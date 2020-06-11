@@ -1,0 +1,18 @@
+    
+Yes! Another Z80 assembler but this one has...
+
+- DAMN fast assembling (millions of instructions in a blink of an eye)
+- integrated crunched sections (LZ48/LZ49/LZ4/ZX7/Exomizer/APlib) + load&crunch on the fly
+- CPC cartridge, ZX snapshots, CPC snapshots up to 4M
+- save unlimited binaries with or without AMSDOS/HOBETA header
+- handle multiple EDSK update or generation simultaneously
+- symbols import/export, breakpoint and dependencies export
+- ORG checking, unlimited memory workspaces where labels are shared, bank management, structures
+- ALL undocumented instructions
+- conditionnal macro, unlimited & embeded loops with local labels, switch/case
+- floating point engine, mathematical functions, ...
+- MAXAM, AS80, UZ80, Pasmo compatibility option
+- Amsdos real & Microsoft basic 40bits float support
+- English & French documentation
+
+
