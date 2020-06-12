@@ -16731,6 +16731,7 @@ int RasmAssembleInfo(const char *datain, int lenin, unsigned char **dataout, int
 
 #define AUTOTEST_BADINCBIN "incl49 'truc\n .bin' \n nop nop"
 
+#define AUTOTEST_BADINCLUDE02 "read: ldir : cp ';'"
 
 #define AUTOTEST_SETINSIDE "ld hl,0=0xC9FB"
 
@@ -17366,6 +17367,11 @@ printf("testing include on a missing file OK\n");
 	if (ret) {} else {printf("Autotest %03d ERROR (bad include test)\n",cpt);exit(-1);}
 	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
 printf("testing include filename on multiple lines OK\n");
+	
+	ret=RasmAssemble(AUTOTEST_BADINCLUDE02,strlen(AUTOTEST_BADINCLUDE02),&opcode,&opcodelen);
+	if (ret) {} else {printf("Autotest %03d ERROR (bad include test 2)\n",cpt);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing wrong READ usage OK\n");
 	
 	ret=RasmAssemble(AUTOTEST_BADINCBIN,strlen(AUTOTEST_BADINCBIN),&opcode,&opcodelen);
 	if (ret) {} else {printf("Autotest %03d ERROR (bad incbin test)\n",cpt);exit(-1);}
