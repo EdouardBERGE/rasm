@@ -227,7 +227,7 @@ E_COMPUTE_OPERATION_SET_R=43,
 E_COMPUTE_OPERATION_SET_V=44,
 E_COMPUTE_OPERATION_SET_B=45,
 /* string functions */
-E_COMPUTE_OPERATION_TICK=46,
+E_COMPUTE_OPERATION_GETNOP=46,
 E_COMPUTE_OPERATION_END=47
 };
 
@@ -966,7 +966,7 @@ struct s_math_keyword math_keyword[]={
 {"SETV",0,E_COMPUTE_OPERATION_SET_V},
 {"SETG",0,E_COMPUTE_OPERATION_SET_V},
 {"SETB",0,E_COMPUTE_OPERATION_SET_B},
-{"TICK",0,E_COMPUTE_OPERATION_TICK},
+{"GETNOP",0,E_COMPUTE_OPERATION_GETNOP},
 {"",0,-1}
 };
 
@@ -3599,6 +3599,49 @@ char *TranslateTag(struct s_assenv *ae, char *varbuffer, int *touched, int enabl
 	return varbuffer;
 }
 
+#define CRC_JR		0x4BD52314
+#define CRC_JP		0x4BD52312
+#define CRC_DJNZ	0x37CD7BAE
+#define CRC_RET		0xE1B32D63
+
+#define CRC_JPHL	0xA3D34817
+#define CRC_JPIX	0xA3D76424
+#define CRC_JPIY	0xA3D76A25
+
+
+int __GETNOP(struct s_assenv *ae,char *opcode, int didx)
+{
+	#undef FUNC
+	#define FUNC "__GETNOP"
+
+	int idx=0,crc,tick;
+
+	/* upper case */
+	while (opcode[idx]) opcode[idx++]=toupper(opcode[idx]);
+
+	crc=GetCRC(opcode);
+
+	/* partial support for DEC,DJNZ,RET,JR */
+	switch (crc) {
+		case CRC_JPHL:
+			tick=1;
+			break;
+		case CRC_JPIX:
+		case CRC_JPIY:
+			tick=2;
+			break;
+		/**************************/
+		case CRC_JP:
+		case CRC_DJNZ:
+		case CRC_JR:
+		case CRC_RET:tick=3;break;
+		default: 
+			MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported opcode [%s] for TICK, see documentation about this directive",opcode);
+	}
+	return tick;
+}
+
+
 double ComputeExpressionCore(struct s_assenv *ae,char *original_zeexpression,int ptr, int didx)
 {
 	#undef FUNC
@@ -4578,7 +4621,7 @@ printf("stage 2 | page=%d | ptr=%X ibank=%d\n",page,curlabel->ptr,curlabel->iban
 			case E_COMPUTE_OPERATION_SET_R:printf("set_r ");break;
 			case E_COMPUTE_OPERATION_SET_V:printf("set_v ");break;
 			case E_COMPUTE_OPERATION_SET_B:printf("set_b ");break;
-			case E_COMPUTE_OPERATION_TICK:printf("tick ");break;
+			case E_COMPUTE_OPERATION_GETNOP:printf("getnop ");break;
 			default:printf("bug\n");break;
 		}
 		
@@ -4700,7 +4743,7 @@ printf("operator\n");
 			case E_COMPUTE_OPERATION_SET_R:
 			case E_COMPUTE_OPERATION_SET_V:
 			case E_COMPUTE_OPERATION_SET_B:
-			case E_COMPUTE_OPERATION_TICK:
+			case E_COMPUTE_OPERATION_GETNOP:
 #if DEBUG_STACK
 printf("ajout de la fonction\n");
 #endif
@@ -4830,7 +4873,7 @@ printf("ajout de la fonction\n");
 								computestack[i].operator==E_COMPUTE_OPERATION_GREATEREQ?">=":
 								computestack[i].operator==E_COMPUTE_OPERATION_OPEN?"(":
 								computestack[i].operator==E_COMPUTE_OPERATION_CLOSE?")":
-								computestack[i].operator==E_COMPUTE_OPERATION_TICK?"tick":
+								computestack[i].operator==E_COMPUTE_OPERATION_GETNOP?"getnpo":
 								"<autre>",computestack[i].priority);
 			}
 #endif
@@ -4912,11 +4955,14 @@ printf("ajout de la fonction\n");
 				case E_COMPUTE_OPERATION_SET_V:if (paccu>0) accu[paccu-1]=MinMaxInt(accu[paccu-1],0,15)<<8;break;
 				case E_COMPUTE_OPERATION_SET_B:if (paccu>0) accu[paccu-1]=MinMaxInt(accu[paccu-1],0,15);break;
 				/* functions with strings */
-				case E_COMPUTE_OPERATION_TICK:if (paccu>0) {
+				case E_COMPUTE_OPERATION_GETNOP:if (paccu>0) {
 								      int integeridx;
 								      integeridx=accu[paccu-1];
-								      printf("TICK(%s)\n",computestack[integeridx].string);
-								      accu[paccu-1]=0;
+								      //printf("GETNOP(%s)\n",computestack[integeridx].string);
+
+								      accu[paccu-1]=__GETNOP(ae,computestack[integeridx].string,didx);
+								      MemFree(computestack[integeridx].string);
+								      computestack[integeridx].string=NULL;
 								}
 							       break;
 				default:MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"invalid computing state! (%d)\n",computestack[i].operator);paccu=0;
