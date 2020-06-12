@@ -15648,8 +15648,8 @@ printf("nbbank=%d initialised\n",ae->nbbank);
 	}
 	/* si on est en ligne de commande ET que le fichier n'est pas trouvé */
 	if (param && param->filename && !FileExists(param->filename)) {
-		char *LTryExtension[]={".asm",".z80",".o",".dam",".mxm",".txt",
-					".ASM",".Z80",".O",".DAM",".MXM",".TXT","",NULL};
+		char *LTryExtension[]={".asm",".z80",".o",".s",".inc",".src",".dam",".mxm",".txt",
+					".ASM",".Z80",".O",".S",".INC",".SRC",".DAM",".MXM",".TXT","",NULL};
 
 		int iguess=1;
 #if TRACE_PREPRO
