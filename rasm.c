@@ -226,13 +226,16 @@ E_COMPUTE_OPERATION_GET_B=42,
 E_COMPUTE_OPERATION_SET_R=43,
 E_COMPUTE_OPERATION_SET_V=44,
 E_COMPUTE_OPERATION_SET_B=45,
-E_COMPUTE_OPERATION_END=46
+/* string functions */
+E_COMPUTE_OPERATION_TICK=46,
+E_COMPUTE_OPERATION_END=47
 };
 
 struct s_compute_element {
 enum e_compute_operation_type operator;
 double value;
 int priority;
+char *string;
 };
 
 struct s_compute_core_data {
@@ -963,6 +966,7 @@ struct s_math_keyword math_keyword[]={
 {"SETV",0,E_COMPUTE_OPERATION_SET_V},
 {"SETG",0,E_COMPUTE_OPERATION_SET_V},
 {"SETB",0,E_COMPUTE_OPERATION_SET_B},
+{"TICK",0,E_COMPUTE_OPERATION_TICK},
 {"",0,-1}
 };
 
@@ -3628,6 +3632,7 @@ double ComputeExpressionCore(struct s_assenv *ae,char *original_zeexpression,int
 	char *localname;
 	int minusptr,imkey,bank,page,idxmacro;
 	double curval;
+	int is_string=0;
 	/* negative value */
 	int allow_minus_as_sign=0;
 	/* extended replace in labels */
@@ -3694,9 +3699,13 @@ double ComputeExpressionCore(struct s_assenv *ae,char *original_zeexpression,int
 					memcpy(zeexpression+idx,asciivalue,3);
 					idx+=2;
 			} else {
-				MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"Only single char may be quoted [%s]\n",TradExpression(zeexpression));
-				zeexpression[0]=0;
-				return 0;
+				//printf("Expression with => moar than one char in quotes\n");
+				//MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"Only single char may be quoted [%s]\n",TradExpression(zeexpression));
+				//zeexpression[0]=0;
+				//return 0;
+				idx++;
+				while (zeexpression[idx] && zeexpression[idx]!=c) idx++; // no escape code management
+
 			}
 		}
 		
@@ -3714,6 +3723,20 @@ double ComputeExpressionCore(struct s_assenv *ae,char *original_zeexpression,int
 	***********************************************************/
 	while ((c=zeexpression[idx])!=0) {
 		switch (c) {
+			case '"':
+			case '\'':
+				//printf("COMPUTE => string detected!\n");
+				idx++;
+				while (zeexpression[idx] && zeexpression[idx]!=c) {
+					ae->computectx->varbuffer[ivar++]=zeexpression[idx];
+					StateMachineResizeBuffer(&ae->computectx->varbuffer,ivar,&ae->computectx->maxivar);
+					idx++;
+				}
+				if (zeexpression[idx]) idx++; else MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"ComputeExpression [%s] quote bug!\n",TradExpression(zeexpression));
+				ae->computectx->varbuffer[ivar]=0;
+				is_string=1;
+				break;
+
 			/* parenthesis */
 			case ')':
 				/* next to a closing parenthesis, a minus is an operator */
@@ -3900,13 +3923,13 @@ double ComputeExpressionCore(struct s_assenv *ae,char *original_zeexpression,int
 				}
 				ae->computectx->varbuffer[ivar]=0;
 				if (!ivar) {
-					MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"invalid char (%d=%c) expression [%s]\n",c,c>31?c:' ',TradExpression(zeexpression));
+					MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"ComputeExpression invalid char (%d=%c) expression [%s]\n",c,c>31?c:' ',TradExpression(zeexpression));
 					if (!original) {
 						MemFree(zeexpression);
 					}
 					return 0;
 				} else if (curly) {
-					MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"wrong curly brackets in expression [%s]\n",TradExpression(zeexpression));
+					MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"ComputeExpression wrong curly brackets in expression [%s]\n",TradExpression(zeexpression));
 					if (!original) {
 						MemFree(zeexpression);
 					}
@@ -3928,6 +3951,12 @@ double ComputeExpressionCore(struct s_assenv *ae,char *original_zeexpression,int
 				MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"expression [%s] has unknown operator %c (%d)\n",TradExpression(zeexpression),c>31?c:'.',c);
 			}
 			/* stackelement.value isn't used */
+		} else if (is_string) {
+			stackelement.operator=E_COMPUTE_OPERATION_PUSH_DATASTC;
+			/* priority & value isn't used */
+			stackelement.string=TxtStrDup(ae->computectx->varbuffer);
+			allow_minus_as_sign=0;
+			ivar=is_string=0;
 		} else {
 			/************************************
 			              V A L U E
@@ -4486,6 +4515,7 @@ printf("stage 2 | page=%d | ptr=%X ibank=%d\n",page,curlabel->ptr,curlabel->iban
 			stackelement.operator=E_COMPUTE_OPERATION_PUSH_DATASTC;
 			stackelement.value=curval;
 			/* priority isn't used */
+			stackelement.string=NULL;
 			
 			allow_minus_as_sign=0;
 			ivar=0;
@@ -4548,6 +4578,7 @@ printf("stage 2 | page=%d | ptr=%X ibank=%d\n",page,curlabel->ptr,curlabel->iban
 			case E_COMPUTE_OPERATION_SET_R:printf("set_r ");break;
 			case E_COMPUTE_OPERATION_SET_V:printf("set_v ");break;
 			case E_COMPUTE_OPERATION_SET_B:printf("set_b ");break;
+			case E_COMPUTE_OPERATION_TICK:printf("tick ");break;
 			default:printf("bug\n");break;
 		}
 		
@@ -4669,6 +4700,7 @@ printf("operator\n");
 			case E_COMPUTE_OPERATION_SET_R:
 			case E_COMPUTE_OPERATION_SET_V:
 			case E_COMPUTE_OPERATION_SET_B:
+			case E_COMPUTE_OPERATION_TICK:
 #if DEBUG_STACK
 printf("ajout de la fonction\n");
 #endif
@@ -4780,7 +4812,7 @@ printf("ajout de la fonction\n");
 			int kk;
 			for (kk=0;kk<paccu;kk++) printf("stack[%d]=%lf\n",kk,accu[kk]);
 			if (computestack[i].operator==E_COMPUTE_OPERATION_PUSH_DATASTC) {
-				printf("pacc=%d push %.1lf\n",paccu,computestack[i].value);
+				printf("pacc=%d push %.1lf or %s\n",paccu,computestack[i].value,computestack[i].string?computestack[i].string:"null");
 			} else {
 				printf("pacc=%d operation %s p=%d\n",paccu,computestack[i].operator==E_COMPUTE_OPERATION_MUL?"*":
 								computestack[i].operator==E_COMPUTE_OPERATION_ADD?"+":
@@ -4798,6 +4830,7 @@ printf("ajout de la fonction\n");
 								computestack[i].operator==E_COMPUTE_OPERATION_GREATEREQ?">=":
 								computestack[i].operator==E_COMPUTE_OPERATION_OPEN?"(":
 								computestack[i].operator==E_COMPUTE_OPERATION_CLOSE?")":
+								computestack[i].operator==E_COMPUTE_OPERATION_TICK?"tick":
 								"<autre>",computestack[i].priority);
 			}
 #endif
@@ -4807,7 +4840,13 @@ printf("ajout de la fonction\n");
 						maccu=16+paccu;
 						accu=MemRealloc(accu,sizeof(double)*maccu);
 					}
-					accu[paccu]=computestack[i].value;paccu++;
+					if (computestack[i].string) {
+						/* string hack */
+						accu[paccu]=i+0.1;
+					} else {
+						accu[paccu]=computestack[i].value;
+					}
+					paccu++;
 					break;
 				case E_COMPUTE_OPERATION_OPEN:
 				case E_COMPUTE_OPERATION_CLOSE: /* cannot happend */ break;
@@ -4872,6 +4911,14 @@ printf("ajout de la fonction\n");
 				case E_COMPUTE_OPERATION_SET_R:if (paccu>0) accu[paccu-1]=MinMaxInt(accu[paccu-1],0,15)<<4;break;
 				case E_COMPUTE_OPERATION_SET_V:if (paccu>0) accu[paccu-1]=MinMaxInt(accu[paccu-1],0,15)<<8;break;
 				case E_COMPUTE_OPERATION_SET_B:if (paccu>0) accu[paccu-1]=MinMaxInt(accu[paccu-1],0,15);break;
+				/* functions with strings */
+				case E_COMPUTE_OPERATION_TICK:if (paccu>0) {
+								      int integeridx;
+								      integeridx=accu[paccu-1];
+								      printf("TICK(%s)\n",computestack[integeridx].string);
+								      accu[paccu-1]=0;
+								}
+							       break;
 				default:MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"invalid computing state! (%d)\n",computestack[i].operator);paccu=0;
 			}
 			if (!paccu) {
@@ -5177,7 +5224,7 @@ void ExpressionFastTranslate(struct s_assenv *ae, char **ptr_expr, int fullrepla
 	/* is there ascii char? */
 	while ((c=expr[idx])!=0) {
 		if (c=='\'' || c=='"') {
-			/* echappement */
+			/* one char escape code */
 			if (expr[idx+1]=='\\') {
 				if (expr[idx+2] && expr[idx+3]==c) {
 					/* no charset conversion for escaped chars */
@@ -5205,9 +5252,12 @@ void ExpressionFastTranslate(struct s_assenv *ae, char **ptr_expr, int fullrepla
 					memcpy(expr+idx,tmpuchar,3);
 					idx+=2;
 			} else {
-				MakeError(ae,GetCurrentFile(ae),GetExpLine(ae,0),"expression [%s] - Only single char may be quoted\n",expr);
-				expr[0]=0;
-				return;
+				//printf("FAST => moar than one quoted char\n");
+				//MakeError(ae,GetCurrentFile(ae),GetExpLine(ae,0),"expression [%s] - Only single char may be quoted\n",expr);
+				//expr[0]=0;
+				//return;
+				idx++;
+				while (expr[idx] && expr[idx]!=c) idx++;
 			}
 		}
 		idx++;
@@ -5216,6 +5266,15 @@ void ExpressionFastTranslate(struct s_assenv *ae, char **ptr_expr, int fullrepla
 	idx=reidx;
 	while ((c=expr[idx])!=0) {
 		switch (c) {
+			/* string in expression */
+			case '"':
+			case '\'':
+				//printf("FAST => skip string [%s]\n",expr);
+				idx++;
+				while (expr[idx] && expr[idx]!=c) idx++;
+				if (expr[idx]) idx++;
+				ivar=0;
+				break;
 			/* operator / parenthesis */
 			case '!':
 			case '=':
@@ -12700,6 +12759,10 @@ fprintf(stderr,"no AP-Ultra support in this version!\n");
 /*
 	meta fonction qui gère le INCBIN standard plus les variantes SMP et DMA
 */
+void __READ(struct s_assenv *ae) {
+	MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"this is a reserved keyword which can cause trouble, remove this\n");
+}
+
 void __HEXBIN(struct s_assenv *ae) {
 	#undef FUNC
 	#define FUNC "__HEXBIN"
@@ -12917,6 +12980,7 @@ printf("Hexbin -> surprise! we found the file!\n");
 				}
 				FileReadBinaryClose(newfilename);
 
+				if (0)
 				switch (curhexbin->crunch) {
 					#ifndef NO_3RD_PARTIES
 					case 4:
@@ -13122,82 +13186,83 @@ printf("Hexbin -> re-tiling MAP! width=%d\n",width);
 						} else {
 #if TRACE_HEXBIN
 printf("Hexbin -> Legacy output from %d to %d\n",offset,size+offset);
+if (curhexbin->crunch) printf("CRUNCHED! (%d)\n",curhexbin->crunch);
 #endif
-							/* legacy HEXBIN */
+							/* only from offset to size+offset */
 							for (idx=offset;idx<size+offset;idx++) {
 								outputdata[outputidx++]=ae->hexbin[hbinidx].data[idx];
 							}
+
+							switch (curhexbin->crunch) {
+								#ifndef NO_3RD_PARTIES
+								case 4:
+									newdata=LZ4_crunch(outputdata,outputidx,&outputidx);
+									MemFree(outputdata);
+									curhexbin->data=newdata;
+									#if TRACE_PREPRO
+									rasm_printf(ae,KVERBOSE"crunched with LZ4 into %d byte(s)\n",outputidx);
+									#endif
+									break;
+								case 7:
+									{
+									size_t slzlen;
+									newdata=ZX7_compress(optimize(outputdata, outputidx), outputdata, outputidx, &slzlen);
+									outputidx=slzlen;
+									MemFree(outputdata);
+									outputdata=newdata;
+									#if TRACE_PREPRO
+									rasm_printf(ae,KVERBOSE"crunched with ZX7 into %d byte(s)\n",outputidx);
+									#endif
+									}
+									break;
+								case 8:
+									if (outputidx>=1024) rasm_printf(ae,KWARNING"Exomizer is crunching %.1fkb this may take a while, be patient...\n",outputidx/1024.0);
+									newdata=Exomizer_crunch(outputdata,outputidx,&outputidx);
+									MemFree(outputdata);
+									outputdata=newdata;
+									#if TRACE_PREPRO
+									rasm_printf(ae,KVERBOSE"crunched with Exomizer into %d byte(s)\n",outputidx);
+									#endif
+									break;
+								case 17:
+									if (outputidx>=1024) rasm_printf(ae,KWARNING"AP-Ultra is crunching %.1fkb this may take a while, be patient...\n",outputidx/1024.0);
+									{
+									int nnewlen;
+									APULTRA_crunch(outputdata,outputidx,&newdata,&nnewlen);
+									outputidx=nnewlen;
+									}
+									MemFree(outputdata);
+									outputdata=newdata;
+									#if TRACE_PREPRO
+									rasm_printf(ae,KVERBOSE"crunched with AP-Ultra into %d byte(s)\n",outputidx);
+									#endif
+									break;
+								#endif
+								case 48:
+									newdata=LZ48_crunch(outputdata,outputidx,&outputidx);
+									MemFree(outputdata);
+									outputdata=newdata;
+									#if TRACE_PREPRO
+									rasm_printf(ae,KVERBOSE"crunched with LZ48 into %d byte(s)\n",outputidx);
+									#endif
+									break;
+								case 49:
+									newdata=LZ49_crunch(outputdata,outputidx,&outputidx);
+									MemFree(outputdata);
+									outputdata=newdata;
+									#if TRACE_PREPRO
+									rasm_printf(ae,KVERBOSE"crunched with LZ49 into %d byte(s)\n",outputidx);
+									#endif
+									break;
+								default:break;
+							}
+
 
 							if (!overwritecheck) {
 								rasm_printf(ae,KWARNING"INCBIN without overwrite check still not working...\n");
 								if (ae->erronwarn) MaxError(ae);
 							}
 						}
-
-						switch (curhexbin->crunch) {
-							#ifndef NO_3RD_PARTIES
-							case 4:
-								newdata=LZ4_crunch(outputdata,outputidx,&curhexbin->datalen);
-								MemFree(curhexbin->data);
-								curhexbin->data=newdata;
-								#if TRACE_PREPRO
-								rasm_printf(ae,KVERBOSE"crunched with LZ4 into %d byte(s)\n",curhexbin->datalen);
-								#endif
-								break;
-							case 7:
-								{
-								size_t slzlen;
-								newdata=ZX7_compress(optimize(outputdata, outputidx), outputdata, outputidx, &slzlen);
-								curhexbin->datalen=slzlen;
-								MemFree(curhexbin->data);
-								curhexbin->data=newdata;
-								#if TRACE_PREPRO
-								rasm_printf(ae,KVERBOSE"crunched with ZX7 into %d byte(s)\n",curhexbin->datalen);
-								#endif
-								}
-								break;
-							case 8:
-								if (curhexbin->datalen>=1024) rasm_printf(ae,KWARNING"Exomizer is crunching %.1fkb this may take a while, be patient...\n",curhexbin->datalen/1024.0);
-								newdata=Exomizer_crunch(outputdata,outputidx,&curhexbin->datalen);
-								MemFree(curhexbin->data);
-								curhexbin->data=newdata;
-								#if TRACE_PREPRO
-								rasm_printf(ae,KVERBOSE"crunched with Exomizer into %d byte(s)\n",curhexbin->datalen);
-								#endif
-								break;
-							case 17:
-								if (curhexbin->datalen>=1024) rasm_printf(ae,KWARNING"AP-Ultra is crunching %.1fkb this may take a while, be patient...\n",curhexbin->datalen/1024.0);
-								{
-								int nnewlen;
-								APULTRA_crunch(outputdata,outputidx,&newdata,&nnewlen);
-								curhexbin->datalen=nnewlen;
-								}
-								MemFree(curhexbin->data);
-								curhexbin->data=newdata;
-								#if TRACE_PREPRO
-								rasm_printf(ae,KVERBOSE"crunched with AP-Ultra into %d byte(s)\n",curhexbin->datalen);
-								#endif
-								break;
-							#endif
-							case 48:
-								newdata=LZ48_crunch(outputdata,outputidx,&curhexbin->datalen);
-								MemFree(curhexbin->data);
-								curhexbin->data=newdata;
-								#if TRACE_PREPRO
-								rasm_printf(ae,KVERBOSE"crunched with LZ48 into %d byte(s)\n",curhexbin->datalen);
-								#endif
-								break;
-							case 49:
-								newdata=LZ49_crunch(outputdata,outputidx,&curhexbin->datalen);
-								MemFree(curhexbin->data);
-								curhexbin->data=newdata;
-								#if TRACE_PREPRO
-								rasm_printf(ae,KVERBOSE"crunched with LZ49 into %d byte(s)\n",curhexbin->datalen);
-								#endif
-								break;
-							default:break;
-						}
-
 
 						if (overwritecheck) {
 							for (idx=0;idx<outputidx;idx++) {
@@ -13446,6 +13511,8 @@ struct s_asm_keyword instruction[]={
 {"PROTECT",0,__PROTECT},
 {"WHILE",0,__WHILE},
 {"WEND",0,__WEND},
+{"READ",0,__READ},
+{"INCLUDE",0,__READ}, // anti-label
 {"HEXBIN",0,__HEXBIN},
 {"ALIGN",0,__ALIGN},
 {"ELSEIF",0,__ELSEIF},
@@ -15585,6 +15652,9 @@ printf("nbbank=%d initialised\n",ae->nbbank);
 					".ASM",".Z80",".O",".DAM",".MXM",".TXT","",NULL};
 
 		int iguess=1;
+#if TRACE_PREPRO
+		printf("TRY EXT\n");
+#endif
 		l=strlen(param->filename);
 		param->filename=MemRealloc(param->filename,l+6);
 		/* si le nom du fichier termine par un . on n'ajoute que l'extension, sinon on l'ajoute avec le . */
@@ -15597,6 +15667,7 @@ printf("nbbank=%d initialised\n",ae->nbbank);
 			}
 			iguess++;
 		}
+		filename=param->filename;
 	}
 
 	if (param && param->filename && !FileExists(param->filename)) {
@@ -15703,8 +15774,14 @@ printf("-comz/include\n");
 	}
 
 	waiting_quote=quote_type=0;
+
 	l=idx=0;
 	while (l<ilisting) {
+
+#if TRACE_PREPRO
+if (!idx) printf("[%s]\n",listing[l].listing);
+#endif
+
 		c=listing[l].listing[idx++];
 		if (!c) {
 			l++;
@@ -15730,10 +15807,18 @@ printf("-comz/include\n");
 		}
 
 		if (waiting_quote) {
-			/* expecting quote and nothing else */
+			/* expecting quote and NOTHING else */
 			switch (waiting_quote) {
 				case 1:
-					if (c==quote_type) waiting_quote=2;
+					if (c==quote_type) waiting_quote=2; else {
+						/* enforce there is only spaces or tabs between READ/INC and string */
+						if (c!=' ' && c!=0x9) {
+							MakeError(ae,ae->filename[listing[l].ifile],listing[l].iline,"A quoted string must follow INCLUDE/READ directive\n");
+							waiting_quote=0;
+							idx--;
+							continue;
+						}
+					}
 					break;
 				case 2:
 					if (!quote_type) {
@@ -15828,7 +15913,6 @@ printf("-comz/include\n");
 							}
 						}
 					}
-				//printf("include [%s]\n",filename_toread);
 
 					/* v0.130 handling error case with filename on multiple lines */
 					if (incstartL!=l) {
@@ -15836,7 +15920,6 @@ printf("-comz/include\n");
 						int ilen;
 
 						MakeError(ae,ae->filename[listing[incstartL].ifile],listing[incstartL].iline,"INCLUDE filename cannot be on multiple lines\n");
-
 						ilen=strlen(listing[iconcat].listing)+1;
 						idx+=ilen-rewrite;
 						while (iconcat<l) {
