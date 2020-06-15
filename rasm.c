@@ -226,9 +226,11 @@ E_COMPUTE_OPERATION_GET_B=42,
 E_COMPUTE_OPERATION_SET_R=43,
 E_COMPUTE_OPERATION_SET_V=44,
 E_COMPUTE_OPERATION_SET_B=45,
+E_COMPUTE_OPERATION_SOFT2HARD=46,
+E_COMPUTE_OPERATION_HARD2SOFT=47,
 /* string functions */
-E_COMPUTE_OPERATION_GETNOP=46,
-E_COMPUTE_OPERATION_END=47
+E_COMPUTE_OPERATION_GETNOP=48,
+E_COMPUTE_OPERATION_END=49
 };
 
 struct s_compute_element {
@@ -966,6 +968,10 @@ struct s_math_keyword math_keyword[]={
 {"SETV",0,E_COMPUTE_OPERATION_SET_V},
 {"SETG",0,E_COMPUTE_OPERATION_SET_V},
 {"SETB",0,E_COMPUTE_OPERATION_SET_B},
+{"SOFT2HARD_INK",0,E_COMPUTE_OPERATION_SOFT2HARD},
+{"S2H_INK",0,E_COMPUTE_OPERATION_SOFT2HARD},
+{"HARD2SOFT_INK",0,E_COMPUTE_OPERATION_HARD2SOFT},
+{"H2S_INK",0,E_COMPUTE_OPERATION_HARD2SOFT},
 {"GETNOP",0,E_COMPUTE_OPERATION_GETNOP},
 {"",0,-1}
 };
@@ -3636,11 +3642,84 @@ int __GETNOP(struct s_assenv *ae,char *opcode, int didx)
 		case CRC_JR:
 		case CRC_RET:tick=3;break;
 		default: 
-			MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported opcode [%s] for TICK, see documentation about this directive",opcode);
+			MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported opcode [%s] for GETNOP, see documentation about this directive",opcode);
 	}
 	return tick;
 }
 
+int __Soft2HardInk(struct s_assenv *ae,int soft, int didx) {
+	switch (soft) {
+		case 0:return 64+20;break;
+		case 1:return 64+4 ;break;
+		case 2:return 64+21 ;break;
+		case 3:return 64+28 ;break;
+		case 4:return 64+24 ;break;
+		case 5:return 64+29 ;break;
+		case 6:return 64+12 ;break;
+		case 7:return 64+5 ;break;
+		case 8:return 64+13 ;break;
+		case 9:return 64+22 ;break;
+		case 10:return 64+6 ;break;
+		case 11:return 64+23 ;break;
+		case 12:return 64+30 ;break;
+		case 13:return 64+0 ;break;
+		case 14:return 64+31 ;break;
+		case 15:return 64+14 ;break;
+		case 16:return 64+7 ;break;
+		case 17:return 64+15 ;break;
+		case 18:return 64+18 ;break;
+		case 19:return 64+2 ;break;
+		case 20:return 64+19 ;break;
+		case 21:return 64+26 ;break;
+		case 22:return 64+25 ;break;
+		case 23:return 64+27 ;break;
+		case 24:return 64+10 ;break;
+		case 25:return 64+3 ;break;
+		case 26:return 64+11 ;break;
+		default:
+			MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"SOFT2HARD_INK needs 0-26 color index");
+	}
+	return 0;
+}
+int __Hard2SoftInk(struct s_assenv *ae,int hard, int didx) {
+	hard&=31;
+	switch (hard) {
+		case 0:return 13;break;
+		case 1:return 13;break;
+		case 2:return 19;break;
+		case 3:return 25;break;
+		case 4:return 1;break;
+		case 5:return 7;break;
+		case 6:return 10;break;
+		case 7:return 16;break;
+		case 8:return 7;break;
+		case 9:return 25;break;
+		case 10:return 24;break;
+		case 11:return 26;break;
+		case 12:return 6;break;
+		case 13:return 8;break;
+		case 14:return 15;break;
+		case 15:return 17;break;
+		case 16:return 1;break;
+		case 17:return 19;break;
+		case 18:return 18;break;
+		case 19:return 20;break;
+		case 20:return 0;break;
+		case 21:return 2;break;
+		case 22:return 9;break;
+		case 23:return 11;break;
+		case 24:return 4;break;
+		case 25:return 22;break;
+		case 26:return 21;break;
+		case 27:return 23;break;
+		case 28:return 3;break;
+		case 29:return 5;break;
+		case 30:return 12;break;
+		case 31:return 14;break;
+		default:/*warning remover*/break;
+	}
+	return 0;
+}
 
 double ComputeExpressionCore(struct s_assenv *ae,char *original_zeexpression,int ptr, int didx)
 {
@@ -3689,16 +3768,6 @@ double ComputeExpressionCore(struct s_assenv *ae,char *original_zeexpression,int
 		accu=NULL;maccu=0;
 		if (maxcomputestack) MemFree(computestack);
 		computestack=NULL;maxcomputestack=0;
-#if 0	
-		if (maxivar) MemFree(varbuffer);
-		if (maxtokenstack) MemFree(tokenstack);
-		if (maxoperatorstack) MemFree(operatorstack);
-		maxtokenstack=maxoperatorstack=0;
-		maxivar=1;
-		varbuffer=NULL;
-		tokenstack=NULL;
-		operatorstack=NULL;
-#endif
 		return 0.0;
 	}
 
@@ -3994,6 +4063,7 @@ double ComputeExpressionCore(struct s_assenv *ae,char *original_zeexpression,int
 				MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"expression [%s] has unknown operator %c (%d)\n",TradExpression(zeexpression),c>31?c:'.',c);
 			}
 			/* stackelement.value isn't used */
+			stackelement.string=NULL;
 		} else if (is_string) {
 			stackelement.operator=E_COMPUTE_OPERATION_PUSH_DATASTC;
 			/* priority & value isn't used */
@@ -4172,7 +4242,7 @@ double ComputeExpressionCore(struct s_assenv *ae,char *original_zeexpression,int
 							if (c=='(') {
 								/* push function as operator! */
 								stackelement.operator=math_keyword[imkey].operation;
-								//stackelement.priority=0;
+								stackelement.string=NULL;
 								/************************************************
 								      C R E A T E    E X T R A     T O K E N
 								************************************************/
@@ -4575,7 +4645,7 @@ printf("stage 2 | page=%d | ptr=%X ibank=%d\n",page,curlabel->ptr,curlabel->iban
 #if DEBUG_STACK
 	for (itoken=0;itoken<nbtokenstack;itoken++) {
 		switch (ae->computectx->tokenstack[itoken].operator) {
-			case E_COMPUTE_OPERATION_PUSH_DATASTC:printf("%lf ",ae->computectx->tokenstack[itoken].value);break;
+			case E_COMPUTE_OPERATION_PUSH_DATASTC:printf("%lf %s",ae->computectx->tokenstack[itoken].value,ae->computectx->tokenstack[itoken].string?ae->computectx->tokenstack[itoken].string:"(null)");break;
 			case E_COMPUTE_OPERATION_OPEN:printf("(");break;
 			case E_COMPUTE_OPERATION_CLOSE:printf(")");break;
 			case E_COMPUTE_OPERATION_ADD:printf("+ ");break;
@@ -4621,6 +4691,8 @@ printf("stage 2 | page=%d | ptr=%X ibank=%d\n",page,curlabel->ptr,curlabel->iban
 			case E_COMPUTE_OPERATION_SET_R:printf("set_r ");break;
 			case E_COMPUTE_OPERATION_SET_V:printf("set_v ");break;
 			case E_COMPUTE_OPERATION_SET_B:printf("set_b ");break;
+			case E_COMPUTE_OPERATION_SOFT2HARD:printf("soft2hard ");break;
+			case E_COMPUTE_OPERATION_HARD2SOFT:printf("hard2soft ");break;
 			case E_COMPUTE_OPERATION_GETNOP:printf("getnop ");break;
 			default:printf("bug\n");break;
 		}
@@ -4633,14 +4705,14 @@ printf("stage 2 | page=%d | ptr=%X ibank=%d\n",page,curlabel->ptr,curlabel->iban
 		switch (ae->computectx->tokenstack[itoken].operator) {
 			case E_COMPUTE_OPERATION_PUSH_DATASTC:
 #if DEBUG_STACK
-printf("data\n");
+printf("data string=%X\n",ae->computectx->tokenstack[itoken].string);
 #endif
 				ObjectArrayAddDynamicValueConcat((void **)&computestack,&nbcomputestack,&maxcomputestack,&ae->computectx->tokenstack[itoken],sizeof(stackelement));
 				break;
 			case E_COMPUTE_OPERATION_OPEN:
 				ObjectArrayAddDynamicValueConcat((void **)&ae->computectx->operatorstack,&nboperatorstack,&ae->computectx->maxoperatorstack,&ae->computectx->tokenstack[itoken],sizeof(stackelement));
 #if DEBUG_STACK
-printf("ajout (\n");
+printf("ajout ( string=%X\n",ae->computectx->tokenstack[itoken].string);
 #endif
 				break;
 			case E_COMPUTE_OPERATION_CLOSE:
@@ -4655,7 +4727,7 @@ printf("close\n");
 						ObjectArrayAddDynamicValueConcat((void **)&computestack,&nbcomputestack,&maxcomputestack,&ae->computectx->operatorstack[o2],sizeof(stackelement));
 						nboperatorstack--;
 #if DEBUG_STACK
-printf("op--\n");
+printf("op-- string=%X\n",ae->computectx->operatorstack[o2].string);
 #endif
 						o2--;
 					} else {
@@ -4681,7 +4753,7 @@ printf("discard )\n");
 					ObjectArrayAddDynamicValueConcat((void **)&computestack,&nbcomputestack,&maxcomputestack,&ae->computectx->operatorstack[o2],sizeof(stackelement));
 					nboperatorstack--;
 #if DEBUG_STACK
-printf("pop function\n");
+printf("pop function string=%X\n",ae->computectx->operatorstack[o2].string);
 #endif
 				}
 				break;
@@ -4704,13 +4776,13 @@ printf("pop function\n");
 			case E_COMPUTE_OPERATION_NOTEQUAL:
 			case E_COMPUTE_OPERATION_LOWEREQ:
 			case E_COMPUTE_OPERATION_GREATEREQ:
-#if DEBUG_STACK
-printf("operator\n");
-#endif
 				o2=nboperatorstack-1;
 				while (o2>=0 && ae->computectx->operatorstack[o2].operator!=E_COMPUTE_OPERATION_OPEN) {
 					if (ae->computectx->tokenstack[itoken].priority>=ae->computectx->operatorstack[o2].priority || ae->computectx->operatorstack[o2].operator>=E_COMPUTE_OPERATION_SIN) {
 						ObjectArrayAddDynamicValueConcat((void **)&computestack,&nbcomputestack,&maxcomputestack,&ae->computectx->operatorstack[o2],sizeof(stackelement));
+#if DEBUG_STACK
+printf("operator string=%X\n",ae->computectx->operatorstack[o2].string);
+#endif
 						nboperatorstack--;
 						o2--;
 					} else {
@@ -4743,6 +4815,8 @@ printf("operator\n");
 			case E_COMPUTE_OPERATION_SET_R:
 			case E_COMPUTE_OPERATION_SET_V:
 			case E_COMPUTE_OPERATION_SET_B:
+			case E_COMPUTE_OPERATION_SOFT2HARD:
+			case E_COMPUTE_OPERATION_HARD2SOFT:
 			case E_COMPUTE_OPERATION_GETNOP:
 #if DEBUG_STACK
 printf("ajout de la fonction\n");
@@ -4755,6 +4829,9 @@ printf("ajout de la fonction\n");
 	/* pop remaining operators */
 	while (nboperatorstack>0) {
 		ObjectArrayAddDynamicValueConcat((void **)&computestack,&nbcomputestack,&maxcomputestack,&ae->computectx->operatorstack[--nboperatorstack],sizeof(stackelement));
+#if DEBUG_STACK
+printf("final POP string=%X\n",ae->computectx->operatorstack[nboperatorstack+1].string);
+#endif
 	}
 	
 	/********************************************
@@ -4773,7 +4850,13 @@ printf("ajout de la fonction\n");
 						maccu=16+paccu;
 						accu=MemRealloc(accu,sizeof(double)*maccu);
 					}
-					accu[paccu]=computestack[i].value;paccu++;
+					if (computestack[i].string) {
+						/* string hack */
+						accu[paccu]=i+0.1;
+					} else {
+						accu[paccu]=computestack[i].value;
+					}
+					paccu++;
 					break;
 				case E_COMPUTE_OPERATION_OPEN:
 				case E_COMPUTE_OPERATION_CLOSE:/* cannot happend */ break;
@@ -4837,6 +4920,28 @@ printf("ajout de la fonction\n");
 				case E_COMPUTE_OPERATION_SET_R:if (paccu>0) accu[paccu-1]=MinMaxInt(accu[paccu-1],0,15)<<4;break;
 				case E_COMPUTE_OPERATION_SET_V:if (paccu>0) accu[paccu-1]=MinMaxInt(accu[paccu-1],0,15)<<8;break;
 				case E_COMPUTE_OPERATION_SET_B:if (paccu>0) accu[paccu-1]=MinMaxInt(accu[paccu-1],0,15);break;
+				case E_COMPUTE_OPERATION_SOFT2HARD:if (paccu>0) accu[paccu-1]=__Soft2HardInk(ae,accu[paccu-1],didx);break;
+				case E_COMPUTE_OPERATION_HARD2SOFT:if (paccu>0) accu[paccu-1]=__Hard2SoftInk(ae,accu[paccu-1],didx);break;
+				/* functions with strings */
+				case E_COMPUTE_OPERATION_GETNOP:if (paccu>0) {
+								      int integeridx;
+								      integeridx=floor(accu[paccu-1]);
+
+								      if (integeridx>=0 && integeridx<nbcomputestack && computestack[integeridx].string) {
+									      accu[paccu-1]=__GETNOP(ae,computestack[integeridx].string,didx);
+									      MemFree(computestack[integeridx].string);
+									      computestack[integeridx].string=NULL;
+								      } else {
+									      if (integeridx>=0 && integeridx<nbcomputestack) {
+											MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"GETNOP function needs a proper string\n");
+										} else {
+											MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"GETNOP internal error (wrong string index)\n");
+										}
+									}
+								} else {
+									MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"GETNOP is empty\n");
+								}
+							       break;
 				default:MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"invalid computing state! (%d)\n",computestack[i].operator);paccu=0;
 			}
 			if (!paccu) {
@@ -4954,15 +5059,26 @@ printf("ajout de la fonction\n");
 				case E_COMPUTE_OPERATION_SET_R:if (paccu>0) accu[paccu-1]=MinMaxInt(accu[paccu-1],0,15)<<4;break;
 				case E_COMPUTE_OPERATION_SET_V:if (paccu>0) accu[paccu-1]=MinMaxInt(accu[paccu-1],0,15)<<8;break;
 				case E_COMPUTE_OPERATION_SET_B:if (paccu>0) accu[paccu-1]=MinMaxInt(accu[paccu-1],0,15);break;
+				case E_COMPUTE_OPERATION_SOFT2HARD:if (paccu>0) accu[paccu-1]=__Soft2HardInk(ae,accu[paccu-1],didx);break;
+				case E_COMPUTE_OPERATION_HARD2SOFT:if (paccu>0) accu[paccu-1]=__Hard2SoftInk(ae,accu[paccu-1],didx);break;
 				/* functions with strings */
 				case E_COMPUTE_OPERATION_GETNOP:if (paccu>0) {
 								      int integeridx;
-								      integeridx=accu[paccu-1];
-								      //printf("GETNOP(%s)\n",computestack[integeridx].string);
+								      integeridx=floor(accu[paccu-1]);
 
-								      accu[paccu-1]=__GETNOP(ae,computestack[integeridx].string,didx);
-								      MemFree(computestack[integeridx].string);
-								      computestack[integeridx].string=NULL;
+								      if (integeridx>=0 && integeridx<nbcomputestack && computestack[integeridx].string) {
+									      accu[paccu-1]=__GETNOP(ae,computestack[integeridx].string,didx);
+									      MemFree(computestack[integeridx].string);
+									      computestack[integeridx].string=NULL;
+								      } else {
+									      if (integeridx>=0 && integeridx<nbcomputestack) {
+											MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"GETNOP function needs a proper string\n");
+										} else {
+											MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"GETNOP internal error (wrong string index)\n");
+										}
+									}
+								} else {
+									MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"GETNOP is empty\n");
 								}
 							       break;
 				default:MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"invalid computing state! (%d)\n",computestack[i].operator);paccu=0;
@@ -11093,8 +11209,214 @@ void __BREAKPOINT(struct s_assenv *ae) {
 		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is BREAKPOINT [adress]\n");
 	}
 }
+
+
+void __SNASET(struct s_assenv *ae) {
+	int myvalue,idx;
+
+	if (!ae->forcecpr && !ae->forcetape && !ae->forcezx) {
+		ae->forcesnapshot=1;
+	} else {
+		if (!ae->nowarning) {
+			rasm_printf(ae,KWARNING"[%s:%d] Warning: Cannot SNASET when already in cartridge/tape output\n",GetCurrentFile(ae),ae->wl[ae->idx].l);
+			if (ae->erronwarn) MaxError(ae);
+		}
+	}
+
+	if (!ae->wl[ae->idx].t) {
+		ae->idx++;
+		/* TWO parameters */
+		if (!ae->wl[ae->idx].t && ae->wl[ae->idx+1].t==1) {
+			/* parameter value */
+			ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
+			myvalue=RoundComputeExpression(ae,ae->wl[ae->idx+1].w,ae->codeadr,0,0);
+
+			/* Z80 register/value */
+			if (strcmp(ae->wl[ae->idx].w,"Z80_AF")==0) {
+				ae->snapshot.registers.general.F=myvalue&0xFF;
+				ae->snapshot.registers.general.A=(myvalue>>8)&0xFF;
+			} else if (strcmp(ae->wl[ae->idx].w,"Z80_F")==0) {
+				ae->snapshot.registers.general.F=myvalue;
+			} else if (strcmp(ae->wl[ae->idx].w,"Z80_A")==0) {
+				ae->snapshot.registers.general.A=myvalue;
+			} else if (strcmp(ae->wl[ae->idx].w,"Z80_BC")==0) {
+				ae->snapshot.registers.general.C=myvalue&0xFF;
+				ae->snapshot.registers.general.B=(myvalue>>8)&0xFF;
+			} else if (strcmp(ae->wl[ae->idx].w,"Z80_C")==0) {
+				ae->snapshot.registers.general.C=myvalue;
+			} else if (strcmp(ae->wl[ae->idx].w,"Z80_B")==0) {
+				ae->snapshot.registers.general.B=myvalue;
+			} else if (strcmp(ae->wl[ae->idx].w,"Z80_DE")==0) {
+				ae->snapshot.registers.general.E=myvalue&0xFF;
+				ae->snapshot.registers.general.D=(myvalue>>8)&0xFF;
+			} else if (strcmp(ae->wl[ae->idx].w,"Z80_E")==0) {
+				ae->snapshot.registers.general.E=myvalue;
+			} else if (strcmp(ae->wl[ae->idx].w,"Z80_D")==0) {
+				ae->snapshot.registers.general.D=myvalue;
+			} else if (strcmp(ae->wl[ae->idx].w,"Z80_HL")==0) {
+				ae->snapshot.registers.general.L=myvalue&0xFF;
+				ae->snapshot.registers.general.H=(myvalue>>8)&0xFF;
+			} else if (strcmp(ae->wl[ae->idx].w,"Z80_L")==0) {
+				ae->snapshot.registers.general.L=myvalue;
+			} else if (strcmp(ae->wl[ae->idx].w,"Z80_H")==0) {
+				ae->snapshot.registers.general.H=myvalue;
+			} else if (strcmp(ae->wl[ae->idx].w,"Z80_I")==0) {
+				ae->snapshot.registers.regI=myvalue;
+			} else if (strcmp(ae->wl[ae->idx].w,"Z80_R")==0) {
+				ae->snapshot.registers.R=myvalue;
+			} else if (strcmp(ae->wl[ae->idx].w,"Z80_IFF0")==0) {
+				ae->snapshot.registers.IFF0=myvalue;
+			} else if (strcmp(ae->wl[ae->idx].w,"Z80_IFF1")==0) {
+				ae->snapshot.registers.IFF1=myvalue;
+			} else if (strcmp(ae->wl[ae->idx].w,"Z80_IX")==0) {
+				ae->snapshot.registers.LX=myvalue&0xFF;
+				ae->snapshot.registers.HX=(myvalue>>8)&0xFF;
+			} else if (strcmp(ae->wl[ae->idx].w,"Z80_IXL")==0) {
+				ae->snapshot.registers.LX=myvalue;
+			} else if (strcmp(ae->wl[ae->idx].w,"Z80_IXH")==0) {
+				ae->snapshot.registers.HX=myvalue;
+			} else if (strcmp(ae->wl[ae->idx].w,"Z80_IY")==0) {
+				ae->snapshot.registers.LY=myvalue&0xFF;
+				ae->snapshot.registers.HY=(myvalue>>8)&0xFF;
+			} else if (strcmp(ae->wl[ae->idx].w,"Z80_IYL")==0) {
+				ae->snapshot.registers.LY=myvalue;
+			} else if (strcmp(ae->wl[ae->idx].w,"Z80_IYH")==0) {
+				ae->snapshot.registers.HY=myvalue;
+			} else if (strcmp(ae->wl[ae->idx].w,"Z80_SP")==0) {
+				ae->snapshot.registers.LSP=myvalue&0xFF;
+				ae->snapshot.registers.HSP=(myvalue>>8)&0xFF;
+			} else if (strcmp(ae->wl[ae->idx].w,"Z80_PC")==0) {
+				ae->snapshot.registers.LPC=myvalue&0xFF;
+				ae->snapshot.registers.HPC=(myvalue>>8)&0xFF;
+			} else if (strcmp(ae->wl[ae->idx].w,"Z80_IM")==0) {
+				ae->snapshot.registers.IM=myvalue;
+			} else if (strcmp(ae->wl[ae->idx].w,"Z80_AFX")==0) {
+				ae->snapshot.registers.alternate.F=myvalue&0xFF;
+				ae->snapshot.registers.alternate.A=(myvalue>>8)&0xFF;
+			} else if (strcmp(ae->wl[ae->idx].w,"Z80_AX")==0) {
+				ae->snapshot.registers.alternate.A=myvalue;
+			} else if (strcmp(ae->wl[ae->idx].w,"Z80_FX")==0) {
+				ae->snapshot.registers.alternate.F=myvalue;
+			} else if (strcmp(ae->wl[ae->idx].w,"Z80_BCX")==0) {
+				ae->snapshot.registers.alternate.C=myvalue&0xFF;
+				ae->snapshot.registers.alternate.B=(myvalue>>8)&0xFF;
+			} else if (strcmp(ae->wl[ae->idx].w,"Z80_CX")==0) {
+				ae->snapshot.registers.alternate.C=myvalue;
+			} else if (strcmp(ae->wl[ae->idx].w,"Z80_BX")==0) {
+				ae->snapshot.registers.alternate.B=myvalue;
+			} else if (strcmp(ae->wl[ae->idx].w,"Z80_DEX")==0) {
+				ae->snapshot.registers.alternate.E=myvalue&0xFF;
+				ae->snapshot.registers.alternate.D=(myvalue>>8)&0xFF;
+			} else if (strcmp(ae->wl[ae->idx].w,"Z80_EX")==0) {
+				ae->snapshot.registers.alternate.E=myvalue;
+			} else if (strcmp(ae->wl[ae->idx].w,"Z80_DX")==0) {
+				ae->snapshot.registers.alternate.D=myvalue;
+			} else if (strcmp(ae->wl[ae->idx].w,"Z80_HLX")==0) {
+				ae->snapshot.registers.alternate.L=myvalue&0xFF;
+				ae->snapshot.registers.alternate.H=(myvalue>>8)&0xFF;
+			} else if (strcmp(ae->wl[ae->idx].w,"Z80_LX")==0) {
+				ae->snapshot.registers.alternate.L=myvalue;
+			} else if (strcmp(ae->wl[ae->idx].w,"Z80_HX")==0) {
+				ae->snapshot.registers.alternate.H=myvalue;
+				/* Gate Array / CRTC / PPI / FDD */
+			} else if (strcmp(ae->wl[ae->idx].w,"GA_PEN")==0) {
+				ae->snapshot.gatearray.selectedpen=myvalue;
+			} else if (strcmp(ae->wl[ae->idx].w,"GA_ROMCFG")==0) {
+				ae->snapshot.gatearray.multiconfiguration=myvalue;
+			} else if (strcmp(ae->wl[ae->idx].w,"GA_RAMCFG")==0) {
+				ae->snapshot.ramconfiguration=myvalue;
+			} else if (strcmp(ae->wl[ae->idx].w,"CRTC_SEL")==0) {
+				ae->snapshot.crtc.selectedregister=myvalue;
+			} else if (strcmp(ae->wl[ae->idx].w,"ROM_UP")==0) {
+				ae->snapshot.romselect=myvalue;
+			} else if (strcmp(ae->wl[ae->idx].w,"PPI_A")==0) {
+				ae->snapshot.ppi.portA=myvalue;
+			} else if (strcmp(ae->wl[ae->idx].w,"PPI_B")==0) {
+				ae->snapshot.ppi.portB=myvalue;
+			} else if (strcmp(ae->wl[ae->idx].w,"PPI_C")==0) {
+				ae->snapshot.ppi.portC=myvalue;
+			} else if (strcmp(ae->wl[ae->idx].w,"PPI_CTL")==0) {
+				ae->snapshot.ppi.control=myvalue;
+			} else if (strcmp(ae->wl[ae->idx].w,"PSG_SEL")==0) {
+				ae->snapshot.psg.selectedregister=myvalue;
+			} else if (strcmp(ae->wl[ae->idx].w,"CPC_TYPE")==0) {
+				ae->snapshot.CPCType=myvalue;
+			} else if (strcmp(ae->wl[ae->idx].w,"INT_NUM")==0) {
+				ae->snapshot.interruptnumber=myvalue;
+			} else if (strcmp(ae->wl[ae->idx].w,"FDD_MOTOR")==0) {
+				ae->snapshot.fdd.motorstate=myvalue;
+			} else if (strcmp(ae->wl[ae->idx].w,"FDD_TRACK")==0) {
+				ae->snapshot.fdd.physicaltrack=myvalue;
+			} else if (strcmp(ae->wl[ae->idx].w,"PRNT_DATA")==0) {
+				ae->snapshot.printerstrobe=myvalue;
+			} else if (strcmp(ae->wl[ae->idx].w,"CRTC_TYPE")==0) {
+				ae->snapshot.crtcstate.model=myvalue;
+			} else if (strcmp(ae->wl[ae->idx].w,"CRTC_HCC")==0) {
+				ae->snapshot.crtcstate.HCC=myvalue;
+			} else if (strcmp(ae->wl[ae->idx].w,"CRTC_CLC")==0) {
+				ae->snapshot.crtcstate.CLC=myvalue;
+			} else if (strcmp(ae->wl[ae->idx].w,"CRTC_RLC")==0) {
+				ae->snapshot.crtcstate.RLC=myvalue;
+			} else if (strcmp(ae->wl[ae->idx].w,"CRTC_VAC")==0) { // Vertical Total Adjust Counter
+				ae->snapshot.crtcstate.VTC=myvalue;
+			} else if (strcmp(ae->wl[ae->idx].w,"CRTC_HSWC")==0) {
+				ae->snapshot.crtcstate.HSC=myvalue;
+			} else if (strcmp(ae->wl[ae->idx].w,"CRTC_VSWC")==0) {
+				ae->snapshot.crtcstate.VSC=myvalue;
+			} else if (strcmp(ae->wl[ae->idx].w,"CRTC_STATE")==0) {
+				ae->snapshot.crtcstate.flags=myvalue;
+			} else if (strcmp(ae->wl[ae->idx].w,"GA_VSC")==0) {
+				ae->snapshot.vsyncdelay=myvalue;
+			} else if (strcmp(ae->wl[ae->idx].w,"GA_ISC")==0) {
+				ae->snapshot.interruptscanlinecounter=myvalue;
+			} else if (strcmp(ae->wl[ae->idx].w,"INT_REQ")==0) {
+				ae->snapshot.interruptrequestflag=myvalue;
+			} else {
+				MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"SNASET directive unknown non array settings\n");
+			}
+		} else if (!ae->wl[ae->idx].t && !ae->wl[ae->idx+1].t && ae->wl[ae->idx+2].t==1) {
+			/* index value */
+			ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
+			idx=RoundComputeExpression(ae,ae->wl[ae->idx+1].w,ae->codeadr,0,0);
+
+			/* parameter value */
+			ExpressionFastTranslate(ae,&ae->wl[ae->idx+2].w,0);
+			myvalue=RoundComputeExpression(ae,ae->wl[ae->idx+2].w,ae->codeadr,0,0);
+
+			if (strcmp(ae->wl[ae->idx].w,"GA_PAL")==0) {
+				if (idx>=0 && idx<17) {
+					ae->snapshot.gatearray.palette[idx]=myvalue;
+				} else {
+					MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"SNASET directive needs [0-16] index for GA_PAL\n");
+				}
+			} else if (strcmp(ae->wl[ae->idx].w,"CRTC_REG")==0) {
+				if (idx>=0 && idx<18) {
+					ae->snapshot.crtc.registervalue[idx]=myvalue;
+				} else {
+					MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"SNASET directive needs [0-17] index for CRTC_REG\n");
+				}
+			} else if (strcmp(ae->wl[ae->idx].w,"PSG_REG")==0) {
+				if (idx>=0 && idx<16) {
+					ae->snapshot.psg.registervalue[idx]=myvalue;
+				} else {
+					MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"SNASET directive needs [0-15] index for PSG_REG\n");
+				}
+			} else {
+				MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"SNASET directive unknown array settings\n");
+			}
+		} else {
+			MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"SNASET directive need 2 or 3 parameters (see documentation for more informations)\n");
+		}
+	}
+
+
+}
+
+
 void __SETCPC(struct s_assenv *ae) {
 	int mycpc;
+
+	rasm_printf(ae,KWARNING"[%s:%d] Warning: SETCPC is deprecated, use SNASET CPC_TYPE,<type> instead\n",GetCurrentFile(ae),ae->wl[ae->idx].l);
 
 	if (!ae->forcecpr) {
 		ae->forcesnapshot=1;
@@ -11127,6 +11449,8 @@ void __SETCPC(struct s_assenv *ae) {
 }
 void __SETCRTC(struct s_assenv *ae) {
 	int mycrtc;
+
+	rasm_printf(ae,KWARNING"[%s:%d] Warning: SETCRTC is deprecated, use SNASET CRTC_TYPE,<type> instead\n",GetCurrentFile(ae),ae->wl[ae->idx].l);
 
 	if (!ae->forcecpr) {
 		ae->forcesnapshot=1;
@@ -13605,6 +13929,7 @@ struct s_asm_keyword instruction[]={
 {"LZ48",0,__LZ48},
 {"LZ49",0,__LZ49},
 {"LZCLOSE",0,__LZCLOSE},
+{"SNASET",0,__SNASET},
 {"BUILDZX",0,__BUILDZX},
 {"BUILDCPR",0,__BUILDCPR},
 {"BUILDSNA",0,__BUILDSNA},
@@ -13706,6 +14031,7 @@ printf("*** assembling ***\n");
 	/* set operator precedence */
 	if (!ae->maxam) {
 		for (i=0;i<256;i++) {
+			ae->AutomateElement[i].string=NULL;
 			switch (i) {
 				/* priority 0 */
 				case '(':ae->AutomateElement[i].operator=E_COMPUTE_OPERATION_OPEN;ae->AutomateElement[i].priority=0;break;
@@ -13744,6 +14070,7 @@ printf("*** assembling ***\n");
 		}
 	} else {
 		for (i=0;i<256;i++) {
+			ae->AutomateElement[i].string=NULL;
 			switch (i) {
 				/* priority 0 */
 				case '(':ae->AutomateElement[i].operator=E_COMPUTE_OPERATION_OPEN;ae->AutomateElement[i].priority=0;break;
@@ -15462,12 +15789,9 @@ printf("start prepro, alloc assenv\n");
 	rindex.cidx=-1;
 
 #if TRACE_PREPRO
-printf("malloc\n");
+printf("malloc+memset\n");
 #endif
 	ae=MemMalloc(sizeof(struct s_assenv));
-#if TRACE_PREPRO
-printf("memset\n");
-#endif
 	memset(ae,0,sizeof(struct s_assenv));
 
 #if TRACE_PREPRO
@@ -17184,6 +17508,30 @@ int RasmAssembleInfo(const char *datain, int lenin, unsigned char **dataout, int
 #define AUTOTEST_MODULE02 "unglobal: nop: .prox: nop: module un: deuxglobal: nop: .prox: nop: djnz .prox: nop: doublon: nop: module deux: troisglobal: nop: " \
 			" .prox: nop: djnz .prox: nop: doublon: nop: assert doublon>troisglobal: module: jr un_doublon: jr deux_doublon: jr un_deuxglobal.prox: jr deux_troisglobal.prox "
 
+#define AUTOTEST_SNASET "buildsna:bank 0:nop:"\
+	":snaset Z80_AF,0x1234 :snaset Z80_A,0x11 :snaset Z80_F,0x11 :snaset Z80_BC,0x11 :snaset Z80_B,0x11 :snaset Z80_C,0x11 :snaset Z80_DE,0x11 :snaset Z80_D,0x11"\
+	":snaset Z80_E,0x11 :snaset Z80_HL,0x11 :snaset Z80_H,0x11 :snaset Z80_L,0x11 :snaset Z80_R,0x11 :snaset Z80_I,0x11 :snaset Z80_IFF0,0x11 :snaset Z80_IFF1,0x11"\
+	":snaset Z80_IX,0x11 :snaset Z80_IY,0x11 :snaset Z80_IXL,0x11 :snaset Z80_IXH,0x11 :snaset Z80_IYL,0x11 :snaset Z80_IYH,0x11 :snaset Z80_SP,0x11 :snaset Z80_PC,0x11"\
+	":snaset Z80_IM,0x11 :snaset Z80_AFX,0x11 :snaset Z80_AX,0x11 :snaset Z80_FX,0x11 :snaset Z80_BCX,0x11 :snaset Z80_BX,0x11 :snaset Z80_CX,0x11 :snaset Z80_DEX,0x11"\
+	":snaset Z80_DX,0x11 :snaset Z80_EX,0x11 :snaset Z80_HLX,0x11 :snaset Z80_HX,0x11 :snaset Z80_LX,0x11 :snaset FDD_MOTOR,0x11 :snaset FDD_TRACK,0x11 :snaset PRNT_DATA,0x11"\
+	":snaset PPI_A,0x1 :snaset PPI_B,0x1 :snaset PPI_C,0x1 :snaset PPI_CTL,0x1 :snaset INT_NUM,0x1 :snaset INT_REQ,0x11 :snaset PSG_SEL,0x1 :snaset CRTC_SEL,0x1"\
+	":snaset CRTC_TYPE,0x1 :snaset CRTC_HCC,0x11 :snaset CRTC_CLC,0x11 :snaset CRTC_RLC,0x11 :snaset CRTC_VAC,0x11 :snaset CRTC_VSWC,0x11 :snaset CRTC_HSWC,0x11"\
+	":snaset CRTC_STATE,0x11 :snaset GA_VSC,0x11 :snaset GA_ISC,0x11 :snaset GA_PEN,0x11 :snaset GA_ROMCFG,0x11 :snaset GA_RAMCFG,0x11 :snaset ROM_UP,0x11"\
+	":snaset CRTC_REG,0,0x11 :snaset CRTC_REG,1,0x11 :snaset CRTC_REG,16,0x11 :snaset PSG_REG,0,0x11 :snaset PSG_REG,5,0x11 :snaset PSG_REG,15,0x11: bank : nop"
+
+#define AUTOTEST_INKCONV "assert s2h_ink(0)==0x54 :assert s2h_ink(1)==0x44 :assert s2h_ink(2)==0x55 :assert s2h_ink(3)==0x5C :assert s2h_ink(4)==0x58 :assert s2h_ink(5)==0x5D "\
+":assert s2h_ink(6)==0x4C :assert s2h_ink(7)==0x45 :assert s2h_ink(8)==0x4D :assert s2h_ink(9)==0x56 :assert s2h_ink(10)==0x46 :assert s2h_ink(11)==0x57 "\
+":assert s2h_ink(12)==0x5E :assert s2h_ink(13)==0x40 :assert soft2hard_ink(14)==0x5F :assert soft2hard_ink(15)==0x4E :assert soft2hard_ink(16)==0x47 "\
+":assert soft2hard_ink(17)==0x4F :assert soft2hard_ink(18)==0x52 :assert soft2hard_ink(19)==0x42 :assert soft2hard_ink(20)==0x53 :assert soft2hard_ink(21)==0x5A "\
+":assert soft2hard_ink(22)==0x59 :assert soft2hard_ink(23)==0x5B :assert soft2hard_ink(24)==0x4A :assert soft2hard_ink(25)==0x43 :assert soft2hard_ink(26)==0x4B "\
+":nop :assert h2s_ink(0)==13 :assert h2s_ink(0x40)==13 :assert h2s_ink(1)==13 :assert h2s_ink(2)==19 :assert h2s_ink(3)==25 :assert h2s_ink(4)==1 "\
+":assert h2s_ink(5)==7 :assert h2s_ink(6)==10 :assert h2s_ink(7)==16 :assert h2s_ink(8)==7 :assert h2s_ink(9)==25 :assert h2s_ink(10)==24 "\
+":assert h2s_ink(11)==26 :assert h2s_ink(12)==6 :assert h2s_ink(13)==8 :assert h2s_ink(14)==15 :assert hard2soft_ink(15)==17 :assert hard2soft_ink(16)==1 "\
+":assert hard2soft_ink(17)==19 :assert hard2soft_ink(18)==18 :assert hard2soft_ink(19)==20 :assert hard2soft_ink(20)==0 :assert hard2soft_ink(21)==2 "\
+":assert hard2soft_ink(22)==9 :assert hard2soft_ink(23)==11 :assert hard2soft_ink(24)==4 :assert hard2soft_ink(25)==22 :assert hard2soft_ink(26)==21 "\
+":assert hard2soft_ink(27)==23 :assert hard2soft_ink(28)==3 :assert hard2soft_ink(29)==5 :assert h2s_ink(30)==12 :assert h2s_ink(31)==14 :nop "
+
+
 
 struct s_autotest_keyword {
 	char *keywordtest;
@@ -17266,7 +17614,22 @@ struct s_autotest_keyword autotest_keyword[]={
 	{"repeat 5:nop:rend",0},{"repeat 100000:a=5:rend",1},{"repeat -5:nop:rend",1},{"repeat repeat:nop:rend",1},
 	{"macro bidule:nop:mend:bidule",0},{"macro bidule:nop:macro glop:nop:mend:mend:bidule",1},
 	{"macro bidule:nop",1},{"macro bidule:nop:mend:macro glop:nop:bidule",1},
+	{"defb getnop(1)",1},{"defb getnop(-1)",1},{"defb getnop(10)",1},{"defb getnop(\"rien\")",1},{"defb getnop()",1},{"defb getnop(\"djNz\")",0},
+	/* wrong snapshot settings */
+	{"buildsna:bank 0:nop:snaset crtc_type",1},
+	{"buildsna:bank 0:nop:snaset crtc_type,3,2",1},
+	{"buildsna:bank 0:nop:snaset crtc_reg,3",1},
+	{"buildsna:bank 0:nop:snaset crtc_reg,20,0",1},
+	{"buildsna:bank 0:nop:snaset crtc_reg,-1,0",1},
+	{"buildsna:bank 0:nop:snaset psg_reg,3",1},
+	{"buildsna:bank 0:nop:snaset psg_reg,20,0",1},
+	{"buildsna:bank 0:nop:snaset psg_reg,-1,0",1},
+	{"buildsna:bank 0:nop:snaset ga_pal,3",1},
+	{"buildsna:bank 0:nop:snaset ga_pal,20,0",1},
+	{"buildsna:bank 0:nop:snaset ga_pal,-1,0",1},
 	/*
+	{"",},{"",},{"",},{"",},{"",},
+	{"",},{"",},{"",},{"",},{"",},{"",},
 	{"",},{"",},{"",},{"",},{"",},{"",},{"",},{"",},{"",},{"",},{"",},{"",},
 	{"",},{"",},{"",},{"",},{"",},{"",},{"",},{"",},{"",},{"",},{"",},{"",},
 	{"",},{"",},{"",},{"",},{"",},{"",},{"",},{"",},{"",},{"",},{"",},{"",},
@@ -17895,6 +18258,16 @@ printf("testing enhanced LD variante OK\n");
 	if (!ret && memcmp(opcode,opcode+opcodelen/2,opcodelen/2)==0) {} else {printf("Autotest %03d ERROR (enhanced PUSH/POP/NOP)\n",cpt);MiniDump(opcode,opcodelen);exit(-1);}
 	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
 printf("testing enhanced PUSH/POP OK\n");
+
+	ret=RasmAssembleInfo(AUTOTEST_INKCONV,strlen(AUTOTEST_INKCONV),&opcode,&opcodelen,&debug);
+	if (!ret && opcodelen==2) {} else {printf("Autotest %03d ERROR (gate array color conversion)\n",cpt);MiniDump(opcode,opcodelen);for (i=0;i<debug->nberror;i++) printf("%d -> %s\n",i,debug->error[i].msg);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing gate array color conversion OK\n");
+
+	ret=RasmAssembleInfo(AUTOTEST_SNASET,strlen(AUTOTEST_SNASET),&opcode,&opcodelen,&debug);
+	if (!ret) {} else {printf("Autotest %03d ERROR (snapshot settings)\n",cpt);MiniDump(opcode,opcodelen);for (i=0;i<debug->nberror;i++) printf("%d -> %s\n",i,debug->error[i].msg);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing snapshot settings OK\n");
 
 	ret=RasmAssemble(AUTOTEST_PAGELABELGEN,strlen(AUTOTEST_PAGELABELGEN),&opcode,&opcodelen);
 	if (!ret) {} else {printf("Autotest %03d ERROR (pagelabelgen)\n",cpt);MiniDump(opcode,opcodelen);exit(-1);}
