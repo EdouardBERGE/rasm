@@ -4911,7 +4911,17 @@ printf("final POP string=%X\n",ae->computectx->operatorstack[nboperatorstack+1].
 				case E_COMPUTE_OPERATION_LOW:if (paccu>0) accu[paccu-1]=((int)accu[paccu-1])&0xFF;break;
 				case E_COMPUTE_OPERATION_HIGH:if (paccu>0) accu[paccu-1]=(((int)accu[paccu-1])&0xFF00)>>8;break;
 				case E_COMPUTE_OPERATION_PSG:if (paccu>0) accu[paccu-1]=ae->psgfine[((int)accu[paccu-1])&0xFF];break;
-				case E_COMPUTE_OPERATION_RND:if (paccu>0) accu[paccu-1]=rand()%((int)accu[paccu-1]);break;
+				case E_COMPUTE_OPERATION_RND:if (paccu>0) {
+								     int zemod;
+								     zemod=(int)floor(accu[paccu-1]+0.5);
+								     if (zemod>0) {
+									     accu[paccu-1]=rand()%zemod;
+								     } else {
+									MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"RND function needs a value greater than zero to perform a random value\n");
+								        accu[paccu-1]=0;
+								     }
+							     }
+							     break;
 				case E_COMPUTE_OPERATION_FRAC:if (paccu>0) accu[paccu-1]=((int)(accu[paccu-1]-(int)accu[paccu-1]));break;
 				case E_COMPUTE_OPERATION_CEIL:if (paccu>0) accu[paccu-1]=(int)ceil(accu[paccu-1])&workinterval;break;
 				case E_COMPUTE_OPERATION_GET_R:if (paccu>0) accu[paccu-1]=((((int)accu[paccu-1])&0xF0)>>4);break;
