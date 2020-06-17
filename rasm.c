@@ -5050,7 +5050,17 @@ printf("final POP string=%X\n",ae->computectx->operatorstack[nboperatorstack+1].
 				case E_COMPUTE_OPERATION_LOW:if (paccu>0) accu[paccu-1]=((int)floor(accu[paccu-1]+0.5))&0xFF;break;
 				case E_COMPUTE_OPERATION_HIGH:if (paccu>0) accu[paccu-1]=(((int)floor(accu[paccu-1]+0.5))&0xFF00)>>8;break;
 				case E_COMPUTE_OPERATION_PSG:if (paccu>0) accu[paccu-1]=ae->psgfine[((int)floor(accu[paccu-1]+0.5))&0xFF];break;
-				case E_COMPUTE_OPERATION_RND:if (paccu>0) accu[paccu-1]=rand()%((int)accu[paccu-1]);break;
+				case E_COMPUTE_OPERATION_RND:if (paccu>0) {
+								     int zemod;
+								     zemod=(int)floor(accu[paccu-1]+0.5);
+								     if (zemod>0) {
+									     accu[paccu-1]=rand()%zemod;
+								     } else {
+									MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"RND function needs a value greater than zero to perform a random value\n");
+								        accu[paccu-1]=0;
+								     }
+							     }
+							     break;
 				case E_COMPUTE_OPERATION_FRAC:if (paccu>0) accu[paccu-1]=modf(accu[paccu-1],&dummint);break;
 				case E_COMPUTE_OPERATION_CEIL:if (paccu>0) accu[paccu-1]=ceil(accu[paccu-1]);break;
 				case E_COMPUTE_OPERATION_GET_R:if (paccu>0) accu[paccu-1]=((((int)accu[paccu-1])&0xF0)>>4);break;
@@ -17421,6 +17431,8 @@ int RasmAssembleInfo(const char *datain, int lenin, unsigned char **dataout, int
 
 #define AUTOTEST_FRAC		"mavar=frac(5.5):assert mavar==0.5:assert frac(6.6)==0.6:assert frac(1.1)==0.1:assert frac(1)==0:assert frac(100000)==0:nop"
 
+#define AUTOTEST_RND		"repeat:glop=rnd(20):until glop==10:nop"
+
 /* test override control between bank and bankset in snapshot mode + temp workspace */
 #define AUTOTEST_BANKSET "buildsna:bank 0:nop:bank 1:nop:bank:nop:bank 2:nop:bank 3:nop:bankset 1:nop:bank 8:nop:bank 9:nop:bank 10:nop:bank 11:nop"
 
@@ -17627,6 +17639,7 @@ struct s_autotest_keyword autotest_keyword[]={
 	{"buildsna:bank 0:nop:snaset ga_pal,3",1},
 	{"buildsna:bank 0:nop:snaset ga_pal,20,0",1},
 	{"buildsna:bank 0:nop:snaset ga_pal,-1,0",1},
+	{"glop=rnd(5):nop",0},{"glop=rnd(0):nop",0},{"glop=rnd():nop",0},{"glop=rnd(-1):nop",0},{"pifou=8:glop=rnd(pifou):defb glop",0},
 	/*
 	{"",},{"",},{"",},{"",},{"",},
 	{"",},{"",},{"",},{"",},{"",},{"",},
@@ -18233,6 +18246,11 @@ printf("testing formula function for Plus color management OK\n");
 	if (!ret) {} else {printf("Autotest %03d ERROR (formula func FRAC)\n",cpt);exit(-1);}
 	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
 printf("testing formula FRAC function OK\n");
+	
+	ret=RasmAssemble(AUTOTEST_RND,strlen(AUTOTEST_RND),&opcode,&opcodelen);
+	if (!ret) {} else {printf("Autotest %03d ERROR (formula func RND)\n",cpt);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing formula RND function OK\n");
 	
 	ret=RasmAssemble(AUTOTEST_UNDERVAR,strlen(AUTOTEST_UNDERVAR),&opcode,&opcodelen);
 	if (!ret && opcodelen==4) {} else {printf("Autotest %03d ERROR (var starting with _)\n",cpt);exit(-1);}
