@@ -1584,7 +1584,7 @@ char *MergePath(struct s_assenv *ae,char *dadfilename, char *filename) {
 	#define FUNC "MergePath"
 
 	static char curpath[PATH_MAX];
-	int zelen;
+
 
 #ifdef OS_WIN
 	TxtReplace(filename,"/","\\",1);
@@ -1939,7 +1939,7 @@ unsigned char *__internal_MakeRosoftREAL(struct s_assenv *ae, double v, int iexp
 	
 	static unsigned char rc[5]={0};
 
-	double tmpval;
+	
 	int j,ib,ibb,exp=0;
 	unsigned int deci;
 	int fracmax=0;
@@ -2096,7 +2096,7 @@ unsigned char *__internal_MakeAmsdosREAL(struct s_assenv *ae, double v, int iexp
 	
 	static unsigned char rc[5];
 
-	double tmpval;
+	
 	int j,ib,ibb,exp=0;
 	unsigned int deci;
 	int fracmax=0;
@@ -2496,8 +2496,8 @@ void MaxError(struct s_assenv *ae)
 	#define FUNC "MaxError"
 
 	char **source_lines=NULL;
-	int idx,crc,zeline;
-	char c;
+	int zeline;
+
 
 	/* extended error is useful with generated code we do not want to edit */
 	if (ae->extended_error && ae->wl) {
@@ -2670,7 +2670,7 @@ unsigned char *MakeHobetaHeader(int minmem, int maxmem, char *trdos_name) {
    */
 	memset(HobetaHeader,0,sizeof(HobetaHeader));
 
-	strncpy(HobetaHeader,trdos_name,8);
+	strncpy(&HobetaHeader[0],trdos_name,8);
 	HobetaHeader[8]='C';
 	HobetaHeader[0x9]=(maxmem-minmem)&0xFF;
 	HobetaHeader[0xA]=(maxmem-minmem)>>8;
@@ -2969,8 +2969,8 @@ void WarnDicoTreeRecurse(struct s_assenv *ae, struct s_crcdico_tree *lt)
 	#undef FUNC
 	#define FUNC "WarnDicoTreeRecurse"
 
-	char symbol_line[1024];
 	int i;
+
 
 	for (i=0;i<256;i++) {
 		if (lt->radix[i]) {
@@ -3076,8 +3076,8 @@ struct s_expr_dico *SearchDico(struct s_assenv *ae, char *dico, int crc)
 	#define FUNC "SearchDico"
 
 	struct s_crcdico_tree *curdicotree;
-	struct s_expr_dico *retdico=NULL;
 	int i,radix,dek=32;
+
 
 	curdicotree=&ae->dicotree;
 
@@ -3323,7 +3323,7 @@ struct s_crclabel_tree {
 
 
 
-/*
+
 struct s_crclabel_tree {
 	struct s_crclabel_tree *radix[256];
 	struct s_label *label;
@@ -3367,8 +3367,8 @@ struct s_label *SearchLabel(struct s_assenv *ae, char *label, int crc)
 	#define FUNC "SearchLabel"
 
 	struct s_crclabel_tree *curlabeltree;
-	struct s_label *retlabel=NULL;
 	int i,radix,dek=32;
+
 //printf("searchLabel [%s]",label);
 	curlabeltree=&ae->labeltree;
 	while (dek) {
@@ -3537,7 +3537,7 @@ char *TranslateTag(struct s_assenv *ae, char *varbuffer, int *touched, int enabl
 	char *starttag,*endtag,*tagcheck,*expr;
 	int newlen,lenw,taglen,tagidx,tagcount,validx;
 	char curvalstr[256]={0};
-	char *equpos=NULL,*equback;
+
 
 //printf("TranslateTag [%s]\n",varbuffer);
 
@@ -3643,6 +3643,7 @@ int __GETNOP(struct s_assenv *ae,char *opcode, int didx)
 		case CRC_RET:tick=3;break;
 		default: 
 			MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported opcode [%s] for GETNOP, see documentation about this directive",opcode);
+			tick=0;
 	}
 	return tick;
 }
@@ -3716,7 +3717,8 @@ int __Hard2SoftInk(struct s_assenv *ae,int hard, int didx) {
 		case 29:return 5;break;
 		case 30:return 12;break;
 		case 31:return 14;break;
-		default:/*warning remover*/break;
+		default:/*warning remover*/
+			MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"SOFT2HARD_INK warning remover");
 	}
 	return 0;
 }
@@ -3751,8 +3753,7 @@ double ComputeExpressionCore(struct s_assenv *ae,char *original_zeexpression,int
 	/* dictionnary */
 	struct s_expr_dico *curdic;
 	struct s_label *curlabel;
-	char *localname;
-	int minusptr,imkey,bank,page,idxmacro;
+	int minusptr,imkey,bank,page;
 	double curval;
 	int is_string=0;
 	/* negative value */
@@ -3838,6 +3839,7 @@ double ComputeExpressionCore(struct s_assenv *ae,char *original_zeexpression,int
 			case '"':
 			case '\'':
 				//printf("COMPUTE => string detected!\n");
+				ivar=0;
 				idx++;
 				while (zeexpression[idx] && zeexpression[idx]!=c) {
 					ae->computectx->varbuffer[ivar++]=zeexpression[idx];
@@ -3846,7 +3848,7 @@ double ComputeExpressionCore(struct s_assenv *ae,char *original_zeexpression,int
 				}
 				if (zeexpression[idx]) idx++; else MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"ComputeExpression [%s] quote bug!\n",TradExpression(zeexpression));
 				ae->computectx->varbuffer[ivar]=0;
-				is_string=1;
+				is_string=1; // donc on ira jamais utiliser startvar derriere
 				break;
 
 			/* parenthesis */
@@ -4082,9 +4084,9 @@ double ComputeExpressionCore(struct s_assenv *ae,char *original_zeexpression,int
 			switch (ae->computectx->varbuffer[minusptr]) {
 				case '0':
 					/* 0x hexa value hack */
-					if (ae->computectx->varbuffer[minusptr+1]=='X' && ae->AutomateHexa[ae->computectx->varbuffer[minusptr+2]]) {
+					if (ae->computectx->varbuffer[minusptr+1]=='X' && ae->AutomateHexa[(int)ae->computectx->varbuffer[minusptr+2]&0xFF]) {
 						for (icheck=minusptr+3;ae->computectx->varbuffer[icheck];icheck++) {
-							if (ae->AutomateHexa[ae->computectx->varbuffer[icheck]]) continue;
+							if (ae->AutomateHexa[(int)ae->computectx->varbuffer[icheck]&0xFF]) continue;
 							MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"expression [%s] - %s is not a valid hex number\n",TradExpression(zeexpression),ae->computectx->varbuffer);
 							break;
 						}
@@ -4122,12 +4124,12 @@ double ComputeExpressionCore(struct s_assenv *ae,char *original_zeexpression,int
 				case '9':
 					/* check number */
 					for (icheck=minusptr;ae->computectx->varbuffer[icheck];icheck++) {
-						if (ae->AutomateDigit[ae->computectx->varbuffer[icheck]]) continue;
+						if (ae->AutomateDigit[(int)ae->computectx->varbuffer[icheck]&0xFF]) continue;
 						/* Intel hexa & binary style */
 						switch (ae->computectx->varbuffer[strlen(ae->computectx->varbuffer)-1]) {
 							case 'H':
 								for (icheck=minusptr;ae->computectx->varbuffer[icheck+1];icheck++) {
-									if (ae->AutomateHexa[ae->computectx->varbuffer[icheck]]) continue;
+									if (ae->AutomateHexa[(int)ae->computectx->varbuffer[icheck]&0xFF]) continue;
 									MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"expression [%s] - %s is not a valid hex number\n",TradExpression(zeexpression),ae->computectx->varbuffer);
 								}
 								curval=strtol(ae->computectx->varbuffer+minusptr,NULL,16);
@@ -4174,9 +4176,9 @@ double ComputeExpressionCore(struct s_assenv *ae,char *original_zeexpression,int
 				default:
 					if (1 || !curlyflag) {
 						/* $ hex value hack */
-						if (ae->computectx->varbuffer[minusptr+0]=='$' && ae->AutomateHexa[ae->computectx->varbuffer[minusptr+1]]) {
+						if (ae->computectx->varbuffer[minusptr+0]=='$' && ae->AutomateHexa[(int)ae->computectx->varbuffer[minusptr+1]&0xFF]) {
 							for (icheck=minusptr+2;ae->computectx->varbuffer[icheck];icheck++) {
-								if (ae->AutomateHexa[ae->computectx->varbuffer[icheck]]) continue;
+								if (ae->AutomateHexa[(int)ae->computectx->varbuffer[icheck]&0xFF]) continue;
 								MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"expression [%s] - %s is not a valid hex number\n",TradExpression(zeexpression),ae->computectx->varbuffer);
 								break;
 							}
@@ -4194,10 +4196,10 @@ double ComputeExpressionCore(struct s_assenv *ae,char *original_zeexpression,int
 							break;
 						}
 						/* Intel hexa value hack */
-						if (ae->AutomateHexa[ae->computectx->varbuffer[minusptr+0]]) {
+						if (ae->AutomateHexa[(int)ae->computectx->varbuffer[minusptr+0]&0xFF]) {
 							if (ae->computectx->varbuffer[strlen(ae->computectx->varbuffer)-1]=='H') {
 								for (icheck=minusptr;ae->computectx->varbuffer[icheck+1];icheck++) {
-									if (!ae->AutomateHexa[ae->computectx->varbuffer[icheck]]) break;
+									if (!ae->AutomateHexa[(int)ae->computectx->varbuffer[icheck]&0xFF]) break;
 								}
 								if (!ae->computectx->varbuffer[icheck+1]) {
 									curval=strtol(ae->computectx->varbuffer+minusptr,NULL,16);
@@ -4331,6 +4333,8 @@ double ComputeExpressionCore(struct s_assenv *ae,char *original_zeexpression,int
 								}
 							} else {
 								MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"expression [%s] - %s is an unknown prefix!\n",TradExpression(zeexpression),ae->computectx->varbuffer);
+								bank=0; // on pourrait sauter le tag pour eviter la merde a suivre
+								page=0;
 							}
 							/* limited label translation while processing crunched blocks
 							   ae->curlz == current crunched block processed
@@ -5159,12 +5163,12 @@ double ComputeExpression(struct s_assenv *ae,char *expr, int ptr, int didx, int 
 	#undef FUNC
 	#define FUNC "ComputeExpression"
 
-	char *ptr_exp,*ptr_exp2,backupeval;
-	int crc,idic,idx=0,ialias,touched,hasformula=0;
-	double v,vl;
+	char *ptr_exp,*ptr_exp2;
+	int crc,idx=0,ialias,touched;
+	double v;
 	struct s_alias curalias;
 	struct s_expr_dico *curdic;
-	char *minibuffer;
+
 
 	while (!ae->AutomateExpressionDecision[((int)expr[idx])&0xFF]) idx++;
 
@@ -5189,7 +5193,6 @@ printf("WARNING! alias is local! [%s]\n",expr);
 				/* local label creation does not handle formula in tags */
 				curalias.alias=TranslateTag(ae,TxtStrDup(expr),&touched,0,E_TAGOPTION_NONE);
 				curalias.alias=MakeLocalLabel(ae,curalias.alias,NULL);
-				hasformula=1;
 			} else if (strchr(expr,'{')) {
 #if TRACE_COMPUTE_EXPRESSION
 printf("WARNING! alias has tag! [%s]\n",expr);
@@ -5199,7 +5202,6 @@ printf("WARNING! alias has tag! [%s]\n",expr);
 #if TRACE_COMPUTE_EXPRESSION
 printf("MakeAlias (2) EXPR=[%s EQU %s]\n",expr,ptr_exp2);
 #endif
-				hasformula=1;
 			} else {
 				curalias.alias=TxtStrDup(expr);
 			}
@@ -5288,7 +5290,7 @@ printf("***********\n");
 						curdic=SearchDico(ae,expr,crc);
 						if (curdic) {
 							switch (operatorassignment) {
-								default:printf("warning remover\n");
+								default:printf("warning remover\n");break;
 								case 0:curdic->v=v;break;
 								case '+':curdic->v+=v;ptr_exp[-1]='+';break;
 								case '-':curdic->v-=v;ptr_exp[-1]='-';break;
@@ -5365,7 +5367,7 @@ void ExpressionFastTranslate(struct s_assenv *ae, char **ptr_expr, int fullrepla
 	struct s_label *curlabel;
 	struct s_expr_dico *curdic;
 	static char *varbuffer=NULL;
-	static int ivar=0,maxivar=1;
+	static int ivar,maxivar=1;
 	char curval[256]={0};
 	int c,lenw=0,idx=0,crc,startvar,newlen,ialias,found_replace,yves,dek,reidx,lenbuf,rlen,tagoffset;
 	double v;
@@ -5385,6 +5387,8 @@ void ExpressionFastTranslate(struct s_assenv *ae, char **ptr_expr, int fullrepla
 	/* be sure to have at least some bytes allocated */
 	StateMachineResizeBuffer(&varbuffer,128,&maxivar);
 	expr=*ptr_expr;
+
+	ivar=0;
 
 //printf("fast [%s]\n",expr);
 
@@ -6762,8 +6766,8 @@ void EDSK_write(struct s_assenv *ae)
 	#define FUNC "EDSK_write"
 
 	struct s_edsk_wrapper *faceA,*faceB;
-	char *edskfilename;
 	int i,j;
+
 	
 	/* on passe en revue toutes les structs */
 	for (i=0;i<ae->nbedskwrapper;i++) {
@@ -7163,21 +7167,21 @@ void PushLabel(struct s_assenv *ae)
 	struct s_label curlabel={0},*searched_label;
 	int i,im;
 	/* label with counters */
-	struct s_expr_dico *curdic;
-	char curval[32];
-	char *varbuffer,*expr;
-	char *starttag,*endtag,*tagcheck;
-	int taglen,tagidx,lenw,tagcount=0;
-	int crc,newlen,touched;
+	char *varbuffer;
+	int taglen,tagcount=0;
+	int newlen,touched;
+
+
+
 
 #if TRACE_LABEL
 	printf("check label [%s]\n",ae->wl[ae->idx].w);
 #endif
-	if (ae->AutomateValidLabelFirst[ae->wl[ae->idx].w[0]]) {
+	if (ae->AutomateValidLabelFirst[(int)ae->wl[ae->idx].w[0]&0xFF]) {
 		for (i=1;ae->wl[ae->idx].w[i];i++) {
 			if (ae->wl[ae->idx].w[i]=='{') tagcount++; else if (ae->wl[ae->idx].w[i]=='}') tagcount--;
 			if (!tagcount) {
-				if (!ae->AutomateValidLabel[ae->wl[ae->idx].w[i]]) {
+				if (!ae->AutomateValidLabel[(int)ae->wl[ae->idx].w[i]&0xFF]) {
 					MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Invalid char in label declaration (%c)\n",ae->wl[ae->idx].w[i]);
 					return;
 				}
@@ -11487,6 +11491,7 @@ void __SETCRTC(struct s_assenv *ae) {
 		ae->idx++;
 	} else {
 		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"SETCRTC directive need one integer parameter\n");
+		mycrtc=0;
 	}
 	switch (mycrtc) {
 		case 0:
@@ -11818,9 +11823,9 @@ void __WEND(struct s_assenv *ae) {
 void __REPEAT(struct s_assenv *ae) {
 	struct s_repeat currepeat={0};
 	struct s_expr_dico *rvar;
-	int *loopstyle;
-	int iloop,mloop;
 	int cidx,crc;
+
+
 	
 	if (ae->wl[ae->idx+1].t!=2) {
 		if (ae->wl[ae->idx].t==0) {
@@ -12118,10 +12123,10 @@ void __IFDEF_light(struct s_assenv *ae) {
 	}
 }
 void __IFNDEF(struct s_assenv *ae) {
-	struct s_expr_dico *curdic=NULL;
-	struct s_label *curlabel=NULL;
 	struct s_ifthen ifthen={0};
 	int rexpr,crc;
+
+
 	
 	if (!ae->wl[ae->idx].t && ae->wl[ae->idx+1].t==1) {
 		crc=GetCRC(ae->wl[ae->idx+1].w);
@@ -12153,9 +12158,8 @@ void __IFNDEF(struct s_assenv *ae) {
 	}
 }
 void __IFNDEF_light(struct s_assenv *ae) {
-	struct s_expr_dico *curdic=NULL;
-	struct s_label *curlabel=NULL;
 	struct s_ifthen ifthen={0};
+
 	
 	if (!ae->wl[ae->idx].t && ae->wl[ae->idx+1].t==1) {
 		ifthen.v=0;
@@ -12529,7 +12533,6 @@ void __STRUCT(struct s_assenv *ae) {
 	int crc,i,j,irs;
 	/* filler */
 	int localsize,cursize;
-	double zeval;
 
 	if (!ae->wl[ae->idx].t) {
 		if (ae->wl[ae->idx+1].t) {
@@ -12905,7 +12908,7 @@ int __internal_getsample32biglittle(unsigned char *data, int *idx) {
 #define __internal_getsample32littlebig __internal_getsample32biglittle
 
 
-void _AudioLoadSample(struct s_assenv *ae, unsigned char *data, int filesize, enum e_audio_sample_type sample_type, float normalize)
+void _AudioLoadSample(struct s_assenv *ae, unsigned char *data, unsigned int filesize, enum e_audio_sample_type sample_type, float normalize)
 {
 	#undef FUNC
 	#define FUNC "AudioLoadSample"
@@ -13228,6 +13231,7 @@ printf(" -> REMAP loading\n");
 						itiles=1;
 					} else {
 						MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"usage is INCBIN'file',ITILES,width\n");
+						tilex=0;
 					}
 #if TRACE_HEXBIN
 printf(" -> ITILES loading\n");
@@ -13706,8 +13710,10 @@ void __SAVE(struct s_assenv *ae) {
 	#define FUNC "__SAVE"
 
 	struct s_save cursave={0};
-	unsigned int offset=0,size=0;
 	int ko=1;
+
+
+
 
 	if (!ae->wl[ae->idx].t) {
 		/* nom de fichier entre quotes ou bien mot clef DSK */
@@ -13977,7 +13983,7 @@ int IsDirective(char *zeexpression)
 
 	crc=GetCRC(zeexpression);
 
-	for (i=0;instruction[i].mnemo[0];i++) if (instruction[i].crc=crc && !strcmp(instruction[i].mnemo,zeexpression)) return 1;
+	for (i=0;instruction[i].mnemo[0];i++) if (instruction[i].crc==crc && !strcmp(instruction[i].mnemo,zeexpression)) return 1;
 
 	return 0;
 }
@@ -13991,7 +13997,6 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 	unsigned char *AmsdosHeader;
 	struct s_expression curexp={0};
 	struct s_wordlist *wordlist;
-	struct s_expr_dico curdico={0};
 	struct s_label *curlabel;
 	int icrc,curcrc,i,j,k;
 	unsigned char *lzdata=NULL;
@@ -14008,8 +14013,9 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 	/* debug */
 	int curii,inhibe;
 	int ok;
-	/* macro inception */
-	int imacrocur=0;
+
+
+
 
 	rasm_printf(ae,KAYGREEN"Assembling\n");
 #if TRACE_ASSEMBLE
@@ -14332,7 +14338,7 @@ printf("-loop\n");
 		*****************************************/
 		if (ae->imacropos) {
 			int icheckm,inewmacrocur;
-			int curlevel;
+
 
 			/*
 			printf("===== Macro positions idx=%d =====\n",ae->idx);
@@ -14556,12 +14562,12 @@ printf("lzshift=%d\n",lzshift);
 				/*******************************************************************************
 				  r e l o c a t e   d a t a   u n t i l   n o n   c o n t i g u o u s   O R G
 				*******************************************************************************/
+				morgzone=iorgzone;
 				if (lzshift>0) {
 					/* positif => plus gros @@TODO */
 					//MemMove(ae->mem[ae->lzsection[i].ibank]+ae->lzsection[i].memend+lzshift,ae->mem[ae->lzsection[i].ibank]+ae->lzsection[i].memend,65536-ae->lzsection[i].memend-lzshift);
 				} else if (lzshift<0) {
 					/* when crunched we may have to move more than 1 ORG */
-					morgzone=iorgzone;
 					while (morgzone+1<ae->io) {
 						/* if next ORG zone is contiguous */
 						if (ae->orgzone[morgzone+1].memstart==ae->orgzone[morgzone].memend && ae->orgzone[morgzone+1].ibank==ae->orgzone[morgzone].ibank) {
@@ -15762,7 +15768,6 @@ struct s_assenv *PreProcessing(char *filename, int flux, const char *datain, int
 	char Automate[256]={0};
 	struct s_hexbin curhexbin;
 	char *newlistingline=NULL;
-	unsigned char *newdata;
 	struct s_label curlabel={0};
 	char *labelsep1;
 	char **labelines=NULL;
@@ -15793,6 +15798,7 @@ struct s_assenv *PreProcessing(char *filename, int flux, const char *datain, int
 	char opassign=0;
 	/* incbin bug */
 	int incstartL;
+
 
 
 #if TRACE_GENERALE
@@ -16334,7 +16340,7 @@ if (!idx) printf("[%s]\n",listing[l].listing);
 					}
 					
 					if (fileok) {
-						int newi,newj;
+
 						#if TRACE_PREPRO
 						rasm_printf(ae,KBLUE"include [%s]\n",filename_toread);
 						#endif
@@ -17582,9 +17588,9 @@ struct s_autotest_keyword autotest_keyword[]={
 	{"jp p,$",0},{"jp p,0",0},{"jp p,jp",1},   {"jp p,(hl)",1}, {"jp p,(ix)",1}, {"jp p,(iy)",1},{"jp p,(de)",1},{"jp p,a",1},
 	{"jp m,$",0},{"jp m,0",0},{"jp m,jp",1},   {"jp m,(hl)",1}, {"jp m,(ix)",1}, {"jp m,(iy)",1},{"jp m,(de)",1},{"jp m,a",1},
 	{"ret",0},{"ret c",0},{"ret nc",0},{"ret pe",0},{"ret po",0},{"ret m",0},{"ret p",0},{"reti",0},{"ret ret",1},{"ret 5",1},{"ret (hl)",1},{"ret a",1},
-	{"xor a",0},{"xor a,b",1},{"xor",1},{"xor (de)",1},{"xor (hl)",0},{"xor (bc)",1},{"xor (ix+0)",0},{"xor (iy+0)",},{"xor xor",1},
-	{"and a",0},{"and a,b",1},{"xor",1},{"and (de)",1},{"and (hl)",0},{"and (bc)",1},{"and (ix+0)",0},{"and (iy+0)",},{"and xor",1},
-	{"or a",0},{"or a,b",1},{"xor",1},{"or (de)",1},{"or (hl)",0},{"or (bc)",1},{"or (ix+0)",0},{"or (iy+0)",},{"or xor",1},
+	{"xor a",0},{"xor a,b",1},{"xor",1},{"xor (de)",1},{"xor (hl)",0},{"xor (bc)",1},{"xor (ix+0)",0},{"xor (iy+0)",0},{"xor xor",1},
+	{"and a",0},{"and a,b",1},{"xor",1},{"and (de)",1},{"and (hl)",0},{"and (bc)",1},{"and (ix+0)",0},{"and (iy+0)",0},{"and xor",1},
+	{"or a",0},{"or a,b",1},{"xor",1},{"or (de)",1},{"or (hl)",0},{"or (bc)",1},{"or (ix+0)",0},{"or (iy+0)",0},{"or xor",1},
 	{"add",1},{"add a",0},{"add a,a",0},{"add add",1},{"add (hl)",0},{"add (de)",1},{"add xh",0},{"add grouik",1},
 	{"add hl,ix",1},{"add hl,iy",1},{"add ix,iy",1},{"add iy,ix",1},{"add hl,0",1},{"add hl,grouik",1},{"add ix,hl",1},{"add iy,hl",1},
 	{"adc",1},{"adc a",0},{"adc a,a",0},{"adc adc",1},{"adc (hl)",0},{"adc (de)",1},{"adc xh",0},{"adc grouik",1},
