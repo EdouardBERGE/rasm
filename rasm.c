@@ -1334,6 +1334,16 @@ int _internal_LevenshteinDistance(char *s,  char *t)
    return r;
 }
 
+unsigned int FastRand()
+{
+        #undef FUNC
+        #define FUNC "FastRand"
+	static unsigned int zeseed=0x12345678;
+        zeseed=214013*zeseed+2531011;
+        return (zeseed>>16)&0x7FFF;
+}
+
+
 #ifdef RASM_THREAD
 /*
  threads used for crunching
@@ -2781,7 +2791,7 @@ void CheckAndSortAliases(struct s_assenv *ae)
 	#define FUNC "CheckAndSortAliases"
 
 	struct s_alias tmpalias;
-	int i,dw,dm,du,crc;
+	int i,dw,dm=0,du,crc;
 	for (i=0;i<ae->ialias-1;i++) {
 		/* is there previous aliases in the new alias? */
 		if (strstr(ae->alias[ae->ialias-1].translation,ae->alias[i].alias)) {
@@ -3105,7 +3115,6 @@ int DelDico(struct s_assenv *ae, char *dico, int crc)
 	#define FUNC "DelDico"
 
 	struct s_crcdico_tree *curdicotree;
-	struct s_expr_dico *retdico=NULL;
 	int i,radix,dek=32;
 
 	curdicotree=&ae->dicotree;
@@ -3748,7 +3757,7 @@ double ComputeExpressionCore(struct s_assenv *ae,char *original_zeexpression,int
 	/* backup alias replace */
 	char *zeexpression,*expr;
 	int original=1;
-	int ialias,startvar;
+	int ialias,startvar=0;
 	int newlen,lenw;
 	/* dictionnary */
 	struct s_expr_dico *curdic;
@@ -4167,7 +4176,7 @@ double ComputeExpressionCore(struct s_assenv *ae,char *original_zeexpression,int
 						MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"expression [%s] - %s is an empty hex number\n",TradExpression(zeexpression),ae->computectx->varbuffer);
 					}
 					for (icheck=minusptr+1;ae->computectx->varbuffer[icheck];icheck++) {
-						if (ae->AutomateHexa[ae->computectx->varbuffer[icheck]]) continue;
+						if (ae->AutomateHexa[(int)ae->computectx->varbuffer[icheck]&0xFF]) continue;
 						MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"expression [%s] - %s is not a valid hex number\n",TradExpression(zeexpression),ae->computectx->varbuffer);
 						break;
 					}
@@ -4919,7 +4928,7 @@ printf("final POP string=%X\n",ae->computectx->operatorstack[nboperatorstack+1].
 								     int zemod;
 								     zemod=(int)floor(accu[paccu-1]+0.5);
 								     if (zemod>0) {
-									     accu[paccu-1]=rand()%zemod;
+									     accu[paccu-1]=FastRand()%zemod;
 								     } else {
 									MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"RND function needs a value greater than zero to perform a random value\n");
 								        accu[paccu-1]=0;
@@ -5068,7 +5077,7 @@ printf("final POP string=%X\n",ae->computectx->operatorstack[nboperatorstack+1].
 								     int zemod;
 								     zemod=(int)floor(accu[paccu-1]+0.5);
 								     if (zemod>0) {
-									     accu[paccu-1]=rand()%zemod;
+									     accu[paccu-1]=FastRand()%zemod;
 								     } else {
 									MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"RND function needs a value greater than zero to perform a random value\n");
 								        accu[paccu-1]=0;
@@ -5369,7 +5378,7 @@ void ExpressionFastTranslate(struct s_assenv *ae, char **ptr_expr, int fullrepla
 	static char *varbuffer=NULL;
 	static int ivar,maxivar=1;
 	char curval[256]={0};
-	int c,lenw=0,idx=0,crc,startvar,newlen,ialias,found_replace,yves,dek,reidx,lenbuf,rlen,tagoffset;
+	int c,lenw=0,idx=0,crc,startvar=0,newlen,ialias,found_replace,yves,dek,reidx,lenbuf,rlen,tagoffset;
 	double v;
 	char tmpuchar[16];
 	char *expr,*locallabel;
@@ -6084,7 +6093,7 @@ char *MakeAMSDOS_name(struct s_assenv *ae, char *reference_filename)
 
 	static char amsdos_name[12];
 	char *filename,*jo;
-	int i,ia,slash;
+	int i,ia;
 	char *pp;
 
 	/* remove path */
@@ -7165,14 +7174,11 @@ void PushLabel(struct s_assenv *ae)
 	#define FUNC "PushLabel"
 	
 	struct s_label curlabel={0},*searched_label;
-	int i,im;
+	int i;
 	/* label with counters */
 	char *varbuffer;
-	int taglen,tagcount=0;
-	int newlen,touched;
-
-
-
+	int tagcount=0;
+	int touched;
 
 #if TRACE_LABEL
 	printf("check label [%s]\n",ae->wl[ae->idx].w);
@@ -11823,7 +11829,7 @@ void __WEND(struct s_assenv *ae) {
 void __REPEAT(struct s_assenv *ae) {
 	struct s_repeat currepeat={0};
 	struct s_expr_dico *rvar;
-	int cidx,crc;
+	int crc;
 
 
 	
@@ -13167,7 +13173,7 @@ void __HEXBIN(struct s_assenv *ae) {
 	float amplification=1.0;
 	int deload=0;
 	int vtiles=0,remap=0,revert=0;
-	int itiles=0,tilex;
+	int itiles=0,tilex=0;
 	struct s_hexbin *curhexbin;
 	unsigned char *newdata=NULL;
 	int fileok=0,incwav=0;
@@ -13522,7 +13528,7 @@ printf("output fictif pour réorganiser les données\n");
 							}
 						} else if (itiles) {
 							/* tiles data reordering */
-							int tx,ty,it,width;
+							int tx,it;
 
 							if (size % (tilex*8)) {
 								MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"INCBIN ITILES cannot reorder tiles %d bytewidth with file of size %d\n",tilex,size);
@@ -13542,7 +13548,7 @@ printf("output fictif pour réorganiser les données\n");
 							}
 						} else if (remap) {
 							/* tiles data reordering */
-							int tx,ty,it,width;
+							int tx,it,width;
 
 							width=size/remap;
 
@@ -14337,8 +14343,7 @@ printf("-loop\n");
 		  m a c r o   p o s i t i o n s
 		*****************************************/
 		if (ae->imacropos) {
-			int icheckm,inewmacrocur;
-
+			int icheckm;
 
 			/*
 			printf("===== Macro positions idx=%d =====\n",ae->idx);
@@ -14700,7 +14705,6 @@ printf("output files\n");
 			if (ae->forcecpr) {
 				char ChunkName[32];
 				int ChunkSize;
-				int do_it=1;
 				unsigned char chunk_endian;
 				
 				if (ae->cartridge_name) {
@@ -14826,7 +14830,6 @@ printf("output files\n");
 					unsigned char *rlebank=NULL;
 					char ChunkName[16];
 					int ChunkSize;
-					int do_it=1;
 					int bankset;
 					int noflood=0;
 
@@ -15586,7 +15589,7 @@ printf("-end ok=%d\n",ok);
 
 
 void EarlyPrepSrc(struct s_assenv *ae, char **listing, char *filename) {
-	int l,idx,c,quote_type=0,further;
+	int l,idx,c,quote_type=0;
 	int mlc_start,mlc_idx;
 
 	/* virer les commentaires en ;, // mais aussi multi-lignes et convertir les decalages, passer les chars en upper case */
@@ -15786,7 +15789,7 @@ struct s_assenv *PreProcessing(char *filename, int flux, const char *datain, int
 	int nri=0,mri=0,ri=0;
 	int nwi=0,mwi=0,wi=0;
 	/* state machine trigger */
-	int waiting_quote=0,lquote;
+	int waiting_quote=0,lquote=0;
 	int macro_trigger=0;
 	int escape_code=0;
 	int quote_type=0;
@@ -15797,7 +15800,7 @@ struct s_assenv *PreProcessing(char *filename, int flux, const char *datain, int
 	int ispace=0;
 	char opassign=0;
 	/* incbin bug */
-	int incstartL;
+	int incstartL=0;
 
 
 
@@ -17685,68 +17688,12 @@ void RasmAutotest(void)
 
 	struct s_rasm_info *debug;
 	unsigned char *opcode=NULL;
-	int opcodelen,ret,filelen;
+	int opcodelen,ret;
 	int cpt=0,chk,i,idx;
-	char tmpstr1[256],tmpstr2[256],*tmpstr3,**tmpsplit;
+	char *tmpstr3,**tmpsplit;
 
 #ifdef RDD
 	printf("\n%d bytes\n",_static_library_memory_used);
-#endif
-#if 0
-	/* Autotest CORE */
-	#ifdef OS_WIN
-	printf(".");fflush(stdout);
-	strcpy(tmpstr1,".\\archives\\job.asm");
-	strcpy(tmpstr2,".\\archives\\job.asm");
-	SimplifyPath(tmpstr1);if (strcmp(tmpstr1,tmpstr2)) {printf("Autotest %03d ERROR (Core:SimplifyPath0) %s!=%s\n",cpt,tmpstr1,tmpstr2);exit(-1);}
-	strcpy(tmpstr1,".\\archives\\..\\job.asm");
-	strcpy(tmpstr2,".\\job.asm");
-	SimplifyPath(tmpstr1);if (strcmp(tmpstr1,tmpstr2)) {printf("Autotest %03d ERROR (Core:SimplifyPath1) %s!=%s\n",cpt,tmpstr1,tmpstr2);exit(-1);}
-	strcpy(tmpstr1,".\\archives\\gruik\\..\\..\\job.asm");
-	strcpy(tmpstr2,".\\job.asm");
-	SimplifyPath(tmpstr1);if (strcmp(tmpstr1,tmpstr2)) {printf("Autotest %03d ERROR (Core:SimplifyPath2) %s!=%s\n",cpt,tmpstr1,tmpstr2);exit(-1);}
-	strcpy(tmpstr1,".\\archives\\..\\gruik\\..\\job.asm");
-	strcpy(tmpstr2,".\\job.asm");
-	SimplifyPath(tmpstr1);if (strcmp(tmpstr1,tmpstr2)) {printf("Autotest %03d ERROR (Core:SimplifyPath3) %s!=%s\n",cpt,tmpstr1,tmpstr2);exit(-1);}
-	strcpy(tmpstr1,"..\\archives\\job.asm");
-	strcpy(tmpstr2,"..\\archives\\job.asm");
-	SimplifyPath(tmpstr1);if (strcmp(tmpstr1,tmpstr2)) {printf("Autotest %03d ERROR (Core:SimplifyPath4) %s!=%s\n",cpt,tmpstr1,tmpstr2);exit(-1);}	
-	strcpy(tmpstr1,".\\src\\..\\..\\src\\job.asm");
-	strcpy(tmpstr2,"..\\src\\job.asm");
-	SimplifyPath(tmpstr1);if (strcmp(tmpstr1,tmpstr2)) {printf("Autotest %03d ERROR (Core:SimplifyPath5) %s!=%s\n",cpt,tmpstr1,tmpstr2);exit(-1);}
-	strcpy(tmpstr1,"src\\..\\..\\src\\job.asm");
-	strcpy(tmpstr2,"..\\src\\job.asm");
-	SimplifyPath(tmpstr1);if (strcmp(tmpstr1,tmpstr2)) {printf("Autotest %03d ERROR (Core:SimplifyPath6) %s!=%s\n",cpt,tmpstr1,tmpstr2);exit(-1);}
-	cpt++;
-	#else
-	printf(".");fflush(stdout);
-	strcpy(tmpstr1,"./archives/job.asm");
-	strcpy(tmpstr2,"./archives/job.asm");
-	SimplifyPath(tmpstr1);if (strcmp(tmpstr1,tmpstr2)) {printf("Autotest %03d ERROR (Core:SimplifyPath0) %s!=%s\n",cpt,tmpstr1,tmpstr2);exit(-1);}
-	strcpy(tmpstr1,"./archives/../job.asm");
-	strcpy(tmpstr2,"./job.asm");
-	SimplifyPath(tmpstr1);if (strcmp(tmpstr1,tmpstr2)) {printf("Autotest %03d ERROR (Core:SimplifyPath1) %s!=%s\n",cpt,tmpstr1,tmpstr2);exit(-1);}
-	strcpy(tmpstr1,"./archives/gruik/../../job.asm");
-	strcpy(tmpstr2,"./job.asm");
-	SimplifyPath(tmpstr1);if (strcmp(tmpstr1,tmpstr2)) {printf("Autotest %03d ERROR (Core:SimplifyPath2) %s!=%s\n",cpt,tmpstr1,tmpstr2);exit(-1);}
-	strcpy(tmpstr1,"./archives/../gruik/../job.asm");
-	strcpy(tmpstr2,"./job.asm");
-	SimplifyPath(tmpstr1);if (strcmp(tmpstr1,tmpstr2)) {printf("Autotest %03d ERROR (Core:SimplifyPath3) %s!=%s\n",cpt,tmpstr1,tmpstr2);exit(-1);}
-	strcpy(tmpstr1,"../archives/job.asm");
-	strcpy(tmpstr2,"../archives/job.asm");
-	SimplifyPath(tmpstr1);if (strcmp(tmpstr1,tmpstr2)) {printf("Autotest %03d ERROR (Core:SimplifyPath4) %s!=%s\n",cpt,tmpstr1,tmpstr2);exit(-1);}	
-	strcpy(tmpstr1,"./src/../../src/job.asm");
-	strcpy(tmpstr2,"../src/job.asm");
-	SimplifyPath(tmpstr1);if (strcmp(tmpstr1,tmpstr2)) {printf("Autotest %03d ERROR (Core:SimplifyPath5) %s!=%s\n",cpt,tmpstr1,tmpstr2);exit(-1);}
-	strcpy(tmpstr1,"src/../../../src/job.asm");
-	strcpy(tmpstr2,"../../src/job.asm");
-	SimplifyPath(tmpstr1);if (strcmp(tmpstr1,tmpstr2)) {printf("Autotest %03d ERROR (Core:SimplifyPath6) %s!=%s\n",cpt,tmpstr1,tmpstr2);exit(-1);}
-	cpt++;
-	printf(".");fflush(stdout);
-	if (strcmp(rasm_GetPath("/home/roudoudou/"),"/home/roudoudou/")) {printf("Autotest %03d ERROR (Core:rasm_GetPath) [%s]\n",cpt,rasm_GetPath("/home/roudoudou/"));exit(-1);}
-	if (strcmp(rasm_GetPath("/home/roudoudou"),"/home/")) {printf("Autotest %03d ERROR (Core:rasm_GetPath) [%s]\n",cpt,rasm_GetPath("/home/roudoudou"));exit(-1);}
-	cpt++;
-	#endif
 #endif
 	
 	/* Autotest preprocessing */
@@ -18951,12 +18898,15 @@ int ParseOptions(char **argv,int argc, struct s_parameter *param)
 							param->maxerr=atoi(argv[++i]);
 							return i;
 						}
-					default:Usage(1);
+						Usage(1);
+						break;
+					default:Usage(1);break;
 				}
 				Usage(1);
 				break;
 			case 's':
 				if (argv[i][2] && argv[i][3]) Usage(1);
+
 				switch (argv[i][2]) {
 					case 0:param->export_sym=1;return 0;
 					case 'z':
@@ -18979,6 +18929,7 @@ int ParseOptions(char **argv,int argc, struct s_parameter *param)
 							if (_internal_check_flexible(param->flexible_export)) return i; else Usage(1);
 						}
 						Usage(1);
+						break;
 					case 'l':
 						param->export_local=1;return 0;
 					case 'v':
@@ -18995,9 +18946,11 @@ int ParseOptions(char **argv,int argc, struct s_parameter *param)
 						param->export_sym=1;
 						param->export_sna=1;return 0;
 					default:
-					break;
+						Usage(1);
+						break;
 				}
 				Usage(1);
+				break;
 			case 'l':
 				if (argv[i][2]) Usage(1);
 				if (i+1<argc) {
@@ -19005,9 +18958,11 @@ int ParseOptions(char **argv,int argc, struct s_parameter *param)
 					break;
 				}	
 				Usage(1);
+				break;
 		case 'i':
 printf("@@@\n@@@ --> deprecated option, there is no need to use -i option to set input file <--\n@@@\n");
 				Usage(0);
+				break;
 			case 'o':
 				if (argv[i][2] && argv[i][3]) Usage(1);
 				switch (argv[i][2]) {
@@ -19017,6 +18972,7 @@ printf("@@@\n@@@ --> deprecated option, there is no need to use -i option to set
 							break;
 						}	
 						Usage(1);
+						break;
 					case 'a':
 						param->automatic_radix=1;
 						break;
@@ -19026,38 +18982,45 @@ printf("@@@\n@@@ --> deprecated option, there is no need to use -i option to set
 							break;
 						}
 						Usage(1);
+						break;
 					case 'i':
 						if (i+1<argc && param->snapshot_name==NULL) {
 							param->snapshot_name=argv[++i];
 							break;
 						}
 						Usage(1);
+						break;
 					case 'b':
 						if (i+1<argc && param->binary_name==NULL) {
 							param->binary_name=argv[++i];
 							break;
 						}
 						Usage(1);
+						break;
 					case 'c':
 						if (i+1<argc && param->cartridge_name==NULL) {
 							param->cartridge_name=argv[++i];
 							break;
 						}
 						Usage(1);
+						break;
 					case 'k':
 						if (i+1<argc && param->breakpoint_name==NULL) {
 							param->breakpoint_name=argv[++i];
 							break;
 						}
 						Usage(1);
+						break;
 					case 's':
 						if (i+1<argc && param->symbol_name==NULL) {
 							param->symbol_name=argv[++i];
 							break;
 						}
 						Usage(1);
+						break;
 					default:
 						Usage(1);
+						break;
 				}
 				break;
 			case 'd':if (!argv[i][2]) printf("deprecated option -d\n"); else Usage(1);
@@ -19074,9 +19037,9 @@ printf("@@@\n@@@ --> deprecated option, there is no need to use -i option to set
 				}
 				break;
 			case 'n':if (!argv[i][2]) Licenses(); else Usage(1);
-			case 'h':Usage(1);
+			case 'h':Usage(1);break;
 			default:
-				Usage(1);
+				Usage(1);break;
 		}
 	} else {
 		if (param->filename==NULL) {
