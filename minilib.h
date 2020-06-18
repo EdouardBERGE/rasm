@@ -917,6 +917,7 @@ int FileWriteBinary(char *filename,char *data,int n)
 		/* NULL buffer sent, this means End of file, we close the handle */
 		//logdebug("%d byte(s) written to %s",FileGetCPT(last_id),filename);
 		FileClose(last_id);
+		nn=0;
 	}
 	return nn;
 }
