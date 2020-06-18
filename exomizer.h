@@ -4861,7 +4861,6 @@ unsigned char *Exomizer_crunch(unsigned char *input_data, int input_len, int *re
 	int argc=1;
 	char **argv=NULL;
     char flags_arr[32];
-    int decrunch_mode = 0;
     int backwards_mode = 0;
     int reverse_mode = 0;
     int c, infilec;

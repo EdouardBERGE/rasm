@@ -933,8 +933,7 @@ static void compression_progress(long long nOriginalSize, long long nCompressedS
 }
 
 static int do_apultra(unsigned char *datain, int lenin, unsigned char **dataout, int *lenout) {
-   long long nStartTime = 0LL, nEndTime = 0LL;
-   size_t nOriginalSize = 0L, nCompressedSize = 0L, nMaxCompressedSize;
+   size_t nCompressedSize = 0L, nMaxCompressedSize;
    int nFlags = 0;
    apultra_stats stats;
    unsigned char *pCompressedData;
@@ -963,7 +962,6 @@ static int do_apultra(unsigned char *datain, int lenin, unsigned char **dataout,
 /*---------------------------------------------------------------------------*/
 
 static int do_decompress(const char *pszInFilename, const char *pszOutFilename, const char *pszDictionaryFilename, const unsigned int nOptions) {
-   long long nStartTime = 0LL, nEndTime = 0LL;
    size_t nCompressedSize, nMaxDecompressedSize, nOriginalSize;
    unsigned char *pCompressedData;
    unsigned char *pDecompressedData;
@@ -1103,16 +1101,6 @@ static void xor_data(unsigned char *pBuffer, size_t nBufferSize, unsigned int nS
 }
 
 int APULTRA_crunch(unsigned char *data, int len, unsigned char **dataout, int *lenout) {
-   int i;
-   const char *pszInFilename = NULL;
-   const char *pszOutFilename = NULL;
-   const char *pszDictionaryFilename = NULL;
-   bool bArgsError = false;
-   bool bCommandDefined = false;
-   bool bVerifyCompression = false;
-   bool bFormatVersionDefined = false;
-   unsigned int nOptions = 0;
-   unsigned int nMaxWindowSize = 0;
 
    return do_apultra(data, len, dataout, lenout);
 }
