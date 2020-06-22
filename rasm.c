@@ -12880,7 +12880,7 @@ int __internal_getsample24big(unsigned char *data, int *idx) {
 /* float & endian shit */
 int _isLittleEndian() /* from lz4.h */
 {
-    const union { U32 u; U8 c[4]; } one = { 1 };
+    const union { U32 u; unsigned char c[4]; } one = { 1 };
     return one.c[0];
 }
 
@@ -17658,7 +17658,7 @@ struct s_autotest_keyword autotest_keyword[]={
 	{"buildsna:bank 0:nop:snaset ga_pal,3",1},
 	{"buildsna:bank 0:nop:snaset ga_pal,20,0",1},
 	{"buildsna:bank 0:nop:snaset ga_pal,-1,0",1},
-	{"glop=rnd(5):nop",0},{"glop=rnd(0):nop",0},{"glop=rnd():nop",0},{"glop=rnd(-1):nop",0},{"pifou=8:glop=rnd(pifou):defb glop",0},
+	{"glop=rnd(5):nop",0},{"glop=rnd(0):nop",1},{"glop=rnd():nop",1},{"glop=rnd(-1):nop",1},{"pifou=8:glop=rnd(pifou):defb glop",0},
 	/*
 	{"",},{"",},{"",},{"",},{"",},
 	{"",},{"",},{"",},{"",},{"",},{"",},
