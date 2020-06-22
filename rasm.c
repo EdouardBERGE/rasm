@@ -1,5 +1,5 @@
 #define PROGRAM_NAME      "RASM"
-#define PROGRAM_VERSION   "1.000"
+#define PROGRAM_VERSION   "1.1"
 #define PROGRAM_DATE      "xx/06/2020"
 #define PROGRAM_COPYRIGHT "© 2017 BERGE Edouard / roudoudou from Resistance"
 
