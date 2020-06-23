@@ -17689,7 +17689,7 @@ void RasmAutotest(void)
 	struct s_rasm_info *debug;
 	unsigned char *opcode=NULL;
 	int opcodelen,ret;
-	int cpt=0,chk,i,idx;
+	int cpt=0,chk,i,idx,sko=0;
 	char *tmpstr3,**tmpsplit;
 
 #ifdef RDD
@@ -17795,10 +17795,16 @@ printf("testing various opcode tests OK\n");
 		} else if (ret && autotest_keyword[idx].result) {
 		} else {
 			printf("Autotest %03d ERROR ([%s] test) is %s instead of %s\n",cpt,autotest_keyword[idx].keywordtest,!ret?"ok":"ko",ret?"ok":"ko");
+			sko++;
 		}
 		if (opcode) MemFree(opcode);opcode=NULL;
 		idx++;
 	}
+	if (sko) {
+		printf("moar various opcode tests did not pass!\n");
+		exit(-1);
+	}
+
 	cpt++;
 printf("testing moar various opcode tests OK\n");
 	
