@@ -13598,7 +13598,7 @@ if (curhexbin->crunch) printf("CRUNCHED! (%d)\n",curhexbin->crunch);
 								case 4:
 									newdata=LZ4_crunch(outputdata,outputidx,&outputidx);
 									MemFree(outputdata);
-									curhexbin->data=newdata;
+									outputdata=newdata;
 									#if TRACE_PREPRO
 									rasm_printf(ae,KVERBOSE"crunched with LZ4 into %d byte(s)\n",outputidx);
 									#endif
@@ -18291,13 +18291,15 @@ printf("testing internal label struct OK\n");
 
 #ifdef RDD
 	printf("\n%d bytes\n",_static_library_memory_used);
-
+	{
+		int filelen;
 	tmpstr3=FileReadContent("./test/PlayerAky.asm",&filelen);
 	printf(".");fflush(stdout);ret=RasmAssembleInfo(tmpstr3,filelen,&opcode,&opcodelen,&debug);
 	if (!ret) {} else {printf("Autotest %03d ERROR (PlayerAky)\n",cpt);MiniDump(opcode,opcodelen);exit(-1);}
 	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
 	RasmFreeInfoStruct(debug);
 	MemFree(tmpstr3);
+	}
 
 	printf("\n%d bytes\n",_static_library_memory_used);
 #endif
