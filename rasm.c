@@ -11211,14 +11211,15 @@ void __RUN(struct s_assenv *ae) {
 						rasm_printf(ae,KWARNING"[%s:%d] Warning: ram configuration out of bound %X forced to #C0\n",GetCurrentFile(ae),ae->wl[ae->idx].l,ramconf);
 						if (ae->erronwarn) MaxError(ae);
 					}
+					ramconf=0xC0;
 				}
+				ae->snapshot.ramconfiguration=ramconf;
 			}
 		}
 	} else {
 		if (ae->forcezx) MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"usage is RUN <adress>,<stack> (ZX mode)\n");
 		else MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"usage is RUN <adress>[,<ppi>]\n");
 	}
-	ae->snapshot.ramconfiguration=ramconf;
 	if (ae->rundefined && !ae->nowarning) {
 		rasm_printf(ae,KWARNING"[%s:%d] Warning: run adress redefinition\n",GetCurrentFile(ae),ae->wl[ae->idx].l);
 		if (ae->erronwarn) MaxError(ae);
