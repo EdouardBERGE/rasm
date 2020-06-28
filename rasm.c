@@ -2387,7 +2387,7 @@ void FreeAssenv(struct s_assenv *ae)
 	}
 	if (ae->mh) {
 		for (i=0;i<ae->ih;i++) {
-			MemFree(ae->hexbin[i].data);
+			//MemFree(ae->hexbin[i].data);
 			MemFree(ae->hexbin[i].filename);
 		}
 		MemFree(ae->hexbin);
@@ -2524,7 +2524,7 @@ void MaxError(struct s_assenv *ae)
 			FreeArrayDynamicValue(&source_lines);
 		}
 	}
-	
+
 	ae->nberr++;
 	if (ae->nberr==ae->maxerr) {
 		rasm_printf(ae,KERROR"Too many errors!\n");
@@ -13380,71 +13380,6 @@ printf("Hexbin -> surprise! we found the file!\n");
 					return;
 				}
 				FileReadBinaryClose(newfilename);
-
-				if (0)
-				switch (curhexbin->crunch) {
-					#ifndef NO_3RD_PARTIES
-					case 4:
-						newdata=LZ4_crunch(curhexbin->data,curhexbin->datalen,&curhexbin->datalen);
-						MemFree(curhexbin->data);
-						curhexbin->data=newdata;
-						#if TRACE_PREPRO
-						rasm_printf(ae,KVERBOSE"crunched with LZ4 into %d byte(s)\n",curhexbin->datalen);
-						#endif
-						break;
-					case 7:
-						{
-						size_t slzlen;
-						newdata=ZX7_compress(optimize(curhexbin->data, curhexbin->datalen), curhexbin->data, curhexbin->datalen, &slzlen);
-						curhexbin->datalen=slzlen;
-						MemFree(curhexbin->data);
-						curhexbin->data=newdata;
-						#if TRACE_PREPRO
-						rasm_printf(ae,KVERBOSE"crunched with ZX7 into %d byte(s)\n",curhexbin->datalen);
-						#endif
-						}
-						break;
-					case 8:
-						if (curhexbin->datalen>=1024) rasm_printf(ae,KWARNING"Exomizer is crunching %.1fkb this may take a while, be patient...\n",curhexbin->datalen/1024.0);
-						newdata=Exomizer_crunch(curhexbin->data,curhexbin->datalen,&curhexbin->datalen);
-						MemFree(curhexbin->data);
-						curhexbin->data=newdata;
-						#if TRACE_PREPRO
-						rasm_printf(ae,KVERBOSE"crunched with Exomizer into %d byte(s)\n",curhexbin->datalen);
-						#endif
-						break;
-					case 17:
-						if (curhexbin->datalen>=1024) rasm_printf(ae,KWARNING"AP-Ultra is crunching %.1fkb this may take a while, be patient...\n",curhexbin->datalen/1024.0);
-						{
-						int nnewlen;
-						APULTRA_crunch(curhexbin->data,curhexbin->datalen,&newdata,&nnewlen);
-						curhexbin->datalen=nnewlen;
-						}
-						MemFree(curhexbin->data);
-						curhexbin->data=newdata;
-						#if TRACE_PREPRO
-						rasm_printf(ae,KVERBOSE"crunched with AP-Ultra into %d byte(s)\n",curhexbin->datalen);
-						#endif
-						break;
-					#endif
-					case 48:
-						newdata=LZ48_crunch(curhexbin->data,curhexbin->datalen,&curhexbin->datalen);
-						MemFree(curhexbin->data);
-						curhexbin->data=newdata;
-						#if TRACE_PREPRO
-						rasm_printf(ae,KVERBOSE"crunched with LZ48 into %d byte(s)\n",curhexbin->datalen);
-						#endif
-						break;
-					case 49:
-						newdata=LZ49_crunch(curhexbin->data,curhexbin->datalen,&curhexbin->datalen);
-						MemFree(curhexbin->data);
-						curhexbin->data=newdata;
-						#if TRACE_PREPRO
-						rasm_printf(ae,KVERBOSE"crunched with LZ49 into %d byte(s)\n",curhexbin->datalen);
-						#endif
-						break;
-					default:break;
-				}
 				deload=1;
 			} else {
 				/* still not found */
@@ -14026,7 +13961,7 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 
 	rasm_printf(ae,KAYGREEN"Assembling\n");
 #if TRACE_ASSEMBLE
-printf("assembling\n");
+printf("assembling (nberr=%d)\n",ae->nberr);
 #endif
 #if TRACE_GENERALE
 printf("*** assembling ***\n");
@@ -15581,6 +15516,7 @@ printf("-cleanup\n");
 	FreeAssenv(ae);
 #if TRACE_ASSEMBLE
 printf("end of assembling\n");
+printf("-end ok=%d\n",ok);
 #endif
 #if TRACE_GENERALE
 printf("-end ok=%d\n",ok);
@@ -16250,7 +16186,7 @@ if (!idx) printf("[%s]\n",listing[l].listing);
 
 					/* TAG + info */
 					curhexbin.datalen=-1;
-					curhexbin.data=MemMalloc(2);
+					curhexbin.data=NULL;
 					/* not yet an error, we will know later when executing the code */
 					ObjectArrayAddDynamicValueConcat((void**)&ae->hexbin,&ae->ih,&ae->mh,&curhexbin,sizeof(curhexbin));
 
@@ -16281,20 +16217,22 @@ if (!idx) printf("[%s]\n",listing[l].listing);
 						l=incstartL;
 
 						/* patch data to remain Assembler silent about this */
-						ae->hexbin[ae->ih-1].datalen=1;
-						ae->hexbin[ae->ih-1].data[0]=0x00;
+						for (i=rewrite;i<idx;i++) listing[incstartL].listing[i]=' ';
+						/* delete entry */
+						MemFree(curhexbin.filename);
+						ae->ih--;
+					} else {
+						/* insertion */
+						le=strlen(listing[l].listing);
+
+						newlistingline=MemMalloc(le+32);
+						memcpy(newlistingline,listing[l].listing,rewrite);
+						rewrite+=sprintf(newlistingline+rewrite,"HEXBIN #%X",ae->ih-1);
+						strcat(newlistingline+rewrite,listing[l].listing+idx);
+						idx=rewrite;
+						MemFree(listing[l].listing);
+						listing[l].listing=newlistingline;
 					}
-
-					/* insertion */
-					le=strlen(listing[l].listing);
-
-					newlistingline=MemMalloc(le+32);
-					memcpy(newlistingline,listing[l].listing,rewrite);
-					rewrite+=sprintf(newlistingline+rewrite,"HEXBIN #%X",ae->ih-1);
-					strcat(newlistingline+rewrite,listing[l].listing+idx);
-					idx=rewrite;
-					MemFree(listing[l].listing);
-					listing[l].listing=newlistingline;
 					incbin=0;
 				} else if (include) {
 					/* qval contient le nom du fichier a lire */
@@ -16339,49 +16277,30 @@ if (!idx) printf("[%s]\n",listing[l].listing);
 						}
 						l=incstartL;
 
-						/* patch data to remain Assembler silent about this */
-						curhexbin.datalen=1;
-					}
-					
-					if (fileok) {
-
-						#if TRACE_PREPRO
-						rasm_printf(ae,KBLUE"include [%s]\n",filename_toread);
-						#endif
-
-						
-						/* lecture */
-						listing_include=FileReadLines(filename_toread);
-						FieldArrayAddDynamicValueConcat(&ae->filename,&ae->ifile,&ae->maxfile,filename_toread);
-						/* virer les commentaires + pré-traitement */
-						EarlyPrepSrc(ae,listing_include,ae->filename[ae->ifile-1]);
-
-						/* split de la ligne en cours + suppression de l'instruction include */
-						PreProcessingSplitListing(&listing,&ilisting,&maxlisting,l,rewrite,idx);
-						/* insertion des nouvelles lignes + reference fichier + numeros de ligne */
-						PreProcessingInsertListing(&listing,&ilisting,&maxlisting,l,listing_include,ae->ifile-1);
-						
-						MemFree(listing_include); /* free le tableau mais pas les lignes */
-						listing_include=NULL;
-						idx=0; /* on reste sur la meme ligne mais on se prepare a relire du caractere 0! */
 					} else {
-						/* TAG + info */
-						curhexbin.filename=TxtStrDup(filename_toread);
-						if (!curhexbin.datalen) curhexbin.datalen=-2; // sinon on laisse la valeur 1 du cas foireux
-						curhexbin.data=MemMalloc(2);
-						curhexbin.crunch=0;
-						/* not yet an error to allow include in #IF 0 sections, we will know later when executing the code */
-						ObjectArrayAddDynamicValueConcat((void**)&ae->hexbin,&ae->ih,&ae->mh,&curhexbin,sizeof(curhexbin));
+						if (fileok) {
+							#if TRACE_PREPRO
+							rasm_printf(ae,KBLUE"include [%s]\n",filename_toread);
+							#endif
+							
+							/* lecture */
+							listing_include=FileReadLines(filename_toread);
+							FieldArrayAddDynamicValueConcat(&ae->filename,&ae->ifile,&ae->maxfile,filename_toread);
+							/* virer les commentaires + pré-traitement */
+							EarlyPrepSrc(ae,listing_include,ae->filename[ae->ifile-1]);
 
-						/* insertion */
-						le=strlen(listing[l].listing);
-						newlistingline=MemMalloc(le+32);
-						memcpy(newlistingline,listing[l].listing,rewrite);
-						rewrite+=sprintf(newlistingline+rewrite,"HEXBIN #%X",ae->ih-1);
-						strcat(newlistingline+rewrite,listing[l].listing+idx);
-						idx=rewrite;
-						MemFree(listing[l].listing);
-						listing[l].listing=newlistingline;
+							/* split de la ligne en cours + suppression de l'instruction include */
+							PreProcessingSplitListing(&listing,&ilisting,&maxlisting,l,rewrite,idx);
+							/* insertion des nouvelles lignes + reference fichier + numeros de ligne */
+							PreProcessingInsertListing(&listing,&ilisting,&maxlisting,l,listing_include,ae->ifile-1);
+							
+							MemFree(listing_include); /* free le tableau mais pas les lignes */
+							listing_include=NULL;
+							idx=0; /* on reste sur la meme ligne mais on se prepare a relire du caractere 0! */
+						} else {
+							for (i=rewrite;i<idx;i++) listing[incstartL].listing[i]=' ';
+							MakeError(ae,ae->filename[listing[l].ifile],listing[l].iline,"Cannot include file [%s]\n",filename_toread);
+						}
 					}
 					include=0;
 				}
@@ -16430,16 +16349,6 @@ if (!idx) printf("[%s]\n",listing[l].listing);
 					incstartL=l;
 					incbin=1;
 					crunch=4;
-					waiting_quote=1;
-					rewrite=idx-6-1;
-					/* quote right after keyword */
-					if (c==quote_type) {
-						waiting_quote=2;
-					}
-				} else if (strcmp(bval,"INCEXB")==0) {
-					incstartL=l;
-					incbin=1;
-					crunch=88;
 					waiting_quote=1;
 					rewrite=idx-6-1;
 					/* quote right after keyword */
@@ -16551,6 +16460,10 @@ if (!idx) printf("[%s]\n",listing[l].listing);
 			}
 		}
 	}
+	if (waiting_quote && ilisting) {
+		MakeError(ae,ae->filename[listing[ilisting-1].ifile],listing[ilisting-1].iline,"A quoted string must follow INCLUDE/READ directive\n");
+	}
+
 #if TRACE_PREPRO
 printf("check quotes and repeats\n");
 #endif
@@ -17475,6 +17388,53 @@ int RasmAssembleInfo(const char *datain, int lenin, unsigned char **dataout, int
 
 #define AUTOTEST_LZ4	"lz4:repeat 10:nop:rend:defb 'roudoudoudouoneatxkjhgfdskljhsdfglkhnopnopnopnop':lzclose"
 
+#define AUTOTEST_INCBIN1	"incbin 'autotest_include.raw'"
+#define AUTOTEST_INCBIN2	"incbin 'autotest_include.raw',1000"
+#define AUTOTEST_INCBIN3	"incbin 'autotest_include.raw',0,1000"
+
+#define AUTOTEST_LZ4_A	"lz4 : incbin 'autotest_include.raw' : lzclose"
+#define AUTOTEST_LZ4_B	"inclz4 'autotest_include.raw'"
+#define AUTOTEST_LZ4_C	"inclz4 'autotest_include.raw',100"
+#define AUTOTEST_LZ4_D	"lz4 : incbin 'autotest_include.raw',100 : lzclose"
+#define AUTOTEST_LZ4_E	"inclz4 'autotest_include.raw',0,1000"
+#define AUTOTEST_LZ4_F	"lz4 : incbin'autotest_include.raw',0,1000 : lzclose"
+
+#define AUTOTEST_LZ48_A	"lz48 : incbin 'autotest_include.raw' : lzclose"
+#define AUTOTEST_LZ48_B	"incl48 'autotest_include.raw'"
+#define AUTOTEST_LZ48_C	"incl48 'autotest_include.raw',100"
+#define AUTOTEST_LZ48_D	"lz48 : incbin 'autotest_include.raw',100 : lzclose"
+#define AUTOTEST_LZ48_E	"incl48 'autotest_include.raw',0,1000"
+#define AUTOTEST_LZ48_F	"lz48 : incbin'autotest_include.raw',0,1000 : lzclose"
+
+#define AUTOTEST_LZ49_A	"lz49 : incbin 'autotest_include.raw' : lzclose"
+#define AUTOTEST_LZ49_B	"incl49 'autotest_include.raw'"
+#define AUTOTEST_LZ49_C	"incl49 'autotest_include.raw',100"
+#define AUTOTEST_LZ49_D	"lz49 : incbin 'autotest_include.raw',100 : lzclose"
+#define AUTOTEST_LZ49_E	"incl49 'autotest_include.raw',0,1000"
+#define AUTOTEST_LZ49_F	"lz49 : incbin'autotest_include.raw',0,1000 : lzclose"
+
+#define AUTOTEST_LZAPU_A	"lzapu : incbin 'autotest_include.raw' : lzclose"
+#define AUTOTEST_LZAPU_B	"incapu 'autotest_include.raw'"
+#define AUTOTEST_LZAPU_C	"incapu 'autotest_include.raw',100"
+#define AUTOTEST_LZAPU_D	"lzapu : incbin 'autotest_include.raw',100 : lzclose"
+#define AUTOTEST_LZAPU_E	"incapu 'autotest_include.raw',0,1000"
+#define AUTOTEST_LZAPU_F	"lzapu : incbin'autotest_include.raw',0,1000 : lzclose"
+
+#define AUTOTEST_LZEXO_A	"lzexo : incbin 'autotest_include.raw' : lzclose"
+#define AUTOTEST_LZEXO_B	"incexo 'autotest_include.raw'"
+#define AUTOTEST_LZEXO_C	"incexo 'autotest_include.raw',100"
+#define AUTOTEST_LZEXO_D	"lzexo : incbin 'autotest_include.raw',100 : lzclose"
+#define AUTOTEST_LZEXO_E	"incexo 'autotest_include.raw',0,1000"
+#define AUTOTEST_LZEXO_F	"lzexo : incbin'autotest_include.raw',0,1000 : lzclose"
+
+#define AUTOTEST_LZX7_A	"lzx7 : incbin 'autotest_include.raw' : lzclose"
+#define AUTOTEST_LZX7_B	"inczx7 'autotest_include.raw'"
+#define AUTOTEST_LZX7_C	"inczx7 'autotest_include.raw',100"
+#define AUTOTEST_LZX7_D	"lzx7 : incbin 'autotest_include.raw',100 : lzclose"
+#define AUTOTEST_LZX7_E	"inczx7 'autotest_include.raw',0,1000"
+#define AUTOTEST_LZX7_F	"lzx7 : incbin'autotest_include.raw',0,1000 : lzclose"
+
+
 #define AUTOTEST_MAXERROR	"repeat 20:aglapi:rend:nop"
 
 //#define AUTOTEST_REAL	"defr 0,0.5,-0.5 : float 0,0.5,-0.5"
@@ -17660,6 +17620,11 @@ struct s_autotest_keyword autotest_keyword[]={
 	{"buildsna:bank 0:nop:snaset ga_pal,20,0",1},
 	{"buildsna:bank 0:nop:snaset ga_pal,-1,0",1},
 	{"glop=rnd(5):nop",0},{"glop=rnd(0):nop",1},{"glop=rnd():nop",1},{"glop=rnd(-1):nop",1},{"pifou=8:glop=rnd(pifou):defb glop",0},
+	/* wrong include usage */
+	{"incbin",1},{"include",1},{"incbin'",1},{"include'",1},{"'include",1}, {"'incbin",1},
+	{"incexo",1},{"inczx7",1},{"incaaa",0}, {"inc",1}, {"incl48",1},{"incl49",1},{"incapu",1},{"inclz4",1},
+	{"incexo'",1},{"inczx7'",1},{"incaaa'",1}, {"inc'",1}, {"incl48'",1},{"incl49'",1},{"incapu'",1},{"inclz4'",1},
+	{"incexb",0}, {"includee",0}, {"incexb'",1}, {"includee'",1}, 
 	/*
 	{"",},{"",},{"",},{"",},{"",},
 	{"",},{"",},{"",},{"",},{"",},{"",},
@@ -17677,7 +17642,7 @@ void MiniDump(unsigned char *opcode, int opcodelen) {
 	int i;
 	printf("%d byte%s to dump\n",opcodelen,opcodelen>1?"s":"");
 	for (i=0;i<opcodelen;i++) {
-		printf("%02X \n",opcode[i]);
+		printf("%02X ",opcode[i]);
 	}
 	printf("\n");
 }
@@ -17690,7 +17655,7 @@ void RasmAutotest(void)
 	struct s_rasm_info *debug;
 	unsigned char *opcode=NULL;
 	int opcodelen,ret;
-	int cpt=0,chk,i,idx,sko=0;
+	int cpt=0,chk,i,j,k,idx,sko=0;
 	char *tmpstr3,**tmpsplit;
 
 #ifdef RDD
@@ -17745,7 +17710,7 @@ printf("testing Maxam operator conversion OK\n");
 printf("testing modulo operator conversion OK\n");
 	
 	ret=RasmAssemble(AUTOTEST_NOINCLUDE,strlen(AUTOTEST_NOINCLUDE),&opcode,&opcodelen);
-	if (!ret) {} else {printf("Autotest %03d ERROR (include missing file)\n",cpt);exit(-1);}
+	if (ret) {} else {printf("Autotest %03d ERROR (include missing file)\n",cpt);exit(-1);} // file not found MUST trigger an error!
 	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
 printf("testing include on a missing file OK\n");
 	
@@ -17795,7 +17760,7 @@ printf("testing various opcode tests OK\n");
 		if (!ret && !autotest_keyword[idx].result) {
 		} else if (ret && autotest_keyword[idx].result) {
 		} else {
-			printf("Autotest %03d ERROR ([%s] test) is %s instead of %s\n",cpt,autotest_keyword[idx].keywordtest,!ret?"ok":"ko",ret?"ok":"ko");
+			printf("Autotest %03d ERROR ([%s] test) has %d error%s instead of %serror expected\n",cpt,autotest_keyword[idx].keywordtest,ret,ret>1?"s":"",autotest_keyword[idx].result?"":"no ");
 			sko++;
 		}
 		if (opcode) MemFree(opcode);opcode=NULL;
@@ -18250,11 +18215,13 @@ printf("testing enhanced PUSH/POP OK\n");
 	ret=RasmAssembleInfo(AUTOTEST_INKCONV,strlen(AUTOTEST_INKCONV),&opcode,&opcodelen,&debug);
 	if (!ret && opcodelen==2) {} else {printf("Autotest %03d ERROR (gate array color conversion)\n",cpt);MiniDump(opcode,opcodelen);for (i=0;i<debug->nberror;i++) printf("%d -> %s\n",i,debug->error[i].msg);exit(-1);}
 	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+	RasmFreeInfoStruct(debug);
 printf("testing gate array color conversion OK\n");
 
 	ret=RasmAssembleInfo(AUTOTEST_SNASET,strlen(AUTOTEST_SNASET),&opcode,&opcodelen,&debug);
 	if (!ret) {} else {printf("Autotest %03d ERROR (snapshot settings)\n",cpt);MiniDump(opcode,opcodelen);for (i=0;i<debug->nberror;i++) printf("%d -> %s\n",i,debug->error[i].msg);exit(-1);}
 	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+	RasmFreeInfoStruct(debug);
 printf("testing snapshot settings OK\n");
 
 	ret=RasmAssemble(AUTOTEST_PAGELABELGEN,strlen(AUTOTEST_PAGELABELGEN),&opcode,&opcodelen);
@@ -18304,8 +18271,219 @@ printf("testing internal label struct OK\n");
 
 	printf("\n%d bytes\n",_static_library_memory_used);
 #endif
-	
+
+	/************************** include testing + crunch ****************/		
+	idx=0;
+	opcode=MemMalloc(8000);
+	for (k=40;k>1;k--) {
+		for (i='A';i<'F';i++) {
+			for (j=0;j<k;j++) opcode[idx++]=i;
+		}
+	}
+	for (k=1;k<40;k++) {
+		for (i='A';i<'F';i++) {
+			for (j=0;j<k;j++) opcode[idx++]=i;
+		}
+	}
+	FileRemoveIfExists("autotest_include.raw");
+	FileWriteBinary("autotest_include.raw",opcode,idx);
+	FileWriteBinaryClose("autotest_include.raw");
+	MemFree(opcode);opcode=NULL;
+
+	ret=RasmAssemble(AUTOTEST_INCBIN1,strlen(AUTOTEST_INCBIN1),&opcode,&opcodelen);
+	if (!ret && opcodelen==7995) {} else {printf("Autotest %03d ERROR (INCBIN)\n",cpt);MiniDump(opcode,opcodelen);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing INCBIN OK\n");
+
+	ret=RasmAssemble(AUTOTEST_INCBIN2,strlen(AUTOTEST_INCBIN2),&opcode,&opcodelen);
+	if (!ret && opcodelen==6995) {} else {printf("Autotest %03d ERROR (INCBIN+offset)\n",cpt);MiniDump(opcode,opcodelen);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing INCBIN+offset OK\n");
+
+	ret=RasmAssemble(AUTOTEST_INCBIN3,strlen(AUTOTEST_INCBIN3),&opcode,&opcodelen);
+	if (!ret && opcodelen==1000) {} else {printf("Autotest %03d ERROR (INCBIN+size)\n",cpt);MiniDump(opcode,opcodelen);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing INCBIN+size OK\n");
+
+	ret=RasmAssemble(AUTOTEST_LZ4_A,strlen(AUTOTEST_LZ4_A),&opcode,&opcodelen);
+	if (!ret && opcodelen==544) {} else {printf("Autotest %03d ERROR (INCBIN + LZ4 segment)\n",cpt);MiniDump(opcode,opcodelen);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing INCBIN + LZ4 segment OK\n");
+
+	ret=RasmAssemble(AUTOTEST_LZ4_B,strlen(AUTOTEST_LZ4_B),&opcode,&opcodelen);
+	if (!ret && opcodelen==544) {} else {printf("Autotest %03d ERROR (INCLZ4)\n",cpt);MiniDump(opcode,opcodelen);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing INCLZ4 OK\n");
+
+	ret=RasmAssemble(AUTOTEST_LZ4_C,strlen(AUTOTEST_LZ4_C),&opcode,&opcodelen);
+	if (!ret) {} else {printf("Autotest %03d ERROR (INCLZ4+offset)\n",cpt);MiniDump(opcode,opcodelen);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+	i=opcodelen;
+	ret=RasmAssemble(AUTOTEST_LZ4_D,strlen(AUTOTEST_LZ4_D),&opcode,&opcodelen);
+	if (!ret && i==opcodelen) {} else {printf("Autotest %03d ERROR (LZ4+INCBIN+offset)\n",cpt);MiniDump(opcode,opcodelen);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing LZ4 variant+offset OK\n");
+
+	ret=RasmAssemble(AUTOTEST_LZ4_E,strlen(AUTOTEST_LZ4_E),&opcode,&opcodelen);
+	if (!ret) {} else {printf("Autotest %03d ERROR (INCLZ4+size)\n",cpt);MiniDump(opcode,opcodelen);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+	i=opcodelen;
+	ret=RasmAssemble(AUTOTEST_LZ4_F,strlen(AUTOTEST_LZ4_F),&opcode,&opcodelen);
+	if (!ret && i==opcodelen) {} else {printf("Autotest %03d ERROR (LZ4+INCBIN+size)\n",cpt);MiniDump(opcode,opcodelen);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing LZ4 variant+size OK\n");
+
+	ret=RasmAssemble(AUTOTEST_LZ48_A,strlen(AUTOTEST_LZ48_A),&opcode,&opcodelen);
+	if (!ret && opcodelen==738) {} else {printf("Autotest %03d ERROR (INCBIN + LZ48 segment)\n",cpt);MiniDump(opcode,opcodelen);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing INCBIN + LZ48 segment OK\n");
+
+	ret=RasmAssemble(AUTOTEST_LZ48_B,strlen(AUTOTEST_LZ48_B),&opcode,&opcodelen);
+	if (!ret && opcodelen==738) {} else {printf("Autotest %03d ERROR (INCL48)\n",cpt);MiniDump(opcode,opcodelen);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing INCL48 OK\n");
+
+	ret=RasmAssemble(AUTOTEST_LZ48_C,strlen(AUTOTEST_LZ48_C),&opcode,&opcodelen);
+	if (!ret) {} else {printf("Autotest %03d ERROR (INCL48+offset)\n",cpt);MiniDump(opcode,opcodelen);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+	i=opcodelen;
+	ret=RasmAssemble(AUTOTEST_LZ48_D,strlen(AUTOTEST_LZ48_D),&opcode,&opcodelen);
+	if (!ret && i==opcodelen) {} else {printf("Autotest %03d ERROR (LZ48+INCBIN+offset)\n",cpt);MiniDump(opcode,opcodelen);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing LZ48 variant+offset OK\n");
+
+	ret=RasmAssemble(AUTOTEST_LZ48_E,strlen(AUTOTEST_LZ48_E),&opcode,&opcodelen);
+	if (!ret) {} else {printf("Autotest %03d ERROR (INCLZ48+size)\n",cpt);MiniDump(opcode,opcodelen);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+	i=opcodelen;
+	ret=RasmAssemble(AUTOTEST_LZ48_F,strlen(AUTOTEST_LZ48_F),&opcode,&opcodelen);
+	if (!ret && i==opcodelen) {} else {printf("Autotest %03d ERROR (LZ48+INCBIN+size)\n",cpt);MiniDump(opcode,opcodelen);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing LZ48 variant+size OK\n");
+
+	ret=RasmAssemble(AUTOTEST_LZ49_A,strlen(AUTOTEST_LZ49_A),&opcode,&opcodelen);
+	if (!ret && opcodelen==717) {} else {printf("Autotest %03d ERROR (INCBIN + LZ49 segment)\n",cpt);MiniDump(opcode,opcodelen);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing INCBIN + LZ49 segment OK\n");
+
+	ret=RasmAssemble(AUTOTEST_LZ49_B,strlen(AUTOTEST_LZ49_B),&opcode,&opcodelen);
+	if (!ret && opcodelen==717) {} else {printf("Autotest %03d ERROR (INCL49)\n",cpt);MiniDump(opcode,opcodelen);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing INCL49 OK\n");
+
+	ret=RasmAssemble(AUTOTEST_LZ49_C,strlen(AUTOTEST_LZ49_C),&opcode,&opcodelen);
+	if (!ret) {} else {printf("Autotest %03d ERROR (INCL49+offset)\n",cpt);MiniDump(opcode,opcodelen);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+	i=opcodelen;
+	ret=RasmAssemble(AUTOTEST_LZ49_D,strlen(AUTOTEST_LZ49_D),&opcode,&opcodelen);
+	if (!ret && i==opcodelen) {} else {printf("Autotest %03d ERROR (LZ49+INCBIN+offset)\n",cpt);MiniDump(opcode,opcodelen);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing LZ49 variant+offset OK\n");
+
+	ret=RasmAssemble(AUTOTEST_LZ49_E,strlen(AUTOTEST_LZ49_E),&opcode,&opcodelen);
+	if (!ret) {} else {printf("Autotest %03d ERROR (INCL49+size)\n",cpt);MiniDump(opcode,opcodelen);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+	i=opcodelen;
+	ret=RasmAssemble(AUTOTEST_LZ49_F,strlen(AUTOTEST_LZ49_F),&opcode,&opcodelen);
+	if (!ret && i==opcodelen) {} else {printf("Autotest %03d ERROR (LZ49+INCBIN+size)\n",cpt);MiniDump(opcode,opcodelen);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing LZ49 variant+size OK\n");
+
+
+	ret=RasmAssemble(AUTOTEST_LZEXO_A,strlen(AUTOTEST_LZEXO_A),&opcode,&opcodelen);
+	if (!ret && opcodelen==335) {} else {printf("Autotest %03d ERROR (INCBIN + LZEXO segment)\n",cpt);MiniDump(opcode,opcodelen);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing INCBIN + LZEXO segment OK\n");
+
+	ret=RasmAssemble(AUTOTEST_LZEXO_B,strlen(AUTOTEST_LZEXO_B),&opcode,&opcodelen);
+	if (!ret && opcodelen==335) {} else {printf("Autotest %03d ERROR (INCEXO)\n",cpt);MiniDump(opcode,opcodelen);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing INCEXO OK\n");
+
+	ret=RasmAssemble(AUTOTEST_LZEXO_C,strlen(AUTOTEST_LZEXO_C),&opcode,&opcodelen);
+	if (!ret) {} else {printf("Autotest %03d ERROR (INCEXO+offset)\n",cpt);MiniDump(opcode,opcodelen);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+	i=opcodelen;
+	ret=RasmAssemble(AUTOTEST_LZEXO_D,strlen(AUTOTEST_LZEXO_D),&opcode,&opcodelen);
+	if (!ret && i==opcodelen) {} else {printf("Autotest %03d ERROR (LZEXO+INCBIN+offset)\n",cpt);MiniDump(opcode,opcodelen);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing LZEXO variant+offset OK\n");
+
+	ret=RasmAssemble(AUTOTEST_LZEXO_E,strlen(AUTOTEST_LZEXO_E),&opcode,&opcodelen);
+	if (!ret) {} else {printf("Autotest %03d ERROR (INCEXO+size)\n",cpt);MiniDump(opcode,opcodelen);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+	i=opcodelen;
+	ret=RasmAssemble(AUTOTEST_LZEXO_F,strlen(AUTOTEST_LZEXO_F),&opcode,&opcodelen);
+	if (!ret && i==opcodelen) {} else {printf("Autotest %03d ERROR (LZEXO+INCBIN+size)\n",cpt);MiniDump(opcode,opcodelen);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing LZEXO variant+size OK\n");
+
+
+	ret=RasmAssemble(AUTOTEST_LZX7_A,strlen(AUTOTEST_LZX7_A),&opcode,&opcodelen);
+	if (!ret && opcodelen==535) {} else {printf("Autotest %03d ERROR (INCBIN + LZX7 segment)\n",cpt);MiniDump(opcode,opcodelen);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing INCBIN + LZX7 segment OK\n");
+
+	ret=RasmAssemble(AUTOTEST_LZX7_B,strlen(AUTOTEST_LZX7_B),&opcode,&opcodelen);
+	if (!ret && opcodelen==535) {} else {printf("Autotest %03d ERROR (INCZX7)\n",cpt);MiniDump(opcode,opcodelen);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing INCZX7 OK\n");
+
+	ret=RasmAssemble(AUTOTEST_LZX7_C,strlen(AUTOTEST_LZX7_C),&opcode,&opcodelen);
+	if (!ret) {} else {printf("Autotest %03d ERROR (INCZX7+offset)\n",cpt);MiniDump(opcode,opcodelen);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+	i=opcodelen;
+	ret=RasmAssemble(AUTOTEST_LZX7_D,strlen(AUTOTEST_LZX7_D),&opcode,&opcodelen);
+	if (!ret && i==opcodelen) {} else {printf("Autotest %03d ERROR (LZX7+INCBIN+offset)\n",cpt);MiniDump(opcode,opcodelen);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing LZX7 variant+offset OK\n");
+
+	ret=RasmAssemble(AUTOTEST_LZX7_E,strlen(AUTOTEST_LZX7_E),&opcode,&opcodelen);
+	if (!ret) {} else {printf("Autotest %03d ERROR (INCZX7+size)\n",cpt);MiniDump(opcode,opcodelen);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+	i=opcodelen;
+	ret=RasmAssemble(AUTOTEST_LZX7_F,strlen(AUTOTEST_LZX7_F),&opcode,&opcodelen);
+	if (!ret && i==opcodelen) {} else {printf("Autotest %03d ERROR (LZX7+INCBIN+size)\n",cpt);MiniDump(opcode,opcodelen);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing LZX7 variant+size OK\n");
+
+
+
+	ret=RasmAssemble(AUTOTEST_LZAPU_A,strlen(AUTOTEST_LZAPU_A),&opcode,&opcodelen);
+	if (!ret && opcodelen==396) {} else {printf("Autotest %03d ERROR (INCBIN + LZAPU segment)\n",cpt);MiniDump(opcode,opcodelen);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing INCBIN + LZAPU segment OK\n");
+
+	ret=RasmAssemble(AUTOTEST_LZAPU_B,strlen(AUTOTEST_LZAPU_B),&opcode,&opcodelen);
+	if (!ret && opcodelen==396) {} else {printf("Autotest %03d ERROR (INCAPU)\n",cpt);MiniDump(opcode,opcodelen);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing INCAPU OK\n");
+
+	ret=RasmAssemble(AUTOTEST_LZAPU_C,strlen(AUTOTEST_LZAPU_C),&opcode,&opcodelen);
+	if (!ret) {} else {printf("Autotest %03d ERROR (INCAPU+offset)\n",cpt);MiniDump(opcode,opcodelen);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+	i=opcodelen;
+	ret=RasmAssemble(AUTOTEST_LZAPU_D,strlen(AUTOTEST_LZAPU_D),&opcode,&opcodelen);
+	if (!ret && i==opcodelen) {} else {printf("Autotest %03d ERROR (LZAPU+INCBIN+offset)\n",cpt);MiniDump(opcode,opcodelen);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing LZAPU variant+offset OK\n");
+
+	ret=RasmAssemble(AUTOTEST_LZAPU_E,strlen(AUTOTEST_LZAPU_E),&opcode,&opcodelen);
+	if (!ret) {} else {printf("Autotest %03d ERROR (INCAPU+size)\n",cpt);MiniDump(opcode,opcodelen);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+	i=opcodelen;
+	ret=RasmAssemble(AUTOTEST_LZAPU_F,strlen(AUTOTEST_LZAPU_F),&opcode,&opcodelen);
+	if (!ret && i==opcodelen) {} else {printf("Autotest %03d ERROR (LZAPU+INCBIN+size)\n",cpt);MiniDump(opcode,opcodelen);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing LZAPU variant+size OK\n");
+
+
+
+
+
+	FileRemoveIfExists("autotest_include.raw");
 	FileRemoveIfExists("rasmoutput.cpr");
+	FileRemoveIfExists("rasmoutput.sna");
 	
 	ret=RasmAssemble(NULL,0,&opcode,&opcodelen)+RasmAssembleInfo(NULL,0,&opcode,&opcodelen,&debug);
 	printf("All internal tests OK => %d tests done\n",ret);
