@@ -1014,6 +1014,20 @@ struct s_math_keyword math_keyword[]={
 #define CRC_PE   0x4BD5370D
 #define CRC_M    0x7A98A6C5
 
+/* cut registers */
+#define CRC_HL_LOW	0xF9FDE22C
+#define CRC_HL_HIGH	0x2261E25A
+#define CRC_DE_LOW	0x3A3CE221
+#define CRC_DE_HIGH	0x23D0E04F
+#define CRC_BC_LOW	0xFDFF1E1D
+#define CRC_BC_HIGH	0x222BE44B
+#define CRC_IX_LOW	0xB9FD0439
+#define CRC_IX_HIGH	0xA3FD0667
+#define CRC_IY_LOW	0xD9ED6C3A
+#define CRC_IY_HIGH	0x23DD5068
+#define CRC_AF_LOW	0xDDCF141F
+#define CRC_AF_HIGH	0x223FEA4D
+
 /* 8 bits registers */
 #define CRC_F    0x7A98A6BE
 #define CRC_I    0x7A98A6C1
@@ -11113,6 +11127,26 @@ struct s_wordlist *__MACRO_EXECUTE(struct s_assenv *ae, int imacro) {
 				MemFree(cpybackup[i].w);
 			}
 			MemFree(cpybackup);
+
+			/* look for specific tags */
+			for (j=idx;j<idx+ae->macro[imacro].nbword;j++) {
+				switch (GetCRC(ae->wl[j].w)) {
+					case CRC_AF_HIGH:if (strcmp(ae->wl[j].w,"AF.HIGH")==0) strcpy(ae->wl[j].w,"A");break;
+					case CRC_AF_LOW: if (strcmp(ae->wl[j].w,"AF.LOW")==0) strcpy(ae->wl[j].w,"F");break;
+					case CRC_BC_HIGH:if (strcmp(ae->wl[j].w,"BC.HIGH")==0) strcpy(ae->wl[j].w,"B");break;
+					case CRC_BC_LOW: if (strcmp(ae->wl[j].w,"BC.LOW")==0) strcpy(ae->wl[j].w,"C");break;
+					case CRC_DE_HIGH:if (strcmp(ae->wl[j].w,"DE.HIGH")==0) strcpy(ae->wl[j].w,"D");break;
+					case CRC_DE_LOW: if (strcmp(ae->wl[j].w,"DE.LOW")==0) strcpy(ae->wl[j].w,"E");break;
+					case CRC_HL_HIGH:if (strcmp(ae->wl[j].w,"HL.HIGH")==0) strcpy(ae->wl[j].w,"H");break;
+					case CRC_HL_LOW: if (strcmp(ae->wl[j].w,"HL.LOW")==0) strcpy(ae->wl[j].w,"L");break;
+					case CRC_IX_HIGH:if (strcmp(ae->wl[j].w,"IX.HIGH")==0) strcpy(ae->wl[j].w,"XH");break;
+					case CRC_IX_LOW: if (strcmp(ae->wl[j].w,"IX.LOW")==0) strcpy(ae->wl[j].w,"XL");break;
+					case CRC_IY_HIGH:if (strcmp(ae->wl[j].w,"IY.HIGH")==0) strcpy(ae->wl[j].w,"YH");break;
+					case CRC_IY_LOW: if (strcmp(ae->wl[j].w,"IY.LOW")==0) strcpy(ae->wl[j].w,"YL");break;
+					default:break;
+				}
+			}
+
 			/* macro replaced, need to rollback index */
 			//ae->idx--;
 		}
