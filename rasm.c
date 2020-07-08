@@ -1,6 +1,6 @@
 #define PROGRAM_NAME      "RASM"
-#define PROGRAM_VERSION   "1.1"
-#define PROGRAM_DATE      "xx/06/2020"
+#define PROGRAM_VERSION   "1.2 nightly"
+#define PROGRAM_DATE      "xx/07/2020"
 #define PROGRAM_COPYRIGHT "© 2017 BERGE Edouard / roudoudou from Resistance"
 
 #define RASM_VERSION PROGRAM_NAME" v"PROGRAM_VERSION" (build "PROGRAM_DATE")"
@@ -21,7 +21,7 @@
 /***
 Rasm (roudoudou assembler) Z80 assembler
 
-doc & latest official release at: http://www.cpcwiki.eu/forum/programming/rasm-z80-assembler-in-beta/
+doc & latest official release at: https://github.com/EdouardBERGE/rasm
 
 You may send requests/bugs in the same topic
 
@@ -46,21 +46,21 @@ arising from,  out of  or in connection  with  the software  or  the  use  or  o
 Software. »
 -----------------------------------------------------------------------------------------------------
 Linux compilation with GCC or Clang:
-cc rasm_v0130.c -O2 -lm -lrt -march=native -o rasm
+cc rasm.c -O2 -lm -lrt -march=native -o rasm
 strip rasm
 
 Windows compilation with Visual studio:
-cl.exe rasm_v0130.c -O2 -Ob3
+cl.exe rasm.c -O2 -Ob3
 
 pure MS-DOS 32 bits compilation with Watcom without native support of AP-Ultra:
-wcl386 rv0130.c -6r -6s -fp6 -d0 -k4000000 -ox /bt=DOS /l=dos4g -DOS_WIN=1 -DNOAPLIB=1
+wcl386 rasm.c -6r -6s -fp6 -d0 -k4000000 -ox /bt=DOS /l=dos4g -DOS_WIN=1 -DNOAPLIB=1
 
 MorphOS compilation (ixemul):
-gcc -noixemul -O2 -c -o rasm rasm_v0130.c
+gcc -noixemul -O2 -c -o rasm rasm.c
 strip rasm
 
 MacOS compilation:
-cc rasm_v0130.c -O2 -lm -march=native -o rasm
+cc rasm.c -O2 -lm -march=native -o rasm
 
 */
 
@@ -164,6 +164,7 @@ struct s_parameter {
 	char *binary_name;
 	char *cartridge_name;
 	char *snapshot_name;
+	char *rom_name;
 	char *tape_name;
 	char *breakpoint_name;
 	char **symboldef;
@@ -230,7 +231,9 @@ E_COMPUTE_OPERATION_SOFT2HARD=46,
 E_COMPUTE_OPERATION_HARD2SOFT=47,
 /* string functions */
 E_COMPUTE_OPERATION_GETNOP=48,
-E_COMPUTE_OPERATION_END=49
+E_COMPUTE_OPERATION_GETTICK=49,
+E_COMPUTE_OPERATION_DURATION=50,
+E_COMPUTE_OPERATION_END=51
 };
 
 struct s_compute_element {
@@ -916,6 +919,7 @@ struct s_assenv {
 	char *binary_name;
 	char *cartridge_name;
 	char *snapshot_name;
+	char *rom_name;
 	struct s_save *save;
 	int nbsave,maxsave;
 	int current_run_idx;
@@ -973,6 +977,8 @@ struct s_math_keyword math_keyword[]={
 {"HARD2SOFT_INK",0,E_COMPUTE_OPERATION_HARD2SOFT},
 {"H2S_INK",0,E_COMPUTE_OPERATION_HARD2SOFT},
 {"GETNOP",0,E_COMPUTE_OPERATION_GETNOP},
+{"GETTICK",0,E_COMPUTE_OPERATION_GETTICK},
+{"DURATION",0,E_COMPUTE_OPERATION_DURATION},
 {"",0,-1}
 };
 
@@ -3628,6 +3634,7 @@ char *TranslateTag(struct s_assenv *ae, char *varbuffer, int *touched, int enabl
 	return varbuffer;
 }
 
+
 #define CRC_JR		0x4BD52314
 #define CRC_JP		0x4BD52312
 #define CRC_DJNZ	0x37CD7BAE
@@ -3637,38 +3644,106 @@ char *TranslateTag(struct s_assenv *ae, char *varbuffer, int *touched, int enabl
 #define CRC_JPIX	0xA3D76424
 #define CRC_JPIY	0xA3D76A25
 
-
-int __GETNOP(struct s_assenv *ae,char *opcode, int didx)
+/*
+	count NOP of one or more instructions
+*/
+int __GETNOP(struct s_assenv *ae,char *oplist, int didx)
 {
 	#undef FUNC
 	#define FUNC "__GETNOP"
 
-	int idx=0,crc,tick;
+	int idx=0,crc,tick=0;
+	char **opcode=NULL;
+	char *opref;
 
 	/* upper case */
-	while (opcode[idx]) opcode[idx++]=toupper(opcode[idx]);
+	while (oplist[idx]) oplist[idx++]=toupper(oplist[idx]);
+	/* duplicata */
+	opref=TxtStrDup(oplist);
+	/* count opcodes */
+	opcode=TxtSplitWithChar(oplist,':');
 
-	crc=GetCRC(opcode);
+	idx=0;
+	while (opcode[idx]) {
+		crc=GetCRC(opcode[idx]);
 
-	/* partial support for DEC,DJNZ,RET,JR */
-	switch (crc) {
-		case CRC_JPHL:
-			tick=1;
-			break;
-		case CRC_JPIX:
-		case CRC_JPIY:
-			tick=2;
-			break;
-		/**************************/
-		case CRC_JP:
-		case CRC_DJNZ:
-		case CRC_JR:
-		case CRC_RET:tick=3;break;
-		default: 
-			MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported opcode [%s] for GETNOP, see documentation about this directive",opcode);
-			tick=0;
+		/* partial support for DEC,DJNZ,RET,JR */
+		switch (crc) {
+			case CRC_JPHL:
+				tick+=1;
+				break;
+			case CRC_JPIX:
+			case CRC_JPIY:
+				tick+=2;
+				break;
+			/**************************/
+			case CRC_JP:
+			case CRC_DJNZ:
+			case CRC_JR:
+			case CRC_RET:tick+=3;break;
+			default: 
+				MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported opcode [%s] for GETNOP, see documentation about this directive",opcode[idx]);
+		}
+		idx++;
 	}
+	MemFree(opref);
+	if (opcode) MemFree(opcode);
 	return tick;
+}
+int __GETTICK(struct s_assenv *ae,char *oplist, int didx)
+{
+	#undef FUNC
+	#define FUNC "__GETTICK"
+
+	int idx=0,crc,tick=0;
+	char **opcode=NULL;
+	char *opref;
+
+	/* upper case */
+	while (oplist[idx]) oplist[idx++]=toupper(oplist[idx]);
+	/* duplicata */
+	opref=TxtStrDup(oplist);
+	/* count opcodes */
+	opcode=TxtSplitWithChar(oplist,':');
+
+	idx=0;
+	while (opcode[idx]) {
+		crc=GetCRC(opcode[idx]);
+
+		/* partial support for DEC,DJNZ,RET,JR */
+		switch (crc) {
+			case CRC_JPHL:
+				tick+=4;
+				break;
+			case CRC_JPIX:
+			case CRC_JPIY:
+				tick+=8;
+				break;
+			/**************************/
+			case CRC_JP:tick+=10;break;
+			case CRC_DJNZ:tick+=13;break;
+			case CRC_JR:tick+=12;break;
+			case CRC_RET:tick+=10;break;
+			default: 
+				MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported opcode [%s] for GETNOP, see documentation about this directive",opcode[idx]);
+		}
+		idx++;
+	}
+	MemFree(opref);
+	if (opcode) MemFree(opcode);
+	return tick;
+}
+/*
+	default returned value of Duration is NOP
+	but BUILDZX usage change this to ticks!
+*/
+int __DURATION(struct s_assenv *ae,char *opcode, int didx)
+{
+	#undef FUNC
+	#define FUNC "__DURATION"
+
+	if (!ae->forcezx) return __GETNOP(ae,opcode,didx);
+	return __GETTICK(ae,opcode,didx);
 }
 
 int __Soft2HardInk(struct s_assenv *ae,int soft, int didx) {
@@ -4378,7 +4453,7 @@ if (didx>0 && didx<ae->ie) {
 		dblvarbuffer=MemMalloc(strlen(ae->computectx->varbuffer)+strlen(ae->expression[didx].module)+2);
 
 		strcpy(dblvarbuffer,ae->expression[didx].module);
-		strcat(dblvarbuffer,"_");
+		strcat(dblvarbuffer,"_"); // modulmodif
 		strcat(dblvarbuffer,ae->computectx->varbuffer+minusptr+bank);
 
 		/* on essaie toujours de trouver le label du module courant */	
@@ -4405,7 +4480,7 @@ if (didx>0 && didx<ae->ie) {
 		char *dblvarbuffer;
 		dblvarbuffer=MemMalloc(strlen(ae->computectx->varbuffer)+strlen(ae->module)+2);
 		strcpy(dblvarbuffer,ae->module);
-		strcat(dblvarbuffer,"_");
+		strcat(dblvarbuffer,"_");  // modulmodif
 		strcat(dblvarbuffer,ae->computectx->varbuffer+minusptr+bank);
 
 		/* on essaie toujours de trouver le label du module courant */	
@@ -4721,6 +4796,8 @@ printf("stage 2 | page=%d | ptr=%X ibank=%d\n",page,curlabel->ptr,curlabel->iban
 			case E_COMPUTE_OPERATION_SOFT2HARD:printf("soft2hard ");break;
 			case E_COMPUTE_OPERATION_HARD2SOFT:printf("hard2soft ");break;
 			case E_COMPUTE_OPERATION_GETNOP:printf("getnop ");break;
+			case E_COMPUTE_OPERATION_GETTICK:printf("gettick ");break;
+			case E_COMPUTE_OPERATION_DURATION:printf("duration ");break;
 			default:printf("bug\n");break;
 		}
 		
@@ -4845,6 +4922,8 @@ printf("operator string=%X\n",ae->computectx->operatorstack[o2].string);
 			case E_COMPUTE_OPERATION_SOFT2HARD:
 			case E_COMPUTE_OPERATION_HARD2SOFT:
 			case E_COMPUTE_OPERATION_GETNOP:
+			case E_COMPUTE_OPERATION_GETTICK:
+			case E_COMPUTE_OPERATION_DURATION:
 #if DEBUG_STACK
 printf("ajout de la fonction\n");
 #endif
@@ -4977,6 +5056,46 @@ printf("final POP string=%X\n",ae->computectx->operatorstack[nboperatorstack+1].
 									}
 								} else {
 									MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"GETNOP is empty\n");
+								}
+							       break;
+							       /* CC GETNOP */
+				case E_COMPUTE_OPERATION_GETTICK:if (paccu>0) {
+								      int integeridx;
+								      integeridx=floor(accu[paccu-1]);
+
+								      if (integeridx>=0 && integeridx<nbcomputestack && computestack[integeridx].string) {
+									      accu[paccu-1]=__GETTICK(ae,computestack[integeridx].string,didx);
+									      MemFree(computestack[integeridx].string);
+									      computestack[integeridx].string=NULL;
+								      } else {
+									      if (integeridx>=0 && integeridx<nbcomputestack) {
+											MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"GETTICK function needs a proper string\n");
+										} else {
+											MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"GETTICK internal error (wrong string index)\n");
+										}
+									}
+								} else {
+									MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"GETTICK is empty\n");
+								}
+							       break;
+							       /* CC GETNOP */
+				case E_COMPUTE_OPERATION_DURATION:if (paccu>0) {
+								      int integeridx;
+								      integeridx=floor(accu[paccu-1]);
+
+								      if (integeridx>=0 && integeridx<nbcomputestack && computestack[integeridx].string) {
+									      accu[paccu-1]=__DURATION(ae,computestack[integeridx].string,didx);
+									      MemFree(computestack[integeridx].string);
+									      computestack[integeridx].string=NULL;
+								      } else {
+									      if (integeridx>=0 && integeridx<nbcomputestack) {
+											MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"DURATION function needs a proper string\n");
+										} else {
+											MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"DURATION internal error (wrong string index)\n");
+										}
+									}
+								} else {
+									MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"DURATION is empty\n");
 								}
 							       break;
 				default:MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"invalid computing state! (%d)\n",computestack[i].operator);paccu=0;
@@ -5128,6 +5247,47 @@ printf("final POP string=%X\n",ae->computectx->operatorstack[nboperatorstack+1].
 									MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"GETNOP is empty\n");
 								}
 							       break;
+							       /* CC GETNOP */
+				case E_COMPUTE_OPERATION_GETTICK:if (paccu>0) {
+								      int integeridx;
+								      integeridx=floor(accu[paccu-1]);
+
+								      if (integeridx>=0 && integeridx<nbcomputestack && computestack[integeridx].string) {
+									      accu[paccu-1]=__GETTICK(ae,computestack[integeridx].string,didx);
+									      MemFree(computestack[integeridx].string);
+									      computestack[integeridx].string=NULL;
+								      } else {
+									      if (integeridx>=0 && integeridx<nbcomputestack) {
+											MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"GETTICK function needs a proper string\n");
+										} else {
+											MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"GETTICK internal error (wrong string index)\n");
+										}
+									}
+								} else {
+									MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"GETTICK is empty\n");
+								}
+							       break;
+							       /* CC GETNOP */
+				case E_COMPUTE_OPERATION_DURATION:if (paccu>0) {
+								      int integeridx;
+								      integeridx=floor(accu[paccu-1]);
+
+								      if (integeridx>=0 && integeridx<nbcomputestack && computestack[integeridx].string) {
+									      accu[paccu-1]=__DURATION(ae,computestack[integeridx].string,didx);
+									      MemFree(computestack[integeridx].string);
+									      computestack[integeridx].string=NULL;
+								      } else {
+									      if (integeridx>=0 && integeridx<nbcomputestack) {
+											MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"DURATION function needs a proper string\n");
+										} else {
+											MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"DURATION internal error (wrong string index)\n");
+										}
+									}
+								} else {
+									MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"DURATION is empty\n");
+								}
+							       break;
+
 				default:MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"invalid computing state! (%d)\n",computestack[i].operator);paccu=0;
 			}
 			if (!paccu) {
@@ -5629,7 +5789,7 @@ void ExpressionFastTranslate(struct s_assenv *ae, char **ptr_expr, int fullrepla
 					}
 				}
 			}
-			/* on cherche aussi dans les labels existants => priorité aux modules!!! */
+			/* on cherche aussi dans les labels existants => priorité aux modules!!! */   // modulmodif => pas utile?
 			if (!found_replace) {
 				curlabel=SearchLabel(ae,varbuffer,crc);
 				if (curlabel) {
@@ -10256,20 +10416,30 @@ void __BUILDZX(struct s_assenv *ae) {
 	if (!ae->wl[ae->idx].t) {
 		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"BUILDZX does not need a parameter\n");
 	}
-	if (!ae->forcesnapshot && !ae->forcetape && !ae->forcecpr) {
+	if (!ae->forcesnapshot && !ae->forcetape && !ae->forcecpr && !ae->forceROM) {
 		ae->forcezx=1;
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Cannot select ZX output when already in Amstrad cartridge/snapshot/tape output\n");
+		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Cannot select ZX output when already in Amstrad ROM/cartridge/snapshot/tape output\n");
 	}
 }
 void __BUILDCPR(struct s_assenv *ae) {
 	if (!ae->wl[ae->idx].t) {
 		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"BUILDCPR does not need a parameter\n");
 	}
-	if (!ae->forcesnapshot && !ae->forcetape && !ae->forcezx) {
+	if (!ae->forcesnapshot && !ae->forcetape && !ae->forcezx && !ae->forceROM) {
 		ae->forcecpr=1;
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Cannot select Amstrad cartridge output when already in snapshot/tape output\n");
+		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Cannot select Amstrad cartridge output when already in ZX/ROM/snapshot/tape output\n");
+	}
+}
+void __BUILDROM(struct s_assenv *ae) {
+	if (!ae->wl[ae->idx].t) {
+		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"BUILDROM does not need a parameter\n");
+	}
+	if (!ae->forcesnapshot && !ae->forcetape && !ae->forcezx && !ae->forcecpr) {
+		ae->forceROM=1;
+	} else {
+		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Cannot select ROM output when already in ZX/cartridge/snapshot/tape output\n");
 	}
 }
 void __BUILDSNA(struct s_assenv *ae) {
@@ -10280,30 +10450,20 @@ void __BUILDSNA(struct s_assenv *ae) {
 			MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"BUILDSNA unrecognized option\n");
 		}
 	}
-	if (!ae->forcecpr && !ae->forcetape && !ae->forcezx) {
+	if (!ae->forcecpr && !ae->forcetape && !ae->forcezx && !ae->forceROM) {
 		ae->forcesnapshot=1;
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Cannot select snapshot output when already in cartridge/tape output\n");
-	}
-}
-void __BUILDROM(struct s_assenv *ae) {
-	if (!ae->wl[ae->idx].t) {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"BUILDROM does not need a parameter\n");
-	}
-	if (!ae->forcesnapshot && !ae->forcetape && !ae->forcezx && !ae->forcecpr) {
-		ae->forceROM=1;
-	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Cannot select Amstrad ROM output when already in snapshot/tape/zx/cartridge output\n");
+		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Cannot select snapshot output when already in ZX/ROM/cartridge/tape output\n");
 	}
 }
 void __BUILDTAPE(struct s_assenv *ae) {
 	if (!ae->wl[ae->idx].t) {
 		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"BUILDTAPE does not need a parameter\n");
 	}
-	if (!ae->forcesnapshot && !ae->forcecpr && !ae->forcezx) {
+	if (!ae->forcesnapshot && !ae->forcecpr && !ae->forcezx && !ae->forceROM) {
 		ae->forcetape=1;
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Cannot select tape output when already in snapshot/cartridge output\n");
+		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Cannot select tape output when already in ZX/ROM/snapshot/cartridge output\n");
 	}
 }
 	
@@ -10575,6 +10735,7 @@ void __BANK(struct s_assenv *ae) {
 	}
 	
 	ae->bankmode=1;
+	/* using BANK without build mode will select cartridge output as default */
 	if (!ae->forceROM && !ae->forcecpr && !ae->forcesnapshot && !ae->forcezx) ae->forcecpr=1;
 
 	if (ae->wl[ae->idx+1].t!=2) {
@@ -10653,7 +10814,7 @@ void __BANKSET(struct s_assenv *ae) {
 
 	__internal_UpdateLZBlockIfAny(ae);
 
-	if (!ae->forcesnapshot && !ae->forcecpr && !ae->forcezx) ae->forcesnapshot=1;
+	if (!ae->forcesnapshot && !ae->forcecpr && !ae->forcezx && !ae->forceROM) ae->forcesnapshot=1;
 	if (!ae->forcesnapshot) {
 		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"BANKSET directive is specific to snapshot output\n");
 		return;
@@ -11275,15 +11436,19 @@ void __BREAKPOINT(struct s_assenv *ae) {
 	}
 }
 
+void __BREAKPOINT_Z80(struct s_assenv *ae) {
+		___output(ae,0xED);
+		___output(ae,0xFF);
+}
 
 void __SNASET(struct s_assenv *ae) {
 	int myvalue,idx;
 
-	if (!ae->forcecpr && !ae->forcetape && !ae->forcezx) {
+	if (!ae->forcecpr && !ae->forcetape && !ae->forcezx && !ae->forceROM) {
 		ae->forcesnapshot=1;
 	} else {
 		if (!ae->nowarning) {
-			rasm_printf(ae,KWARNING"[%s:%d] Warning: Cannot SNASET when already in cartridge/tape output\n",GetCurrentFile(ae),ae->wl[ae->idx].l);
+			rasm_printf(ae,KWARNING"[%s:%d] Warning: Cannot SNASET when already in ZX/ROM/cartridge/tape output\n",GetCurrentFile(ae),ae->wl[ae->idx].l);
 			if (ae->erronwarn) MaxError(ae);
 		}
 	}
@@ -11483,11 +11648,11 @@ void __SETCPC(struct s_assenv *ae) {
 
 	rasm_printf(ae,KWARNING"[%s:%d] Warning: SETCPC is deprecated, use SNASET CPC_TYPE,<type> instead\n",GetCurrentFile(ae),ae->wl[ae->idx].l);
 
-	if (!ae->forcecpr) {
+	if (!ae->forcecpr && !ae->forceROM && !ae->forcezx) {
 		ae->forcesnapshot=1;
 	} else {
 		if (!ae->nowarning) {
-			rasm_printf(ae,KWARNING"[%s:%d] Warning: Cannot SETCPC when already in cartridge output\n",GetCurrentFile(ae),ae->wl[ae->idx].l);
+			rasm_printf(ae,KWARNING"[%s:%d] Warning: Cannot SETCPC when already in ZX/ROM/cartridge output\n",GetCurrentFile(ae),ae->wl[ae->idx].l);
 			if (ae->erronwarn) MaxError(ae);
 		}
 	}
@@ -11517,11 +11682,11 @@ void __SETCRTC(struct s_assenv *ae) {
 
 	rasm_printf(ae,KWARNING"[%s:%d] Warning: SETCRTC is deprecated, use SNASET CRTC_TYPE,<type> instead\n",GetCurrentFile(ae),ae->wl[ae->idx].l);
 
-	if (!ae->forcecpr) {
+	if (!ae->forcecpr && !ae->forcezx && !ae->forceROM) {
 		ae->forcesnapshot=1;
 	} else {
 		if (!ae->nowarning) {
-			rasm_printf(ae,KWARNING"[%s:%d] Warning: Cannot SETCRTC when already in cartridge output\n",GetCurrentFile(ae),ae->wl[ae->idx].l);
+			rasm_printf(ae,KWARNING"[%s:%d] Warning: Cannot SETCRTC when already in ZX/ROM/cartridge output\n",GetCurrentFile(ae),ae->wl[ae->idx].l);
 			if (ae->erronwarn) MaxError(ae);
 		}
 	}
@@ -13920,6 +14085,7 @@ struct s_asm_keyword instruction[]={
 {"PRINT",0,__PRINT},
 {"FAIL",0,__FAIL},
 {"BREAKPOINT",0,__BREAKPOINT},
+{"BREAKPOINT_Z80",0,__BREAKPOINT_Z80},
 {"BANK",0,__BANK},
 {"BANKSET",0,__BANKSET},
 {"NAMEBANK",0,__NameBANK},
@@ -14666,7 +14832,7 @@ printf("output files\n");
 		/* enregistrement des fichiers programmes par la commande SAVE */
 		PopAllSave(ae);
 	
-		if (ae->nbsave==0 || ae->forcecpr || ae->forcesnapshot) {
+		if (ae->nbsave==0 || ae->forcecpr || ae->forcesnapshot || ae->forceROM) {
 			/*********************************************
 			**********************************************
 						  C A R T R I D G E
@@ -14754,6 +14920,67 @@ printf("output files\n");
 				}
 				FileWriteBinaryClose(TMP_filename);
 				rasm_printf(ae,"Total %d bank%s (%dK)\n",maxrom+1,maxrom+1>1?"s":"",(maxrom+1)*16);
+			/*********************************************
+			**********************************************
+						       R O M       
+			**********************************************
+			*********************************************/
+			} else if (ae->forceROM) {
+				unsigned char filler[16384]={0};
+				int noflood=0;
+
+				/* how many ROM? */
+				for (i=maxrom=0;i<ae->io;i++) {
+					if (ae->orgzone[i].ibank<256 && ae->orgzone[i].ibank>maxrom) maxrom=ae->orgzone[i].ibank;
+				}
+
+				for (i=0;i<=maxrom;i++) {
+					/* number the file */
+					if (ae->rom_name) {
+						sprintf(TMP_filename,"%s%d.rom",ae->rom_name,i);
+					} else {
+						sprintf(TMP_filename,"%s%d.rom",ae->outputfilename,i);
+					}
+					FileRemoveIfExists(TMP_filename);
+
+					offset=65536;
+					endoffset=0;
+					for (j=0;j<ae->io;j++) {
+						if (ae->orgzone[j].protect) continue; /* protected zones exclusion */
+						/* bank data may start anywhere (typically #0000 or #C000) */
+						if (ae->orgzone[j].ibank==i && ae->orgzone[j].memstart!=ae->orgzone[j].memend) {
+							if (ae->orgzone[j].memstart<offset) offset=ae->orgzone[j].memstart;
+							if (ae->orgzone[j].memend>endoffset) endoffset=ae->orgzone[j].memend;
+						}
+					}
+					if (endoffset>offset) {
+						/* cannot be bigger than 16K */
+						if (endoffset-offset>16384) {
+							rasm_printf(ae,"\nROM is too big!!!\n");
+							FileRemoveIfExists(TMP_filename);
+							FreeAssenv(ae);
+							exit(ABORT_ERROR);
+						}
+						/* to avoid ROM smaller than 16K at the end of working memory */
+						if (offset>49152) offset=49152;
+
+						if (i<4 || i+4>maxrom) rasm_printf(ae,KVERBOSE"WriteROM bank %3d of %5d byte%s start at #%04X\n",i,endoffset-offset,endoffset-offset>1?"s":" ",offset);
+						else if (!noflood) {rasm_printf(ae,KVERBOSE"[...]\n");noflood=1;}
+
+						FileWriteBinary(TMP_filename,ae->mem[i]+offset,endoffset-offset);
+						if (endoffset-offset<16384) FileWriteBinary(TMP_filename,(char*)filler,16384-(endoffset-offset));
+						FileWriteBinaryClose(TMP_filename);
+					} else {
+						rasm_printf(ae,KVERBOSE"WriteROM bank %3d is empty\n",i);
+						//FileWriteBinary(TMP_filename,(char*)filler,16384);
+						//FileWriteBinaryClose(TMP_filename);
+					}
+
+
+				}
+
+				rasm_printf(ae,"Total %d rom%s (%dK)\n",maxrom+1,maxrom+1>1?"s":"",(maxrom+1)*16);
+					
 			/*********************************************
 			**********************************************
 						  S N A P S H O T  
@@ -15832,6 +16059,7 @@ printf("paramz 1\n");
 		ae->flexible_export=param->flexible_export;
 		ae->cartridge_name=param->cartridge_name;
 		ae->snapshot_name=param->snapshot_name;
+		ae->rom_name=param->rom_name;
 		ae->checkmode=param->checkmode;
 		if (param->rough) ae->maxam=0; else ae->maxam=1;
 		/* additional symbols */
@@ -17874,7 +18102,7 @@ printf("testing LZ segment relocation OK\n");
 	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
 printf("testing multi-LZ segment relocation with multiple banks OK\n");
 #else
-printf("*** multi-LZ segment test disabled as there is no APUltra support for MSDOS ***\n");
+printf("*** multi-LZ segment test disabled as there is no APUltra support for this version ***\n");
 #endif
 	ret=RasmAssemble(AUTOTEST_MULTILZORG,strlen(AUTOTEST_MULTILZORG),&opcode,&opcodelen);
 	if (!ret && opcodelen==38 && opcode[0]==6 && opcode[2]==0x10
@@ -18482,7 +18710,7 @@ printf("testing LZX7 variant+offset OK\n");
 printf("testing LZX7 variant+size OK\n");
 
 
-
+#ifndef NOAPULTRA
 	ret=RasmAssemble(AUTOTEST_LZAPU_A,strlen(AUTOTEST_LZAPU_A),&opcode,&opcodelen);
 	if (!ret && opcodelen==396) {} else {printf("Autotest %03d ERROR (INCBIN + LZAPU segment)\n",cpt);MiniDump(opcode,opcodelen);exit(-1);}
 	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
@@ -18510,7 +18738,9 @@ printf("testing LZAPU variant+offset OK\n");
 	if (!ret && i==opcodelen) {} else {printf("Autotest %03d ERROR (LZAPU+INCBIN+size)\n",cpt);MiniDump(opcode,opcodelen);exit(-1);}
 	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
 printf("testing LZAPU variant+size OK\n");
-
+#else
+printf("*** LZAPU and INCAPU tests disabled as there is no APUltra support for this version ***\n");
+#endif
 
 
 
@@ -18782,6 +19012,7 @@ void Usage(int help)
 		printf("FILENAMES:\n");
 		printf("-oa                      automatic radix from input filename\n");
 		printf("-o  <outputfile radix>   choose a common radix for all files\n");
+		printf("-or <ROM filename(s)>    choose a radix filename for snapshot output\n");
 		printf("-ob <binary filename>    choose a full filename for binary output\n");
 		printf("-oc <cartridge filename> choose a full filename for cartridge output\n");
 		printf("-oi <snapshot filename>  choose a full filename for snapshot output\n");
@@ -19200,6 +19431,13 @@ printf("@@@\n@@@ --> deprecated option, there is no need to use -i option to set
 					case 't':
 						if (i+1<argc && param->tape_name==NULL) {
 							param->tape_name=argv[++i];
+							break;
+						}
+						Usage(1);
+						break;
+					case 'r':
+						if (i+1<argc && param->rom_name==NULL) {
+							param->rom_name=argv[++i];
 							break;
 						}
 						Usage(1);
