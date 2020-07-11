@@ -15693,8 +15693,10 @@ printf("output files\n");
 				FileWriteLineClose(TMP_filename);
 			} else {
 				if (!ae->nowarning) {
-					rasm_printf(ae,KWARNING"Warning: no breakpoint to output (previous file [%s] deleted anyway)\n",TMP_filename);
+					rasm_printf(ae,KWARNING"Warning: no breakpoint to output\n",TMP_filename);
 					if (ae->erronwarn) MaxError(ae);
+					/* empty file */
+					FileTruncate(TMP_filename);
 				}
 			}
 		}
