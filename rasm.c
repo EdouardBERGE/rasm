@@ -16088,7 +16088,7 @@ printf("paramz 1\n");
 		ae->dependencies=param->dependencies;
 	}
 #if TRACE_PREPRO
-printf("init 0\n");
+printf("init 0 amper=%d\n",ae->noampersand);
 #endif
 #if TRACE_GENERALE
 printf("-init\n");
@@ -16755,11 +16755,18 @@ if (!idx) printf("[%s]\n",listing[l].listing);
 						}
 						break;
 
-					case '&': if (ae->noampersand && c=='&') c=listing[l].listing[idx-1]='#';
+					default: if (ae->noampersand && c=='&') {
+							  listing[l].listing[idx-1]='#';
+#if TRACE_PREPRO
+printf("patch & => #\n");
+#endif
+						}
 						break;
-					default:break;
 				}
 
+#if TRACE_PREPRO
+printf("bval=[%s]\n",bval);
+#endif
 				bval[0]=0;
 				ival=0;
 			}
