@@ -171,6 +171,7 @@ struct s_parameter {
 	int nsymb,msymb;
 	char **pathdef;
 	int npath,mpath;
+	int noampersand;
 };
 
 
@@ -906,6 +907,7 @@ struct s_assenv {
 	struct s_compute_element AutomateElement[256];
 	unsigned char psgtab[256];
 	unsigned char psgfine[256];
+	int noampersand;
 	/* output */
 	char *outputfilename;
 	int export_sym,export_local,export_multisym;
@@ -16063,6 +16065,7 @@ printf("paramz 1\n");
 		ae->snapshot_name=param->snapshot_name;
 		ae->rom_name=param->rom_name;
 		ae->checkmode=param->checkmode;
+		ae->noampersand=param->noampersand;
 		if (param->rough) ae->maxam=0; else ae->maxam=1;
 		/* additional symbols */
 		for (i=0;i<param->nsymb;i++) {
@@ -16581,144 +16584,182 @@ if (!idx) printf("[%s]\n",listing[l].listing);
 				StateMachineResizeBuffer(&bval,ival,&sval);
 				bval[ival]=0;
 			} else {
-				if (strcmp(bval,"INCLUDE")==0) {
-					incstartL=l;
-					include=1;
-					waiting_quote=1;
-					rewrite=idx-7-1;
-					/* quote right after keyword */
-					if (c==quote_type) {
-						waiting_quote=2;
-					}
-				} else if (strcmp(bval,"READ")==0) {
-					incstartL=l;
-					include=1;
-					waiting_quote=1;
-					rewrite=idx-4-1;
-					/* quote right after keyword */
-					if (c==quote_type) {
-						waiting_quote=2;
-					}
-				} else if (strcmp(bval,"INCAPU")==0) {
-					incstartL=l;
-					incbin=1;
-					crunch=17;
-					waiting_quote=1;
-					rewrite=idx-6-1;
-					/* quote right after keyword */
-					if (c==quote_type) {
-						waiting_quote=2;
-					}
-				} else if (strcmp(bval,"INCLZ4")==0) {
-					incstartL=l;
-					incbin=1;
-					crunch=4;
-					waiting_quote=1;
-					rewrite=idx-6-1;
-					/* quote right after keyword */
-					if (c==quote_type) {
-						waiting_quote=2;
-					}
-				} else if (strcmp(bval,"INCEXO")==0) {
-					incstartL=l;
-					incbin=1;
-					crunch=8;
-					waiting_quote=1;
-					rewrite=idx-6-1;
-					/* quote right after keyword */
-					if (c==quote_type) {
-						waiting_quote=2;
-					}
-				} else if (strcmp(bval,"INCZX7")==0) {
-					incstartL=l;
-					incbin=1;
-					crunch=7;
-					waiting_quote=1;
-					rewrite=idx-6-1;
-					/* quote right after keyword */
-					if (c==quote_type) {
-						waiting_quote=2;
-					}
-				} else if (strcmp(bval,"INCL48")==0) {
-					incstartL=l;
-					incbin=1;
-					crunch=48;
-					waiting_quote=1;
-					rewrite=idx-6-1;
-					/* quote right after keyword */
-					if (c==quote_type) {
-						waiting_quote=2;
-					}
-				} else if (strcmp(bval,"INCL49")==0) {
-					incstartL=l;
-					incbin=1;
-					crunch=49;
-					waiting_quote=1;
-					rewrite=idx-6-1;
-					/* quote right after keyword */
-					if (c==quote_type) {
-						waiting_quote=2;
-					}
-				} else if (strcmp(bval,"INCBIN")==0) {
-					incstartL=l;
-					incbin=1;
-					crunch=0;
-					waiting_quote=1;
-					rewrite=idx-6-1;
-					/* quote right after keyword */
-					if (c==quote_type) {
-						waiting_quote=2;
-					}
-				} else if (strcmp(bval,"INCWAV")==0) {
-					incstartL=l;
-					incbin=1;
-					crunch=0;
-					waiting_quote=1;
-					rewrite=idx-6-1;
-					/* quote right after keyword */
-					if (c==quote_type) {
-						waiting_quote=2;
-					}
-				} else if (strcmp(bval,"WHILE")==0) {
-					/* remplir la structure repeat_index */
-					windex.ol=listing[l].iline;
-					windex.oidx=idx;
-					windex.ifile=ae->ifile-1;
-					ObjectArrayAddDynamicValueConcat((void**)&TABwindex,&nwi,&mwi,&windex,sizeof(windex));
-				} else if (strcmp(bval,"REPEAT")==0) {
-					/* remplir la structure repeat_index */
-					rindex.ol=listing[l].iline;
-					rindex.oidx=idx;
-					rindex.ifile=ae->ifile-1;
-					ObjectArrayAddDynamicValueConcat((void**)&TABrindex,&nri,&mri,&rindex,sizeof(rindex));
-				} else if (strcmp(bval,"WEND")==0) {
-					/* retrouver la structure repeat_index correspondant a l'ouverture */
-					for (wi=nwi-1;wi>=0;wi--) {
-						if (TABwindex[wi].cl==-1) {
-							TABwindex[wi].cl=c;
-							TABwindex[wi].cidx=idx;
-							break;
+				switch (bval[0]) {
+					case 'I':
+						if (bval[1]=='N' && bval[2]=='C') {
+							if (strcmp(bval,"INCLUDE")==0) {
+								incstartL=l;
+								include=1;
+								waiting_quote=1;
+								rewrite=idx-7-1;
+								/* quote right after keyword */
+								if (c==quote_type) {
+									waiting_quote=2;
+								}
+							} else if (strcmp(bval,"INCAPU")==0) {
+								incstartL=l;
+								incbin=1;
+								crunch=17;
+								waiting_quote=1;
+								rewrite=idx-6-1;
+								/* quote right after keyword */
+								if (c==quote_type) {
+									waiting_quote=2;
+								}
+							} else if (strcmp(bval,"INCLZ4")==0) {
+								incstartL=l;
+								incbin=1;
+								crunch=4;
+								waiting_quote=1;
+								rewrite=idx-6-1;
+								/* quote right after keyword */
+								if (c==quote_type) {
+									waiting_quote=2;
+								}
+							} else if (strcmp(bval,"INCEXO")==0) {
+								incstartL=l;
+								incbin=1;
+								crunch=8;
+								waiting_quote=1;
+								rewrite=idx-6-1;
+								/* quote right after keyword */
+								if (c==quote_type) {
+									waiting_quote=2;
+								}
+							} else if (strcmp(bval,"INCZX7")==0) {
+								incstartL=l;
+								incbin=1;
+								crunch=7;
+								waiting_quote=1;
+								rewrite=idx-6-1;
+								/* quote right after keyword */
+								if (c==quote_type) {
+									waiting_quote=2;
+								}
+							} else if (strcmp(bval,"INCL48")==0) {
+								incstartL=l;
+								incbin=1;
+								crunch=48;
+								waiting_quote=1;
+								rewrite=idx-6-1;
+								/* quote right after keyword */
+								if (c==quote_type) {
+									waiting_quote=2;
+								}
+							} else if (strcmp(bval,"INCL49")==0) {
+								incstartL=l;
+								incbin=1;
+								crunch=49;
+								waiting_quote=1;
+								rewrite=idx-6-1;
+								/* quote right after keyword */
+								if (c==quote_type) {
+									waiting_quote=2;
+								}
+							} else if (strcmp(bval,"INCBIN")==0) {
+								incstartL=l;
+								incbin=1;
+								crunch=0;
+								waiting_quote=1;
+								rewrite=idx-6-1;
+								/* quote right after keyword */
+								if (c==quote_type) {
+									waiting_quote=2;
+								}
+							} else if (strcmp(bval,"INCWAV")==0) {
+								incstartL=l;
+								incbin=1;
+								crunch=0;
+								waiting_quote=1;
+								rewrite=idx-6-1;
+								/* quote right after keyword */
+								if (c==quote_type) {
+									waiting_quote=2;
+								}
+							}
 						}
-					}
-					if (wi==-1) {
-						MakeError(ae,ae->filename[listing[l].ifile],listing[l].iline,"WEND refers to unknown WHILE\n");
-						//exit(1);
-					}
-				} else if (strcmp(bval,"REND")==0 || strcmp(bval,"UNTIL")==0) {
-					/* retrouver la structure repeat_index correspondant a l'ouverture */
-					for (ri=nri-1;ri>=0;ri--) {
-						if (TABrindex[ri].cl==-1) {
-							TABrindex[ri].cl=c;
-							TABrindex[ri].cidx=idx;
-							break;
+						break;
+
+					case 'U':
+						/* code dupliqué du REND */
+						if (strcmp(bval,"UNTIL")==0) {
+							/* retrouver la structure repeat_index correspondant a l'ouverture */
+							for (ri=nri-1;ri>=0;ri--) {
+								if (TABrindex[ri].cl==-1) {
+									TABrindex[ri].cl=c;
+									TABrindex[ri].cidx=idx;
+									break;
+								}
+							}
+							if (ri==-1) {
+								MakeError(ae,ae->filename[listing[l].ifile],listing[l].iline,"%s refers to unknown REPEAT\n",bval);
+								//exit(1);
+							}
 						}
-					}
-					if (ri==-1) {
-						MakeError(ae,ae->filename[listing[l].ifile],listing[l].iline,"%s refers to unknown REPEAT\n",bval);
-						//exit(1);
-					}
-						
+						break;
+
+					case 'R':
+						if (strcmp(bval,"READ")==0) {
+							incstartL=l;
+							include=1;
+							waiting_quote=1;
+							rewrite=idx-4-1;
+							/* quote right after keyword */
+							if (c==quote_type) {
+								waiting_quote=2;
+							}
+						/* code dupliqué du UNTIL */
+						} else if (strcmp(bval,"REND")==0) {
+							/* retrouver la structure repeat_index correspondant a l'ouverture */
+							for (ri=nri-1;ri>=0;ri--) {
+								if (TABrindex[ri].cl==-1) {
+									TABrindex[ri].cl=c;
+									TABrindex[ri].cidx=idx;
+									break;
+								}
+							}
+							if (ri==-1) {
+								MakeError(ae,ae->filename[listing[l].ifile],listing[l].iline,"%s refers to unknown REPEAT\n",bval);
+								//exit(1);
+							}
+						} else if (strcmp(bval,"REPEAT")==0) {
+							/* remplir la structure repeat_index */
+							rindex.ol=listing[l].iline;
+							rindex.oidx=idx;
+							rindex.ifile=ae->ifile-1;
+							ObjectArrayAddDynamicValueConcat((void**)&TABrindex,&nri,&mri,&rindex,sizeof(rindex));
+						}
+						break;
+
+					case 'W':
+						if (strcmp(bval,"WHILE")==0) {
+							/* remplir la structure repeat_index */
+							windex.ol=listing[l].iline;
+							windex.oidx=idx;
+							windex.ifile=ae->ifile-1;
+							ObjectArrayAddDynamicValueConcat((void**)&TABwindex,&nwi,&mwi,&windex,sizeof(windex));
+						} else if (strcmp(bval,"WEND")==0) {
+							/* retrouver la structure repeat_index correspondant a l'ouverture */
+							for (wi=nwi-1;wi>=0;wi--) {
+								if (TABwindex[wi].cl==-1) {
+									TABwindex[wi].cl=c;
+									TABwindex[wi].cidx=idx;
+									break;
+								}
+							}
+							if (wi==-1) {
+								MakeError(ae,ae->filename[listing[l].ifile],listing[l].iline,"WEND refers to unknown WHILE\n");
+								//exit(1);
+							}
+								
+						}
+						break;
+
+					case '&': if (ae->noampersand && c=='&') c=listing[l].listing[idx-1]='#';
+						break;
+					default:break;
 				}
+
 				bval[0]=0;
 				ival=0;
 			}
@@ -19050,6 +19091,7 @@ void Usage(int help)
 		printf("-ass   AS80  behaviour mimic\n");
 		printf("-uz    UZ80  behaviour mimic\n");
 		printf("-pasmo PASMO behaviour mimic\n");
+		printf("-amper use ampersand for hex values\n");
 		
 		printf("EDSK generation/update:\n");
 		printf("-eo overwrite files on disk if it already exists\n");
@@ -19288,6 +19330,8 @@ int ParseOptions(char **argv,int argc, struct s_parameter *param)
 		param->pasmo=1;
 	} else if (strcmp(argv[i],"-ass")==0) {
 		param->as80=1;
+	} else if (strcmp(argv[i],"-amper")==0) {
+		param->noampersand=1;
 	} else if (strcmp(argv[i],"-eb")==0) {
 		param->export_brk=1;
 	} else if (strcmp(argv[i],"-wu")==0) {
