@@ -9992,9 +9992,9 @@ void _STR(struct s_assenv *ae) {
 					} else {
 						/* charset conversion on the fly */
 						if (ae->wl[ae->idx].w[i+1]!=tquote) {
-							___output(ae,ae->charset[(int)ae->wl[ae->idx].w[i]]);
+							___output(ae,ae->charset[(unsigned int)ae->wl[ae->idx].w[i]]);
 						} else {
-							___output(ae,ae->charset[(int)ae->wl[ae->idx].w[i]]|0x80);
+							___output(ae,ae->charset[(unsigned int)ae->wl[ae->idx].w[i]]|0x80);
 						}
 					}
 
@@ -10108,11 +10108,11 @@ void _DEFB(struct s_assenv *ae) {
 							case 't':___output(ae,'\t');break;
 							default:
 							___output(ae,c);
-							ae->nop+=1;
 						}						
+						ae->nop+=1;
 					} else {
 						/* charset conversion on the fly */
-						___output(ae,ae->charset[(int)ae->wl[ae->idx].w[i]]);
+						___output(ae,ae->charset[(unsigned int)ae->wl[ae->idx].w[i]]);
 						ae->nop+=1;
 					}
 					i++;
@@ -11154,10 +11154,6 @@ struct s_wordlist *__MACRO_EXECUTE(struct s_assenv *ae, int imacro) {
 		} else {
 			if (ae->macrovoid) {
 				MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"MACRO [%s] used without (void) and option -void used!\n",ae->macro[imacro].mnemo);
-				while (!ae->wl[ae->idx].t) {
-					ae->idx++;
-				}
-				ae->idx++;
 			}
 		}
 	}
@@ -14324,6 +14320,17 @@ printf("*** assembling ***\n");
 				instruction[icrc].makemnemo=_DEFI_as80;
 			}
 		}
+	} else {
+		/* for multiple configurations with rasm embedded */
+		for (icrc=0;instruction[icrc].mnemo[0];icrc++) {
+			if (strcmp(instruction[icrc].mnemo,"DEFB")==0 || strcmp(instruction[icrc].mnemo,"DB")==0) {
+				instruction[icrc].makemnemo=_DEFB;
+			} else if (strcmp(instruction[icrc].mnemo,"DEFW")==0 || strcmp(instruction[icrc].mnemo,"DW")==0) {
+				instruction[icrc].makemnemo=_DEFW;
+			} else if (strcmp(instruction[icrc].mnemo,"DEFI")==0) {
+				instruction[icrc].makemnemo=_DEFI;
+			}
+		}
 	}
 	
 	for (icrc=0;instruction[icrc].mnemo[0];icrc++) {
@@ -16143,7 +16150,7 @@ printf("-init\n");
 	ae->snapshot.CPCType=2; /* 6128 */
 	ae->snapshot.crtcstate.model=0; /* CRTC 0 */
 	ae->snapshot.vsyncdelay=2;
-	strcpy((char *)ae->snapshot.unused6+3+0x20+8,RASM_VERSION);
+	strncpy((char *)ae->snapshot.unused6+3+0x20,RASM_VERSION,sizeof(ae->snapshot.unused6)-1-(3+0x20));
 	/* CRTC default registers */
 	ae->snapshot.crtc.registervalue[0]=0x3F;
 	ae->snapshot.crtc.registervalue[1]=40;
@@ -17347,6 +17354,18 @@ int RasmAssembleInfo(const char *datain, int lenin, unsigned char **dataout, int
 	return ret;
 }
 
+int RasmAssembleInfoParam(const char *datain, int lenin, unsigned char **dataout, int *lenout, struct s_rasm_info **debug, struct s_parameter *param)
+{
+	static int cpt=0;
+	struct s_assenv *ae=NULL;
+	int ret;
+
+	if (datain==NULL && lenin==0) return cpt; else cpt++;
+
+	ae=PreProcessing(NULL,1,datain,lenin,param);
+	ret=Assemble(ae,dataout,lenout,debug);
+	return ret;
+}
 
 #define AUTOTEST_PAGELABELGEN "buildsna: bank: cpt=5: ld bc,{page}miam{cpt}: bank cpt: nop: miam{cpt} nop: assert {page}miam{cpt}==0x7FC5 "
 
@@ -17964,6 +17983,7 @@ void RasmAutotest(void)
 	#undef FUNC
 	#define FUNC "RasmAutotest"
 
+	struct s_parameter param;
 	struct s_rasm_info *debug;
 	unsigned char *opcode=NULL;
 	int opcodelen,ret;
@@ -18051,6 +18071,95 @@ printf("testing digit formats OK\n");
 	if (!ret) {} else {printf("Autotest %03d ERROR (all opcodes)\n",cpt);exit(-1);}
 	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
 printf("testing all opcodes OK\n");
+
+	/********************************************
+	           Autotest assembly options
+	*********************************************/
+
+	#define AUTOTEST_PARAM_AMPER "ld a,&10 : assert &10==#10"
+	memset(&param,0,sizeof(struct s_parameter));
+	param.noampersand=1;
+	ret=RasmAssembleInfoParam(AUTOTEST_PARAM_AMPER,strlen(AUTOTEST_PARAM_AMPER),&opcode,&opcodelen,&debug,&param);
+	if (!ret) {} else {printf("Autotest %03d ERROR (testing compilation option -amper)\n",cpt);MiniDump(opcode,opcodelen);for (i=0;i<debug->nberror;i++) printf("%d -> %s\n",i,debug->error[i].msg);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+	RasmFreeInfoStruct(debug);
+printf("testing command line parameter -amper OK\n");
+
+	#define AUTOTEST_PARAM_MAXAM "aaa=10+5*3 : assert aaa==45 : nop"
+	memset(&param,0,sizeof(struct s_parameter));
+	param.rough=0.0; // 0.5 as default
+	ret=RasmAssembleInfoParam(AUTOTEST_PARAM_MAXAM,strlen(AUTOTEST_PARAM_MAXAM),&opcode,&opcodelen,&debug,&param);
+	if (!ret) {} else {printf("Autotest %03d ERROR (testing compilation option -m)\n",cpt);MiniDump(opcode,opcodelen);for (i=0;i<debug->nberror;i++) printf("%d -> %s\n",i,debug->error[i].msg);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+	RasmFreeInfoStruct(debug);
+printf("testing command line parameter -m OK\n");
+
+	#define AUTOTEST_PARAM_DAMS ".grouik : djnz grouik"
+	memset(&param,0,sizeof(struct s_parameter));
+	param.dams=1;
+	ret=RasmAssembleInfoParam(AUTOTEST_PARAM_DAMS,strlen(AUTOTEST_PARAM_DAMS),&opcode,&opcodelen,&debug,&param);
+	if (!ret) {} else {printf("Autotest %03d ERROR (testing compilation option -dams)\n",cpt);MiniDump(opcode,opcodelen);for (i=0;i<debug->nberror;i++) printf("%d -> %s\n",i,debug->error[i].msg);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+	RasmFreeInfoStruct(debug);
+printf("testing command line parameter -dams OK\n");
+
+	#define AUTOTEST_PARAM_PASMO "org #1234 : defw $,$"
+	memset(&param,0,sizeof(struct s_parameter));
+	param.pasmo=1;
+	ret=RasmAssembleInfoParam(AUTOTEST_PARAM_PASMO,strlen(AUTOTEST_PARAM_PASMO),&opcode,&opcodelen,&debug,&param);
+	if (!ret && opcodelen==4 && opcode[0]==opcode[2] && opcode[1]==opcode[3]) {} else {printf("Autotest %03d ERROR (testing compilation option -pasmo)\n",cpt);MiniDump(opcode,opcodelen);for (i=0;i<debug->nberror;i++) printf("%d -> %s\n",i,debug->error[i].msg);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+	RasmFreeInfoStruct(debug);
+printf("testing command line parameter -pasmo OK\n");
+
+	#define AUTOTEST_PARAM_VOID "macro grouik : nop : mend : grouik"
+	memset(&param,0,sizeof(struct s_parameter));
+	param.macrovoid=1;
+	ret=RasmAssembleInfoParam(AUTOTEST_PARAM_VOID,strlen(AUTOTEST_PARAM_VOID),&opcode,&opcodelen,&debug,&param);
+	if (ret) {} else {printf("Autotest %03d ERROR (testing compilation option -void)\n",cpt);MiniDump(opcode,opcodelen);for (i=0;i<debug->nberror;i++) printf("%d -> %s\n",i,debug->error[i].msg);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+	RasmFreeInfoStruct(debug);
+printf("testing command line parameter -void OK\n");
+
+	#define AUTOTEST_PARAM_VOID2 "macro grouik : nop : mend : grouik (void)"
+	memset(&param,0,sizeof(struct s_parameter));
+	param.macrovoid=1;
+	ret=RasmAssembleInfoParam(AUTOTEST_PARAM_VOID2,strlen(AUTOTEST_PARAM_VOID2),&opcode,&opcodelen,&debug,&param);
+	if (!ret) {} else {printf("Autotest %03d ERROR (testing compilation option (bis) -void)\n",cpt);MiniDump(opcode,opcodelen);for (i=0;i<debug->nberror;i++) printf("%d -> %s\n",i,debug->error[i].msg);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+	RasmFreeInfoStruct(debug);
+printf("testing command line parameter (bis) -void OK\n");
+
+	#define AUTOTEST_PARAM_TWE "ld a,300"
+	memset(&param,0,sizeof(struct s_parameter));
+	param.erronwarn=1;
+	ret=RasmAssembleInfoParam(AUTOTEST_PARAM_TWE,strlen(AUTOTEST_PARAM_TWE),&opcode,&opcodelen,&debug,&param);
+	if (ret) {} else {printf("Autotest %03d ERROR (testing compilation option -twe)\n",cpt);MiniDump(opcode,opcodelen);for (i=0;i<debug->nberror;i++) printf("%d -> %s\n",i,debug->error[i].msg);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+	RasmFreeInfoStruct(debug);
+printf("testing command line parameter -twe OK\n");
+
+/*
+	#define AUTOTEST_PARAM_ ""
+	memset(&param,0,sizeof(struct s_parameter));
+	param.dams=1;
+	ret=RasmAssembleInfoParam(AUTOTEST_PARAM_,strlen(AUTOTEST_PARAM_),&opcode,&opcodelen,&debug,&param);
+	if (!ret) {} else {printf("Autotest %03d ERROR (testing compilation option -)\n",cpt);MiniDump(opcode,opcodelen);for (i=0;i<debug->nberror;i++) printf("%d -> %s\n",i,debug->error[i].msg);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+	RasmFreeInfoStruct(debug);
+printf("testing command line parameter - OK\n");
+
+	#define AUTOTEST_PARAM_ ""
+	memset(&param,0,sizeof(struct s_parameter));
+	param.dams=1;
+	ret=RasmAssembleInfoParam(AUTOTEST_PARAM_,strlen(AUTOTEST_PARAM_),&opcode,&opcodelen,&debug,&param);
+	if (!ret) {} else {printf("Autotest %03d ERROR (testing compilation option -)\n",cpt);MiniDump(opcode,opcodelen);for (i=0;i<debug->nberror;i++) printf("%d -> %s\n",i,debug->error[i].msg);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+	RasmFreeInfoStruct(debug);
+printf("testing command line parameter - OK\n");
+*/
+
+
 
 	/* Autotest single instruction writes that must failed */
 	tmpstr3=TxtStrDup(AUTOTEST_INSTRMUSTFAILED);
@@ -18799,7 +18908,7 @@ printf("*** LZAPU and INCAPU tests disabled as there is no APUltra support for t
 	FileRemoveIfExists("rasmoutput.cpr");
 	FileRemoveIfExists("rasmoutput.sna");
 	
-	ret=RasmAssemble(NULL,0,&opcode,&opcodelen)+RasmAssembleInfo(NULL,0,&opcode,&opcodelen,&debug);
+	ret=RasmAssemble(NULL,0,&opcode,&opcodelen)+RasmAssembleInfo(NULL,0,&opcode,&opcodelen,&debug)+RasmAssembleInfoParam(NULL,0,&opcode,&opcodelen,&debug,&param);
 	printf("All internal tests OK => %d tests done\n",ret);
 
 
@@ -19337,7 +19446,7 @@ int ParseOptions(char **argv,int argc, struct s_parameter *param)
 		param->pasmo=1;
 	} else if (strcmp(argv[i],"-ass")==0) {
 		param->as80=1;
-	} else if (strcmp(argv[i],"-amper")==0) {
+	} else if (strcmp(argv[i],"-amper")==0 || strcmp(argv[i],"--noampersand")==0) {
 		param->noampersand=1;
 	} else if (strcmp(argv[i],"-eb")==0) {
 		param->export_brk=1;
