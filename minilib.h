@@ -865,48 +865,23 @@ int FileReadBinary(char *filename,char *data,int n)
 */
 int FileTruncate(char *filename)
 {
-	#undef FUNC
-	#define FUNC "FileTruncate"
-	FILE *last_id=NULL;
-	int nn;
-	char data;
+#undef FUNC
+#define FUNC "FileTruncate"
+FILE *last_id=NULL;
 
 #ifdef OS_WIN
-	int sr;
-	last_id=FileOpen(filename,"w");
-	sr=_setmode(_fileno(last_id), _O_BINARY );
-	if (sr==-1) {
-		logerr("FATAL: cannot set binary mode for writing");
-		exit(ABORT_ERROR);
-	}				
+int sr;
+last_id=FileOpen(filename,"w");
+sr=_setmode(_fileno(last_id), _O_BINARY );
+if (sr==-1) {
+logerr("FATAL: cannot set binary mode for writing");
+exit(ABORT_ERROR);
+}
 #else
-	last_id=FileOpen(filename,"a+");
+last_id=FileOpen(filename,"a+");
 #endif
-	if (fwrite(&data,1,1,last_id)!=1) {
-	/* we must always write the same amount of data */
-		if (ferror(last_id))
-		{
-			if (!nn) {
-				logerr("cannot write %s",filename);
-				logerr("%s",strerror(errno));
-			}
-			else{
-				logerr("error during write of %s (%d byte(s))",filename,FileGetCPT(last_id));
-			}
-			exit(ABORT_ERROR);
-		}
-		else
-		{
-			logerr("error during write of %s (but no error neither eof flag set) %d byte(s) written",filename,FileGetCPT(last_id));
-			exit(INTERNAL_ERROR);
-		}
-	} else {
-		/* ONE byte buffer sent, we truncate, we close the handle */
-		ftruncate(fileno(last_id),0);
-		FileClose(last_id);
-		nn=0;
-	}
-	return nn;
+FileClose(last_id);
+return 0;
 }
 
 /***
