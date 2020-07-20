@@ -1,5 +1,5 @@
 #define PROGRAM_NAME      "RASM"
-#define PROGRAM_VERSION   "1.2 nightly"
+#define PROGRAM_VERSION   "1.3 nightly"
 #define PROGRAM_DATE      "xx/07/2020"
 #define PROGRAM_COPYRIGHT "© 2017 BERGE Edouard / roudoudou from Resistance"
 
@@ -19171,7 +19171,7 @@ void Usage(int help)
 		printf("FILENAMES:\n");
 		printf("-oa                      automatic radix from input filename\n");
 		printf("-o  <outputfile radix>   choose a common radix for all files\n");
-		printf("-or <ROM filename(s)>    choose a radix filename for snapshot output\n");
+		printf("-or <ROM filename(s)>    choose a radix filename for ROM output\n");
 		printf("-ob <binary filename>    choose a full filename for binary output\n");
 		printf("-oc <cartridge filename> choose a full filename for cartridge output\n");
 		printf("-oi <snapshot filename>  choose a full filename for snapshot output\n");
