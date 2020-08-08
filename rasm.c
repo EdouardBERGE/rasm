@@ -8060,8 +8060,12 @@ void _JP(struct s_assenv *ae) {
 			case CRC_IX:case CRC_MIX:___output(ae,0xDD);___output(ae,0xE9);ae->nop+=2;break;
 			case CRC_IY:case CRC_MIY:___output(ae,0xFD);___output(ae,0xE9);ae->nop+=2;break;
 			default:
-				___output(ae,0xC3);
-				PushExpression(ae,ae->idx+1,E_EXPRESSION_V16);
+				if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0 || strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0) {
+					MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"JP (IX) or JP (IY) only\n");
+				} else {
+					___output(ae,0xC3);
+					PushExpression(ae,ae->idx+1,E_EXPRESSION_V16);
+				}
 		}
 		ae->idx++;
 	} else {
@@ -17874,6 +17878,7 @@ struct s_autotest_keyword autotest_keyword[]={
 	{"jr z,$",0},{"jr 0",0},{"jr jr",1},{"jr (hl)",1},{"jr a",1},
 	{"jr nz,$",0},{"jr 0",0},{"jr jr",1},{"jr (hl)",1},{"jr a",1},
 	{"jp $",0},{"jp 0",0},{"jp jp",1},{"jp (hl)",0},{"jp (ix)",0},{"jp (iy)",0},{"jp (de)",1},{"jp a",1},
+	{"jp (ix+5)",1}, {"jp (ix-5)",1}, {"jp (iy-5)",1}, {"jp (iy+5)",1},
 	{"jp c,$",0},{"jp c,0",0},{"jp c,jp",1},   {"jp c,(hl)",1}, {"jp c,(ix)",1}, {"jp c,(iy)",1},{"jp c,(de)",1},{"jp c,a",1},
 	{"jp nc,$",0},{"jp nc,0",0},{"jp nc,jp",1},{"jp nc,(hl)",1},{"jp nc,(ix)",1},{"jp nc,(iy)",1},{"jp nc,(de)",1},{"jp nc,a",1},
 	{"jp z,$",0},{"jp z,0",0},{"jp z,jp",1},   {"jp z,(hl)",1}, {"jp z,(ix)",1}, {"jp z,(iy)",1},{"jp z,(de)",1},{"jp z,a",1},
