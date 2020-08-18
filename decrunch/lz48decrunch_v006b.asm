@@ -69,7 +69,7 @@ readoffset
 	; A != 0 here
 	neg
 	ld l,a
-	ld h,&ff
+	ld h,#ff
 	add hl,de
 copykey
 	ldir
