@@ -63,8 +63,9 @@
 
 ;	DEFINE SupportLongOffsets				; +4 bytes for long offset support. slows decompression down by 1%, but may be needed to decompress files >=32K
 
-macro APunpack
-		ld a,128 : jr @CASE0
+MACRO ApUnpack
+
+		ld a,128 : jr @LWM0_CASE0
 
 ;==================================================================================================================
 ;==================================================================================================================
@@ -72,25 +73,25 @@ macro APunpack
 
 @LWM0:			;LWM = 0 (LWM stands for "Last Was Match"; a flag that we did not have a match)
 
-@ReloadByteC0		ld a,(hl) : inc hl : rla
-			jr c,@Check2ndBit
+@LWM0_ReloadByteC0		ld a,(hl) : inc hl : rla
+			jr c,@LWM0_Check2ndBit
 
 ;
 ;  case "0"+BYTE: copy a single literal
 
-@CASE0:			ldi						; first byte is always copied as literal
+@LWM0_CASE0:			ldi						; first byte is always copied as literal
 
 ;
 ;  main decompressor loop
 
-@CASE0_MainLoop:		add a : jr z,@ReloadByteC0 : jr nc,@CASE0	; "0"+BYTE = copy literal
-@Check2ndBit		add a : call z,ReloadByte : jr nc,@CASE10	; "10"+gamma(offset/256)+BYTE+gamma(length) = the main matching mechanism
-			add a : call z,ReloadByte : jp c,@CASE111	; "110"+[oooooool] = matched 2-3 bytes with a small offset
+@LWM0_MainLoop:		add a : jr z,@LWM0_ReloadByteC0 : jr nc,@LWM0_CASE0	; "0"+BYTE = copy literal
+@LWM0_Check2ndBit		add a : call z,@ReloadByte : jr nc,@LWM0_CASE10	; "10"+gamma(offset/256)+BYTE+gamma(length) = the main matching mechanism
+			add a : call z,@ReloadByte : jp c,@LWM1_CASE111	; "110"+[oooooool] = matched 2-3 bytes with a small offset
 
 ;
 ;  branch "110"+[oooooool]: copy two or three bytes (bit "l") with the offset -1..-127 (bits "ooooooo"), or stop
 
-@CASE110:		; "use 7 bit offset, length = 2 or 3"
+@LWM0_CASE110:		; "use 7 bit offset, length = 2 or 3"
 			; "if a zero is found here, it's EOF"
 			ld c,(hl) : rr c : ret z			; process EOF
 			inc hl
@@ -100,20 +101,20 @@ macro APunpack
 
 			push hl						; save src
 			ld h,d : ld l,e					; HL = dest
-			jr c,@LengthIs3
+			jr c,@LWM0_LengthIs3
 
-@LengthIs2		sbc hl,bc
+@LWM0_LengthIs2		sbc hl,bc
 			ldi : ldi
-			jr @PreMainLoop
+			jr @LWM0_PreMainLoop
 
-@LengthIs3		or a : sbc hl,bc
+@LWM0_LengthIs3		or a : sbc hl,bc
 			ldi : ldi : ldi
-			jr @PreMainLoop
+			jr @LWM0_PreMainLoop
 
 ;
 ;  branch "10"+gamma(offset/256)+BYTE+gamma(length): the main matching mechanism
 
-@CASE10:		; "use a gamma code * 256 for offset, another gamma code for length"
+@LWM0_CASE10:		; "use a gamma code * 256 for offset, another gamma code for length"
 			call @GetGammaCoded
 
 			; the original decompressor contains
@@ -126,9 +127,9 @@ macro APunpack
 			;
 			; so, the idea here is to use the fact that GetGammaCoded returns (offset/256)+2,
 			; and to split the first condition by noticing that C-1 can never be zero
-			dec c : dec c : jr z,@KickInLWM
+			dec c : dec c : jr z,@LWM1_KickInLWM
 
-@AfterLWM		dec c : ld b,c : ld c,(hl) : inc hl	; BC = offset
+@LWM0_AfterLWM		dec c : ld b,c : ld c,(hl) : inc hl	; BC = offset
 
 			ld iyl,c : ld iyh,b : push bc
 
@@ -149,24 +150,24 @@ macro APunpack
 	IFDEF	SupportLongOffsets
 			; NB offsets over 32000 require an additional check, which is skipped in most
 			; Z80 decompressors (seemingly as a performance optimization)
-			cp 32000/256 : jr nc,@Add2
+			cp 32000>>8 : jr nc,@LWM0_Add2
 	ENDIF
-			cp 5 : jr nc,@Add1
-			or a : jr nz,@Add0
-			bit 7,l : jr nz,@Add0
-@Add2			inc bc
-@Add1			inc bc
-@Add0			; for offs<128 : 4+4+7+7 + 4+7 + 8+7 + 6+6 = 60t
+			cp 5 : jr nc,@LWM0_Add1
+			or a : jr nz,@LWM0_Add0
+			bit 7,l : jr nz,@LWM0_Add0
+@LWM0_Add2			inc bc
+@LWM0_Add1			inc bc
+@LWM0_Add0			; for offs<128 : 4+4+7+7 + 4+7 + 8+7 + 6+6 = 60t
 			; for offs>=1280 : 4+4+7+12 + 6 = 33t
 			; for 128<=offs<1280 : 4+4+7+7 + 4+12 = 38t OR 4+4+7+7 + 4+7+8+12 = 53t
 ;			dec bc
 
-@CopyMatch:		; this assumes that BC = len, DE = offset, HL = dest
+@LWM0_CopyMatch:		; this assumes that BC = len, DE = offset, HL = dest
 			; and also that (SP) = src, while having NC
 			ld a,e : sub l : ld l,a
 			ld a,d : sbc h
-@CopyMatchLDH		ld h,a : ldi : ldir : exa
-@PreMainLoop		pop hl					; recover src
+@LWM0_CopyMatchLDH		ld h,a : ldi : ldir : exa
+@LWM0_PreMainLoop		pop hl					; recover src
 
 ;==================================================================================================================
 ;==================================================================================================================
@@ -177,18 +178,19 @@ macro APunpack
 ;
 ;  main decompressor loop
 
-@MainLoop:		add a : jr z,@ReloadByteC0 : jr nc,@CASE0		; "0"+BYTE = copy literal
-@Check2ndBit		add a : call z,@ReloadByte : jr nc,@CASE10		; "10"+gamma(offset/256)+BYTE+gamma(length) = the main matching mechanism
-			add a : call z,@ReloadByte : jr nc,@CASE110		; "110"+[oooooool] = matched 2-3 bytes with a small offset
+@LWM1_MainLoop:		add a : jr z,@LWM1_ReloadByteC0 : jr nc,@LWM0_CASE0		; "0"+BYTE = copy literal
+@LWM1_Check2ndBit		add a : call z,@ReloadByte : jr nc,@LWM1_CASE10		; "10"+gamma(offset/256)+BYTE+gamma(length) = the main matching mechanism
+			add a : call z,@ReloadByte : jr nc,@LWM0_CASE110		; "110"+[oooooool] = matched 2-3 bytes with a small offset
 
 ;
 ;  case "111"+"oooo": copy a byte with offset -1..-15, or write zero to dest
 
-@CASE111:		ld bc,%11100000
-			DUP 4
+@LWM1_CASE111:		ld bc,%11100000
 			add a : call z,@ReloadByte : rl c		; read short offset (4 bits)
-			EDUP
-			ex de,hl : jr z,@WriteZero		; zero offset means "write zero" (NB: B is zero here)
+			add a : call z,@ReloadByte : rl c		; read short offset (4 bits)
+			add a : call z,@ReloadByte : rl c		; read short offset (4 bits)
+			add a : call z,@ReloadByte : rl c		; read short offset (4 bits)
+			ex de,hl : jr z,@LWM1_WriteZero		; zero offset means "write zero" (NB: B is zero here)
 
 			; "write a previous byte (1-15 away from dest)"
 			push hl					; BC = offset, DE = src, HL = dest
@@ -196,17 +198,17 @@ macro APunpack
 			ld b,(hl)
 			pop hl
 
-@WriteZero		ld (hl),b : ex de,hl
-			inc de : jp @CASE0_MainLoop				; 10+4*(4+10+8)+4+7 + 11+15+7+10 + 7+4+6+10 = 179t
+@LWM1_WriteZero		ld (hl),b : ex de,hl
+			inc de : jp @LWM0_MainLoop				; 10+4*(4+10+8)+4+7 + 11+15+7+10 + 7+4+6+10 = 179t
 
-@ReloadByteC0		ld a,(hl) : inc hl : rla
-			jp nc,@CASE0
-			jr @Check2ndBit
+@LWM1_ReloadByteC0		ld a,(hl) : inc hl : rla
+			jp nc,@LWM0_CASE0
+			jr @LWM1_Check2ndBit
 
 ;
 ;  branch "10"+gamma(offset/256)+BYTE+gamma(length): the main matching mechanism
 
-@CASE10:		; "use a gamma code * 256 for offset, another gamma code for length"
+@LWM1_CASE10:		; "use a gamma code * 256 for offset, another gamma code for length"
 			call @GetGammaCoded
 
 			; the original decompressor contains
@@ -219,17 +221,17 @@ macro APunpack
 			;
 			; so, the idea here is to use the fact that GetGammaCoded returns (offset/256)+2,
 			; and to split the first condition by noticing that C-1 can never be zero
-			dec c : jp @AfterLWM
+			dec c : jp @LWM0_AfterLWM
 
 ;
 ;  the re-use of the previous offset (LWM magic)
 
-@KickInLWM:		; "and a new gamma code for length"
+@LWM1_KickInLWM:		; "and a new gamma code for length"
 			call @GetGammaCoded			; BC = len
 			push hl
 			exa : ld a,e : sub iyl : ld l,a
 			ld a,d : sbc iyh
-			jp @CopyMatchLDH
+			jp @LWM0_CopyMatchLDH
 
 ;==================================================================================================================
 ;==================================================================================================================
@@ -260,5 +262,5 @@ macro APunpack
 
 @ReloadByte:		ld a,(hl) : inc hl : rla : ret
 
-mend
+MEND
 
