@@ -172,6 +172,7 @@ struct s_parameter {
 	char **pathdef;
 	int npath,mpath;
 	int noampersand;
+	char module_separator;
 };
 
 
@@ -844,6 +845,7 @@ struct s_assenv {
 	struct s_crclabel_tree labeltree; /* fast label access */
 	char *module;
 	int modulen;
+	char module_separator[2];
 	struct s_breakpoint *breakpoint;
 	int ibreakpoint,maxbreakpoint;
 	char *lastgloballabel;
@@ -4455,7 +4457,7 @@ if (didx>0 && didx<ae->ie) {
 		dblvarbuffer=MemMalloc(strlen(ae->computectx->varbuffer)+strlen(ae->expression[didx].module)+2);
 
 		strcpy(dblvarbuffer,ae->expression[didx].module);
-		strcat(dblvarbuffer,"_"); // modulmodif
+		strcat(dblvarbuffer,ae->module_separator);
 		strcat(dblvarbuffer,ae->computectx->varbuffer+minusptr+bank);
 
 		/* on essaie toujours de trouver le label du module courant */	
@@ -4482,7 +4484,7 @@ if (didx>0 && didx<ae->ie) {
 		char *dblvarbuffer;
 		dblvarbuffer=MemMalloc(strlen(ae->computectx->varbuffer)+strlen(ae->module)+2);
 		strcpy(dblvarbuffer,ae->module);
-		strcat(dblvarbuffer,"_");  // modulmodif
+		strcat(dblvarbuffer,ae->module_separator);
 		strcat(dblvarbuffer,ae->computectx->varbuffer+minusptr+bank);
 
 		/* on essaie toujours de trouver le label du module courant */	
@@ -7539,7 +7541,7 @@ printf("PUSH Orphan PROXIMITY label that cannot be exported [%s]->[%s]\n",ae->wl
 
 				newlabelname=MemMalloc(strlen(curlabel.name)+ae->modulen+2);
 				strcpy(newlabelname,ae->module);
-				strcat(newlabelname,"_");
+				strcat(newlabelname,ae->module_separator);
 				strcat(newlabelname,curlabel.name);
 				MemFree(curlabel.name);
 				curlabel.name=newlabelname;
@@ -16036,6 +16038,7 @@ printf("malloc+memset\n");
 	ae=MemMalloc(sizeof(struct s_assenv));
 	memset(ae,0,sizeof(struct s_assenv));
 
+	ae->module_separator[0]='_';
 #if TRACE_PREPRO
 printf("paramz 1\n");
 #endif
@@ -16077,6 +16080,7 @@ printf("paramz 1\n");
 		ae->rom_name=param->rom_name;
 		ae->checkmode=param->checkmode;
 		ae->noampersand=param->noampersand;
+		ae->module_separator[0]=param->module_separator;
 		if (param->rough) ae->maxam=0; else ae->maxam=1;
 		/* additional symbols */
 		for (i=0;i<param->nsymb;i++) {
@@ -19213,6 +19217,7 @@ void Usage(int help)
 		printf("-uz    UZ80  behaviour mimic\n");
 		printf("-pasmo PASMO behaviour mimic\n");
 		printf("-amper use ampersand for hex values\n");
+		printf("-msep <separator> set separator for modules\n");
 		
 		printf("EDSK generation/update:\n");
 		printf("-eo overwrite files on disk if it already exists\n");
@@ -19445,6 +19450,10 @@ int ParseOptions(char **argv,int argc, struct s_parameter *param)
 		RasmAutotest();
 	} else if (strcmp(argv[i],"-uz")==0) {
 		param->as80=2;
+	} else if (strcmp(argv[i],"-msep")==0) {
+		if (i+1<argc) {
+			param->module_separator=argv[++i][0];
+		} else Usage(1);
 	} else if (strcmp(argv[i],"-twe")==0) {
 		param->erronwarn=1;
 	} else if (strcmp(argv[i],"-pasmo")==0) {
@@ -19712,6 +19721,7 @@ int main(int argc, char **argv)
 
 	param.maxerr=20;
 	param.rough=0.5;
+	param.module_separator='_';
 
 	GetParametersFromCommandLine(argc,argv,&param);
 	ret=Rasm(&param);
