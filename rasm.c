@@ -797,7 +797,7 @@ struct s_assenv {
 	unsigned char **mem;
 	int iwnamebank[BANK_MAX_NUMBER];
 	int nbbank,maxbank;
-	int forcetape,forcezx,forcecpr,forceROM,bankmode,activebank,amsdos,forcesnapshot,packedbank;
+	int forcetape,forcezx,forcecpr,forceROM,bankmode,activebank,amsdos,forcesnapshot,packedbank,extendedCPR;
 	struct s_snapshot snapshot;
 	struct s_zxsnapshot zxsnapshot;
 	int bankset[BANK_MAX_NUMBER>>2];   /* 64K selected flag */
@@ -3855,7 +3855,7 @@ double ComputeExpressionCore(struct s_assenv *ae,char *original_zeexpression,int
 	/* dictionnary */
 	struct s_expr_dico *curdic;
 	struct s_label *curlabel;
-	int minusptr,imkey,bank,page;
+	int minusptr,imkey,bank,page,getslot=0;
 	double curval;
 	int is_string=0;
 	/* negative value */
@@ -4384,9 +4384,16 @@ double ComputeExpressionCore(struct s_assenv *ae,char *original_zeexpression,int
 							if (ae->computectx->varbuffer[minusptr]!='{') {
 								bank=0;
 								page=0;
+							} else if (strncmp(ae->computectx->varbuffer+minusptr,"{SLOT}",6)==0) {
+								bank=6;
+								page=0;
+								getslot=1;
+								/* obligé de recalculer le CRC */
+								crc=GetCRC(ae->computectx->varbuffer+minusptr+bank);
 							} else if (strncmp(ae->computectx->varbuffer+minusptr,"{BANK}",6)==0) {
 								bank=6;
 								page=0;
+								getslot=0;
 								/* obligé de recalculer le CRC */
 								crc=GetCRC(ae->computectx->varbuffer+minusptr+bank);
 							} else if (strncmp(ae->computectx->varbuffer+minusptr,"{PAGE}",6)==0) {
@@ -4535,7 +4542,15 @@ printf("page=%d | ptr=%X ibank=%d\n",page,curlabel->ptr,curlabel->ibank);
 														}
 														break;
 													case 0:
-														curval=curlabel->ibank;
+														if (!getslot) {
+															if (ae->extendedCPR) {
+																curval=curlabel->ibank&31;
+															} else {
+																curval=curlabel->ibank;
+															}
+														} else {
+															curval=curlabel->ibank>>5;
+														}
 														break;
 													default:MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"INTERNAL ERROR (unknown paging)\n",GetExpFile(ae,didx),GetExpLine(ae,didx));FreeAssenv(ae);exit(-664);
 												}
@@ -5905,7 +5920,7 @@ void ExpressionFastTranslate(struct s_assenv *ae, char **ptr_expr, int fullrepla
 //@@TODO ajouter une recherche d'alias?
 
 				} else if (varbuffer[0]=='{') {
-					if (strncmp(varbuffer,"{BANK}",6)==0 || strncmp(varbuffer,"{PAGE}",6)==0) tagoffset=6; else
+					if (strncmp(varbuffer,"{BANK}",6)==0 || strncmp(varbuffer,"{PAGE}",6)==0 || strncmp(varbuffer,"{SLOT}",6)==0) tagoffset=6; else
 					if (strncmp(varbuffer,"{PAGESET}",9)==0) tagoffset=9; else
 					if (strncmp(varbuffer,"{SIZEOF}",8)==0) tagoffset=8; else
 					{
@@ -5942,6 +5957,9 @@ void ExpressionFastTranslate(struct s_assenv *ae, char **ptr_expr, int fullrepla
 						found_replace=1;
 					} else if (varbuffer[tagoffset]=='$') {
 						int tagvalue=-1;
+						/*
+						 * There is no {SLOT}$ support...
+						 */
 						if (strcmp(varbuffer,"{BANK}$")==0) {
 							if (ae->forcecpr) {
 								if (ae->activebank<32) {
@@ -10431,8 +10449,10 @@ void __BUILDZX(struct s_assenv *ae) {
 	}
 }
 void __BUILDCPR(struct s_assenv *ae) {
-	if (!ae->wl[ae->idx].t) {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"BUILDCPR does not need a parameter\n");
+	if (!ae->wl[ae->idx].t && ae->wl[ae->idx+1].t==1 && strcmp(ae->wl[ae->idx+1].w,"EXTENDED")==0) {
+		ae->extendedCPR=1;
+	} else if (!ae->wl[ae->idx].t) {
+		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"BUILDCPR unknown parameter\n");
 	}
 	if (!ae->forcesnapshot && !ae->forcetape && !ae->forcezx && !ae->forceROM) {
 		ae->forcecpr=1;
@@ -10759,8 +10779,12 @@ void __BANK(struct s_assenv *ae) {
 			ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
 			ae->activebank=RoundComputeExpression(ae,ae->wl[ae->idx+1].w,ae->codeadr,0,0);
 		}
-		if (ae->forcecpr && (ae->activebank<0 || ae->activebank>31)) {
+		if (ae->forcecpr && (ae->activebank<0 || ae->activebank>31) && !ae->extendedCPR) {
 			MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"FATAL - Bank selection must be from 0 to 31 in cartridge mode\n");
+			FreeAssenv(ae);
+			exit(2);
+		} else if (ae->extendedCPR && (ae->activebank<0 || ae->activebank>256) && !ae->extendedCPR) {
+			MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"FATAL - Bank selection must be from 0 to 256 in extended cartridge mode\n");
 			FreeAssenv(ae);
 			exit(2);
 		} else if (ae->forcezx && (ae->activebank<0 || ae->activebank>7)) {
@@ -14861,13 +14885,14 @@ printf("output files\n");
 				if (ae->cartridge_name) {
 					sprintf(TMP_filename,"%s",ae->cartridge_name);
 				} else {
-					sprintf(TMP_filename,"%s.cpr",ae->outputfilename);
+					if (!ae->extendedCPR) sprintf(TMP_filename,"%s.cpr",ae->outputfilename);
+					else sprintf(TMP_filename,"%s.xpr",ae->outputfilename);
 				}
 				FileRemoveIfExists(TMP_filename);
 				
-				rasm_printf(ae,KIO"Write cartridge file %s\n",TMP_filename);
+				rasm_printf(ae,KIO"Write %scartridge file %s\n",ae->extendedCPR?"extended ":"",TMP_filename);
 				for (i=maxrom=0;i<ae->io;i++) {
-					if (ae->orgzone[i].ibank<32 && ae->orgzone[i].ibank>maxrom) maxrom=ae->orgzone[i].ibank;
+					if (ae->orgzone[i].ibank<256 && ae->orgzone[i].ibank>maxrom) maxrom=ae->orgzone[i].ibank;
 				}
 				/* construction du CPR */
 				/* header blablabla */
@@ -14917,7 +14942,12 @@ printf("output files\n");
 						rasm_printf(ae,KVERBOSE"WriteCPR bank %2d (empty)\n",i);
 					}
 					ChunkSize=16384;
-					sprintf(ChunkName,"cb%02d",i);
+					if (ae->extendedCPR) {
+						ChunkName[0]='C';
+						ChunkName[1]='X';
+						ChunkName[2]=i>>8;
+						ChunkName[3]=i&255;
+					} else sprintf(ChunkName,"cb%02d",i);
 					FileWriteBinary(TMP_filename,ChunkName,4);
 					chunk_endian=ChunkSize&0xFF;FileWriteBinary(TMP_filename,(char*)&chunk_endian,1);
 					chunk_endian=(ChunkSize>>8)&0xFF;FileWriteBinary(TMP_filename,(char*)&chunk_endian,1);
@@ -17862,6 +17892,7 @@ int RasmAssembleInfoParam(const char *datain, int lenin, unsigned char **dataout
 ":assert hard2soft_ink(22)==9 :assert hard2soft_ink(23)==11 :assert hard2soft_ink(24)==4 :assert hard2soft_ink(25)==22 :assert hard2soft_ink(26)==21 "\
 ":assert hard2soft_ink(27)==23 :assert hard2soft_ink(28)==3 :assert hard2soft_ink(29)==5 :assert h2s_ink(30)==12 :assert h2s_ink(31)==14 :nop "
 
+#define AUTOTEST_ECPR1 "buildcpr extended : bank 32 : label1 : assert {slot}label1==1 : assert {bank}label1==0 : nop"
 
 
 struct s_autotest_keyword {
@@ -18911,9 +18942,15 @@ printf("*** LZAPU and INCAPU tests disabled as there is no APUltra support for t
 #endif
 
 
+	ret=RasmAssemble(AUTOTEST_ECPR1,strlen(AUTOTEST_ECPR1),&opcode,&opcodelen);
+	if (!ret) {} else {printf("Autotest %03d ERROR (extended CPR test 1)\n",cpt);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing simple extended CPR + {slot} tag and modifie {bank} behaviour OK\n");
+
 
 
 	FileRemoveIfExists("autotest_include.raw");
+	FileRemoveIfExists("rasmoutput.xpr");
 	FileRemoveIfExists("rasmoutput.cpr");
 	FileRemoveIfExists("rasmoutput.sna");
 	
