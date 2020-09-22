@@ -788,6 +788,22 @@ struct s_rasm_info {
 };
 
 /*******************************************
+              P O K E R               
+*******************************************/
+enum e_poker {
+E_POKER_XOR8=0,
+E_POKER_SUM8=1,
+E_POKER_END
+};
+
+struct s_poker {
+	enum e_poker method;
+	int istart,iend;
+	int outputadr;
+	int ibank;
+};
+
+/*******************************************
         G L O B A L     S T R U C T
 *******************************************/
 struct s_assenv {
@@ -879,6 +895,9 @@ struct s_assenv {
 	struct s_lz_section *lzsection;
 	int ilz,mlz;
 	int lz,curlz;
+	/* poker */
+	struct s_poker *poker;
+	int nbpoker,maxpoker;
 	/* macro */
 	struct s_macro *macro;
 	int imacro,mmacro;
@@ -13978,8 +13997,119 @@ void __MODULE(struct s_assenv *ae) {
 	}
 }
 
-void __TIMESTR(struct s_assenv *ae) {
+void __SUMMEM(struct s_assenv *ae) {
+	struct s_poker poker={0};
 
+	if (!ae->wl[ae->idx].t && !ae->wl[ae->idx+1].t && ae->wl[ae->idx+2].t==1) {
+		/* no poke in a NOCODE section */
+		if (!ae->nocode) {
+			poker.method=E_POKER_SUM8;
+			poker.istart=ae->idx+1;
+			poker.iend=ae->idx+2;
+			poker.outputadr=ae->outputadr;
+			poker.ibank=ae->activebank;
+			ObjectArrayAddDynamicValueConcat((void**)&ae->poker,&ae->nbpoker,&ae->maxpoker,&poker,sizeof(poker));
+		}
+		___output(ae,0);
+	} else {
+		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"usage is SUMMEM start,end\n");
+	}
+}
+
+void __XORMEM(struct s_assenv *ae) {
+	struct s_poker poker={0};
+
+	if (!ae->wl[ae->idx].t && !ae->wl[ae->idx+1].t && ae->wl[ae->idx+2].t==1) {
+		/* no poke in a NOCODE section */
+		if (!ae->nocode) {
+			poker.method=E_POKER_XOR8;
+			poker.istart=ae->idx+1;
+			poker.iend=ae->idx+2;
+			poker.outputadr=ae->outputadr;
+			poker.ibank=ae->activebank;
+			ObjectArrayAddDynamicValueConcat((void**)&ae->poker,&ae->nbpoker,&ae->maxpoker,&poker,sizeof(poker));
+		}
+		___output(ae,0);
+	} else {
+		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"usage is XORMEM start,end\n");
+	}
+}
+
+void __TIMESTAMP(struct s_assenv *ae) {
+	char Ltimestamp[32];
+	char LTMP[64];
+	struct tm *local;
+	char *timestr;
+	time_t now;
+	int idx=0;
+	int cpt;
+
+	time(&now);
+	local=localtime(&now);
+
+	if (!ae->wl[ae->idx].t) {
+		ae->idx++;
+		timestr=ae->wl[ae->idx].w+1;
+	} else {
+		timestr=Ltimestamp;
+		strcpy(timestr,"[Y-M-D h:m]");
+	}
+
+	while (timestr[idx]) {
+		switch (timestr[idx]) {
+			case 'Y':
+				cpt=0;
+				while (timestr[idx]=='Y') {idx++;cpt++;}
+				sprintf(LTMP,"%04d",local->tm_year+1900);
+				switch (cpt) {
+					case 2:	___output(ae,LTMP[2]);
+						___output(ae,LTMP[3]);
+						break;
+					case 1:
+					case 4:	___output(ae,LTMP[0]);
+						___output(ae,LTMP[1]);
+						___output(ae,LTMP[2]);
+						___output(ae,LTMP[3]);
+						break;
+				}
+				break;
+			case 'M':
+				while (timestr[idx]=='M') idx++;
+				sprintf(LTMP,"%02d",local->tm_mon+1);
+				___output(ae,LTMP[0]);
+				___output(ae,LTMP[1]);
+				break;
+			case 'D':
+				while (timestr[idx]=='D') idx++;
+				sprintf(LTMP,"%02d",local->tm_mday+1);
+				___output(ae,LTMP[0]);
+				___output(ae,LTMP[1]);
+				break;
+			case 'h':
+				while (timestr[idx]=='h') idx++;
+				sprintf(LTMP,"%02d",local->tm_hour+1);
+				___output(ae,LTMP[0]);
+				___output(ae,LTMP[1]);
+				break;
+			case 'm':
+				while (timestr[idx]=='m') idx++;
+				sprintf(LTMP,"%02d",local->tm_min+1);
+				___output(ae,LTMP[0]);
+				___output(ae,LTMP[1]);
+				break;
+			case 's':
+				while (timestr[idx]=='s') idx++;
+				sprintf(LTMP,"%02d",local->tm_sec+1);
+				___output(ae,LTMP[0]);
+				___output(ae,LTMP[1]);
+				break;
+			default:
+				if (timestr[idx]=='\'' && !timestr[idx+1]) {} else ___output(ae,timestr[idx]);
+				idx++;
+				break;
+
+		}
+	}
 }
 
 struct s_asm_keyword instruction[]={
@@ -14144,6 +14274,9 @@ struct s_asm_keyword instruction[]={
 {"NOEXPORT",0,__NOEXPORT},
 {"ENOEXPORT",0,__ENOEXPORT},
 {"MODULE",0,__MODULE},
+{"TIMESTAMP",0,__TIMESTAMP},
+{"SUMMEM",0,__SUMMEM},
+{"XORMEM",0,__XORMEM},
 {"",0,NULL}
 };
 
@@ -14851,6 +14984,44 @@ printf("include %d other ORG for the memove size=%d\n",morgzone-iorgzone,lzmove)
 		PopAllExpression(ae,-1);
 	}	
 
+	/*******************************************************************************
+	      p o k e r  
+	*******************************************************************************/
+	for (i=0;i<ae->nbpoker;i++) {
+		int istart,iend;
+		unsigned char xorval,sumval;
+
+		switch (ae->poker[i].method) {
+			case E_POKER_XOR8:
+				xorval=0;
+				ae->idx=ae->poker[i].istart; /* exp hack */
+				ExpressionFastTranslate(ae,&ae->wl[ae->idx].w,0);
+				istart=RoundComputeExpression(ae,ae->wl[ae->idx].w,0,0,0);
+				ae->idx=ae->poker[i].iend; /* exp hack */
+				ExpressionFastTranslate(ae,&ae->wl[ae->idx].w,0);
+				iend=RoundComputeExpression(ae,ae->wl[ae->idx].w,0,0,0);
+				for (j=istart;j<iend;j++) {
+					xorval=xorval^ae->mem[ae->poker[i].ibank][j];
+				}
+				ae->mem[ae->poker[i].ibank][ae->poker[i].outputadr]=xorval;
+				break;
+			case E_POKER_SUM8:
+				sumval=0;
+				ae->idx=ae->poker[i].istart; /* exp hack */
+				ExpressionFastTranslate(ae,&ae->wl[ae->idx].w,0);
+				istart=RoundComputeExpression(ae,ae->wl[ae->idx].w,0,0,0);
+				ae->idx=ae->poker[i].iend; /* exp hack */
+				ExpressionFastTranslate(ae,&ae->wl[ae->idx].w,0);
+				iend=RoundComputeExpression(ae,ae->wl[ae->idx].w,0,0,0);
+				for (j=istart;j<iend;j++) {
+					sumval+=ae->mem[ae->poker[i].ibank][j];
+				}
+				ae->mem[ae->poker[i].ibank][ae->poker[i].outputadr]=sumval;
+				break;
+			default:printf("warning remover\n");break;
+		}
+	}
+
 /***************************************************************************************************************************************************************************************
 ****************************************************************************************************************************************************************************************
       W R I T E      O U T P U T      F I L E S
@@ -14898,13 +15069,37 @@ printf("output files\n");
 				/* header blablabla */
 				strcpy(ChunkName,"RIFF");
 				FileWriteBinary(TMP_filename,ChunkName,4);
-				ChunkSize=(maxrom+1)*(16384+8)+4;
-				chunk_endian=ChunkSize&0xFF;FileWriteBinary(TMP_filename,(char*)&chunk_endian,1);
-				chunk_endian=(ChunkSize>>8)&0xFF;FileWriteBinary(TMP_filename,(char*)&chunk_endian,1);
-				chunk_endian=(ChunkSize>>16)&0xFF;FileWriteBinary(TMP_filename,(char*)&chunk_endian,1);
-				chunk_endian=(ChunkSize>>24)&0xFF;FileWriteBinary(TMP_filename,(char*)&chunk_endian,1);
-				sprintf(ChunkName,"AMS!");
-				FileWriteBinary(TMP_filename,ChunkName,4);
+
+				if (!ae->extendedCPR) {
+					ChunkSize=(maxrom+1)*(16384+8)+4;
+					chunk_endian=ChunkSize&0xFF;FileWriteBinary(TMP_filename,(char*)&chunk_endian,1);
+					chunk_endian=(ChunkSize>>8)&0xFF;FileWriteBinary(TMP_filename,(char*)&chunk_endian,1);
+					chunk_endian=(ChunkSize>>16)&0xFF;FileWriteBinary(TMP_filename,(char*)&chunk_endian,1);
+					chunk_endian=(ChunkSize>>24)&0xFF;FileWriteBinary(TMP_filename,(char*)&chunk_endian,1);
+					sprintf(ChunkName,"AMS!");
+					FileWriteBinary(TMP_filename,ChunkName,4);
+				} else {
+					ChunkSize=(maxrom+1)*(16384+8)+4+10;
+					chunk_endian=ChunkSize&0xFF;FileWriteBinary(TMP_filename,(char*)&chunk_endian,1);
+					chunk_endian=(ChunkSize>>8)&0xFF;FileWriteBinary(TMP_filename,(char*)&chunk_endian,1);
+					chunk_endian=(ChunkSize>>16)&0xFF;FileWriteBinary(TMP_filename,(char*)&chunk_endian,1);
+					chunk_endian=(ChunkSize>>24)&0xFF;FileWriteBinary(TMP_filename,(char*)&chunk_endian,1);
+					sprintf(ChunkName,"CXME");
+					FileWriteBinary(TMP_filename,ChunkName,4);
+					ChunkName[0]='N';
+					ChunkName[1]='B';
+					ChunkName[2]='B';
+					ChunkName[3]='K';
+					FileWriteBinary(TMP_filename,ChunkName,4);
+					ChunkSize=2;
+					chunk_endian=ChunkSize&0xFF;FileWriteBinary(TMP_filename,(char*)&chunk_endian,1);
+					chunk_endian=(ChunkSize>>8)&0xFF;FileWriteBinary(TMP_filename,(char*)&chunk_endian,1);
+					chunk_endian=(ChunkSize>>16)&0xFF;FileWriteBinary(TMP_filename,(char*)&chunk_endian,1);
+					chunk_endian=(ChunkSize>>24)&0xFF;FileWriteBinary(TMP_filename,(char*)&chunk_endian,1);
+					ChunkName[0]=0;
+					ChunkName[1]=32;
+					FileWriteBinary(TMP_filename,ChunkName,2);
+				}
 				
 //				for (j=0;j<ae->io;j++) {
 //printf("ORG[%03d]=B%02d/#%04X/#%04X\n",j,ae->orgzone[j].ibank,ae->orgzone[j].memstart,ae->orgzone[j].memend);
