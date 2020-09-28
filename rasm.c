@@ -156,6 +156,7 @@ struct s_parameter {
 	int extended_error;
 	int display_stats;
 	int edskoverwrite;
+	int xpr;
 	float rough;
 	int as80,dams,pasmo;
 	int v2;
@@ -813,7 +814,7 @@ struct s_assenv {
 	unsigned char **mem;
 	int iwnamebank[BANK_MAX_NUMBER];
 	int nbbank,maxbank;
-	int forcetape,forcezx,forcecpr,forceROM,bankmode,activebank,amsdos,forcesnapshot,packedbank,extendedCPR;
+	int forcetape,forcezx,forcecpr,forceROM,bankmode,activebank,amsdos,forcesnapshot,packedbank,extendedCPR,xpr;
 	struct s_snapshot snapshot;
 	struct s_zxsnapshot zxsnapshot;
 	int bankset[BANK_MAX_NUMBER>>2];   /* 64K selected flag */
@@ -14081,30 +14082,30 @@ void __TIMESTAMP(struct s_assenv *ae) {
 				break;
 			case 'D':
 				while (timestr[idx]=='D') idx++;
-				sprintf(LTMP,"%02d",local->tm_mday+1);
+				sprintf(LTMP,"%02d",local->tm_mday);
 				___output(ae,LTMP[0]);
 				___output(ae,LTMP[1]);
 				break;
 			case 'h':
 				while (timestr[idx]=='h') idx++;
-				sprintf(LTMP,"%02d",local->tm_hour+1);
+				sprintf(LTMP,"%02d",local->tm_hour);
 				___output(ae,LTMP[0]);
 				___output(ae,LTMP[1]);
 				break;
 			case 'm':
 				while (timestr[idx]=='m') idx++;
-				sprintf(LTMP,"%02d",local->tm_min+1);
+				sprintf(LTMP,"%02d",local->tm_min);
 				___output(ae,LTMP[0]);
 				___output(ae,LTMP[1]);
 				break;
 			case 's':
 				while (timestr[idx]=='s') idx++;
-				sprintf(LTMP,"%02d",local->tm_sec+1);
+				sprintf(LTMP,"%02d",local->tm_sec);
 				___output(ae,LTMP[0]);
 				___output(ae,LTMP[1]);
 				break;
 			default:
-				if (timestr[idx]=='\'' && !timestr[idx+1]) {} else ___output(ae,timestr[idx]);
+				if ((timestr[idx]=='\'' || timestr[idx]=='"') && !timestr[idx+1]) {} else ___output(ae,timestr[idx]);
 				idx++;
 				break;
 
@@ -15154,8 +15155,19 @@ printf("output files\n");
 						if (ChunkSize) FileWriteBinary(TMP_filename,(char*)ae->mem[i]+offset,ChunkSize);
 						/* ADD zeros until the end of the bank */
 						FileWriteBinary(TMP_filename,(char*)filler,16384-ChunkSize);
+						if (ae->xpr) {
+							char xproutputname[256];
+							sprintf(xproutputname,"xpr%02d.rom",i>>5);
+							if (ChunkSize) FileWriteBinary(xproutputname,(char*)ae->mem[i]+offset,ChunkSize);
+							FileWriteBinary(xproutputname,(char*)filler,16384-ChunkSize);
+						}
 					} else {
 						FileWriteBinary(TMP_filename,(char*)ae->mem[i]+offset,ChunkSize);
+						if (ae->xpr) {
+							char xproutputname[256];
+							sprintf(xproutputname,"xpr%02d.rom",i>>5);
+							FileWriteBinary(xproutputname,(char*)ae->mem[i]+offset,ChunkSize);
+						}
 					}
 				}
 				FileWriteBinaryClose(TMP_filename);
@@ -16292,6 +16304,7 @@ printf("paramz 1\n");
 		} else {
 			ae->snapshot.version=3;
 		}
+		ae->xpr=param->xpr;
 		ae->maxerr=param->maxerr;
 		ae->extended_error=param->extended_error;
 		ae->nowarning=param->nowarning;
@@ -19698,6 +19711,8 @@ int ParseOptions(char **argv,int argc, struct s_parameter *param)
 		param->export_brk=1;
 	} else if (strcmp(argv[i],"-wu")==0) {
 		param->warn_unused=1;
+	} else if (strcmp(argv[i],"-xpr")==0) {
+		param->xpr=1;
 	} else if (strcmp(argv[i],"-dams")==0) {
 	} else if (strcmp(argv[i],"-void")==0) {
 		param->macrovoid=1;
