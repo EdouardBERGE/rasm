@@ -1991,8 +1991,8 @@ unsigned char *__internal_MakeRosoftREAL(struct s_assenv *ae, double v, int iexp
 	#undef FUNC
 	#define FUNC "__internal_MakeRosoftREAL"
 	
-	static unsigned char rc[5]={0};
-
+	static unsigned char orc[5]={0};
+	unsigned char rc[5]={0};
 	
 	int j,ib,ibb,exp=0;
 	unsigned int deci;
@@ -2009,7 +2009,7 @@ unsigned char *__internal_MakeRosoftREAL(struct s_assenv *ae, double v, int iexp
 
 	if (deci) {
 		mask=0x80000000;
-		while (!(deci & mask)) mask=mask/2;
+		while (!(deci & mask)) mask=mask>>1;
 		while (mask) {
 			mesbits[ibit]=!!(deci & mask);
 #if TRACE_MAKEAMSDOSREAL
@@ -2026,7 +2026,7 @@ printf("\nexposant positif: %d\n",ibit);
 printf(".");
 #endif
 		while (ibit<32 && frac!=0) {
-			frac=frac*2;
+			frac=frac*2.0;
 			if (frac>=1.0) {
 				mesbits[ibit++]=1;
 #if TRACE_MAKEAMSDOSREAL
@@ -2057,7 +2057,7 @@ printf("\ncas special ZERO:\n");
 		} else {
 			/* looking for first significant bit */
 			while (1) {
-				frac=frac*2;
+				frac=frac*2.0;
 				if (frac>=1.0) {
 					mesbits[ibit++]=1;
 #if TRACE_MAKEAMSDOSREAL
@@ -2074,7 +2074,7 @@ printf("o");
 				exp--;
 			}
 			while (ibit<32 && frac!=0) {
-				frac=frac*2;
+				frac=frac*2.0;
 				if (frac>=1.0) {
 					mesbits[ibit++]=1;
 #if TRACE_MAKEAMSDOSREAL
@@ -2099,7 +2099,7 @@ printf("\n%d bits utilises en mantisse\n",ibit);
 	ib=3;ibb=0x80;
 	for (j=0;j<ibit;j++) {
 		if (mesbits[j])	rc[ib]|=ibb;
-		ibb/=2;
+		ibb>>=1;
 		if (ibb==0) {
 			ibb=0x80;
 			ib--;
@@ -2130,7 +2130,14 @@ printf("\n%d bits utilises en mantisse\n",ibit);
 	printf("\n");
 #endif
 
-	return rc;
+	/* switch byte order */
+	orc[0]=rc[4];
+	orc[1]=rc[3];
+	orc[2]=rc[2];
+	orc[3]=rc[1];
+	orc[4]=rc[0];
+
+	return orc;
 }
 
 
