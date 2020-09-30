@@ -9136,6 +9136,11 @@ void _LD(struct s_assenv *ae) {
 					case CRC_BC:___output(ae,0x40);___output(ae,0x49);ae->nop+=2;break;
 					case CRC_DE:___output(ae,0x42);___output(ae,0x4B);ae->nop+=2;break;
 					case CRC_HL:___output(ae,0x44);___output(ae,0x4D);ae->nop+=2;break;
+					/* enhanced LD BC,IX / LD BC,IY */
+					case CRC_IX:___output(ae,0xDD);___output(ae,0x44);ae->nop+=4;
+						    ___output(ae,0xDD);___output(ae,0x4D);break;
+					case CRC_IY:___output(ae,0xFD);___output(ae,0x44);ae->nop+=4;
+						    ___output(ae,0xFD);___output(ae,0x4D);break;
 					default:
 					if (strncmp(ae->wl[ae->idx+2].w,"(IX+",4)==0) {
 						/* enhanced LD BC,(IX+nn) */
@@ -9167,6 +9172,11 @@ void _LD(struct s_assenv *ae) {
 					case CRC_BC:___output(ae,0x50);___output(ae,0x59);ae->nop+=2;break;
 					case CRC_DE:___output(ae,0x52);___output(ae,0x5B);ae->nop+=2;break;
 					case CRC_HL:___output(ae,0x54);___output(ae,0x5D);ae->nop+=2;break;
+					/* enhanced LD DE,IX / LD DE,IY */
+					case CRC_IX:___output(ae,0xDD);___output(ae,0x54);ae->nop+=4;
+						    ___output(ae,0xDD);___output(ae,0x5D);break;
+					case CRC_IY:___output(ae,0xFD);___output(ae,0x54);ae->nop+=4;
+						    ___output(ae,0xFD);___output(ae,0x5D);break;
 					default:
 					if (strncmp(ae->wl[ae->idx+2].w,"(IX+",4)==0) {
 						/* enhanced LD DE,(IX+nn) */
@@ -9194,6 +9204,13 @@ void _LD(struct s_assenv *ae) {
 				}
 				break;
 			case CRC_IX:
+				switch (GetCRC(ae->wl[ae->idx+2].w)) {
+					/* enhanced LD IX,BC / LD IX,DE */
+					case CRC_BC:___output(ae,0xDD);___output(ae,0x60);
+						    ___output(ae,0xDD);___output(ae,0x69);ae->nop+=4;break;
+					case CRC_DE:___output(ae,0xDD);___output(ae,0x62);
+						    ___output(ae,0xDD);___output(ae,0x6B);ae->nop+=4;break;
+					default:
 				if (StringIsMem(ae->wl[ae->idx+2].w)) {
 					___output(ae,0xDD);___output(ae,0x2A);
 					PushExpression(ae,ae->idx+2,E_EXPRESSION_IV16);
@@ -9203,8 +9220,16 @@ void _LD(struct s_assenv *ae) {
 					PushExpression(ae,ae->idx+2,E_EXPRESSION_IV16);
 					ae->nop+=4;
 				}
+				}
 				break;
 			case CRC_IY:
+				switch (GetCRC(ae->wl[ae->idx+2].w)) {
+					/* enhanced LD IY,BC / LD IY,DE */
+					case CRC_BC:___output(ae,0xFD);___output(ae,0x60);
+						    ___output(ae,0xFD);___output(ae,0x69);ae->nop+=4;break;
+					case CRC_DE:___output(ae,0xFD);___output(ae,0x62);
+						    ___output(ae,0xFD);___output(ae,0x6B);ae->nop+=4;break;
+					default:
 				if (StringIsMem(ae->wl[ae->idx+2].w)) {
 					___output(ae,0xFD);___output(ae,0x2A);
 					PushExpression(ae,ae->idx+2,E_EXPRESSION_IV16);
@@ -9213,6 +9238,7 @@ void _LD(struct s_assenv *ae) {
 					___output(ae,0xFD);___output(ae,0x21);
 					PushExpression(ae,ae->idx+2,E_EXPRESSION_IV16);
 					ae->nop+=4;
+				}
 				}
 				break;
 			case CRC_SP:
@@ -15087,6 +15113,12 @@ printf("output files\n");
 					sprintf(ChunkName,"AMS!");
 					FileWriteBinary(TMP_filename,ChunkName,4);
 				} else {
+					for (i=0;i<=maxrom;i+=32) {
+						char xproutputname[256];
+						sprintf(xproutputname,"xpr%02d.rom",i>>5);
+						FileRemoveIfExists(xproutputname);
+					}
+
 					ChunkSize=(maxrom+1)*(16384+8)+4+10;
 					chunk_endian=ChunkSize&0xFF;FileWriteBinary(TMP_filename,(char*)&chunk_endian,1);
 					chunk_endian=(ChunkSize>>8)&0xFF;FileWriteBinary(TMP_filename,(char*)&chunk_endian,1);
@@ -18033,6 +18065,10 @@ int RasmAssembleInfoParam(const char *datain, int lenin, unsigned char **dataout
 #define AUTOTEST_ENHANCED_LD2 "ld (ix+0),hl: ld (ix+0),de: ld (ix+0),bc: ld (iy+0),hl: ld (iy+0),de: ld (iy+0),bc:"\
 "ld (ix+1),h: ld (ix+0),l: ld (ix+1),d: ld (ix+0),e: ld (ix+1),b: ld (ix+0),c: ld (iy+1),h: ld (iy+0),l: ld (iy+1),d: ld (iy+0),e: ld (iy+1),b: ld (iy+0),c"
 
+#define AUTOTEST_ENHANCED_LD3 "ld bc,ix : ld bc,iy : ld de,ix : ld de,iy : ld ix,bc : ld ix,de : ld iy,bc : ld iy,de:"\
+	"ld b,hx : ld c,lx : ld b,hy : ld c,ly : ld d,hx : ld e,lx : ld d,hy : ld e,ly :"\
+	"ld hx,b : ld lx,c : ld hx,d : ld lx,e : ld hy,b : ld ly,c : ld hy,d : ld ly,e"
+
 #define AUTOTEST_INHIBITION2 "ifdef roudoudou:macro glop bank,page,param:ld a,{bank}:ld hl,{param}{bank}:if {bank}:nop:else:exx:" \
 	"endif::switch {param}:nop:case 4:nop:case {param}:nop:default:nop:break:endswitch:endif:defb 'coucou'"
 
@@ -18880,6 +18916,11 @@ printf("testing enhanced LD OK\n");
 	
 	ret=RasmAssemble(AUTOTEST_ENHANCED_LD2,strlen(AUTOTEST_ENHANCED_LD2),&opcode,&opcodelen);
 	if (!ret && memcmp(opcode,opcode+opcodelen/2,opcodelen/2)==0) {} else {printf("Autotest %03d ERROR (enhanced LD 2)\n",cpt);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing enhanced LD variante OK\n");
+	
+	ret=RasmAssemble(AUTOTEST_ENHANCED_LD3,strlen(AUTOTEST_ENHANCED_LD3),&opcode,&opcodelen);
+	if (!ret && memcmp(opcode,opcode+opcodelen/2,opcodelen/2)==0) {} else {printf("Autotest %03d ERROR (enhanced LD 3)\n",cpt);exit(-1);}
 	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
 printf("testing enhanced LD variante OK\n");
 	
