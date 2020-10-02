@@ -279,7 +279,9 @@ enum e_audio_sample_type {
 AUDIOSAMPLE_SMP,
 AUDIOSAMPLE_SM2,
 AUDIOSAMPLE_SM4,
-AUDIOSAMPLE_DMA,
+AUDIOSAMPLE_DMAA,
+AUDIOSAMPLE_DMAB,
+AUDIOSAMPLE_DMAC,
 AUDIOSAMPLE_END
 };
 
@@ -13206,7 +13208,7 @@ void _AudioLoadSample(struct s_assenv *ae, unsigned char *data, unsigned int fil
 	int bigendian=0,cursample;
 	double accumulator;
 	unsigned char samplevalue=0, sampleprevious=0;
-	int samplerepeat=0,ipause;
+	int samplerepeat=0,ipause,mypsgreg;
 
 	unsigned char *subchunk;
 	int subchunksize;
@@ -13365,9 +13367,26 @@ printf("nbsample=%d (sze=%d,chn=%d,bps=%d) st=%c\n",nbsample,controlsize,nbchann
 				___output(ae,samplevalue);
 			}
 			break;
-		case AUDIOSAMPLE_DMA:
-			sampleprevious=255;
-			for (i=0;i<nbsample;i++) {
+		case AUDIOSAMPLE_DMAA:
+		case AUDIOSAMPLE_DMAB:
+		case AUDIOSAMPLE_DMAC:
+			switch (sample_type) {
+				case AUDIOSAMPLE_DMAA:mypsgreg=0x8;break;
+				case AUDIOSAMPLE_DMAB:mypsgreg=0x9;break;
+				case AUDIOSAMPLE_DMAC:mypsgreg=0xA;break;
+				default:printf("warning remover\n");
+			}
+
+			/* downmixing */
+			accumulator=0.0;
+			for (n=0;n<nbchannel;n++) {
+				accumulator+=_internal_getsample(data,&idx);
+			}
+			/* normalize */
+			cursample=MinMaxInt(floor(((accumulator/nbchannel)*normalize)+0.5)+128,0,255);
+			/* PSG levels */
+			sampleprevious=ae->psgtab[cursample];
+			for (i=1;i<nbsample;i++) {
 				/* downmixing */
 				accumulator=0.0;
 				for (n=0;n<nbchannel;n++) {
@@ -13379,17 +13398,17 @@ printf("nbsample=%d (sze=%d,chn=%d,bps=%d) st=%c\n",nbsample,controlsize,nbchann
 				/* PSG levels */
 				samplevalue=ae->psgtab[cursample];
 				
-				if (samplevalue==sampleprevious) {
+				if (samplevalue==sampleprevious && i+1<nbsample) {
 					samplerepeat++;
 				} else {
 					if (!samplerepeat) {
 						/* DMA output */
 						___output(ae,sampleprevious);
-						___output(ae,0x0A); /* volume canal C */
+						___output(ae,mypsgreg); /* volume canal A/B/C */
 					} else {
 						/* DMA pause */
 						___output(ae,sampleprevious);
-						___output(ae,0x0A); /* volume canal C */
+						___output(ae,mypsgreg); /* volume canal A/B/C */
 						while (samplerepeat) {
 							ipause=samplerepeat<4096?samplerepeat:4095;
 							___output(ae,ipause&0xFF);
@@ -13402,23 +13421,6 @@ printf("nbsample=%d (sze=%d,chn=%d,bps=%d) st=%c\n",nbsample,controlsize,nbchann
 					sampleprevious=samplevalue;
 				}
 			}
-			if (samplerepeat) {
-				/* DMA pause */
-				___output(ae,sampleprevious);
-				___output(ae,0x0A); /* volume canal C */
-				while (samplerepeat) {
-					ipause=samplerepeat<4096?samplerepeat:4095;
-					___output(ae,ipause&0xFF);
-					___output(ae,0x10 | ((ipause>>8) &0xF)); /* pause */
-					
-					samplerepeat-=4096;
-					if (samplerepeat<0) samplerepeat=0;
-				}
-			}
-			___output(ae,0);
-			___output(ae,0x0A); /* volume canal C */
-			___output(ae,0x20);
-			___output(ae,0x40); /* stop or reloop? */
 			break;
 	}
 }
@@ -13672,6 +13674,10 @@ printf("Hexbin -> surprise! we found the file!\n");
 
 		if (incwav) {
 			/* SMP,SM2,SM4,DMA */
+			int dma_args=3;
+			int dma_channel=AUDIOSAMPLE_DMAC;
+			int dma_int=0,dma_repeat=0;
+			int mypsgreg=0xA;
 #if TRACE_HEXBIN
 printf("Hexbin -> %s\n",ae->wl[ae->idx+2].w);
 #endif
@@ -13686,7 +13692,54 @@ printf("sample amplification=%.2lf\n",amplification);
 				case 'P':_AudioLoadSample(ae,ae->hexbin[hbinidx].data,ae->hexbin[hbinidx].datalen, AUDIOSAMPLE_SMP,amplification);break;
 				case '2':_AudioLoadSample(ae,ae->hexbin[hbinidx].data,ae->hexbin[hbinidx].datalen, AUDIOSAMPLE_SM2,amplification);break;
 				case '4':_AudioLoadSample(ae,ae->hexbin[hbinidx].data,ae->hexbin[hbinidx].datalen, AUDIOSAMPLE_SM4,amplification);break;
-				case 'A':_AudioLoadSample(ae,ae->hexbin[hbinidx].data,ae->hexbin[hbinidx].datalen, AUDIOSAMPLE_DMA,amplification);break;
+				case 'A':/* DMA options */
+					if (!ae->wl[ae->idx+2].t) {
+						while (!ae->wl[ae->idx+dma_args].t) {
+							dma_args++;
+							if (strcmp(ae->wl[ae->idx+dma_args].w,"DMA_INT")==0) {
+								dma_int=1;
+							} else if (strcmp(ae->wl[ae->idx+dma_args].w,"DMA_REPEAT")==0) {
+								if (!ae->wl[ae->idx+dma_args].t) {
+									dma_args++;
+									dma_repeat=ComputeExpressionCore(ae,ae->wl[ae->idx+dma_args].w,ae->codeadr,0);
+									if (dma_repeat<1 || dma_repeat>4095) {
+										MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"DMA_REPEAT value out of bounds (1-4095)\n");
+										dma_repeat=0;
+									}
+								} else {
+									MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"DMA_REPEAT must be followed by another parameter\n");
+								}
+							} else if (strcmp(ae->wl[ae->idx+dma_args].w,"DMA_CHANNEL_A")==0) {
+								dma_channel=AUDIOSAMPLE_DMAA;
+								mypsgreg=0x8;
+							} else if (strcmp(ae->wl[ae->idx+dma_args].w,"DMA_CHANNEL_B")==0) {
+								dma_channel=AUDIOSAMPLE_DMAB;
+								mypsgreg=0x9;
+							} else if (strcmp(ae->wl[ae->idx+dma_args].w,"DMA_CHANNEL_C")==0) {
+								dma_channel=AUDIOSAMPLE_DMAC;
+								mypsgreg=0xA;
+							}
+						}
+					}
+					if (dma_repeat) {
+						___output(ae,dma_repeat&0xFF);
+						___output(ae,0x20|((dma_repeat>>8)&0xF));
+					}
+					_AudioLoadSample(ae,ae->hexbin[hbinidx].data,ae->hexbin[hbinidx].datalen, dma_channel,amplification);
+					if (dma_repeat) {
+						___output(ae,0x01);
+						___output(ae,0x40); /* LOOP */
+					}
+					___output(ae,0);
+					___output(ae,mypsgreg); /* volume to zero */
+					if (dma_int) {
+						___output(ae,0x10);
+						___output(ae,0x40); /* INT */
+					}
+					___output(ae,0x20);
+					___output(ae,0x40); /* Mandatory STOP */
+					break;
+
 				default:printf("warning remover\n");break;
 			}
 			ae->idx+=2;
