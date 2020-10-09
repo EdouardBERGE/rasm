@@ -7389,6 +7389,7 @@ void PushLabelLight(struct s_assenv *ae, struct s_label *curlabel) {
 		MemFree(curlabel->name);
 	} else {
 		curlabel->backidx=ae->il;
+		curlabel->autorise_export=ae->autorise_export&(!ae->getstruct);
 		ObjectArrayAddDynamicValueConcat((void **)&ae->label,&ae->il,&ae->ml,curlabel,sizeof(struct s_label));
 		InsertLabelToTree(ae,curlabel);
 	}				
@@ -7623,7 +7624,7 @@ printf("PUSH Orphan PROXIMITY label that cannot be exported [%s]->[%s]\n",ae->wl
 //printf("PushLabel(%s) name=%s crc=%X lz=%d\n",curlabel.name,curlabel.name?curlabel.name:"null",curlabel.crc,curlabel.lz);
 		curlabel.fileidx=ae->wl[ae->idx].ifile;
 		curlabel.fileline=ae->wl[ae->idx].l;
-		curlabel.autorise_export=ae->autorise_export;
+		curlabel.autorise_export=ae->autorise_export&(!ae->getstruct);
 		curlabel.backidx=ae->il;
 		ObjectArrayAddDynamicValueConcat((void **)&ae->label,&ae->il,&ae->ml,&curlabel,sizeof(curlabel));
 		InsertLabelToTree(ae,&curlabel);
@@ -12947,6 +12948,7 @@ printf("create subfields\n");
 #endif
 				curlabel.iw=-1;
 				curlabel.ptr=ae->codeadr;
+				curlabel.ibank=ae->activebank<BANK_MAX_NUMBER?ae->activebank:0;
 				for (i=0;i<ae->rasmstruct[irs].irasmstructfield;i++) {
 					curlabel.ptr=ae->codeadr+ae->rasmstruct[irs].rasmstructfield[i].offset;
 					if (!ae->getstruct) {
@@ -12976,6 +12978,9 @@ printf("create subfields\n");
 						curlabel.crc=GetCRC(curlabel.name);
 						PushLabelLight(ae,&curlabel);
 					}					
+#if TRACE_STRUCT
+printf("pushLight [%s] %d:%X\n",curlabel.name,curlabel.ibank,curlabel.ptr);
+#endif
 				}
 
 				/* is there any filler in the declaration? */
@@ -13136,28 +13141,32 @@ int (*_internal_getsample)(unsigned char *data, int *idx);
 #define FUNC "_internal_AudioGetSampleValue"
 
 int __internal_getsample8(unsigned char *data, int *idx) {
-	unsigned char v;
+	int v;
 	v=data[*idx]-128;*idx=*idx+1;return v;
 }
 int __internal_getsample16little(unsigned char *data, int *idx) {
 	int cursample;
-	cursample=data[*idx+1]-0x80;*idx=*idx+2;
+	char *sdata=(char *)data;
+	cursample=sdata[*idx+1];*idx=*idx+2;
 	return cursample;
 }
 int __internal_getsample24little(unsigned char *data, int *idx) {
 	int cursample;
-	cursample=data[*idx+2-0x80];*idx=*idx+3;
+	char *sdata=(char *)data;
+	cursample=sdata[*idx+2];*idx=*idx+3;
 	return cursample;
 }
 /* big-endian */
 int __internal_getsample16big(unsigned char *data, int *idx) {
 	int cursample;
-	cursample=data[*idx]-0x80;*idx=*idx+2;
+	char *sdata=(char *)data;
+	cursample=sdata[*idx];*idx=*idx+2;
 	return cursample;
 }
 int __internal_getsample24big(unsigned char *data, int *idx) {
 	int cursample;
-	cursample=data[*idx]-0x80;*idx=*idx+3;
+	char *sdata=(char *)data;
+	cursample=sdata[*idx];*idx=*idx+3;
 	return cursample;
 }
 /* float & endian shit */
@@ -13205,7 +13214,8 @@ void _AudioLoadSample(struct s_assenv *ae, unsigned char *data, unsigned int fil
 	struct s_wav_header *wav_header;
 	int i,j,n,idx,controlsize;
 	int nbchannel,bitspersample,nbsample;
-	int bigendian=0,cursample;
+	int bigendian=0,cursample,wFormat;
+	double frequency;
 	double accumulator;
 	unsigned char samplevalue=0, sampleprevious=0;
 	int samplerepeat=0,ipause,mypsgreg;
@@ -13265,28 +13275,54 @@ printf("AudioLoadSample getsubchunk\n");
 		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"WAV import - invalid number of audio channel\n");
 		return;
 	}
+
+	wFormat=wav_header->AudioFormat[0]+wav_header->AudioFormat[1]*256;
+	if (wFormat!=1 && wFormat!=3) {
+		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"WAV import - invalid or unsupported wFormatTag (%04X)\n",wFormat);
+		return;
+	}
+
+	frequency=wav_header->SampleRate[0]+wav_header->SampleRate[1]*256+wav_header->SampleRate[2]*65536+wav_header->SampleRate[3]*256*65536;
+	switch (sample_type) {
+		case AUDIOSAMPLE_DMAA:
+		case AUDIOSAMPLE_DMAB:
+		case AUDIOSAMPLE_DMAC:
+			if (fabs(frequency/15125.0-1.0)>0.2) {
+				if (!ae->nowarning) {
+					rasm_printf(ae,KWARNING"[%s:%d] Warning: WAV sample frequency (%dHz) is very different from 15KHz DMA frequency\n",GetCurrentFile(ae),ae->wl[ae->idx].l,(int)frequency);
+					if (ae->erronwarn) MaxError(ae);
+				}
+			}
+		default:break;
+	}
+
 	bitspersample=wav_header->BitsPerSample[0]+wav_header->BitsPerSample[1]*256;
 #if TRACE_HEXBIN
-printf("AudioLoadSample bitpersample=%d\n",bitspersample);
+printf("AudioLoadSample bitpersample=%d | Format=%s\n",bitspersample,wFormat==1?"PCM":"IEEE Float");
 #endif
 	switch (bitspersample) {
 		case 8:_internal_getsample=__internal_getsample8;break;
 		case 16:if (!bigendian) _internal_getsample=__internal_getsample16little; else _internal_getsample=__internal_getsample16big;break;
 		case 24:if (!bigendian) _internal_getsample=__internal_getsample24little; else _internal_getsample=__internal_getsample24big;break;
-		case 32:if (!bigendian) {
-					if (_isLittleEndian()) {
-						_internal_getsample=__internal_getsample32littlelittle;
+		case 32:if (wFormat==3) {
+				if (!bigendian) {
+						if (_isLittleEndian()) {
+							_internal_getsample=__internal_getsample32littlelittle;
+						} else {
+							_internal_getsample=__internal_getsample32littlebig;
+						}
 					} else {
-						_internal_getsample=__internal_getsample32littlebig;
+						if (_isLittleEndian()) {
+							_internal_getsample=__internal_getsample32biglittle;
+						} else {
+							_internal_getsample=__internal_getsample32bigbig;
+						}
 					}
-				} else {
-					if (_isLittleEndian()) {
-						_internal_getsample=__internal_getsample32biglittle;
-					} else {
-						_internal_getsample=__internal_getsample32bigbig;
-					}
-				}
-				break;
+			} else {
+				MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"WAV import - unsupported 32bits PCM\n",wFormat);
+				return;
+			}
+			break;
 		default:
 			MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"WAV import - unsupported bits per sample (%d)\n",bitspersample);
 			return;
@@ -13299,7 +13335,7 @@ printf("AudioLoadSample bitpersample=%d\n",bitspersample);
 	}
 
 #if TRACE_HEXBIN
-printf("nbsample=%d (sze=%d,chn=%d,bps=%d) st=%c\n",nbsample,controlsize,nbchannel,bitspersample,sample_type);
+printf("nbsample=%d (sze=%d,chn=%d,bps=%d) st=%d\n",nbsample,controlsize,nbchannel,bitspersample,sample_type);
 #endif
 	
 	idx=subchunk-data;
@@ -13376,7 +13412,6 @@ printf("nbsample=%d (sze=%d,chn=%d,bps=%d) st=%c\n",nbsample,controlsize,nbchann
 				case AUDIOSAMPLE_DMAC:mypsgreg=0xA;break;
 				default:printf("warning remover\n");
 			}
-
 			/* downmixing */
 			accumulator=0.0;
 			for (n=0;n<nbchannel;n++) {
@@ -13420,6 +13455,11 @@ printf("nbsample=%d (sze=%d,chn=%d,bps=%d) st=%c\n",nbsample,controlsize,nbchann
 					}
 					sampleprevious=samplevalue;
 				}
+			}
+			/* if last sample is alone */
+			if (!samplerepeat) {
+				___output(ae,sampleprevious);
+				___output(ae,mypsgreg); /* volume canal A/B/C */
 			}
 			break;
 	}
@@ -13718,6 +13758,8 @@ printf("sample amplification=%.2lf\n",amplification);
 							} else if (strcmp(ae->wl[ae->idx+dma_args].w,"DMA_CHANNEL_C")==0) {
 								dma_channel=AUDIOSAMPLE_DMAC;
 								mypsgreg=0xA;
+							} else {
+								MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Unrecognized DMA option [%s]\n",ae->wl[ae->idx+dma_args].w);
 							}
 						}
 					}
