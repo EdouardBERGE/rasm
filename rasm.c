@@ -100,6 +100,8 @@ cc rasm.c -O2 -lm -march=native -o rasm
 #ifdef __MORPHOS__
 /* Add standard version string to executable */
 const char __attribute__((section(".text"))) ver_version[]={ "\0$VER: "PROGRAM_NAME" "PROGRAM_VERSION" ("PROGRAM_DATE") "PROGRAM_COPYRIGHT"" };
+/* Expand the default stack to match rasm requirements (about 64KiB) */
+unsigned long __stack = 128 * 1024;
 #endif
 
 #undef __FILENAME__
