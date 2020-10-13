@@ -262,10 +262,10 @@ struct s_compute_core_data {
   w a v   h e a d e r    f o r    a u d i o    i m p o r t
 ***********************************************************/
 struct s_wav_header {
-unsigned char ChunkID[4];
+char ChunkID[4];
 unsigned char ChunkSize[4];
-unsigned char Format[4];
-unsigned char SubChunk1ID[4];
+char Format[4];
+char SubChunk1ID[4];
 unsigned char SubChunk1Size[4];
 unsigned char AudioFormat[2];
 unsigned char NumChannels[2];
@@ -1688,7 +1688,7 @@ void InitAutomate(char *autotab, const unsigned char *def)
 
 	memset(autotab,0,256);
 	for (i=0;def[i];i++) {
-		autotab[(int)def[i]]=1;
+		autotab[(unsigned int)def[i]]=1;
 	}
 }
 void StateMachineResizeBuffer(char **ABuf, int idx, int *ASize) {
@@ -2735,7 +2735,7 @@ unsigned char *MakeHobetaHeader(int minmem, int maxmem, char *trdos_name) {
    */
 	memset(HobetaHeader,0,sizeof(HobetaHeader));
 
-	strncpy(&HobetaHeader[0],trdos_name,8);
+	strncpy((char*)&HobetaHeader[0],trdos_name,8);
 	HobetaHeader[8]='C';
 	HobetaHeader[0x9]=(maxmem-minmem)&0xFF;
 	HobetaHeader[0xA]=(maxmem-minmem)>>8;
@@ -14474,13 +14474,13 @@ printf("*** assembling ***\n");
 	ObjectArrayAddDynamicValueConcat((void**)&ae->orgzone,&ae->io,&ae->mo,&orgzone,sizeof(orgzone));
 	___output=___internal_output;
 	/* init des automates */
-	InitAutomate(ae->AutomateHexa,AutomateHexaDefinition);
-	InitAutomate(ae->AutomateDigit,AutomateDigitDefinition);
-	InitAutomate(ae->AutomateValidLabel,AutomateValidLabelDefinition);
-	InitAutomate(ae->AutomateValidLabelFirst,AutomateValidLabelFirstDefinition);
-	InitAutomate(ae->AutomateExpressionValidCharExtended,AutomateExpressionValidCharExtendedDefinition);
-	InitAutomate(ae->AutomateExpressionValidCharFirst,AutomateExpressionValidCharFirstDefinition);
-	InitAutomate(ae->AutomateExpressionValidChar,AutomateExpressionValidCharDefinition);
+	InitAutomate(ae->AutomateHexa,(unsigned char *)AutomateHexaDefinition);
+	InitAutomate(ae->AutomateDigit,(unsigned char *)AutomateDigitDefinition);
+	InitAutomate(ae->AutomateValidLabel,(unsigned char *)AutomateValidLabelDefinition);
+	InitAutomate(ae->AutomateValidLabelFirst,(unsigned char *)AutomateValidLabelFirstDefinition);
+	InitAutomate(ae->AutomateExpressionValidCharExtended,(unsigned char *)AutomateExpressionValidCharExtendedDefinition);
+	InitAutomate(ae->AutomateExpressionValidCharFirst,(unsigned char *)AutomateExpressionValidCharFirstDefinition);
+	InitAutomate(ae->AutomateExpressionValidChar,(unsigned char *)AutomateExpressionValidCharDefinition);
 	ae->AutomateExpressionDecision['<']='<';
 	ae->AutomateExpressionDecision['>']='>';
 	ae->AutomateExpressionDecision['=']='=';
