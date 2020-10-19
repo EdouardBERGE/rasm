@@ -1954,7 +1954,7 @@ void MakeError(struct s_assenv *ae, char *filename, int line, char *format, ...)
 		}
 		#endif
 		if (myalloc<1) {
-			/* do not crash */
+			/* does not crash */
 			return;
 		}
 
@@ -11093,10 +11093,10 @@ void __CHARSET(struct s_assenv *ae) {
 				ae->charset[i]=(unsigned char)v++;
 			}
 		} else {
-			MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"CHARSET winape directive wrong interval value\n");
+			MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"CHARSET Winape directive wrong interval value\n");
 		}
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"CHARSET winape directive wrong parameter count\n");
+		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"CHARSET Winape directive wrong parameter count\n");
 	}
 }
 
@@ -11462,7 +11462,7 @@ void __LET(struct s_assenv *ae) {
 		ExpressionFastTranslate(ae,&ae->wl[ae->idx].w,0);
 		RoundComputeExpression(ae,ae->wl[ae->idx].w,ae->codeadr,0,0);
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"LET useless winape directive need one expression\n");
+		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"LET useless Winape directive need one expression\n");
 	}
 }
 
@@ -11520,11 +11520,6 @@ void __BREAKPOINT(struct s_assenv *ae) {
 	} else {
 		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is BREAKPOINT [adress]\n");
 	}
-}
-
-void __BREAKPOINT_Z80(struct s_assenv *ae) {
-		___output(ae,0xED);
-		___output(ae,0xFF);
 }
 
 void __SNASET(struct s_assenv *ae) {
@@ -11801,18 +11796,21 @@ void __SETCRTC(struct s_assenv *ae) {
 
 void __LIST(struct s_assenv *ae) {
 	if (!ae->wl[ae->idx].t) {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"LIST winape directive do not need parameter\n");
+		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"LIST Winape directive does not need parameter\n");
 	}
 }
 void __NOLIST(struct s_assenv *ae) {
 	if (!ae->wl[ae->idx].t) {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"NOLIST winape directive do not need parameter\n");
+		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"NOLIST Winape directive does not need parameter\n");
 	}
 }
 
 void __BRK(struct s_assenv *ae) {
 	if (!ae->wl[ae->idx].t) {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"BRK winape directive do not need parameter\n");
+		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"BRK Winape directive does not need parameter\n");
+	} else {
+		___output(ae,0xED);
+		___output(ae,0xFF);
 	}
 }
 
@@ -12300,7 +12298,7 @@ void __IF_light(struct s_assenv *ae) {
 	struct s_ifthen ifthen={0};
 
 	if (!ae->wl[ae->idx].t && ae->wl[ae->idx+1].t==1) {
-		/* do not need to compute the value in shadow execution */
+		/* does not need to compute the value in shadow execution */
 		ifthen.v=0;
 		ifthen.filename=GetCurrentFile(ae);
 		ifthen.line=ae->wl[ae->idx].l;
@@ -12519,7 +12517,7 @@ void __DEFAULT(struct s_assenv *ae) {
 				ae->switchcase[ae->isw-1].execute=1;
 			}
 		} else {
-			MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"DEFAULT do not need parameter\n");
+			MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"DEFAULT does not need parameter\n");
 		}
 	} else {
 		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"DEFAULT encounter whereas there is no referent SWITCH\n");
@@ -12531,7 +12529,7 @@ void __BREAK(struct s_assenv *ae) {
 		if (ae->wl[ae->idx].t==1) {
 			ae->switchcase[ae->isw-1].execute=0;
 		} else {
-			MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"BREAK do not need parameter\n");
+			MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"BREAK does not need parameter\n");
 		}
 	} else {
 		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"BREAK encounter whereas there is no referent SWITCH\n");
@@ -14374,7 +14372,6 @@ struct s_asm_keyword instruction[]={
 {"PRINT",0,__PRINT},
 {"FAIL",0,__FAIL},
 {"BREAKPOINT",0,__BREAKPOINT},
-{"BREAKPOINT_Z80",0,__BREAKPOINT_Z80},
 {"BANK",0,__BANK},
 {"BANKSET",0,__BANKSET},
 {"NAMEBANK",0,__NameBANK},
@@ -15151,6 +15148,20 @@ printf("include %d other ORG for the memove size=%d\n",morgzone-iorgzone,lzmove)
 				break;
 			default:printf("warning remover\n");break;
 		}
+
+		for (j=0;j<ae->nbpoker;j++) {
+			if (ae->poker[i].ibank==ae->poker[j].ibank) {
+				if (ae->poker[j].outputadr>=istart && ae->poker[j].outputadr<iend) {
+					if (!ae->nowarning) {
+						rasm_printf(ae,KWARNING"[%s:%d] Warning: %s result is inside another %s calculation",GetCurrentFile(ae),ae->wl[ae->idx].l,ae->poker[i].method==E_POKER_SUM8?"SUMMEM":"XORMEM",ae->poker[j].method==E_POKER_SUM8?"SUMMEM":"XORMEM");
+						ae->idx=ae->poker[j].istart;
+						rasm_printf(ae,KWARNING"[%s:%d]\n",GetCurrentFile(ae),ae->wl[ae->idx].l);
+						if (ae->erronwarn) MaxError(ae);
+					}
+				}
+			}
+		}
+
 	}
 
 /***************************************************************************************************************************************************************************************
@@ -15925,7 +15936,7 @@ printf("output files\n");
 					FileWriteLineClose(TMP_filename);
 					break;
 				case 3:
-					/* winape */
+					/* Winape */
 					for (i=0;i<ae->il;i++) {
 						if (ae->label[i].autorise_export) {
 							if (ae->export_multisym) {
@@ -16550,7 +16561,7 @@ printf("-init\n");
 	ae->snapshot.registers.HSP=0xC0;
 
 	/*
-		winape		sprintf(symbol_line,"%s #%4X\n",ae->label[i].name,ae->label[i].ptr);
+		Winape		sprintf(symbol_line,"%s #%4X\n",ae->label[i].name,ae->label[i].ptr);
 		pasmo		sprintf(symbol_line,"%s EQU 0%4XH\n",ae->label[i].name,ae->label[i].ptr);
 		rasm 		sprintf(symbol_line,"%s #%X B%d\n",ae->wl[ae->label[i].iw].w,ae->label[i].ptr,ae->label[i].ibank>31?0:ae->label[i].ibank);
 	*/
@@ -16586,7 +16597,7 @@ printf("paramz\n");
 					//ObjectArrayAddDynamicValueConcat((void **)&ae->label,&ae->il,&ae->ml,&curlabel,sizeof(curlabel));
 					PushLabelLight(ae,&curlabel);
 				} else if ((labelsep1=strstr(labelines[i]," "))!=NULL) {
-					/* winape / rasm */
+					/* Winape / rasm */
 					if (*(labelsep1+1)=='#') {
 						*labelsep1=0;
 						curlabel.name=labelines[i];
@@ -17261,7 +17272,7 @@ printf("quote\n");
 						} else {
 							/* Winape/Maxam operator compatibility on expressions */
 #if TRACE_PREPRO
-printf("1/2 winape maxam operator test for [%s]\n",w+ispace);
+printf("1/2 Winape maxam operator test for [%s]\n",w+ispace);
 #endif
 							if (texpr) {
 								if (strcmp(w+ispace,"AND")==0) {
@@ -17300,9 +17311,9 @@ printf("*** separator='%c'\n",c);
 					if (lw) {
 						w[lw]=0;
 						if (texpr && !wordlist[nbword-1].t && wordlist[nbword-1].e && !hadcomma) {
-							/* pour compatibilite winape avec AND,OR,XOR */
+							/* pour compatibilite Winape avec AND,OR,XOR */
 #if TRACE_PREPRO
-printf("2/2 winape maxam operator test for expression [%s]\n",w+ispace);
+printf("2/2 Winape maxam operator test for expression [%s]\n",w+ispace);
 #endif
 							if (strcmp(w,"AND")==0) {
 								wtmp=TxtStrDup("&");
