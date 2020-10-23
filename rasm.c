@@ -13482,7 +13482,20 @@ fprintf(stderr,"no AP-Ultra support in this version!\n");
 	meta fonction qui gère le INCBIN standard plus les variantes SMP et DMA
 */
 void __READ(struct s_assenv *ae) {
-	MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"this is a reserved keyword which can cause trouble, remove this\n");
+	if (!ae->wl[ae->idx].t) {
+		int idx;
+
+		idx=atoi(ae->wl[ae->idx+1].w);
+		ae->idx++;
+
+		if (idx>=0 && idx<ae->ih) {
+			MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"File to include was not found [%s]\n",ae->hexbin[idx].filename);
+		} else {
+			MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"internal error with text file import (index out of bounds)\n");
+		}
+	} else {
+		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"READ directive need a proper filename as argument\n");
+	}
 }
 
 void __HEXBIN(struct s_assenv *ae) {
@@ -13504,7 +13517,7 @@ void __HEXBIN(struct s_assenv *ae) {
 	if (!ae->wl[ae->idx].t) {
 		ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,1);
 		hbinidx=RoundComputeExpressionCore(ae,ae->wl[ae->idx+1].w,ae->codeadr,0);
-		if (hbinidx>ae->ih) {
+		if (hbinidx>=ae->ih) {
 			MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"internal error with binary file import (index out of bounds)\n");
 			return;
 		}
@@ -15116,7 +15129,7 @@ printf("include %d other ORG for the memove size=%d\n",morgzone-iorgzone,lzmove)
 	      p o k e r  
 	*******************************************************************************/
 	for (i=0;i<ae->nbpoker;i++) {
-		int istart,iend;
+		int istart=-1,iend=-1;
 		unsigned char xorval,sumval;
 
 		switch (ae->poker[i].method) {
@@ -16965,8 +16978,24 @@ if (!idx) printf("[%s]\n",listing[l].listing);
 							listing_include=NULL;
 							idx=0; /* on reste sur la meme ligne mais on se prepare a relire du caractere 0! */
 						} else {
+							/********************************************
+							*      E R R O R    M a n a g e m e n t     *
+							********************************************/
+							char tmp_insert[128];
+
 							for (i=rewrite;i<idx;i++) listing[incstartL].listing[i]=' ';
-							MakeError(ae,ae->filename[listing[l].ifile],listing[l].iline,"Cannot include file [%s]\n",filename_toread);
+							sprintf(tmp_insert,"READ %d",ae->ih);
+							memcpy(listing[incstartL].listing+rewrite,tmp_insert,strlen(tmp_insert));
+							
+							filename_toread=MergePath(ae,ae->filename[listing[l].ifile],qval);
+							curhexbin.filename=TxtStrDup(filename_toread);
+							curhexbin.crunch=crunch;
+
+							/* TAG + info */
+							curhexbin.datalen=-2;
+							curhexbin.data=NULL;
+							/* not yet an error, we will know later when executing the code */
+							ObjectArrayAddDynamicValueConcat((void**)&ae->hexbin,&ae->ih,&ae->mh,&curhexbin,sizeof(curhexbin));
 						}
 					}
 					include=0;
