@@ -6,6 +6,8 @@ CFLAGS_DBG = $(CFLAGS) -g -pthread -DRDD
 
 .PHONY: prod debug clean
 
+default: prod
+
 debug:
 	$(CC) rasm.c $(CFLAGS_DBG)
 
