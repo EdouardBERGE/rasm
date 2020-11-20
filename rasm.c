@@ -1129,7 +1129,7 @@ A-Z variable ou fonction (cos, sin, tan, sqr, pow, mod, and, xor, mod, ...)
 +*-/&^m| operateur
 */
 
-#define AutomateExpressionValidCharExtendedDefinition "0123456789.ABCDEFGHIJKLMNOPQRSTUVWXYZ_{}@+-*/~^$#%§<=>|&"
+#define AutomateExpressionValidCharExtendedDefinition "0123456789.ABCDEFGHIJKLMNOPQRSTUVWXYZ_{}@+-*/~^$#%<=>|&" /* § */
 #define AutomateExpressionValidCharFirstDefinition "#%0123456789.ABCDEFGHIJKLMNOPQRSTUVWXYZ_@${"
 #define AutomateExpressionValidCharDefinition "0123456789.ABCDEFGHIJKLMNOPQRSTUVWXYZ_{}@$"
 #define AutomateValidLabelFirstDefinition ".ABCDEFGHIJKLMNOPQRSTUVWXYZ_@"
@@ -3692,7 +3692,10 @@ int __GETNOP(struct s_assenv *ae,char *oplist, int didx)
 	char *opref;
 
 	/* upper case */
-	while (oplist[idx]) oplist[idx++]=toupper(oplist[idx]);
+	while (oplist[idx]) {
+		oplist[idx]=toupper(oplist[idx]);
+		idx++;
+	}
 	/* duplicata */
 	opref=TxtStrDup(oplist);
 	/* count opcodes */
@@ -3735,7 +3738,10 @@ int __GETTICK(struct s_assenv *ae,char *oplist, int didx)
 	char *opref;
 
 	/* upper case */
-	while (oplist[idx]) oplist[idx++]=toupper(oplist[idx]);
+	while (oplist[idx]) {
+		oplist[idx]=toupper(oplist[idx]);
+		idx++;
+	}
 	/* duplicata */
 	opref=TxtStrDup(oplist);
 	/* count opcodes */
@@ -10181,13 +10187,15 @@ void _DEFB(struct s_assenv *ae) {
 						/* no conversion on escaped chars */
 						c=ae->wl[ae->idx].w[i];
 						switch (c) {
+							case 'e':___output(ae,0x1B);break;
+							case 'a':___output(ae,0x07);break; // alarm
 							case 'b':___output(ae,'\b');break;
-							case 'v':___output(ae,'\v');break;
-							case 'f':___output(ae,'\f');break;
+							case 'v':___output(ae,'\v');break; // v-tab
+							case 'f':___output(ae,'\f');break; // feed
 							case '0':___output(ae,'\0');break;
-							case 'r':___output(ae,'\r');break;
-							case 'n':___output(ae,'\n');break;
-							case 't':___output(ae,'\t');break;
+							case 'r':___output(ae,'\r');break; // return
+							case 'n':___output(ae,'\n');break; // carriage-return
+							case 't':___output(ae,'\t');break; // tab
 							default:
 							___output(ae,c);
 						}						
@@ -13259,7 +13267,7 @@ printf("AudioLoadSample filesize=%d st=%d normalize=%.2lf\n",filesize,sample_typ
 printf("AudioLoadSample getsubchunk\n");
 #endif
 	subchunk=(unsigned char *)&wav_header->SubChunk2ID;
-	while (strncmp(subchunk,"data",4)) {
+	while (strncmp((char *)subchunk,"data",4)) {
 		subchunksize=8+subchunk[4]+subchunk[5]*256+subchunk[6]*65536+subchunk[7]*256*65536;
 		if (subchunksize>=filesize) {
 			MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"WAV import - data subchunk not found\n");
@@ -15379,7 +15387,7 @@ printf("output files\n");
 						if (i<4 || i+4>maxrom) rasm_printf(ae,KVERBOSE"WriteROM bank %3d of %5d byte%s start at #%04X\n",i,endoffset-offset,endoffset-offset>1?"s":" ",offset);
 						else if (!noflood) {rasm_printf(ae,KVERBOSE"[...]\n");noflood=1;}
 
-						FileWriteBinary(TMP_filename,ae->mem[i]+offset,endoffset-offset);
+						FileWriteBinary(TMP_filename,(char *)(ae->mem[i]+offset),endoffset-offset);
 						if (endoffset-offset<16384) FileWriteBinary(TMP_filename,(char*)filler,16384-(endoffset-offset));
 						FileWriteBinaryClose(TMP_filename);
 					} else {
@@ -18470,7 +18478,7 @@ printf("testing Maxam operator conversion OK\n");
 printf("testing modulo operator conversion OK\n");
 	
 	ret=RasmAssemble(AUTOTEST_NOINCLUDE,strlen(AUTOTEST_NOINCLUDE),&opcode,&opcodelen);
-	if (ret) {} else {printf("Autotest %03d ERROR (include missing file)\n",cpt);exit(-1);} // file not found MUST trigger an error!
+	if (!ret) {} else {printf("Autotest %03d ERROR (include missing file)\n",cpt);exit(-1);} // file not found MUST trigger an error! => NOT ANYMORE
 	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
 printf("testing include on a missing file OK\n");
 	
@@ -19140,7 +19148,7 @@ printf("testing internal label struct OK\n");
 		}
 	}
 	FileRemoveIfExists("autotest_include.raw");
-	FileWriteBinary("autotest_include.raw",opcode,idx);
+	FileWriteBinary("autotest_include.raw",(char *)opcode,idx);
 	FileWriteBinaryClose("autotest_include.raw");
 	MemFree(opcode);opcode=NULL;
 
@@ -19822,7 +19830,7 @@ printf(" * 3. This notice may not be removed or altered from any source distribu
 printf(" *\n");
 printf(" * Uses the libdivsufsort library Copyright (c) 2003-2008 Yuta Mori\n");
 printf(" *\n");
-printf(" * Inspired by cap by Sven-Åke Dahl. https://github.com/svendahl/cap\n");
+printf(" * Inspired by cap by Sven-Ake Dahl. https://github.com/svendahl/cap\n");
 printf(" * Also inspired by Charles Bloom's compression blog. http://cbloomrants.blogspot.com/\n");
 printf(" * With ideas from LZ4 by Yann Collet. https://github.com/lz4/lz4\n");
 printf(" * With help and support from spke <zxintrospec@gmail.com>\n");
