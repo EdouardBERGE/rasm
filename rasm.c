@@ -1143,9 +1143,6 @@ unsigned char *LZ4_crunch(unsigned char *data, int zelen, int *retlen){
 	return lzdest;
 }
 #ifndef NOAPULTRA
-int APULTRA_crunch(unsigned char *data, int len, unsigned char **dataout, int *lenout) {
-   return do_apultra(data, len, dataout, lenout);
-}
 size_t apultra_compress(const unsigned char *pInputData, unsigned char *pOutBuffer, size_t nInputSize, size_t nMaxOutBufferSize,
       const unsigned int nFlags, size_t nMaxWindowSize, size_t nDictionarySize, void(*progress)(long long nOriginalSize, long long nCompressedSize), void *pStats);
 size_t apultra_get_max_compressed_size(size_t nInputSize);
@@ -1174,6 +1171,9 @@ int do_apultra(unsigned char *datain, int lenin, unsigned char **dataout, int *l
    *lenout=nCompressedSize;
    *dataout=pCompressedData;
    return 0;
+}
+int APULTRA_crunch(unsigned char *data, int len, unsigned char **dataout, int *lenout) {
+   return do_apultra(data, len, dataout, lenout);
 }
 
 
@@ -7249,7 +7249,7 @@ void PopAllSave(struct s_assenv *ae)
 			/* output file on filesystem */
 			FileRemoveIfExists(filename);
 
-			strcpy(TZX_header,"ZXTape!\032\001\000\040\000\012");
+			memcpy(TZX_header,"ZXTape!\032\001\000\040\000\012",13);
 
 			if (ae->save[is].iwdskname>0) {
 				tapefilename=ae->wl[ae->save[is].iwdskname].w;
@@ -7264,8 +7264,7 @@ void PopAllSave(struct s_assenv *ae)
 
 			AmsdosHeader=MakeAMSDOSHeader(run,offset,offset+size,MakeAMSDOS_name(ae,filename));
 			memcpy(body,AmsdosHeader,128);
-			memcpy(body+128,(char*)ae->mem[ae->save[is].ibank]+offset,size);
-			wrksize=128+size;
+			wrksize=size;
 
 			memset(head,0,16);
 			strcpy(head,MakeAMSDOS_name(ae,filename));
@@ -7277,6 +7276,7 @@ void PopAllSave(struct s_assenv *ae)
 			fileload=body[0x15]+body[0x16]*256;
 			flag_b=(3500000/3+flag_b/2)/flag_b;
 			flag_bb=flag_b*2;
+			memcpy(body,(char*)ae->mem[ae->save[is].ibank]+offset,size);
 
 			if (wrksize>0x800) {
 				update11(head,j=1,1,0,0x800,fileload); // FIRST BLOCK
