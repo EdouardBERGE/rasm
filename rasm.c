@@ -91,10 +91,6 @@ cc rasm.c -O2 -lm -march=native -o rasm
 #include"zx7.h"
 #include"lz4.h"
 #include"exomizer.h"
-/* too much trouble with old DOS compiler */
- #ifndef NOAPULTRA
-  #include"apultra.h"
- #endif
 #endif
 
 #ifdef __MORPHOS__
@@ -397,6 +393,7 @@ struct s_lz_section {
 	int iw;
 	int memstart,memend;
 	int lzversion; /* 0 -> NO CRUNCH but must be delayed / 4 -> LZ4 / 7 -> ZX7 / 48 -> LZ48 / 49 -> LZ49 / 8 -> Exomizer */
+	int version,minmatch; /* LZSA */
 	int iorgzone;
 	int ibank;
 	/* idx backup */
@@ -420,6 +417,7 @@ struct s_hexbin {
 	int datalen,rawlen;
 	char *filename;
 	int crunch;
+	int version,minmatch;
 };
 
 /**************************************************
@@ -1144,7 +1142,79 @@ unsigned char *LZ4_crunch(unsigned char *data, int zelen, int *retlen){
 	*retlen=LZ4_compress_HC((char*)data,(char*)lzdest,zelen,65536,9);
 	return lzdest;
 }
+#ifndef NOAPULTRA
+int APULTRA_crunch(unsigned char *data, int len, unsigned char **dataout, int *lenout) {
+   return do_apultra(data, len, dataout, lenout);
+}
+size_t apultra_compress(const unsigned char *pInputData, unsigned char *pOutBuffer, size_t nInputSize, size_t nMaxOutBufferSize,
+      const unsigned int nFlags, size_t nMaxWindowSize, size_t nDictionarySize, void(*progress)(long long nOriginalSize, long long nCompressedSize), void *pStats);
+size_t apultra_get_max_compressed_size(size_t nInputSize);
+
+int do_apultra(unsigned char *datain, int lenin, unsigned char **dataout, int *lenout) {
+   size_t nCompressedSize = 0L, nMaxCompressedSize;
+   int nFlags = 0;
+   //apultra_stats stats;
+   unsigned char *pCompressedData;
+
+   /* Allocate max compressed size */
+
+   nMaxCompressedSize = apultra_get_max_compressed_size(lenin);
+   pCompressedData = (unsigned char*)MemMalloc(nMaxCompressedSize);
+   memset(pCompressedData, 0, nMaxCompressedSize);
+
+   nCompressedSize = apultra_compress(datain, pCompressedData, lenin, nMaxCompressedSize, nFlags, 65536, 0 /* dico */, NULL /*compression_progress*/, NULL /*&stats*/);
+
+   if (nCompressedSize == -1) {
+      fprintf(stderr, "APULTRA compression error\n");
+      *lenout=0;
+      *dataout=NULL;
+      return 100;
+   }
+
+   *lenout=nCompressedSize;
+   *dataout=pCompressedData;
+   return 0;
+}
+
+
+size_t lzsa_compress_inmem(unsigned char *pInputData, unsigned char *pOutBuffer, size_t nInputSize, size_t nMaxOutBufferSize,
+                             const unsigned int nFlags, const int nMinMatchSize, const int nFormatVersion);
+
+int LZSA_crunch(unsigned char *datain, int lenin, unsigned char **dataout, int *lenout, int version, int matchsize) {
+   size_t nCompressedSize = 0L, nMaxCompressedSize;
+   int nFlags = 0;
+   unsigned char *pCompressedData;
+
+pCompressedData=(unsigned char *)MemMalloc(65536);
+nMaxCompressedSize=65536;
+
+/* RAW */
+nFlags=1<<1; // nFlags=LZSA_FLAG_RAW_BLOCK;
+/* par défaut du LZSA1-Fast */
+if (version<1 || version>2) {
+	matchsize=1;
+}
+if (matchsize<2 || matchsize>5) {
+	matchsize=5;
+}
+
+nCompressedSize=lzsa_compress_inmem(datain, pCompressedData, lenin, nMaxCompressedSize, nFlags, matchsize, version);
+
+   if (nCompressedSize == -1) {
+      fprintf(stderr, "LZSA compression error\n");
+      *lenout=0;
+      *dataout=NULL;
+      return 100;
+   }
+
+   *lenout=nCompressedSize;
+   *dataout=pCompressedData;
+   return 0;
+}
+
 #endif
+#endif
+
 unsigned char *LZ48_encode_legacy(unsigned char *data, int length, int *retlength);
 #define LZ48_crunch LZ48_encode_legacy
 unsigned char *LZ49_encode_legacy(unsigned char *data, int length, int *retlength);
@@ -7037,6 +7107,71 @@ void EDSK_write(struct s_assenv *ae)
 		EDSK_write_file(ae,faceA,faceB);
 	}
 }
+
+/* CDT output code / courtesy of CNG */
+void update11(unsigned char *head,int n,int is1st,int islast,int l, int fileload)
+{
+        head[0x10]=n;
+        head[0x11]=islast?-1:0;
+        head[0x13]=l;
+        head[0x14]=l>>8;
+        head[0x15]=fileload;
+        head[0x16]=fileload>>8;
+        head[0x17]=is1st?-1:0;
+}
+#define fputcc(x,y) { fputc((x),y); fputc((x)>>8,y); }
+#define fputccc(x,y) { fputc((x),y); fputc((x)>>8,y); fputc((x)>>16,y); }
+void record11(char *filename,unsigned char *t,int first,int l,int p, int flag_bb, int flag_b)
+{
+	FILE *fo;
+	#ifdef OS_WIN
+	fo=FileOpen(filename,"w");
+	#else
+	fo=FileOpen(filename,"a+");
+	#endif
+
+	/* almost legacy */
+        fputc(0x11,fo);
+        fputcc(flag_bb,fo);
+        fputcc(flag_b,fo);
+        fputcc(flag_b,fo);
+        fputcc(flag_b,fo);
+        fputcc(flag_bb,fo);
+        //fputcc(flag_o,fo);
+        fputcc(4096,fo); // 4K block
+        fputc(8,fo);
+        fputcc(p,fo);
+        p=1+(((l+255)/256)*258)+4; //flag_z;
+        fputccc(p,fo);
+        fputc(first,fo);
+        p=0;
+        while (l>0)
+        {
+                fwrite(t+p,1,256,fo);
+                int crc16=0xFFFF;
+                first=256; while (first--) // early CRC-16-CCITT as used by Amstrad
+                {
+                        int xor8=(t[p++]<<8)+1;
+                        while (xor8&0xFF)
+                        {
+                                if ((xor8^crc16)&0x8000)
+                                        crc16=((crc16^0x0810)<<1)+1;
+                                else
+                                        crc16<<=1;
+                                xor8<<=1;
+                        }
+                }
+                crc16=~crc16;
+                fputc(crc16>>8,fo); // HI FIRST,
+                fputc(crc16,fo); // AND LO NEXT!
+                l-=256;
+        }
+        l=4; //flag_z;
+        while (l--)
+                fputc(255,fo);
+}
+
+
 void PopAllSave(struct s_assenv *ae)
 {
 	#undef FUNC
@@ -7104,61 +7239,75 @@ void PopAllSave(struct s_assenv *ae)
 				MemFree(dskfilename);
 			}
 		} else if (ae->save[is].tape) {
-			char TZX_header[10];
-			unsigned char IDval[2];
-			int wrksize,nbblock;
+			char *tapefilename;
+			unsigned char head[256];
+			char TZX_header[14];
+			int wrksize,fileload,nbblock=0;
+			unsigned char body[65536+128];
+			int flag_h=2560, flag_p=10240, flag_bb, flag_b=1000,j,k;
 
 			/* output file on filesystem */
 			FileRemoveIfExists(filename);
 
-			strcpy(TZX_header,"ZXTape!");
-			TZX_header[7]=0x1A;
-			TZX_header[8]=1;
-			TZX_header[9]=20;
-			FileWriteBinary(filename,(char *)TZX_header,10);
+			strcpy(TZX_header,"ZXTape!\032\001\000\040\000\012");
 
-			IDval[0]=0x20;
-			FileWriteBinary(filename,(char *)IDval,1);
-			IDval[0]=0x03;
-			IDval[1]=0x03;
-			FileWriteBinary(filename,(char *)IDval,2); // first silence
-
-			IDval[0]=0x10;
-			FileWriteBinary(filename,(char *)IDval,1);
-			IDval[0]=0x03;
-			IDval[1]=0x03;
-			FileWriteBinary(filename,(char *)IDval,2); // little silence
-			if (size+128<=2048) wrksize=size+128; else wrksize=2048;
-			IDval[0]=(wrksize+128) & 0xFF;
-			IDval[1]=((wrksize+128)>>8) & 0xFF;
-			FileWriteBinary(filename,(char *)IDval,2); // block len
-			nbblock=1;
-			AmsdosHeader=MakeAMSDOSHeader(run,offset,offset+size,MakeAMSDOS_name(ae,filename));
-			FileWriteBinary(filename,(char *)AmsdosHeader,128);
-			if (size<=2048-128) {
-				FileWriteBinary(filename,(char*)ae->mem[ae->save[is].ibank]+offset,size);
+			if (ae->save[is].iwdskname>0) {
+				tapefilename=ae->wl[ae->save[is].iwdskname].w;
+				tapefilename[strlen(tapefilename)-1]=0;
+				tapefilename=TxtStrDup(tapefilename+1);
 			} else {
-				FileWriteBinary(filename,(char*)ae->mem[ae->save[is].ibank]+offset,2048-128);
-				size=size-2048+128;
-				while (size>0) {
-					nbblock++;
-					/* additionnal block */
-					IDval[0]=0x10;
-					FileWriteBinary(filename,(char *)IDval,1);
-					IDval[0]=0x04;
-					IDval[1]=0x04;
-					FileWriteBinary(filename,(char *)IDval,2); // silence 1s delay
-					if (size<=2048) wrksize=size; else wrksize=2048;
-					IDval[0]=(wrksize+128) & 0xFF;
-					IDval[1]=((wrksize+128)>>8) & 0xFF;
-					FileWriteBinary(filename,(char *)IDval,2); // block len
-					FileWriteBinary(filename,(char*)ae->mem[ae->save[is].ibank]+offset,wrksize);
-					/* adjust */
-					size=size-2048;
-				}
+				tapefilename=TxtStrDup("rasmoutput.cdt");
 			}
-			FileWriteBinaryClose(filename);
-			rasm_printf(ae,KIO"Write tape file %s (%d block%s)\n",filename,nbblock,nbblock>1?"s":"");
+
+			FileRemoveIfExists(tapefilename); // pas de append pour le moment
+			FileWriteBinary(tapefilename,(char *)TZX_header,13);
+
+			AmsdosHeader=MakeAMSDOSHeader(run,offset,offset+size,MakeAMSDOS_name(ae,filename));
+			memcpy(body,AmsdosHeader,128);
+			memcpy(body+128,(char*)ae->mem[ae->save[is].ibank]+offset,size);
+			wrksize=128+size;
+
+			memset(head,0,16);
+			strcpy(head,MakeAMSDOS_name(ae,filename));
+			head[0x12]=body[0x12];
+			head[0x18]=body[0x40];
+			head[0x19]=body[0x41];
+			head[0x1A]=body[0x1A];
+			head[0x1B]=body[0x1B];
+			fileload=body[0x15]+body[0x16]*256;
+			flag_b=(3500000/3+flag_b/2)/flag_b;
+			flag_bb=flag_b*2;
+
+			if (wrksize>0x800) {
+				update11(head,j=1,1,0,0x800,fileload); // FIRST BLOCK
+				record11(tapefilename,head,44,28,16,flag_bb,flag_b);
+				record11(tapefilename,body,22,0x800,flag_h,flag_bb,flag_b);
+				k=wrksize-0x800;
+				i=0x800;
+				nbblock=1;
+				while (k>0x800) {
+					fileload+=0x800;
+					update11(head,++j,0,0,0x800,fileload); // MID BLOCK
+					record11(tapefilename,head,44,28,16,flag_bb,flag_b);
+					record11(tapefilename,body+i,22,0x800,flag_h,flag_bb,flag_b);
+					k-=0x800;
+					i+=0x800;
+					nbblock++;
+				}
+				nbblock++;
+				fileload+=0x800;
+				update11(head,++j,0,1,k,fileload); // LAST BLOCK
+				record11(tapefilename,head,44,28,16,flag_bb,flag_b);
+				record11(tapefilename,body+i,22,k,flag_p,flag_bb,flag_b);
+			} else {
+				update11(head,1,1,1,wrksize,fileload); // SINGLE BLOCK
+				record11(tapefilename,head,44,28,16,flag_bb,flag_b);
+				record11(tapefilename,body,22,wrksize,flag_p,flag_bb,flag_b);
+				nbblock=1;
+			}
+
+			FileWriteBinaryClose(tapefilename);
+			rasm_printf(ae,KIO"Write tape file %s (%d block%s)\n",tapefilename,nbblock,nbblock>1?"s":"");
 		} else {
 			/* output file on filesystem */
 			rasm_printf(ae,KIO"Write binary file %s (%d byte%s)\n",filename,size,size>1?"s":"");
@@ -10564,6 +10713,68 @@ void __BUILDTAPE(struct s_assenv *ae) {
 }
 	
 
+void __LZSA1(struct s_assenv *ae) {
+	struct s_lz_section curlz={0};
+	
+	if (!ae->wl[ae->idx].t) {
+		ae->idx++;
+		curlz.minmatch=atoi(ae->wl[ae->idx].w);
+		if (!ae->wl[ae->idx].t) {
+			MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"LZSA1 directive may only have 1 parameter\n");
+		}
+	}
+	#ifdef NO_3RD_PARTIES
+		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Cannot use 3rd parties cruncher with this version of RASM\n");
+		FreeAssenv(ae);
+		exit(-5);
+	#endif
+	
+	if (ae->lz>=0 && ae->lz<ae->ilz && ae->lzsection[ae->ilz-1].lzversion) {
+		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Cannot start a new LZ section inside another one (%d)\n",ae->lz);
+		FreeAssenv(ae);
+		exit(-5);
+	}
+	curlz.version=1;
+	curlz.iw=ae->idx;
+	curlz.iorgzone=ae->io-1;
+	curlz.ibank=ae->activebank;
+	curlz.memstart=ae->outputadr;
+	curlz.memend=-1;
+	curlz.lzversion=18;
+	ae->lz=ae->ilz;
+	ObjectArrayAddDynamicValueConcat((void**)&ae->lzsection,&ae->ilz,&ae->mlz,&curlz,sizeof(curlz));
+}
+void __LZSA2(struct s_assenv *ae) {
+	struct s_lz_section curlz={0};
+	
+	if (!ae->wl[ae->idx].t) {
+		ae->idx++;
+		curlz.minmatch=atoi(ae->wl[ae->idx].w);
+		if (!ae->wl[ae->idx].t) {
+			MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"LZSA2 directive may only have 1 parameter\n");
+		}
+	}
+	#ifdef NO_3RD_PARTIES
+		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Cannot use 3rd parties cruncher with this version of RASM\n");
+		FreeAssenv(ae);
+		exit(-5);
+	#endif
+	
+	if (ae->lz>=0 && ae->lz<ae->ilz && ae->lzsection[ae->ilz-1].lzversion) {
+		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Cannot start a new LZ section inside another one (%d)\n",ae->lz);
+		FreeAssenv(ae);
+		exit(-5);
+	}
+	curlz.version=2;
+	curlz.iw=ae->idx;
+	curlz.iorgzone=ae->io-1;
+	curlz.ibank=ae->activebank;
+	curlz.memstart=ae->outputadr;
+	curlz.memend=-1;
+	curlz.lzversion=18;
+	ae->lz=ae->ilz;
+	ObjectArrayAddDynamicValueConcat((void**)&ae->lzsection,&ae->ilz,&ae->mlz,&curlz,sizeof(curlz));
+}
 void __LZAPU(struct s_assenv *ae) {
 	struct s_lz_section curlz;
 	
@@ -13477,6 +13688,15 @@ printf("nbsample=%d (sze=%d,chn=%d,bps=%d) st=%d\n",nbsample,controlsize,nbchann
 
 
 #ifdef NOAPULTRA
+  int LZSA_crunch(unsigned char *input_data,int input_size,unsigned char **lzdata,int *lzlen) {
+	  lzdata=MemMalloc(4);
+	  *lzlen=0;
+
+printf("no LZSA support in this version!\n");
+fprintf(stderr,"no LZSA support in this version!\n");
+
+	  return 0;
+  }
   int APULTRA_crunch(unsigned char *input_data,int input_size,unsigned char **lzdata,int *lzlen) {
 	  lzdata=MemMalloc(4);
 	  *lzlen=0;
@@ -13971,6 +14191,19 @@ if (curhexbin->crunch) printf("CRUNCHED! (%d)\n",curhexbin->crunch);
 									rasm_printf(ae,KVERBOSE"crunched with AP-Ultra into %d byte(s)\n",outputidx);
 									#endif
 									break;
+								case 18:
+									if (outputidx>=16384 && curhexbin->version==2) rasm_printf(ae,KWARNING"LZSA2 is crunching %.1fkb this may take a while, be patient...\n",outputidx/1024.0);
+									{
+									int nnewlen;
+									LZSA_crunch(outputdata,outputidx,&newdata,&nnewlen,curhexbin->version,curhexbin->minmatch);
+									outputidx=nnewlen;
+									}
+									MemFree(outputdata);
+									outputdata=newdata;
+									#if TRACE_PREPRO
+									rasm_printf(ae,KVERBOSE"crunched with LZSA%d into %d byte(s)\n",curhexbin->version,outputidx);
+									#endif
+									break;
 								#endif
 								case 48:
 									newdata=LZ48_crunch(outputdata,outputidx,&outputidx);
@@ -14038,7 +14271,7 @@ if (curhexbin->crunch) printf("CRUNCHED! (%d)\n",curhexbin->crunch);
 
 /*
 save "nom",start,size -> save binary
-save "nom",start,size,TAPE -> save tape file
+save "nom",start,size,TAPE,"cdtname" -> save tape file
 save "nom",start,size,AMSDOS -> save binary with Amsdos header
 save "nom",start,size,DSK,"dskname" -> save binary on DSK data format
 save "nom",start,size,DSK,"dskname",B -> select face
@@ -14073,6 +14306,12 @@ void __SAVE(struct s_assenv *ae) {
 					if (!ae->wl[ae->idx+3].t) {
 						if (strcmp(ae->wl[ae->idx+4].w,"TAPE")==0) {
 							cursave.tape=1;
+							if (!ae->wl[ae->idx+4].t) {
+								cursave.iwdskname=ae->idx+5;
+							} else {
+								cursave.iwdskname=-1;
+								MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"cannot autoselect TAPE, please specify a filename after TAPE arg\n");
+							}
 						} else if (strcmp(ae->wl[ae->idx+4].w,"AMSDOS")==0) {
 							cursave.amsdos=1;
 						} else if (strcmp(ae->wl[ae->idx+4].w,"HOBETA")==0) {
@@ -14402,6 +14641,8 @@ struct s_asm_keyword instruction[]={
 {"LZEXO",0,__LZEXO},
 {"LZX7",0,__LZX7},
 {"LZAPU",0,__LZAPU},
+{"LZSA1",0,__LZSA1},
+{"LZSA2",0,__LZSA2},
 {"LZ4",0,__LZ4},
 {"LZ48",0,__LZ48},
 {"LZ49",0,__LZ49},
@@ -14994,6 +15235,12 @@ printf("Crunch LZ[%d] (%d) %s\n",i,ae->lzsection[i].lzversion,ae->lzsection[i].l
 							#ifndef NO_3RD_PARTIES
 							if (input_size>=1024) rasm_printf(ae,KWARNING"AP-Ultra is crunching %.1fkb this may take a while, be patient...\n",input_size/1024.0);
 							APULTRA_crunch(input_data,input_size,&lzdata,&lzlen);
+							#endif
+							break;
+						case 18:
+							#ifndef NO_3RD_PARTIES
+							if (input_size>=1024) rasm_printf(ae,KWARNING"LZSA is crunching %.1fkb this may take a while, be patient...\n",input_size/1024.0);
+							LZSA_crunch(input_data,input_size,&lzdata,&lzlen,ae->lzsection[i].version,ae->lzsection[i].minmatch);
 							#endif
 							break;
 						case 48:
@@ -16873,6 +17120,18 @@ if (!idx) printf("[%s]\n",listing[l].listing);
 					}
 					curhexbin.filename=TxtStrDup(filename_toread);
 					curhexbin.crunch=crunch;
+					switch (crunch) {
+						case 18:
+							curhexbin.version=1;
+							curhexbin.minmatch=5;
+							break;
+						case 19:
+							curhexbin.crunch=18;
+							curhexbin.version=2;
+							curhexbin.minmatch=2;
+							break;
+						default:break;
+					}
 
 					/* TAG + info */
 					curhexbin.datalen=-1;
@@ -17031,6 +17290,26 @@ if (!idx) printf("[%s]\n",listing[l].listing);
 								include=1;
 								waiting_quote=1;
 								rewrite=idx-7-1;
+								/* quote right after keyword */
+								if (c==quote_type) {
+									waiting_quote=2;
+								}
+							} else if (strcmp(bval,"INCLZSA2")==0) {
+								incstartL=l;
+								incbin=1;
+								crunch=19;
+								waiting_quote=1;
+								rewrite=idx-8-1;
+								/* quote right after keyword */
+								if (c==quote_type) {
+									waiting_quote=2;
+								}
+							} else if (strcmp(bval,"INCLZSA1")==0) {
+								incstartL=l;
+								incbin=1;
+								crunch=18;
+								waiting_quote=1;
+								rewrite=idx-8-1;
 								/* quote right after keyword */
 								if (c==quote_type) {
 									waiting_quote=2;
