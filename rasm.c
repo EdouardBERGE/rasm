@@ -1,6 +1,6 @@
 #define PROGRAM_NAME      "RASM"
-#define PROGRAM_VERSION   "1.3 nightly"
-#define PROGRAM_DATE      "xx/07/2020"
+#define PROGRAM_VERSION   "1.3"
+#define PROGRAM_DATE      "xx/11/2020"
 #define PROGRAM_COPYRIGHT "© 2017 BERGE Edouard / roudoudou from Resistance"
 
 #define RASM_VERSION PROGRAM_NAME" v"PROGRAM_VERSION" (build "PROGRAM_DATE")"
@@ -1192,10 +1192,14 @@ nMaxCompressedSize=65536;
 nFlags=1<<1; // nFlags=LZSA_FLAG_RAW_BLOCK;
 /* par défaut du LZSA1-Fast */
 if (version<1 || version>2) {
-	matchsize=1;
+	version=1;
 }
 if (matchsize<2 || matchsize>5) {
-	matchsize=5;
+	switch (version) {
+		case 1:matchsize=5;break;
+		case 2:matchsize=2;break;
+		default:break;
+	}
 }
 
 nCompressedSize=lzsa_compress_inmem(datain, pCompressedData, lenin, nMaxCompressedSize, nFlags, matchsize, version);
@@ -7147,10 +7151,11 @@ void record11(char *filename,unsigned char *t,int first,int l,int p, int flag_bb
         p=0;
         while (l>0)
         {
+		int crc16=0xFFFF;
                 fwrite(t+p,1,256,fo);
-                int crc16=0xFFFF;
-                first=256; while (first--) // early CRC-16-CCITT as used by Amstrad
-                {
+                first=256;
+		while (first--) {
+			// early CRC-16-CCITT as used by Amstrad
                         int xor8=(t[p++]<<8)+1;
                         while (xor8&0xFF)
                         {
@@ -18462,6 +18467,22 @@ int RasmAssembleInfoParam(const char *datain, int lenin, unsigned char **dataout
 #define AUTOTEST_LZAPU_E	"incapu 'autotest_include.raw',0,1000"
 #define AUTOTEST_LZAPU_F	"lzapu : incbin'autotest_include.raw',0,1000 : lzclose"
 
+#define AUTOTEST_LZSA2_A	"lzsa2 : incbin 'autotest_include.raw' : lzclose"
+#define AUTOTEST_LZSA2_Abis	"lzsa2 2 : incbin 'autotest_include.raw' : lzclose"
+#define AUTOTEST_LZSA2_B	"inclzsa2 'autotest_include.raw'"
+#define AUTOTEST_LZSA2_C	"inclzsa2 'autotest_include.raw',100"
+#define AUTOTEST_LZSA2_D	"lzsa2 : incbin 'autotest_include.raw',100 : lzclose"
+#define AUTOTEST_LZSA2_E	"inclzsa2 'autotest_include.raw',0,1000"
+#define AUTOTEST_LZSA2_F	"lzsa2 : incbin'autotest_include.raw',0,1000 : lzclose"
+
+#define AUTOTEST_LZSA1_A	"lzsa1 : incbin 'autotest_include.raw' : lzclose"
+#define AUTOTEST_LZSA1_Abis	"lzsa1 2 : incbin 'autotest_include.raw' : lzclose"
+#define AUTOTEST_LZSA1_B	"inclzsa1 'autotest_include.raw'"
+#define AUTOTEST_LZSA1_C	"inclzsa1 'autotest_include.raw',100"
+#define AUTOTEST_LZSA1_D	"lzsa1 : incbin 'autotest_include.raw',100 : lzclose"
+#define AUTOTEST_LZSA1_E	"inclzsa1 'autotest_include.raw',0,1000"
+#define AUTOTEST_LZSA1_F	"lzsa1 : incbin'autotest_include.raw',0,1000 : lzclose"
+
 #define AUTOTEST_LZEXO_A	"lzexo : incbin 'autotest_include.raw' : lzclose"
 #define AUTOTEST_LZEXO_B	"incexo 'autotest_include.raw'"
 #define AUTOTEST_LZEXO_C	"incexo 'autotest_include.raw',100"
@@ -19619,8 +19640,82 @@ printf("testing LZAPU variant+offset OK\n");
 	if (!ret && i==opcodelen) {} else {printf("Autotest %03d ERROR (LZAPU+INCBIN+size)\n",cpt);MiniDump(opcode,opcodelen);exit(-1);}
 	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
 printf("testing LZAPU variant+size OK\n");
+
+
+
+	ret=RasmAssemble(AUTOTEST_LZSA1_A,strlen(AUTOTEST_LZSA1_A),&opcode,&opcodelen);
+	if (!ret && opcodelen<=442) {} else {printf("Autotest %03d ERROR (INCBIN + LZSA1 segment)\n",cpt);MiniDump(opcode,opcodelen);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing INCBIN + LZSA1 segment OK\n");
+
+	ret=RasmAssemble(AUTOTEST_LZSA1_Abis,strlen(AUTOTEST_LZSA1_Abis),&opcode,&opcodelen);
+	if (!ret && opcodelen<=437) {} else {printf("Autotest %03d ERROR (INCBIN + LZSA1 segment)\n",cpt);MiniDump(opcode,opcodelen);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing INCBIN + LZSA1 segment OK\n");
+
+	ret=RasmAssemble(AUTOTEST_LZSA1_B,strlen(AUTOTEST_LZSA1_B),&opcode,&opcodelen);
+	if (!ret && opcodelen<=442) {} else {printf("Autotest %03d ERROR (INCLZSA1)\n",cpt);MiniDump(opcode,opcodelen);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing INCLZSA1 OK\n");
+
+	ret=RasmAssemble(AUTOTEST_LZSA1_C,strlen(AUTOTEST_LZSA1_C),&opcode,&opcodelen);
+	if (!ret) {} else {printf("Autotest %03d ERROR (INCLZSA1+offset)\n",cpt);MiniDump(opcode,opcodelen);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+	i=opcodelen;
+	ret=RasmAssemble(AUTOTEST_LZSA1_D,strlen(AUTOTEST_LZSA1_D),&opcode,&opcodelen);
+	if (!ret && i==opcodelen) {} else {printf("Autotest %03d ERROR (LZSA1+INCBIN+offset)\n",cpt);MiniDump(opcode,opcodelen);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing LZSA1 variant+offset OK\n");
+
+	ret=RasmAssemble(AUTOTEST_LZSA1_E,strlen(AUTOTEST_LZSA1_E),&opcode,&opcodelen);
+	if (!ret) {} else {printf("Autotest %03d ERROR (INCLZSA1+size)\n",cpt);MiniDump(opcode,opcodelen);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+	i=opcodelen;
+	ret=RasmAssemble(AUTOTEST_LZSA1_F,strlen(AUTOTEST_LZSA1_F),&opcode,&opcodelen);
+	if (!ret && i==opcodelen) {} else {printf("Autotest %03d ERROR (LZSA1+INCBIN+size)\n",cpt);MiniDump(opcode,opcodelen);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing LZSA1 variant+size OK\n");
+
+
+
+
+	ret=RasmAssemble(AUTOTEST_LZSA2_A,strlen(AUTOTEST_LZSA2_A),&opcode,&opcodelen);
+	if (!ret && opcodelen<=463) {} else {printf("Autotest %03d ERROR (INCBIN + LZSA2 segment)\n",cpt);MiniDump(opcode,opcodelen);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing INCBIN + LZSA2 segment OK\n");
+
+	ret=RasmAssemble(AUTOTEST_LZSA2_Abis,strlen(AUTOTEST_LZSA2_Abis),&opcode,&opcodelen);
+	if (!ret && opcodelen<=462) {} else {printf("Autotest %03d ERROR (INCBIN + LZSA2 segment)\n",cpt);MiniDump(opcode,opcodelen);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing INCBIN + LZSA2 segment OK\n");
+
+	ret=RasmAssemble(AUTOTEST_LZSA2_B,strlen(AUTOTEST_LZSA2_B),&opcode,&opcodelen);
+	if (!ret && opcodelen<=463) {} else {printf("Autotest %03d ERROR (INCLZSA2)\n",cpt);MiniDump(opcode,opcodelen);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing INCLZSA2 OK\n");
+
+	ret=RasmAssemble(AUTOTEST_LZSA2_C,strlen(AUTOTEST_LZSA2_C),&opcode,&opcodelen);
+	if (!ret) {} else {printf("Autotest %03d ERROR (INCLZSA2+offset)\n",cpt);MiniDump(opcode,opcodelen);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+	i=opcodelen;
+	ret=RasmAssemble(AUTOTEST_LZSA2_D,strlen(AUTOTEST_LZSA2_D),&opcode,&opcodelen);
+	if (!ret && i==opcodelen) {} else {printf("Autotest %03d ERROR (LZSA2+INCBIN+offset) %d!=%d\n",cpt,i,opcodelen);MiniDump(opcode,opcodelen);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing LZSA2 variant+offset OK\n");
+
+	ret=RasmAssemble(AUTOTEST_LZSA2_E,strlen(AUTOTEST_LZSA2_E),&opcode,&opcodelen);
+	if (!ret) {} else {printf("Autotest %03d ERROR (INCLZSA2+size)\n",cpt);MiniDump(opcode,opcodelen);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+	i=opcodelen;
+	ret=RasmAssemble(AUTOTEST_LZSA2_F,strlen(AUTOTEST_LZSA2_F),&opcode,&opcodelen);
+	if (!ret && i==opcodelen) {} else {printf("Autotest %03d ERROR (LZSA2+INCBIN+size)\n",cpt);MiniDump(opcode,opcodelen);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing LZSA2 variant+size OK\n");
+
 #else
-printf("*** LZAPU and INCAPU tests disabled as there is no APUltra support for this version ***\n");
+printf("*** LZAPU and INCAPU   tests disabled as there is no APUltra support for this version ***\n");
+printf("*** LZSA1 and INCLZSA1 tests disabled as there is no LZSA v1 support for this version ***\n");
+printf("*** LZSA2 and INCLZSA2 tests disabled as there is no LZSA v2 support for this version ***\n");
 #endif
 
 
@@ -20089,7 +20184,7 @@ printf(" *   specific prior written permission.\n");
 
 
 printf("\n\n\n\n");
-printf("******* license for AP-Ultra cruncher / sources were modified ***********\n\n\n\n");
+printf("******* license for AP-Ultra & LZSA crunchers ****************************\n\n\n\n");
 printf(" * apultra.c - command line compression utility for the apultra library\n");
 printf(" * Copyright (C) 2019 Emmanuel Marty\n");
 printf(" *\n");
@@ -20115,9 +20210,11 @@ printf(" * Inspired by cap by Sven-Ake Dahl. https://github.com/svendahl/cap\n")
 printf(" * Also inspired by Charles Bloom's compression blog. http://cbloomrants.blogspot.com/\n");
 printf(" * With ideas from LZ4 by Yann Collet. https://github.com/lz4/lz4\n");
 printf(" * With help and support from spke <zxintrospec@gmail.com>\n");
+printf("\n\n\n\n");
+printf("*** license for CDT export (record11() function and some other code extracts) ***\n\n\n\n");
+printf(" as far as i know, the tool is in GPL licence,\nCopyright (C) 2007 Free Software Foundation, Inc. https://fsf.org\n");
 printf("\n");
 printf("\n");
-
 #endif
 
 printf("\n\n");
