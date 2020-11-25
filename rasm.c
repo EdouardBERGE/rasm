@@ -1,5 +1,5 @@
 #define PROGRAM_NAME      "RASM"
-#define PROGRAM_VERSION   "1.3"
+#define PROGRAM_VERSION   "1.4 nightly"
 #define PROGRAM_DATE      "xx/11/2020"
 #define PROGRAM_COPYRIGHT "© 2017 BERGE Edouard / roudoudou from Resistance"
 
@@ -945,6 +945,7 @@ struct s_assenv {
 	char *binary_name;
 	char *cartridge_name;
 	char *snapshot_name;
+	char *tape_name;
 	char *rom_name;
 	struct s_save *save;
 	int nbsave,maxsave;
@@ -7176,6 +7177,68 @@ void record11(char *filename,unsigned char *t,int first,int l,int p, int flag_bb
                 fputc(255,fo);
 }
 
+void __output_CDT(struct s_assenv *ae, char *tapefilename,char *filename,char *mydata,int size, int offset, int run)
+{
+	unsigned char *AmsdosHeader;
+	unsigned char head[256];
+	char TZX_header[14];
+	int wrksize,fileload,nbblock=0;
+	unsigned char body[65536+128];
+	int flag_h=2560, flag_p=10240, flag_bb, flag_b=1000,i,j,k;
+
+	FileRemoveIfExists(tapefilename); // pas de append pour le moment
+
+	memcpy(TZX_header,"ZXTape!\032\001\000\040\000\012",13);
+	FileWriteBinary(tapefilename,(char *)TZX_header,13);
+
+	AmsdosHeader=MakeAMSDOSHeader(run,offset,offset+size,MakeAMSDOS_name(ae,filename));
+	memcpy(body,AmsdosHeader,128);
+	wrksize=size;
+
+	memset(head,0,16);
+	strcpy(head,MakeAMSDOS_name(ae,filename));
+	head[0x12]=body[0x12];
+	head[0x18]=body[0x40];
+	head[0x19]=body[0x41];
+	head[0x1A]=body[0x1A];
+	head[0x1B]=body[0x1B];
+	fileload=body[0x15]+body[0x16]*256;
+	flag_b=(3500000/3+flag_b/2)/flag_b;
+	flag_bb=flag_b*2;
+	memcpy(body,mydata,size);
+
+	if (wrksize>0x800) {
+		update11(head,j=1,1,0,0x800,fileload); // FIRST BLOCK
+		record11(tapefilename,head,44,28,16,flag_bb,flag_b);
+		record11(tapefilename,body,22,0x800,flag_h,flag_bb,flag_b);
+		k=wrksize-0x800;
+		i=0x800;
+		nbblock=1;
+		while (k>0x800) {
+			fileload+=0x800;
+			update11(head,++j,0,0,0x800,fileload); // MID BLOCK
+			record11(tapefilename,head,44,28,16,flag_bb,flag_b);
+			record11(tapefilename,body+i,22,0x800,flag_h,flag_bb,flag_b);
+			k-=0x800;
+			i+=0x800;
+			nbblock++;
+		}
+		nbblock++;
+		fileload+=0x800;
+		update11(head,++j,0,1,k,fileload); // LAST BLOCK
+		record11(tapefilename,head,44,28,16,flag_bb,flag_b);
+		record11(tapefilename,body+i,22,k,flag_p,flag_bb,flag_b);
+	} else {
+		update11(head,1,1,1,wrksize,fileload); // SINGLE BLOCK
+		record11(tapefilename,head,44,28,16,flag_bb,flag_b);
+		record11(tapefilename,body,22,wrksize,flag_p,flag_bb,flag_b);
+		nbblock=1;
+	}
+	FileWriteBinaryClose(tapefilename);
+	rasm_printf(ae,KIO"Write tape file %s (%d block%s) run=#%04X\n",tapefilename,nbblock,nbblock>1?"s":"",run);
+}
+
+
 
 void PopAllSave(struct s_assenv *ae)
 {
@@ -7245,16 +7308,6 @@ void PopAllSave(struct s_assenv *ae)
 			}
 		} else if (ae->save[is].tape) {
 			char *tapefilename;
-			unsigned char head[256];
-			char TZX_header[14];
-			int wrksize,fileload,nbblock=0;
-			unsigned char body[65536+128];
-			int flag_h=2560, flag_p=10240, flag_bb, flag_b=1000,j,k;
-
-			/* output file on filesystem */
-			FileRemoveIfExists(filename);
-
-			memcpy(TZX_header,"ZXTape!\032\001\000\040\000\012",13);
 
 			if (ae->save[is].iwdskname>0) {
 				tapefilename=ae->wl[ae->save[is].iwdskname].w;
@@ -7264,55 +7317,7 @@ void PopAllSave(struct s_assenv *ae)
 				tapefilename=TxtStrDup("rasmoutput.cdt");
 			}
 
-			FileRemoveIfExists(tapefilename); // pas de append pour le moment
-			FileWriteBinary(tapefilename,(char *)TZX_header,13);
-
-			AmsdosHeader=MakeAMSDOSHeader(run,offset,offset+size,MakeAMSDOS_name(ae,filename));
-			memcpy(body,AmsdosHeader,128);
-			wrksize=size;
-
-			memset(head,0,16);
-			strcpy(head,MakeAMSDOS_name(ae,filename));
-			head[0x12]=body[0x12];
-			head[0x18]=body[0x40];
-			head[0x19]=body[0x41];
-			head[0x1A]=body[0x1A];
-			head[0x1B]=body[0x1B];
-			fileload=body[0x15]+body[0x16]*256;
-			flag_b=(3500000/3+flag_b/2)/flag_b;
-			flag_bb=flag_b*2;
-			memcpy(body,(char*)ae->mem[ae->save[is].ibank]+offset,size);
-
-			if (wrksize>0x800) {
-				update11(head,j=1,1,0,0x800,fileload); // FIRST BLOCK
-				record11(tapefilename,head,44,28,16,flag_bb,flag_b);
-				record11(tapefilename,body,22,0x800,flag_h,flag_bb,flag_b);
-				k=wrksize-0x800;
-				i=0x800;
-				nbblock=1;
-				while (k>0x800) {
-					fileload+=0x800;
-					update11(head,++j,0,0,0x800,fileload); // MID BLOCK
-					record11(tapefilename,head,44,28,16,flag_bb,flag_b);
-					record11(tapefilename,body+i,22,0x800,flag_h,flag_bb,flag_b);
-					k-=0x800;
-					i+=0x800;
-					nbblock++;
-				}
-				nbblock++;
-				fileload+=0x800;
-				update11(head,++j,0,1,k,fileload); // LAST BLOCK
-				record11(tapefilename,head,44,28,16,flag_bb,flag_b);
-				record11(tapefilename,body+i,22,k,flag_p,flag_bb,flag_b);
-			} else {
-				update11(head,1,1,1,wrksize,fileload); // SINGLE BLOCK
-				record11(tapefilename,head,44,28,16,flag_bb,flag_b);
-				record11(tapefilename,body,22,wrksize,flag_p,flag_bb,flag_b);
-				nbblock=1;
-			}
-
-			FileWriteBinaryClose(tapefilename);
-			rasm_printf(ae,KIO"Write tape file %s (%d block%s)\n",tapefilename,nbblock,nbblock>1?"s":"");
+			__output_CDT(ae,tapefilename,filename,(char*)ae->mem[ae->save[is].ibank]+offset,size,offset,run);
 		} else {
 			/* output file on filesystem */
 			rasm_printf(ae,KIO"Write binary file %s (%d byte%s)\n",filename,size,size>1?"s":"");
@@ -15459,7 +15464,7 @@ printf("output files\n");
 		/* enregistrement des fichiers programmes par la commande SAVE */
 		PopAllSave(ae);
 	
-		if (ae->nbsave==0 || ae->forcecpr || ae->forcesnapshot || ae->forceROM) {
+		if (ae->nbsave==0 || ae->forcecpr || ae->forcesnapshot || ae->forceROM || ae->forcetape) {
 			/*********************************************
 			**********************************************
 						  C A R T R I D G E
@@ -16065,17 +16070,35 @@ printf("output files\n");
 					}
 				} else {
 					if (!ae->flux) {
-						rasm_printf(ae,KIO"Write binary file %s (%d byte%s)\n",TMP_filename,maxmem-minmem,maxmem-minmem>1?"s":"");
-						if (ae->amsdos) {
-							AmsdosHeader=MakeAMSDOSHeader(minmem,minmem,maxmem,TMP_filename); //@@TODO
-							FileWriteBinary(TMP_filename,(char *)AmsdosHeader,128);
-						}
-						if (maxmem-minmem>0) {
-							FileWriteBinary(TMP_filename,(char*)ae->mem[lastspaceid]+minmem,maxmem-minmem);
-							FileWriteBinaryClose(TMP_filename);
+						/***************************************************************
+						*      T A P E    o u t p u t                                  *
+						***************************************************************/
+						if (ae->forcetape) {
+							int run;
+							if (ae->tape_name) {
+								sprintf(TMP_filename,"%s",ae->tape_name);
+							} else {
+								sprintf(TMP_filename,"%s.cdt",ae->outputfilename);
+							}
+							run=ae->snapshot.registers.LPC+(ae->snapshot.registers.HPC<<8);
+							if (run<0x100) run=minmem;
+							__output_CDT(ae,TMP_filename,"TAPE.BIN",(char*)ae->mem[lastspaceid]+minmem,maxmem-minmem,minmem,run);
 						} else {
+						/***************************************************************
+						*      F I L E    o u t p u t                                  *
+						***************************************************************/
+							rasm_printf(ae,KIO"Write binary file %s (%d byte%s)\n",TMP_filename,maxmem-minmem,maxmem-minmem>1?"s":"");
 							if (ae->amsdos) {
+								AmsdosHeader=MakeAMSDOSHeader(minmem,minmem,maxmem,TMP_filename); //@@TODO
+								FileWriteBinary(TMP_filename,(char *)AmsdosHeader,128);
+							}
+							if (maxmem-minmem>0) {
+								FileWriteBinary(TMP_filename,(char*)ae->mem[lastspaceid]+minmem,maxmem-minmem);
 								FileWriteBinaryClose(TMP_filename);
+							} else {
+								if (ae->amsdos) {
+									FileWriteBinaryClose(TMP_filename);
+								}
 							}
 						}
 					} else {
@@ -16737,6 +16760,7 @@ printf("paramz 1\n");
 		ae->flexible_export=param->flexible_export;
 		ae->cartridge_name=param->cartridge_name;
 		ae->snapshot_name=param->snapshot_name;
+		ae->tape_name=param->tape_name;
 		ae->rom_name=param->rom_name;
 		ae->checkmode=param->checkmode;
 		ae->noampersand=param->noampersand;
@@ -19984,7 +20008,7 @@ void Usage(int help)
 	
 	printf("%s (c) 2017 Edouard BERGE (use -n option to display all licenses / -autotest for self-testing)\n",RASM_VERSION);
 	#ifndef NO_3RD_PARTIES
-	printf("LZ4 (c) Yann Collet / ZX7 (c) Einar Saukas / Exomizer 2 (c) Magnus Lind / AP-Ultra (c) Emmanuel Marty\n");
+	printf("LZ4 (c) Yann Collet / ZX7 (c) Einar Saukas / Exomizer 2 (c) Magnus Lind / LZSA & AP-Ultra (c) Emmanuel Marty\n");
 	#endif
 	printf("\n");
 	printf("SYNTAX: rasm <inputfile> [options]\n");
@@ -20212,7 +20236,7 @@ printf(" * With ideas from LZ4 by Yann Collet. https://github.com/lz4/lz4\n");
 printf(" * With help and support from spke <zxintrospec@gmail.com>\n");
 printf("\n\n\n\n");
 printf("*** license for CDT export (record11() function and some other code extracts) ***\n\n\n\n");
-printf(" as far as i know, the tool is in GPL licence,\nCopyright (C) 2007 Free Software Foundation, Inc. https://fsf.org\n");
+printf("Author: CNGSoft http://cngsoft.no-ip.org , the tool is in GPL2 licence,\nCopyright (C) 2007 Free Software Foundation, Inc. https://fsf.org\n");
 printf("\n");
 printf("\n");
 #endif
