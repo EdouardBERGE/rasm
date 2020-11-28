@@ -3744,19 +3744,17 @@ char *TranslateTag(struct s_assenv *ae, char *varbuffer, int *touched, int enabl
 	return varbuffer;
 }
 
+#define CRC_NOP	0xE1830165
+#define CRC_LDI	0xE18B3F51
+#define CRC_LDD	0xE18B3F4C
+#define CRC_DEC	0xE06BDD44
+#define CRC_INC	0xE19F3B52
 
 #define CRC_JR		0x4BD52314
 #define CRC_JP		0x4BD52312
 #define CRC_DJNZ	0x37CD7BAE
 #define CRC_RET		0xE1B32D63
 
-#define CRC_JPHL	0xA3D34817
-#define CRC_JPIX	0xA3D76424
-#define CRC_JPIY	0xA3D76A25
-
-/*
-	count NOP of one or more instructions
-*/
 int __GETNOP(struct s_assenv *ae,char *oplist, int didx)
 {
 	#undef FUNC
@@ -3773,27 +3771,80 @@ int __GETNOP(struct s_assenv *ae,char *oplist, int didx)
 	}
 	/* duplicata */
 	opref=TxtStrDup(oplist);
+	/* clean-up */
+	TxtReplace(opref,"\t"," ",0);
+	TxtReplace(opref,"  "," ",1);
+	/* simplify extended registers to XL or IX */
+	TxtReplace(opref,"IY","IX",0);
+	TxtReplace(opref,"LIX","XL",0);
+	TxtReplace(opref,"HIX","XL",0);
+	TxtReplace(opref,"LX","XL",0);
+	TxtReplace(opref,"HX","XL",0);
+	TxtReplace(opref,"LY","XL",0);
+	TxtReplace(opref,"HY","XL",0);
+	TxtReplace(opref,"YL","XL",0);
+	TxtReplace(opref,"XH","XL",0);
+	TxtReplace(opref,"YH","XL",0);
+
 	/* count opcodes */
-	opcode=TxtSplitWithChar(oplist,':');
+	opcode=TxtSplitWithChar(opref,':');
 
 	idx=0;
 	while (opcode[idx]) {
-		crc=GetCRC(opcode[idx]);
+		char *zeopcode,*terminator,*zearg=NULL;
 
-		/* partial support for DEC,DJNZ,RET,JR */
+		zeopcode=terminator=opcode[idx];
+		while (*terminator!=0 && *terminator!=' ') terminator++;
+		if (*terminator) {
+			zearg=terminator+1;
+			*terminator=0;
+			/* no space in args */
+			TxtReplace(opref," ","",1);
+			/* simplify deprecated notation */
+			TxtReplace(zearg,"A,","",0);
+		}
+		crc=GetCRC(zeopcode);
+
+		/*************************************
+		* very simple and simplified parsing *
+		*************************************/
 		switch (crc) {
-			case CRC_JPHL:
-				tick+=1;
+			case CRC_NOP:tick++;break;
+			case CRC_LDD:
+			case CRC_LDI:tick+=5;break;
+			case CRC_DEC:
+			case CRC_INC:
+				if (strcmp(zearg,"XL")==0 || strcmp(zearg,"SP")==0 || strcmp(zearg,"BC")==0
+				     || strcmp(zearg,"DE")==0 || strcmp(zearg,"HL")==0)
+					     tick+=2;
+				else if (strcmp(zearg,"IX")==0 || strcmp(zearg,"(HL)")==0)
+						tick+=3;
+				else if (strncmp(zearg,"(IX",3)==0)
+						tick+=6;
+				else tick++;
 				break;
-			case CRC_JPIX:
-			case CRC_JPIY:
-				tick+=2;
-				break;
-			/**************************/
 			case CRC_JP:
+				// JP is supposed to loop!
+				if (zearg) {
+					if (*zearg=='C' && strncmp(zearg,"NC",2)==0 && *zearg=='Z' && strncmp(zearg,"NZ",2)==0)
+						tick+=3;
+					else if (strcmp(zearg,"(IX)")==0)
+						tick+=2;
+					else if (strcmp(zearg,"(HL)")==0)
+						tick+=1;
+				} else tick+=3;
+				break;
 			case CRC_DJNZ:
+				// DJNZ is supposed to loop!
 			case CRC_JR:
-			case CRC_RET:tick+=3;break;
+				// JR is supposed to loop!
+				tick+=3;
+				break;
+			case CRC_RET:
+				// conditionnal RET shorter because it's supposed to be the exit!
+				if (!zearg) tick+=3; else tick+=2;
+				break;
+
 			default: 
 				MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported opcode [%s] for GETNOP, see documentation about this directive",opcode[idx]);
 		}
@@ -3828,20 +3879,13 @@ int __GETTICK(struct s_assenv *ae,char *oplist, int didx)
 
 		/* partial support for DEC,DJNZ,RET,JR */
 		switch (crc) {
-			case CRC_JPHL:
-				tick+=4;
-				break;
-			case CRC_JPIX:
-			case CRC_JPIY:
-				tick+=8;
-				break;
 			/**************************/
 			case CRC_JP:tick+=10;break;
 			case CRC_DJNZ:tick+=13;break;
 			case CRC_JR:tick+=12;break;
 			case CRC_RET:tick+=10;break;
 			default: 
-				MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported opcode [%s] for GETNOP, see documentation about this directive",opcode[idx]);
+				MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported opcode [%s] for GETTICK, see documentation about this directive",opcode[idx]);
 		}
 		idx++;
 	}
@@ -18700,6 +18744,23 @@ struct s_autotest_keyword autotest_keyword[]={
 	{"macro bidule:nop:mend:bidule",0},{"macro bidule:nop:macro glop:nop:mend:mend:bidule",1},
 	{"macro bidule:nop",1},{"macro bidule:nop:mend:macro glop:nop:bidule",1},
 	{"defb getnop(1)",1},{"defb getnop(-1)",1},{"defb getnop(10)",1},{"defb getnop(\"rien\")",1},{"defb getnop()",1},{"defb getnop(\"djNz\")",0},
+	{"assert getnop('nop')==1 : nop",0},
+	{"assert getnop('ldi')==5 : nop",0}, {"assert getnop('ldd')==5 : nop",0},
+	{"assert getnop('dec a')==1 : nop",0}, {"assert getnop('dec b')==1 : nop",0}, {"assert getnop('dec c')==1 : nop",0},
+	{"assert getnop('dec d')==1 : nop",0}, {"assert getnop('dec e')==1 : nop",0}, {"assert getnop('dec h')==1 : nop",0},
+	{"assert getnop('dec l')==1 : nop",0}, {"assert getnop('dec xl')==2 : nop",0}, {"assert getnop('dec yl')==2 : nop",0},
+	{"assert getnop('dec xh')==2 : nop",0}, {"assert getnop('dec yh')==2 : nop",0}, {"assert getnop('dec bc')==2 : nop",0},
+	{"assert getnop('dec de')==2 : nop",0}, {"assert getnop('dec hl')==2 : nop",0}, {"assert getnop('dec sp')==2 : nop",0},
+	{"assert getnop('dec ix')==3 : nop",0}, {"assert getnop('dec iy')==3 : nop",0}, {"assert getnop('dec (hl)')==3 : nop",0},
+	{"assert getnop('dec (ix-50)')==6 : nop",0}, {"assert getnop('dec (iy+1)')==6 : nop",0},
+	{"assert getnop(\"ret\")==3 : nop",0},
+	{"assert getnop(\"ret nz\")==2 : nop",0},
+	{"assert getnop(\"djNz\")==3 : nop",0},
+	{"assert getnop(\"jr\")==3 : nop",0},
+	{"assert getnop(\"jr nz\")==3 : nop",0},
+	{"assert getnop(\"jp (ix)\")==2 : nop",0},
+	{"assert getnop(\"jp (iy)\")==2 : nop",0},
+	{"assert getnop(\"jp (hl)\")==1 : nop",0},
 	/* wrong snapshot settings */
 	{"buildsna:bank 0:nop:snaset crtc_type",1},
 	{"buildsna:bank 0:nop:snaset crtc_type,3,2",1},
