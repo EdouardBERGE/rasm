@@ -3754,11 +3754,35 @@ char *TranslateTag(struct s_assenv *ae, char *varbuffer, int *touched, int enabl
 #define CRC_BIT	0xE073D557
 #define CRC_RES	0xE1B32D62
 #define CRC_SET	0xE1B71164
+#define CRC_CCF	0xE0742D44
+#define CRC_IND	0xE19F3B53
+#define CRC_INI	0xE19F3B58
+#define CRC_DAA	0xE068253E
+#define CRC_CPL	0xE077C757
+#define CRC_EI	0x4BD5DD06
+#define CRC_DI	0x4BD5DF05
+#define CRC_IM	0x4BD5250E
+#define CRC_SCF	0xE1B72D54
+#define CRC_NEG	0xE1833D52
+#define CRC_OUTI	0xEFA5F1B9
+#define CRC_OUTD	0xEFA5F1B4
+
+#define CRC_RLA	0xE1B31F57
+#define CRC_RLCA	0x878DAD9A
+#define CRC_RRCA	0x87A5B5A0
+#define CRC_RRA	0xE1B30B5D
+#define CRC_RLD	0xE1B31F5A
+#define CRC_RRD	0xE1B30B60
+#define CRC_RST	0xE1B30971
+
 
 #define CRC_JR		0x4BD52314
 #define CRC_JP		0x4BD52312
 #define CRC_DJNZ	0x37CD7BAE
 #define CRC_RET		0xE1B32D63
+#define CRC_RETN	0x87E9EBB1
+#define CRC_RETI	0x87E9EBAC
+
 
 int __GETNOP(struct s_assenv *ae,char *oplist, int didx)
 {
@@ -3814,11 +3838,37 @@ int __GETNOP(struct s_assenv *ae,char *oplist, int didx)
 		* very simple and simplified parsing *
 		*************************************/
 		switch (crc) {
-			case CRC_NOP:tick++;break;
+			case CRC_RLA:
+			case CRC_RLCA:
+			case CRC_RRCA:
+			case CRC_RRA:
+			case CRC_NOP:
+			case CRC_CCF:
+			case CRC_DAA:
+			case CRC_SCF:
+			case CRC_CPL:
+			case CRC_EI:
+			case CRC_DI:tick+=1;break;
+
+			case CRC_IM:
+			case CRC_NEG:tick+=2;break;
+
+			case CRC_RST:
+			case CRC_RETN:
+			case CRC_RETI:
 			case CRC_CPD:
 			case CRC_CPI:tick+=4;break;
+
+			case CRC_RLD:
+			case CRC_RRD:
 			case CRC_LDD:
-			case CRC_LDI:tick+=5;break;
+			case CRC_LDI:
+			case CRC_OUTI:
+			case CRC_OUTD:
+			case CRC_IND:
+			case CRC_INI:tick+=5;break;
+
+
 			case CRC_BIT:
 			case CRC_RES:
 			case CRC_SET:
@@ -18778,6 +18828,27 @@ struct s_autotest_keyword autotest_keyword[]={
 	{"assert getnop('bit 0,b')==2 : nop",0}, {"assert getnop('bit 0,c')==2 : nop",0}, {"assert getnop('bit 0,d')==2 : nop",0},
 	{"assert getnop('bit 0,e')==2 : nop",0}, {"assert getnop('bit 0,h')==2 : nop",0}, {"assert getnop('bit 0,l')==2 : nop",0},
 	{"assert getnop('bit 0,(hl)')==3 : nop",0}, {"assert getnop('bit 1,(ix+12),d')==6 : nop",0}, {"assert getnop('bit 3,(iy-34),h')==6 : nop",0},
+	{"assert getnop('rla')==1 : nop",0},
+	{"assert getnop('rlca')==1 : nop",0},
+	{"assert getnop('rrca')==1 : nop",0},
+	{"assert getnop('rra')==1 : nop",0},
+	{"assert getnop('ccf')==1 : nop",0},
+	{"assert getnop('daa')==1 : nop",0},
+	{"assert getnop('scf')==1 : nop",0},
+	{"assert getnop('cpl')==1 : nop",0},
+	{"assert getnop('ei')==1 : nop",0},
+	{"assert getnop('di')==1 : nop",0},
+	{"assert getnop('im')==2 : nop",0},
+	{"assert getnop('neg')==2 : nop",0},
+	{"assert getnop('rst')==4 : nop",0},
+	{"assert getnop('retn')==4 : nop",0},
+	{"assert getnop('reti')==4 : nop",0},
+	{"assert getnop('rld')==5 : nop",0},
+	{"assert getnop('rrd')==5 : nop",0},
+	{"assert getnop('outi')==5 : nop",0},
+	{"assert getnop('outd')==5 : nop",0},
+	{"assert getnop('ind')==5 : nop",0},
+	{"assert getnop('ini')==5 : nop",0},
 	{"assert getnop(\"ret\")==3 : nop",0},
 	{"assert getnop(\"ret nz\")==2 : nop",0},
 	{"assert getnop(\"djNz\")==3 : nop",0},
