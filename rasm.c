@@ -3749,6 +3749,11 @@ char *TranslateTag(struct s_assenv *ae, char *varbuffer, int *touched, int enabl
 #define CRC_LDD	0xE18B3F4C
 #define CRC_DEC	0xE06BDD44
 #define CRC_INC	0xE19F3B52
+#define CRC_CPI	0xE077C754
+#define CRC_CPD	0xE077C74F
+#define CRC_BIT	0xE073D557
+#define CRC_RES	0xE1B32D62
+#define CRC_SET	0xE1B71164
 
 #define CRC_JR		0x4BD52314
 #define CRC_JP		0x4BD52312
@@ -3776,8 +3781,8 @@ int __GETNOP(struct s_assenv *ae,char *oplist, int didx)
 	TxtReplace(opref,"  "," ",1);
 	/* simplify extended registers to XL or IX */
 	TxtReplace(opref,"IY","IX",0);
-	TxtReplace(opref,"LIX","XL",0);
-	TxtReplace(opref,"HIX","XL",0);
+	TxtReplace(opref,"IXL","XL",0);
+	TxtReplace(opref,"IXH","XL",0);
 	TxtReplace(opref,"LX","XL",0);
 	TxtReplace(opref,"HX","XL",0);
 	TxtReplace(opref,"LY","XL",0);
@@ -3810,8 +3815,16 @@ int __GETNOP(struct s_assenv *ae,char *oplist, int didx)
 		*************************************/
 		switch (crc) {
 			case CRC_NOP:tick++;break;
+			case CRC_CPD:
+			case CRC_CPI:tick+=4;break;
 			case CRC_LDD:
 			case CRC_LDI:tick+=5;break;
+			case CRC_BIT:
+			case CRC_RES:
+			case CRC_SET:
+				if (strstr(zearg,"(HL)")) tick+=3; else
+				if (strstr(zearg,"(IX")) tick+=6; else tick+=2;
+				break;
 			case CRC_DEC:
 			case CRC_INC:
 				if (strcmp(zearg,"XL")==0 || strcmp(zearg,"SP")==0 || strcmp(zearg,"BC")==0
@@ -18753,6 +18766,18 @@ struct s_autotest_keyword autotest_keyword[]={
 	{"assert getnop('dec de')==2 : nop",0}, {"assert getnop('dec hl')==2 : nop",0}, {"assert getnop('dec sp')==2 : nop",0},
 	{"assert getnop('dec ix')==3 : nop",0}, {"assert getnop('dec iy')==3 : nop",0}, {"assert getnop('dec (hl)')==3 : nop",0},
 	{"assert getnop('dec (ix-50)')==6 : nop",0}, {"assert getnop('dec (iy+1)')==6 : nop",0},
+	{"assert getnop('set 0,a')==2 : nop",0}, {"assert getnop('set 2,a')==2 : nop",0}, {"assert getnop('set 5,a')==2 : nop",0},
+	{"assert getnop('set 0,b')==2 : nop",0}, {"assert getnop('set 0,c')==2 : nop",0}, {"assert getnop('set 0,d')==2 : nop",0},
+	{"assert getnop('set 0,e')==2 : nop",0}, {"assert getnop('set 0,h')==2 : nop",0}, {"assert getnop('set 0,l')==2 : nop",0},
+	{"assert getnop('set 0,(hl)')==3 : nop",0}, {"assert getnop('set 1,(ix+12),d')==6 : nop",0}, {"assert getnop('set 3,(iy-34),h')==6 : nop",0},
+	{"assert getnop('res 0,a')==2 : nop",0}, {"assert getnop('res 2,a')==2 : nop",0}, {"assert getnop('res 5,a')==2 : nop",0},
+	{"assert getnop('res 0,b')==2 : nop",0}, {"assert getnop('res 0,c')==2 : nop",0}, {"assert getnop('res 0,d')==2 : nop",0},
+	{"assert getnop('res 0,e')==2 : nop",0}, {"assert getnop('res 0,h')==2 : nop",0}, {"assert getnop('res 0,l')==2 : nop",0},
+	{"assert getnop('res 0,(hl)')==3 : nop",0}, {"assert getnop('res 1,(ix+12),d')==6 : nop",0}, {"assert getnop('res 3,(iy-34),h')==6 : nop",0},
+	{"assert getnop('bit 0,a')==2 : nop",0}, {"assert getnop('bit 2,a')==2 : nop",0}, {"assert getnop('bit 5,a')==2 : nop",0},
+	{"assert getnop('bit 0,b')==2 : nop",0}, {"assert getnop('bit 0,c')==2 : nop",0}, {"assert getnop('bit 0,d')==2 : nop",0},
+	{"assert getnop('bit 0,e')==2 : nop",0}, {"assert getnop('bit 0,h')==2 : nop",0}, {"assert getnop('bit 0,l')==2 : nop",0},
+	{"assert getnop('bit 0,(hl)')==3 : nop",0}, {"assert getnop('bit 1,(ix+12),d')==6 : nop",0}, {"assert getnop('bit 3,(iy-34),h')==6 : nop",0},
 	{"assert getnop(\"ret\")==3 : nop",0},
 	{"assert getnop(\"ret nz\")==2 : nop",0},
 	{"assert getnop(\"djNz\")==3 : nop",0},
