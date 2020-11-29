@@ -86,7 +86,11 @@ prod:
 	$(CC) $(SRC_LZSADIR)/stream.c $(LZSA_FLAGS)            -o $(SRC_LZSADIR)/stream.o
 
 	$(CC) rasm.c $(CFLAGS_OPT) $(APU_OBJ) $(LZSA_OBJ)
+	strip $(EXEC)
 
+reload:
+	$(CC) rasm.c $(CFLAGS_OPT) $(APU_OBJ) $(LZSA_OBJ)
+	strip $(EXEC)
 
 clean:
 	rm -rf *.o
