@@ -3744,37 +3744,57 @@ char *TranslateTag(struct s_assenv *ae, char *varbuffer, int *touched, int enabl
 	return varbuffer;
 }
 
-#define CRC_NOP	0xE1830165
-#define CRC_LDI	0xE18B3F51
-#define CRC_LDD	0xE18B3F4C
-#define CRC_DEC	0xE06BDD44
-#define CRC_INC	0xE19F3B52
-#define CRC_CPI	0xE077C754
-#define CRC_CPD	0xE077C74F
-#define CRC_BIT	0xE073D557
-#define CRC_RES	0xE1B32D62
-#define CRC_SET	0xE1B71164
-#define CRC_CCF	0xE0742D44
-#define CRC_IND	0xE19F3B53
-#define CRC_INI	0xE19F3B58
-#define CRC_DAA	0xE068253E
-#define CRC_CPL	0xE077C757
-#define CRC_EI	0x4BD5DD06
-#define CRC_DI	0x4BD5DF05
-#define CRC_IM	0x4BD5250E
-#define CRC_SCF	0xE1B72D54
-#define CRC_NEG	0xE1833D52
+#define CRC_NOP		0xE1830165
+#define CRC_LDI		0xE18B3F51
+#define CRC_LDD		0xE18B3F4C
+#define CRC_DEC		0xE06BDD44
+#define CRC_INC		0xE19F3B52
+#define CRC_CPI		0xE077C754
+#define CRC_CPD		0xE077C74F
+#define CRC_BIT		0xE073D557
+#define CRC_RES		0xE1B32D62
+#define CRC_SET		0xE1B71164
+#define CRC_CCF		0xE0742D44
+#define CRC_IND		0xE19F3B53
+#define CRC_INI		0xE19F3B58
+#define CRC_DAA		0xE068253E
+#define CRC_CPL		0xE077C757
+#define CRC_EI		0x4BD5DD06
+#define CRC_DI		0x4BD5DF05
+#define CRC_IM		0x4BD5250E
+#define CRC_SCF		0xE1B72D54
+#define CRC_NEG		0xE1833D52
 #define CRC_OUTI	0xEFA5F1B9
 #define CRC_OUTD	0xEFA5F1B4
+#define CRC_OUT		0xE1871170
+#define CRC_IN		0x4BD5250F
 
-#define CRC_RLA	0xE1B31F57
+#define CRC_RLA		0xE1B31F57
 #define CRC_RLCA	0x878DAD9A
 #define CRC_RRCA	0x87A5B5A0
-#define CRC_RRA	0xE1B30B5D
-#define CRC_RLD	0xE1B31F5A
-#define CRC_RRD	0xE1B30B60
-#define CRC_RST	0xE1B30971
+#define CRC_RRA		0xE1B30B5D
+#define CRC_RLD		0xE1B31F5A
+#define CRC_RRD		0xE1B30B60
+#define CRC_RST		0xE1B30971
+#define CRC_RR		0x4BD5331C
+#define CRC_RL		0x4BD53316
+#define CRC_RRC		0xE1B30B5F
+#define CRC_RLC		0xE1B31F59
+#define CRC_SLA		0xE1B71F58
+#define CRC_SLL		0xE1B71F63
+#define CRC_SRA		0xE1B70B5E
+#define CRC_SRL		0xE1B70B69
 
+#define CRC_ADD		0xE07C2F41
+#define CRC_ADC		0xE07C2F40
+#define CRC_SBC		0xE1B72B50
+#define CRC_SUB		0xE1B77162
+#define CRC_XOR		0xE1DB3971
+#define CRC_AND		0xE07FDB4B
+#define CRC_OR		0x4BD52919
+
+#define CRC_PUSH	0x97A1EDB8
+#define CRC_POP		0xE1BB1967
 
 #define CRC_JR		0x4BD52314
 #define CRC_JP		0x4BD52312
@@ -3782,6 +3802,11 @@ char *TranslateTag(struct s_assenv *ae, char *varbuffer, int *touched, int enabl
 #define CRC_RET		0xE1B32D63
 #define CRC_RETN	0x87E9EBB1
 #define CRC_RETI	0x87E9EBAC
+
+#define CRC_LD		0x4BD52F08
+
+#define CRC_EX		0x4BD5DD15
+#define CRC_EXX		0xE06FF76D
 
 
 int __GETNOP(struct s_assenv *ae,char *oplist, int didx)
@@ -3803,6 +3828,7 @@ int __GETNOP(struct s_assenv *ae,char *oplist, int didx)
 	/* clean-up */
 	TxtReplace(opref,"\t"," ",0);
 	TxtReplace(opref,"  "," ",1);
+	TxtReplace(opref,": ",":",1);
 	/* simplify extended registers to XL or IX */
 	TxtReplace(opref,"IY","IX",0);
 	TxtReplace(opref,"IXL","XL",0);
@@ -3822,13 +3848,16 @@ int __GETNOP(struct s_assenv *ae,char *oplist, int didx)
 	while (opcode[idx]) {
 		char *zeopcode,*terminator,*zearg=NULL;
 
-		zeopcode=terminator=opcode[idx];
+		zeopcode=opcode[idx];
+		/* trim */
+		while (*zeopcode==' ') zeopcode++;
+		terminator=zeopcode;
 		while (*terminator!=0 && *terminator!=' ') terminator++;
 		if (*terminator) {
 			zearg=terminator+1;
 			*terminator=0;
 			/* no space in args */
-			TxtReplace(opref," ","",1);
+			TxtReplace(zearg," ","",1);
 			/* simplify deprecated notation */
 			TxtReplace(zearg,"A,","",0);
 		}
@@ -3847,6 +3876,7 @@ int __GETNOP(struct s_assenv *ae,char *oplist, int didx)
 			case CRC_DAA:
 			case CRC_SCF:
 			case CRC_CPL:
+			case CRC_EXX:
 			case CRC_EI:
 			case CRC_DI:tick+=1;break;
 
@@ -3868,7 +3898,99 @@ int __GETNOP(struct s_assenv *ae,char *oplist, int didx)
 			case CRC_IND:
 			case CRC_INI:tick+=5;break;
 
+			case CRC_EX:
+				if (zearg) {
+					if (strstr(zearg,"AF") || strstr(zearg,"DE")) tick+=1; else
+					if (strstr(zearg,"(SP)") && strstr(zearg,"HL")) tick+=6; else
+					if (strstr(zearg,"(SP)") && strstr(zearg,"IX")) tick+=7;
+				} else {
+					MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported opcode [%s] for GETNOP, see documentation about this directive",opcode[idx]);
+				}
+				break;
 
+			case CRC_PUSH:
+				if (zearg) {
+					if (strcmp(zearg,"IX")==0) tick+=5; else tick+=4;
+				} else {
+					MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported opcode [%s] for GETNOP, see documentation about this directive",opcode[idx]);
+				}
+				break;
+
+			case CRC_POP:
+				if (zearg) {
+					if (strcmp(zearg,"IX")==0) tick+=4; else tick+=3;
+				} else {
+					MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported opcode [%s] for GETNOP, see documentation about this directive",opcode[idx]);
+				}
+				break;
+
+			case CRC_SLA:
+			case CRC_SLL:
+			case CRC_SRA:
+			case CRC_SRL:
+			case CRC_RL:
+			case CRC_RLC:
+			case CRC_RR:
+			case CRC_RRC:
+				if (zearg) {
+					if (strstr(zearg,"(HL)")) tick+=4; else
+					if (strstr(zearg,"(IX")) tick+=7; else
+						tick+=2;
+				} else {
+					MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported opcode [%s] for GETNOP, see documentation about this directive",opcode[idx]);
+				}
+				break;
+
+			case CRC_OUT:
+				if (zearg) {
+					if (strstr(zearg,"(C),")) tick+=4; else tick+=3;
+				} else {
+					MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported opcode [%s] for GETNOP, see documentation about this directive",opcode[idx]);
+				}
+				break;
+			case CRC_IN:
+				if (zearg) {
+					if (strstr(zearg,"(C)")) tick+=4; else tick+=3;
+				} else {
+					MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported opcode [%s] for GETNOP, see documentation about this directive",opcode[idx]);
+				}
+				break;
+
+			case CRC_ADD:
+			     if (zearg) {
+					if (strcmp(zearg,"IX,BC")==0 || strcmp(zearg,"IX,DE")==0 || strcmp(zearg,"IX,IX")==0 || strcmp(zearg,"IX,SP")==0) tick+=4; else
+					if (strcmp(zearg,"HL,BC")==0 || strcmp(zearg,"HL,DE")==0 || strcmp(zearg,"HL,HL")==0 || strcmp(zearg,"HL,SP")==0) tick+=3; else
+					if (strstr(zearg,"(HL)") || strcmp(zearg,"XL")==0) tick+=2; else
+					if (strstr(zearg,"(IX")) tick+=5; else
+					if ((*zearg>='A' && *zearg<='E') || *zearg=='H' || *zearg=='L') tick+=1; else tick+=2;
+				} else {
+					MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported opcode [%s] for GETNOP, see documentation about this directive",opcode[idx]);
+				}
+				break;
+
+			/* ADC/SBC/SUB/XOR/AND/OR */
+			case CRC_ADC:
+				if (zearg) {
+					if (strcmp(zearg,"IX,BC")==0 || strcmp(zearg,"IX,DE")==0 ||strcmp(zearg,"IX,IX")==0 ||strcmp(zearg,"IX,SP")==0) {tick+=5;break;}
+				}
+			case CRC_SBC:
+				if (zearg) {
+					if (strcmp(zearg,"HL,BC")==0 || strcmp(zearg,"HL,DE")==0 ||strcmp(zearg,"HL,HL")==0 ||strcmp(zearg,"HL,SP")==0) {tick+=4;break;}
+				}
+			case CRC_SUB:
+			case CRC_XOR:
+			case CRC_AND:
+			case CRC_OR:
+			     if (zearg) {
+					if (strstr(zearg,"(HL)") || strcmp(zearg,"XL")==0) tick+=2; else
+					if (strstr(zearg,"(IX")) tick+=5; else
+					if ((*zearg>='A' && *zearg<='E') || *zearg=='H' || *zearg=='L') tick+=1; else tick+=2;
+				} else {
+					MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported opcode [%s] for GETNOP, see documentation about this directive",opcode[idx]);
+				}
+				break;
+
+			/* BIT/RES/SET */
 			case CRC_BIT:
 			case CRC_RES:
 			case CRC_SET:
@@ -3906,6 +4028,21 @@ int __GETNOP(struct s_assenv *ae,char *oplist, int didx)
 			case CRC_RET:
 				// conditionnal RET shorter because it's supposed to be the exit!
 				if (!zearg) tick+=3; else tick+=2;
+				break;
+
+			case CRC_LD:
+				/* big cake! */
+				if (zearg) {
+					if (strcmp(zearg,"SP,HL")==0 || strcmp(zearg,"(BC),A")==0 || strcmp(zearg,"(DE),A")==0 || strcmp(zearg,"(HL),A")==0) tick+=2; else
+					if (strcmp(zearg,"A,(BC)")==0 || strcmp(zearg,"A,(DE),A")==0 || strcmp(zearg,"A,(HL)")==0) tick+=2; else
+					if (strcmp(zearg,"(HL),B")==0 || strcmp(zearg,"(HL),C")==0 || strcmp(zearg,"(HL),D")==0 || strcmp(zearg,"(HL),E")==0) tick+=2; else
+					if (strcmp(zearg,"(HL),H")==0 || strcmp(zearg,"(HL),L")==0) tick+=2; else
+					if (strcmp(zearg,"A,R")==0 || strcmp(zearg,"R,A")==0 || strcmp(zearg,"A,I")==0 || strcmp(zearg,"I,A")==0) tick+=3; else
+					if (strncmp(zearg,"BC,(",4)==0 || strncmp(zearg,"DE,(",4)==0 || strncmp(zearg,"IX,(",4)==0 || strncmp(zearg,"SP,(",4)==0) tick+=6; else
+					if (strstr(zearg,"),BC") || strstr(zearg,"),DE") || strstr(zearg,"),IX") || strstr(zearg,"),SP")) tick+=6;
+				} else {
+					MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported opcode [%s] for GETNOP, see documentation about this directive",opcode[idx]);
+				}
 				break;
 
 			default: 
@@ -18828,7 +18965,11 @@ struct s_autotest_keyword autotest_keyword[]={
 	{"assert getnop('bit 0,b')==2 : nop",0}, {"assert getnop('bit 0,c')==2 : nop",0}, {"assert getnop('bit 0,d')==2 : nop",0},
 	{"assert getnop('bit 0,e')==2 : nop",0}, {"assert getnop('bit 0,h')==2 : nop",0}, {"assert getnop('bit 0,l')==2 : nop",0},
 	{"assert getnop('bit 0,(hl)')==3 : nop",0}, {"assert getnop('bit 1,(ix+12),d')==6 : nop",0}, {"assert getnop('bit 3,(iy-34),h')==6 : nop",0},
-	{"assert getnop('rla')==1 : nop",0},
+	{"assert getnop(\"ex af,af' \")==1 : nop",0}, {"assert getnop('ex hl,de ')==1 : nop",0}, {"assert getnop('ex de,hl ')==1 : nop",0},
+	{"assert getnop('ex (sp),hl')==6 : nop",0}, {"assert getnop('ex (sp),ix ')==7 : nop",0}, {"assert getnop('ex (sp),iy ')==7 : nop",0},
+
+	{"assert getnop('exx ')==1 : nop",0},
+	{"assert getnop('rla ')==1 : nop",0},
 	{"assert getnop('rlca')==1 : nop",0},
 	{"assert getnop('rrca')==1 : nop",0},
 	{"assert getnop('rra')==1 : nop",0},
@@ -18857,6 +18998,80 @@ struct s_autotest_keyword autotest_keyword[]={
 	{"assert getnop(\"jp (ix)\")==2 : nop",0},
 	{"assert getnop(\"jp (iy)\")==2 : nop",0},
 	{"assert getnop(\"jp (hl)\")==1 : nop",0},
+
+	{"assert getnop(' pop af ' )==3 : nop",0}, {"assert getnop(' pop bc ' )==3 : nop",0}, {"assert getnop(' pop de ' )==3 : nop",0},
+	{"assert getnop(' pop hl ' )==3 : nop",0}, {"assert getnop(' pop ix ' )==4 : nop",0}, {"assert getnop(' pop iy ' )==4 : nop",0},
+	{"assert getnop(' push af ' )==4 : nop",0}, {"assert getnop(' push bc ' )==4 : nop",0}, {"assert getnop(' push de ' )==4 : nop",0},
+	{"assert getnop(' push hl ' )==4 : nop",0}, {"assert getnop(' push ix ' )==5 : nop",0}, {"assert getnop(' push iy ' )==5 : nop",0},
+
+	{"assert getnop('add a,a')==1 : nop",0}, {"assert getnop('add a,b')==1 : nop",0}, {"assert getnop('add a,c')==1 : nop",0},
+	{"assert getnop('add a,d')==1 : nop",0}, {"assert getnop('add a,e')==1 : nop",0}, {"assert getnop('add a,h')==1 : nop",0}, {"assert getnop('add a,l')==1 : nop",0},
+	{"assert getnop('add a')==1 : nop",0}, {"assert getnop('add b')==1 : nop",0}, {"assert getnop('add c')==1 : nop",0},
+	{"assert getnop('add d')==1 : nop",0}, {"assert getnop('add e')==1 : nop",0}, {"assert getnop('add h')==1 : nop",0}, {"assert getnop('add l')==1 : nop",0},
+	{"assert getnop('add a,#12')==2 : nop",0}, {"assert getnop('add #12')==2 : nop",0}, {"assert getnop('add a,(hl)')==2 : nop",0},
+	{"assert getnop('add (hl)')==2 : nop",0}, {"assert getnop('add a,xl')==2 : nop",0}, {"assert getnop('add xl')==2 : nop",0},
+	{"assert getnop('add hl,bc')==3 : nop",0}, {"assert getnop('add hl,de')==3 : nop",0}, {"assert getnop('add hl,hl')==3 : nop",0}, {"assert getnop('add hl,sp')==3 : nop",0},
+	{"assert getnop('add ix,bc')==4 : nop",0}, {"assert getnop('add ix,de')==4 : nop",0}, {"assert getnop('add ix,ix')==4 : nop",0}, {"assert getnop('add ix,sp')==4 : nop",0},
+	{"assert getnop('add a,(ix+12)' )==5 : nop",0}, {"assert getnop('add (iy-102)' )==5 : nop",0},
+
+	{"assert getnop('adc a,a')==1 : nop",0}, {"assert getnop('adc a,b')==1 : nop",0}, {"assert getnop('adc a,c')==1 : nop",0},
+	{"assert getnop('adc a,d')==1 : nop",0}, {"assert getnop('adc a,e')==1 : nop",0}, {"assert getnop('adc a,h')==1 : nop",0}, {"assert getnop('adc a,l')==1 : nop",0},
+	{"assert getnop('adc a')==1 : nop",0}, {"assert getnop('adc b')==1 : nop",0}, {"assert getnop('adc c')==1 : nop",0},
+	{"assert getnop('adc d')==1 : nop",0}, {"assert getnop('adc e')==1 : nop",0}, {"assert getnop('adc h')==1 : nop",0}, {"assert getnop('adc l')==1 : nop",0},
+	{"assert getnop('adc a,#12')==2 : nop",0}, {"assert getnop('adc #12')==2 : nop",0}, {"assert getnop('adc a,(hl)')==2 : nop",0},
+	{"assert getnop('adc (hl)')==2 : nop",0}, {"assert getnop('adc a,xl')==2 : nop",0}, {"assert getnop('adc xl')==2 : nop",0},
+	{"assert getnop('adc hl,bc')==4 : nop",0}, {"assert getnop('adc hl,de')==4 : nop",0}, {"assert getnop('adc hl,hl')==4 : nop",0}, {"assert getnop('adc hl,sp')==4 : nop",0},
+	{"assert getnop('adc a,(ix+12)' )==5 : nop",0}, {"assert getnop('adc (iy-102)' )==5 : nop",0},
+
+	{"assert getnop('sbc a,a')==1 : nop",0}, {"assert getnop('sbc a,b')==1 : nop",0}, {"assert getnop('sbc a,c')==1 : nop",0},
+	{"assert getnop('sbc a,d')==1 : nop",0}, {"assert getnop('sbc a,e')==1 : nop",0}, {"assert getnop('sbc a,h')==1 : nop",0}, {"assert getnop('sbc a,l')==1 : nop",0},
+	{"assert getnop('sbc a')==1 : nop",0}, {"assert getnop('sbc b')==1 : nop",0}, {"assert getnop('sbc c')==1 : nop",0},
+	{"assert getnop('sbc d')==1 : nop",0}, {"assert getnop('sbc e')==1 : nop",0}, {"assert getnop('sbc h')==1 : nop",0}, {"assert getnop('sbc l')==1 : nop",0},
+	{"assert getnop('sbc a,#12')==2 : nop",0}, {"assert getnop('sbc #12')==2 : nop",0}, {"assert getnop('sbc a,(hl)')==2 : nop",0},
+	{"assert getnop('sbc (hl)')==2 : nop",0}, {"assert getnop('sbc a,xl')==2 : nop",0}, {"assert getnop('sbc xl')==2 : nop",0},
+	{"assert getnop('sbc hl,bc')==4 : nop",0}, {"assert getnop('sbc hl,de')==4 : nop",0}, {"assert getnop('sbc hl,hl')==4 : nop",0}, {"assert getnop('sbc hl,sp')==4 : nop",0},
+	{"assert getnop('sbc a,(ix+12)' )==5 : nop",0}, {"assert getnop('sbc (iy-102)' )==5 : nop",0},
+
+	{"assert getnop('sub a,a')==1 : nop",0}, {"assert getnop('sub a,b')==1 : nop",0}, {"assert getnop('sub a,c')==1 : nop",0},
+	{"assert getnop('sub a,d')==1 : nop",0}, {"assert getnop('sub a,e')==1 : nop",0}, {"assert getnop('sub a,h')==1 : nop",0}, {"assert getnop('sub a,l')==1 : nop",0},
+	{"assert getnop('sub a')==1 : nop",0}, {"assert getnop('sub b')==1 : nop",0}, {"assert getnop('sub c')==1 : nop",0},
+	{"assert getnop('sub d')==1 : nop",0}, {"assert getnop('sub e')==1 : nop",0}, {"assert getnop('sub h')==1 : nop",0}, {"assert getnop('sub l')==1 : nop",0},
+	{"assert getnop('sub a,#12')==2 : nop",0}, {"assert getnop('sub #12')==2 : nop",0}, {"assert getnop('sub a,(hl)')==2 : nop",0},
+	{"assert getnop('sub (hl)')==2 : nop",0}, {"assert getnop('sub a,xl')==2 : nop",0}, {"assert getnop('sub xl')==2 : nop",0},
+	{"assert getnop('sub a,(ix+12)' )==5 : nop",0}, {"assert getnop('sub (iy-102)' )==5 : nop",0},
+
+	{"assert getnop('out (c),a' )==4 : nop",0},
+	{"assert getnop('out (c),b' )==4 : nop",0},
+	{"assert getnop('out (c),c' )==4 : nop",0},
+	{"assert getnop('out (c),d' )==4 : nop",0},
+	{"assert getnop('out (c),e' )==4 : nop",0},
+	{"assert getnop('out (c),h' )==4 : nop",0},
+	{"assert getnop('out (c),l' )==4 : nop",0},
+	{"assert getnop('out (c),0' )==4 : nop",0},
+	{"assert getnop('out (12),a')==3 : nop",0},
+	{"assert getnop('out (c),l : out (c),0 : out (12),a')==11 : nop",0},
+	{"assert getnop('in a,(c)' )==4 : nop",0},
+	{"assert getnop('in b,(c)' )==4 : nop",0},
+	{"assert getnop('in a,(0)' )==3 : nop",0},
+	{"assert getnop('in a,(0) : in a,(c)' )==7 : nop",0},
+
+	{"assert getnop('rr a')==2 : nop",0}, {"assert getnop('rr b')==2 : nop",0}, {"assert getnop('rr (hl)')==4 : nop",0},
+	{"assert getnop('rr (ix+5)')==7 : nop",0}, {"assert getnop('rr (iy-111)')==7 : nop",0}, {"assert getnop('rr (ix+2),b')==7 : nop",0},
+	{"assert getnop('rl a')==2 : nop",0}, {"assert getnop('rl b')==2 : nop",0}, {"assert getnop('rl (hl)')==4 : nop",0},
+	{"assert getnop('rl (ix+5)')==7 : nop",0}, {"assert getnop('rl (iy-111)')==7 : nop",0}, {"assert getnop('rl (ix+2),b')==7 : nop",0},
+	{"assert getnop('rrc a')==2 : nop",0}, {"assert getnop('rrc b')==2 : nop",0}, {"assert getnop('rrc (hl)')==4 : nop",0},
+	{"assert getnop('rrc (ix+5)')==7 : nop",0}, {"assert getnop('rrc (iy-111)')==7 : nop",0}, {"assert getnop('rrc (ix+2),b')==7 : nop",0},
+	{"assert getnop('rlc a')==2 : nop",0}, {"assert getnop('rlc b')==2 : nop",0}, {"assert getnop('rlc (hl)')==4 : nop",0},
+	{"assert getnop('rlc (ix+5)')==7 : nop",0}, {"assert getnop('rlc (iy-111)')==7 : nop",0}, {"assert getnop('rlc (ix+2),b')==7 : nop",0},
+	{"assert getnop('sla a')==2 : nop",0}, {"assert getnop('sla b')==2 : nop",0}, {"assert getnop('sla (hl)')==4 : nop",0},
+	{"assert getnop('sla (ix+5)')==7 : nop",0}, {"assert getnop('sla (iy-111)')==7 : nop",0}, {"assert getnop('sla (ix+2),b')==7 : nop",0},
+	{"assert getnop('sra a')==2 : nop",0}, {"assert getnop('sra b')==2 : nop",0}, {"assert getnop('sra (hl)')==4 : nop",0},
+	{"assert getnop('sra (ix+5)')==7 : nop",0}, {"assert getnop('sra (iy-111)')==7 : nop",0}, {"assert getnop('sra (ix+2),b')==7 : nop",0},
+	{"assert getnop('sll a')==2 : nop",0}, {"assert getnop('sll b')==2 : nop",0}, {"assert getnop('sll (hl)')==4 : nop",0},
+	{"assert getnop('sll (ix+5)')==7 : nop",0}, {"assert getnop('sll (iy-111)')==7 : nop",0}, {"assert getnop('sll (ix+2),b')==7 : nop",0},
+	{"assert getnop('srl a')==2 : nop",0}, {"assert getnop('srl b')==2 : nop",0}, {"assert getnop('srl (hl)')==4 : nop",0},
+	{"assert getnop('srl (ix+5)')==7 : nop",0}, {"assert getnop('srl (iy-111)')==7 : nop",0}, {"assert getnop('srl (ix+2),b')==7 : nop",0},
+
 	/* wrong snapshot settings */
 	{"buildsna:bank 0:nop:snaset crtc_type",1},
 	{"buildsna:bank 0:nop:snaset crtc_type,3,2",1},
