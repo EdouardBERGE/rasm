@@ -3847,6 +3847,7 @@ int __GETNOP(struct s_assenv *ae,char *oplist, int didx)
 	idx=0;
 	while (opcode[idx]) {
 		char *zeopcode,*terminator,*zearg=NULL;
+		char **listarg;
 
 		zeopcode=opcode[idx];
 		/* trim */
@@ -3858,8 +3859,6 @@ int __GETNOP(struct s_assenv *ae,char *oplist, int didx)
 			*terminator=0;
 			/* no space in args */
 			TxtReplace(zearg," ","",1);
-			/* simplify deprecated notation */
-			TxtReplace(zearg,"A,","",0);
 		}
 		crc=GetCRC(zeopcode);
 
@@ -3904,7 +3903,7 @@ int __GETNOP(struct s_assenv *ae,char *oplist, int didx)
 					if (strstr(zearg,"(SP)") && strstr(zearg,"HL")) tick+=6; else
 					if (strstr(zearg,"(SP)") && strstr(zearg,"IX")) tick+=7;
 				} else {
-					MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported opcode [%s] for GETNOP, see documentation about this directive",opcode[idx]);
+					MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported opcode [%s] for GETNOP, see documentation about this directive\n",opcode[idx]);
 				}
 				break;
 
@@ -3912,7 +3911,7 @@ int __GETNOP(struct s_assenv *ae,char *oplist, int didx)
 				if (zearg) {
 					if (strcmp(zearg,"IX")==0) tick+=5; else tick+=4;
 				} else {
-					MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported opcode [%s] for GETNOP, see documentation about this directive",opcode[idx]);
+					MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported opcode [%s] for GETNOP, see documentation about this directive\n",opcode[idx]);
 				}
 				break;
 
@@ -3920,7 +3919,7 @@ int __GETNOP(struct s_assenv *ae,char *oplist, int didx)
 				if (zearg) {
 					if (strcmp(zearg,"IX")==0) tick+=4; else tick+=3;
 				} else {
-					MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported opcode [%s] for GETNOP, see documentation about this directive",opcode[idx]);
+					MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported opcode [%s] for GETNOP, see documentation about this directive\n",opcode[idx]);
 				}
 				break;
 
@@ -3937,7 +3936,7 @@ int __GETNOP(struct s_assenv *ae,char *oplist, int didx)
 					if (strstr(zearg,"(IX")) tick+=7; else
 						tick+=2;
 				} else {
-					MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported opcode [%s] for GETNOP, see documentation about this directive",opcode[idx]);
+					MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported opcode [%s] for GETNOP, see documentation about this directive\n",opcode[idx]);
 				}
 				break;
 
@@ -3945,39 +3944,47 @@ int __GETNOP(struct s_assenv *ae,char *oplist, int didx)
 				if (zearg) {
 					if (strstr(zearg,"(C),")) tick+=4; else tick+=3;
 				} else {
-					MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported opcode [%s] for GETNOP, see documentation about this directive",opcode[idx]);
+					MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported opcode [%s] for GETNOP, see documentation about this directive\n",opcode[idx]);
 				}
 				break;
 			case CRC_IN:
 				if (zearg) {
 					if (strstr(zearg,"(C)")) tick+=4; else tick+=3;
 				} else {
-					MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported opcode [%s] for GETNOP, see documentation about this directive",opcode[idx]);
+					MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported opcode [%s] for GETNOP, see documentation about this directive\n",opcode[idx]);
 				}
 				break;
 
 			case CRC_ADD:
 			     if (zearg) {
+					/* simplify deprecated notation */
+					TxtReplace(zearg,"A,","",0);
 					if (strcmp(zearg,"IX,BC")==0 || strcmp(zearg,"IX,DE")==0 || strcmp(zearg,"IX,IX")==0 || strcmp(zearg,"IX,SP")==0) tick+=4; else
 					if (strcmp(zearg,"HL,BC")==0 || strcmp(zearg,"HL,DE")==0 || strcmp(zearg,"HL,HL")==0 || strcmp(zearg,"HL,SP")==0) tick+=3; else
 					if (strstr(zearg,"(HL)") || strcmp(zearg,"XL")==0) tick+=2; else
 					if (strstr(zearg,"(IX")) tick+=5; else
 					if ((*zearg>='A' && *zearg<='E') || *zearg=='H' || *zearg=='L') tick+=1; else tick+=2;
 				} else {
-					MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported opcode [%s] for GETNOP, see documentation about this directive",opcode[idx]);
+					MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported opcode [%s] for GETNOP, see documentation about this directive\n",opcode[idx]);
 				}
 				break;
 
 			/* ADC/SBC/SUB/XOR/AND/OR */
 			case CRC_ADC:
 				if (zearg) {
+					/* simplify deprecated notation */
+					TxtReplace(zearg,"A,","",0);
 					if (strcmp(zearg,"IX,BC")==0 || strcmp(zearg,"IX,DE")==0 ||strcmp(zearg,"IX,IX")==0 ||strcmp(zearg,"IX,SP")==0) {tick+=5;break;}
 				}
 			case CRC_SBC:
 				if (zearg) {
+					/* simplify deprecated notation */
+					TxtReplace(zearg,"A,","",0);
 					if (strcmp(zearg,"HL,BC")==0 || strcmp(zearg,"HL,DE")==0 ||strcmp(zearg,"HL,HL")==0 ||strcmp(zearg,"HL,SP")==0) {tick+=4;break;}
 				}
 			case CRC_SUB:
+				/* simplify deprecated notation */
+				TxtReplace(zearg,"A,","",0);
 			case CRC_XOR:
 			case CRC_AND:
 			case CRC_OR:
@@ -3986,16 +3993,19 @@ int __GETNOP(struct s_assenv *ae,char *oplist, int didx)
 					if (strstr(zearg,"(IX")) tick+=5; else
 					if ((*zearg>='A' && *zearg<='E') || *zearg=='H' || *zearg=='L') tick+=1; else tick+=2;
 				} else {
-					MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported opcode [%s] for GETNOP, see documentation about this directive",opcode[idx]);
+					MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported opcode [%s] for GETNOP, see documentation about this directive\n",opcode[idx]);
 				}
 				break;
 
 			/* BIT/RES/SET */
 			case CRC_BIT:
-			case CRC_RES:
-			case CRC_SET:
 				if (strstr(zearg,"(HL)")) tick+=3; else
 				if (strstr(zearg,"(IX")) tick+=6; else tick+=2;
+				break;
+			case CRC_RES:
+			case CRC_SET:
+				if (strstr(zearg,"(HL)")) tick+=4; else
+				if (strstr(zearg,"(IX")) tick+=7; else tick+=2;
 				break;
 			case CRC_DEC:
 			case CRC_INC:
@@ -4032,21 +4042,179 @@ int __GETNOP(struct s_assenv *ae,char *oplist, int didx)
 
 			case CRC_LD:
 				/* big cake! */
-				if (zearg) {
-					if (strcmp(zearg,"SP,HL")==0 || strcmp(zearg,"(BC),A")==0 || strcmp(zearg,"(DE),A")==0 || strcmp(zearg,"(HL),A")==0) tick+=2; else
-					if (strcmp(zearg,"A,(BC)")==0 || strcmp(zearg,"A,(DE),A")==0 || strcmp(zearg,"A,(HL)")==0) tick+=2; else
-					if (strcmp(zearg,"(HL),B")==0 || strcmp(zearg,"(HL),C")==0 || strcmp(zearg,"(HL),D")==0 || strcmp(zearg,"(HL),E")==0) tick+=2; else
-					if (strcmp(zearg,"(HL),H")==0 || strcmp(zearg,"(HL),L")==0) tick+=2; else
-					if (strcmp(zearg,"A,R")==0 || strcmp(zearg,"R,A")==0 || strcmp(zearg,"A,I")==0 || strcmp(zearg,"I,A")==0) tick+=3; else
-					if (strncmp(zearg,"BC,(",4)==0 || strncmp(zearg,"DE,(",4)==0 || strncmp(zearg,"IX,(",4)==0 || strncmp(zearg,"SP,(",4)==0) tick+=6; else
-					if (strstr(zearg,"),BC") || strstr(zearg,"),DE") || strstr(zearg,"),IX") || strstr(zearg,"),SP")) tick+=6;
+				if (zearg && strchr(zearg,',')) {
+					int crc1,crc2;
+
+					/* split args */
+					listarg=TxtSplitWithChar(zearg,',');
+					crc1=GetCRC(listarg[0]);
+					crc2=GetCRC(listarg[1]);
+
+					switch (crc1) {
+						case CRC_I:
+						case CRC_R:
+							switch (crc2) {
+								case CRC_A:
+									tick+=3;
+									break;
+								default:
+									MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported LD %s,%s for GETNOP, see documentation\n",listarg[0],listarg[1]);
+							}
+							break;
+						case CRC_A:
+						case CRC_B:
+						case CRC_C:
+						case CRC_D:
+						case CRC_E:
+						case CRC_H:
+						case CRC_L:
+							switch (crc2) {
+								case CRC_A:
+								case CRC_B:
+								case CRC_C:
+								case CRC_D:
+								case CRC_E:
+								case CRC_H:
+								case CRC_L:
+									tick++;
+									break;
+								case CRC_I:
+								case CRC_R:
+									if (crc1==CRC_A) tick+=3; else
+									MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported LD %s,%s for GETNOP, see documentation\n",listarg[0],listarg[1]);
+									break;
+								case CRC_MBC:
+								case CRC_MDE:
+									if (crc1!=CRC_A) {
+										MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported LD %s,%s for GETNOP, see documentation\n",listarg[0],listarg[1]);
+										break;
+									}
+								case CRC_XL:
+								case CRC_MHL:
+									tick+=2;
+									break;
+								default:
+									/* MIX + memory + value */
+									if (strncmp(listarg[1],"(IX",3)==0) {
+										tick+=5;
+									} else if (listarg[1][0]=='(' && listarg[1][strlen(listarg[1])-1]==')') {
+										/* memory */
+										if (crc1==CRC_A) {
+										tick+=4;
+										} else {
+											MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported LD %s,%s for GETNOP, see documentation\n",listarg[0],listarg[1]);
+										}
+									} else {
+										/* numeric value as default */
+										tick+=2;
+									}
+							}
+							break;
+
+						case CRC_XL:
+							switch (crc2) {
+								case CRC_A:
+								case CRC_B:
+								case CRC_C:
+								case CRC_D:
+								case CRC_E:
+								case CRC_H:
+								case CRC_L:
+									tick+=2;
+									break;
+								case CRC_XL:
+									tick+=2;
+									break;
+								default:
+									/* value */
+									tick+=3;
+							}
+							break;
+
+						case CRC_BC:
+						case CRC_DE:
+							/* memory / value */
+							if (listarg[1][0]=='(' && listarg[1][strlen(listarg[1])-1]==')') tick+=6; else tick+=3;
+							break;
+						case CRC_HL:
+							/* memory / value */
+							if (listarg[1][0]=='(' && listarg[1][strlen(listarg[1])-1]==')') tick+=5; else tick+=3;
+							break;
+						case CRC_SP:
+							if (crc2==CRC_HL) {
+								tick+=2;
+							} else if (crc2==CRC_IX) {
+								/* IX */
+								tick+=3;
+							} else if (listarg[1][0]=='(' && listarg[1][strlen(listarg[1])-1]==')') {
+								/* memory */
+								tick+=6;
+							} else tick+=3;
+							break;
+						case CRC_IX:
+							/* memory / value */
+							if (listarg[1][0]=='(' && listarg[1][strlen(listarg[1])-1]==')') tick+=6; else tick+=4;
+							break;
+
+						case CRC_MBC:
+						case CRC_MDE:
+							if (crc2==CRC_A) {
+								tick+=2;
+							} else {
+								MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported LD %s,%s for GETNOP, see documentation\n",listarg[0],listarg[1]);
+							}
+							break;
+						case CRC_MHL:
+							switch (crc2) {
+								case CRC_A:
+								case CRC_B:
+								case CRC_C:
+								case CRC_D:
+								case CRC_E:
+								case CRC_H:
+								case CRC_L:
+									tick+=2;
+									break;
+								default:
+									MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported LD %s,%s for GETNOP, see documentation\n",listarg[0],listarg[1]);
+							}
+							break;
+						default:
+							if (strncmp(listarg[0],"(IX",3)==0) {
+								/* MIX */
+								switch (crc2) {
+									case CRC_A:
+									case CRC_B:
+									case CRC_C:
+									case CRC_D:
+									case CRC_E:
+									case CRC_H:
+									case CRC_L:tick+=5;break;
+									default:tick+=6;
+								}
+							} else if (listarg[0][0]=='(' && listarg[0][strlen(listarg[0])-1]==')') {
+								/* memory */
+								switch (crc2) {
+									case CRC_A:tick+=4;break;
+									case CRC_HL:tick+=5;break;
+									case CRC_BC:
+									case CRC_DE:
+									case CRC_SP:
+									case CRC_IX:tick+=6;break;
+									default:
+										MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported LD %s,%s for GETNOP, see documentation\n",listarg[0],listarg[1]);
+								}
+							} else {
+								MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported LD %s,%s for GETNOP, see documentation\n",listarg[0],listarg[1]);
+							}
+					}
 				} else {
-					MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported opcode [%s] for GETNOP, see documentation about this directive",opcode[idx]);
+					MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported opcode LD for GETNOP, need 2 arguments [%s]\n",zearg);
 				}
 				break;
 
 			default: 
-				MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported opcode [%s] for GETNOP, see documentation about this directive",opcode[idx]);
+				MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported opcode [%s] for GETNOP, see documentation about this directive\n",opcode[idx]);
 		}
 		idx++;
 	}
@@ -8085,14 +8253,14 @@ void _IN(struct s_assenv *ae) {
 		if (strcmp(ae->wl[ae->idx+2].w,"(C)")==0) {
 			switch (GetCRC(ae->wl[ae->idx+1].w)) {
 				case CRC_0:
-				case CRC_F:___output(ae,0xED);___output(ae,0x70);ae->nop+=4;break;
-				case CRC_A:___output(ae,0xED);___output(ae,0x78);ae->nop+=3;break;
-				case CRC_B:___output(ae,0xED);___output(ae,0x40);ae->nop+=4;break;
-				case CRC_C:___output(ae,0xED);___output(ae,0x48);ae->nop+=4;break;
-				case CRC_D:___output(ae,0xED);___output(ae,0x50);ae->nop+=4;break;
-				case CRC_E:___output(ae,0xED);___output(ae,0x58);ae->nop+=4;break;
-				case CRC_H:___output(ae,0xED);___output(ae,0x60);ae->nop+=4;break;
-				case CRC_L:___output(ae,0xED);___output(ae,0x68);ae->nop+=4;break;
+				case CRC_F:___output(ae,0xED);___output(ae,0x70);ae->nop+=4;ae->tick+=12;break;
+				case CRC_A:___output(ae,0xED);___output(ae,0x78);ae->nop+=3;ae->tick+=12;break;
+				case CRC_B:___output(ae,0xED);___output(ae,0x40);ae->nop+=4;ae->tick+=12;break;
+				case CRC_C:___output(ae,0xED);___output(ae,0x48);ae->nop+=4;ae->tick+=12;break;
+				case CRC_D:___output(ae,0xED);___output(ae,0x50);ae->nop+=4;ae->tick+=12;break;
+				case CRC_E:___output(ae,0xED);___output(ae,0x58);ae->nop+=4;ae->tick+=12;break;
+				case CRC_H:___output(ae,0xED);___output(ae,0x60);ae->nop+=4;ae->tick+=12;break;
+				case CRC_L:___output(ae,0xED);___output(ae,0x68);ae->nop+=4;ae->tick+=12;break;
 				default:
 					MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is IN [0,F,A,B,C,D,E,H,L],(C)\n");
 			}
@@ -8100,6 +8268,7 @@ void _IN(struct s_assenv *ae) {
 			___output(ae,0xDB);
 			PushExpression(ae,ae->idx+2,E_EXPRESSION_V8);
 			ae->nop+=3;
+			ae->tick+=11;
 		} else {
 			MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"IN [0,F,A,B,C,D,E,H,L],(C) or IN A,(n) only\n");
 		}
@@ -8113,14 +8282,14 @@ void _OUT(struct s_assenv *ae) {
 	if (!ae->wl[ae->idx].t && !ae->wl[ae->idx+1].t && ae->wl[ae->idx+2].t==1) {
 		if (strcmp(ae->wl[ae->idx+1].w,"(C)")==0) {
 			switch (GetCRC(ae->wl[ae->idx+2].w)) {
-				case CRC_0:___output(ae,0xED);___output(ae,0x71);ae->nop+=4;break;
-				case CRC_A:___output(ae,0xED);___output(ae,0x79);ae->nop+=4;break;
-				case CRC_B:___output(ae,0xED);___output(ae,0x41);ae->nop+=4;break;
-				case CRC_C:___output(ae,0xED);___output(ae,0x49);ae->nop+=4;break;
-				case CRC_D:___output(ae,0xED);___output(ae,0x51);ae->nop+=4;break;
-				case CRC_E:___output(ae,0xED);___output(ae,0x59);ae->nop+=4;break;
-				case CRC_H:___output(ae,0xED);___output(ae,0x61);ae->nop+=4;break;
-				case CRC_L:___output(ae,0xED);___output(ae,0x69);ae->nop+=4;break;
+				case CRC_0:___output(ae,0xED);___output(ae,0x71);ae->nop+=4;ae->tick+=12;break;
+				case CRC_A:___output(ae,0xED);___output(ae,0x79);ae->nop+=4;ae->tick+=12;break;
+				case CRC_B:___output(ae,0xED);___output(ae,0x41);ae->nop+=4;ae->tick+=12;break;
+				case CRC_C:___output(ae,0xED);___output(ae,0x49);ae->nop+=4;ae->tick+=12;break;
+				case CRC_D:___output(ae,0xED);___output(ae,0x51);ae->nop+=4;ae->tick+=12;break;
+				case CRC_E:___output(ae,0xED);___output(ae,0x59);ae->nop+=4;ae->tick+=12;break;
+				case CRC_H:___output(ae,0xED);___output(ae,0x61);ae->nop+=4;ae->tick+=12;break;
+				case CRC_L:___output(ae,0xED);___output(ae,0x69);ae->nop+=4;ae->tick+=12;break;
 				default:
 					MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is OUT (C),[0,A,B,C,D,E,H,L]\n");
 			}
@@ -8128,6 +8297,7 @@ void _OUT(struct s_assenv *ae) {
 			___output(ae,0xD3);
 			PushExpression(ae,ae->idx+1,E_EXPRESSION_V8);
 			ae->nop+=3;
+			ae->tick+=12;
 		} else {
 			MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"OUT (C),[0,A,B,C,D,E,H,L] or OUT (n),A only\n");
 		}
@@ -8142,45 +8312,45 @@ void _EX(struct s_assenv *ae) {
 		switch (GetCRC(ae->wl[ae->idx+1].w)) {
 			case CRC_HL:
 				switch (GetCRC(ae->wl[ae->idx+2].w)) {
-					case CRC_DE:___output(ae,0xEB);ae->nop+=1;break;
-					case CRC_MSP:___output(ae,0xE3);ae->nop+=6;break;
+					case CRC_DE:___output(ae,0xEB);ae->nop+=1;ae->tick+=4;break;
+					case CRC_MSP:___output(ae,0xE3);ae->nop+=6;ae->tick+=19;break;
 					default:
 						MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is EX HL,[(SP),DE]\n");
 				}
 				break;
 			case CRC_AF:
 				if (strcmp(ae->wl[ae->idx+2].w,"AF'")==0) {
-					___output(ae,0x08);ae->nop+=1;
+					___output(ae,0x08);ae->nop+=1;ae->tick+=4;
 				} else {
 					MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is EX AF,AF'\n");
 				}
 				break;
 			case CRC_MSP:
 				switch (GetCRC(ae->wl[ae->idx+2].w)) {
-					case CRC_HL:___output(ae,0xE3);ae->nop+=6;break;
-					case CRC_IX:___output(ae,0xDD);___output(ae,0xE3);ae->nop+=7;break;
-					case CRC_IY:___output(ae,0xFD);___output(ae,0xE3);ae->nop+=7;break;
+					case CRC_HL:___output(ae,0xE3);ae->nop+=6;ae->tick+=19;break;
+					case CRC_IX:___output(ae,0xDD);___output(ae,0xE3);ae->nop+=7;ae->tick+=23;break;
+					case CRC_IY:___output(ae,0xFD);___output(ae,0xE3);ae->nop+=7;ae->tick+=23;break;
 					default:
 						MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is EX (SP),[HL,IX,IY]\n");
 				}
 				break;
 			case CRC_DE:
 				switch (GetCRC(ae->wl[ae->idx+2].w)) {
-					case CRC_HL:___output(ae,0xEB);ae->nop+=1;break;
+					case CRC_HL:___output(ae,0xEB);ae->nop+=1;ae->tick+=4;break;
 					default:
 						MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is EX DE,HL\n");
 				}
 				break;
 			case CRC_IX:
 				switch (GetCRC(ae->wl[ae->idx+2].w)) {
-					case CRC_MSP:___output(ae,0xDD);___output(ae,0xE3);ae->nop+=7;break;
+					case CRC_MSP:___output(ae,0xDD);___output(ae,0xE3);ae->nop+=7;ae->tick+=23;break;
 					default:
 						MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is EX IX,(SP)\n");
 				}
 				break;
 			case CRC_IY:
 				switch (GetCRC(ae->wl[ae->idx+2].w)) {
-					case CRC_MSP:___output(ae,0xFD);___output(ae,0xE3);ae->nop+=7;break;
+					case CRC_MSP:___output(ae,0xFD);___output(ae,0xE3);ae->nop+=7;ae->tick+=23;break;
 					default:
 						MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is EX IY,(SP)\n");
 				}
@@ -8199,18 +8369,18 @@ void _SBC(struct s_assenv *ae) {
 		if (!ae->wl[ae->idx+1].t) ae->idx++;
 		/* do implicit A */
 		switch (GetCRC(ae->wl[ae->idx+1].w)) {
-			case CRC_A:___output(ae,0x9F);ae->nop+=1;break;
-			case CRC_MHL:___output(ae,0x9E);ae->nop+=2;break;
-			case CRC_B:___output(ae,0x98);ae->nop+=1;break;
-			case CRC_C:___output(ae,0x99);ae->nop+=1;break;
-			case CRC_D:___output(ae,0x9A);ae->nop+=1;break;
-			case CRC_E:___output(ae,0x9B);ae->nop+=1;break;
-			case CRC_H:___output(ae,0x9C);ae->nop+=1;break;
-			case CRC_L:___output(ae,0x9D);ae->nop+=1;break;
-			case CRC_IXH:case CRC_HX:case CRC_XH:___output(ae,0xDD);___output(ae,0x9C);ae->nop+=2;break;
-			case CRC_IXL:case CRC_LX:case CRC_XL:___output(ae,0xDD);___output(ae,0x9D);ae->nop+=2;break;
-			case CRC_IYH:case CRC_HY:case CRC_YH:___output(ae,0xFD);___output(ae,0x9C);ae->nop+=2;break;
-			case CRC_IYL:case CRC_LY:case CRC_YL:___output(ae,0xFD);___output(ae,0x9D);ae->nop+=2;break;
+			case CRC_A:___output(ae,0x9F);ae->nop+=1;ae->tick+=4;break;
+			case CRC_MHL:___output(ae,0x9E);ae->nop+=2;ae->tick+=7;break;
+			case CRC_B:___output(ae,0x98);ae->nop+=1;ae->tick+=4;break;
+			case CRC_C:___output(ae,0x99);ae->nop+=1;ae->tick+=4;break;
+			case CRC_D:___output(ae,0x9A);ae->nop+=1;ae->tick+=4;break;
+			case CRC_E:___output(ae,0x9B);ae->nop+=1;ae->tick+=4;break;
+			case CRC_H:___output(ae,0x9C);ae->nop+=1;ae->tick+=4;break;
+			case CRC_L:___output(ae,0x9D);ae->nop+=1;ae->tick+=4;break;
+			case CRC_IXH:case CRC_HX:case CRC_XH:___output(ae,0xDD);___output(ae,0x9C);ae->nop+=2;ae->tick+=8;break;
+			case CRC_IXL:case CRC_LX:case CRC_XL:___output(ae,0xDD);___output(ae,0x9D);ae->nop+=2;ae->tick+=8;break;
+			case CRC_IYH:case CRC_HY:case CRC_YH:___output(ae,0xFD);___output(ae,0x9C);ae->nop+=2;ae->tick+=8;break;
+			case CRC_IYL:case CRC_LY:case CRC_YL:___output(ae,0xFD);___output(ae,0x9D);ae->nop+=2;ae->tick+=8;break;
 			case CRC_IX:case CRC_IY:
 				MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Use SBC with A,B,C,D,E,H,L,XH,XL,YH,YL,(HL),(IX),(IY)\n");
 				ae->idx++;
@@ -8219,15 +8389,15 @@ void _SBC(struct s_assenv *ae) {
 				if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0) {
 					___output(ae,0xDD);___output(ae,0x9E);
 					PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
-					ae->nop+=3;
+					ae->nop+=5;ae->tick+=19;
 				} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0) {
 					___output(ae,0xFD);___output(ae,0x9E);
 					PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
-					ae->nop+=3;
+					ae->nop+=5;ae->tick+=19;
 				} else {
 					___output(ae,0xDE);
 					PushExpression(ae,ae->idx+1,E_EXPRESSION_V8);
-					ae->nop+=2;
+					ae->nop+=2;ae->tick+=7;
 				}
 		}
 		ae->idx++;
@@ -8235,10 +8405,10 @@ void _SBC(struct s_assenv *ae) {
 		switch (GetCRC(ae->wl[ae->idx+1].w)) {
 			case CRC_HL:
 				switch (GetCRC(ae->wl[ae->idx+2].w)) {
-					case CRC_BC:___output(ae,0xED);___output(ae,0x42);ae->nop+=4;break;
-					case CRC_DE:___output(ae,0xED);___output(ae,0x52);ae->nop+=4;break;
-					case CRC_HL:___output(ae,0xED);___output(ae,0x62);ae->nop+=4;break;
-					case CRC_SP:___output(ae,0xED);___output(ae,0x72);ae->nop+=4;break;
+					case CRC_BC:___output(ae,0xED);___output(ae,0x42);ae->nop+=4;ae->tick+=15;break;
+					case CRC_DE:___output(ae,0xED);___output(ae,0x52);ae->nop+=4;ae->tick+=15;break;
+					case CRC_HL:___output(ae,0xED);___output(ae,0x62);ae->nop+=4;ae->tick+=15;break;
+					case CRC_SP:___output(ae,0xED);___output(ae,0x72);ae->nop+=4;ae->tick+=15;break;
 					default:
 						MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is SBC HL,[BC,DE,HL,SP]\n");
 				}
@@ -8257,18 +8427,18 @@ void _ADC(struct s_assenv *ae) {
 		if (!ae->wl[ae->idx+1].t) ae->idx++;
 		/* also implicit A */
 		switch (GetCRC(ae->wl[ae->idx+1].w)) {
-			case CRC_A:___output(ae,0x8F);ae->nop+=1;break;
-			case CRC_MHL:___output(ae,0x8E);ae->nop+=2;break;
-			case CRC_B:___output(ae,0x88);ae->nop+=1;break;
-			case CRC_C:___output(ae,0x89);ae->nop+=1;break;
-			case CRC_D:___output(ae,0x8A);ae->nop+=1;break;
-			case CRC_E:___output(ae,0x8B);ae->nop+=1;break;
-			case CRC_H:___output(ae,0x8C);ae->nop+=1;break;
-			case CRC_L:___output(ae,0x8D);ae->nop+=1;break;
-			case CRC_IXH:case CRC_HX:case CRC_XH:___output(ae,0xDD);___output(ae,0x8C);ae->nop+=2;break;
-			case CRC_IXL:case CRC_LX:case CRC_XL:___output(ae,0xDD);___output(ae,0x8D);ae->nop+=2;break;
-			case CRC_IYH:case CRC_HY:case CRC_YH:___output(ae,0xFD);___output(ae,0x8C);ae->nop+=2;break;
-			case CRC_IYL:case CRC_LY:case CRC_YL:___output(ae,0xFD);___output(ae,0x8D);ae->nop+=2;break;
+			case CRC_A:___output(ae,0x8F);ae->nop+=1;ae->tick+=4;break;
+			case CRC_MHL:___output(ae,0x8E);ae->nop+=2;ae->tick+=7;break;
+			case CRC_B:___output(ae,0x88);ae->nop+=1;ae->tick+=4;break;
+			case CRC_C:___output(ae,0x89);ae->nop+=1;ae->tick+=4;break;
+			case CRC_D:___output(ae,0x8A);ae->nop+=1;ae->tick+=4;break;
+			case CRC_E:___output(ae,0x8B);ae->nop+=1;ae->tick+=4;break;
+			case CRC_H:___output(ae,0x8C);ae->nop+=1;ae->tick+=4;break;
+			case CRC_L:___output(ae,0x8D);ae->nop+=1;ae->tick+=4;break;
+			case CRC_IXH:case CRC_HX:case CRC_XH:___output(ae,0xDD);___output(ae,0x8C);ae->nop+=2;ae->tick+=8;break;
+			case CRC_IXL:case CRC_LX:case CRC_XL:___output(ae,0xDD);___output(ae,0x8D);ae->nop+=2;ae->tick+=8;break;
+			case CRC_IYH:case CRC_HY:case CRC_YH:___output(ae,0xFD);___output(ae,0x8C);ae->nop+=2;ae->tick+=8;break;
+			case CRC_IYL:case CRC_LY:case CRC_YL:___output(ae,0xFD);___output(ae,0x8D);ae->nop+=2;ae->tick+=8;break;
 			case CRC_IX:case CRC_IY:
 				MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Use ADC with A,B,C,D,E,H,L,XH,XL,YH,YL,(HL),(IX),(IY)\n");
 				ae->idx++;
@@ -8277,15 +8447,15 @@ void _ADC(struct s_assenv *ae) {
 				if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0) {
 					___output(ae,0xDD);___output(ae,0x8E);
 					PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
-					ae->nop+=3;
+					ae->nop+=5;ae->tick+=19;
 				} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0) {
 					___output(ae,0xFD);___output(ae,0x8E);
 					PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
-					ae->nop+=3;
+					ae->nop+=5;ae->tick+=19;
 				} else {
 					___output(ae,0xCE);
 					PushExpression(ae,ae->idx+1,E_EXPRESSION_V8);
-					ae->nop+=2;
+					ae->nop+=2;ae->tick+=7;
 				}
 		}
 		ae->idx++;
@@ -8293,10 +8463,10 @@ void _ADC(struct s_assenv *ae) {
 		switch (GetCRC(ae->wl[ae->idx+1].w)) {
 			case CRC_HL:
 				switch (GetCRC(ae->wl[ae->idx+2].w)) {
-					case CRC_BC:___output(ae,0xED);___output(ae,0x4A);ae->nop+=4;break;
-					case CRC_DE:___output(ae,0xED);___output(ae,0x5A);ae->nop+=4;break;
-					case CRC_HL:___output(ae,0xED);___output(ae,0x6A);ae->nop+=4;break;
-					case CRC_SP:___output(ae,0xED);___output(ae,0x7A);ae->nop+=4;break;
+					case CRC_BC:___output(ae,0xED);___output(ae,0x4A);ae->nop+=4;ae->tick+=15;break;
+					case CRC_DE:___output(ae,0xED);___output(ae,0x5A);ae->nop+=4;ae->tick+=15;break;
+					case CRC_HL:___output(ae,0xED);___output(ae,0x6A);ae->nop+=4;ae->tick+=15;break;
+					case CRC_SP:___output(ae,0xED);___output(ae,0x7A);ae->nop+=4;ae->tick+=15;break;
 					default:
 						MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is ADC HL,[BC,DE,HL,SP]\n");
 				}
@@ -8315,18 +8485,18 @@ void _ADD(struct s_assenv *ae) {
 		if (!ae->wl[ae->idx+1].t) ae->idx++;
 		/* also implicit A */
 		switch (GetCRC(ae->wl[ae->idx+1].w)) {
-			case CRC_A:___output(ae,0x87);ae->nop+=1;break;
-			case CRC_MHL:___output(ae,0x86);ae->nop+=2;break;
-			case CRC_B:___output(ae,0x80);ae->nop+=1;break;
-			case CRC_C:___output(ae,0x81);ae->nop+=1;break;
-			case CRC_D:___output(ae,0x82);ae->nop+=1;break;
-			case CRC_E:___output(ae,0x83);ae->nop+=1;break;
-			case CRC_H:___output(ae,0x84);ae->nop+=1;break;
-			case CRC_L:___output(ae,0x85);ae->nop+=1;break;
-			case CRC_IXH:case CRC_HX:case CRC_XH:___output(ae,0xDD);___output(ae,0x84);ae->nop+=2;break;
-			case CRC_IXL:case CRC_LX:case CRC_XL:___output(ae,0xDD);___output(ae,0x85);ae->nop+=2;break;
-			case CRC_IYH:case CRC_HY:case CRC_YH:___output(ae,0xFD);___output(ae,0x84);ae->nop+=2;break;
-			case CRC_IYL:case CRC_LY:case CRC_YL:___output(ae,0xFD);___output(ae,0x85);ae->nop+=2;break;
+			case CRC_A:___output(ae,0x87);ae->nop+=1;ae->tick+=4;break;
+			case CRC_MHL:___output(ae,0x86);ae->nop+=2;ae->tick+=7;break;
+			case CRC_B:___output(ae,0x80);ae->nop+=1;ae->tick+=4;break;
+			case CRC_C:___output(ae,0x81);ae->nop+=1;ae->tick+=4;break;
+			case CRC_D:___output(ae,0x82);ae->nop+=1;ae->tick+=4;break;
+			case CRC_E:___output(ae,0x83);ae->nop+=1;ae->tick+=4;break;
+			case CRC_H:___output(ae,0x84);ae->nop+=1;ae->tick+=4;break;
+			case CRC_L:___output(ae,0x85);ae->nop+=1;ae->tick+=4;break;
+			case CRC_IXH:case CRC_HX:case CRC_XH:___output(ae,0xDD);___output(ae,0x84);ae->nop+=2;ae->tick+=8;break;
+			case CRC_IXL:case CRC_LX:case CRC_XL:___output(ae,0xDD);___output(ae,0x85);ae->nop+=2;ae->tick+=8;break;
+			case CRC_IYH:case CRC_HY:case CRC_YH:___output(ae,0xFD);___output(ae,0x84);ae->nop+=2;ae->tick+=8;break;
+			case CRC_IYL:case CRC_LY:case CRC_YL:___output(ae,0xFD);___output(ae,0x85);ae->nop+=2;ae->tick+=8;break;
 			case CRC_IX:case CRC_IY:
 				MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Use ADD with A,B,C,D,E,H,L,XH,XL,YH,YL,(HL),(IX),(IY)\n");
 				ae->idx++;
@@ -8335,15 +8505,15 @@ void _ADD(struct s_assenv *ae) {
 				if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0) {
 					___output(ae,0xDD);___output(ae,0x86);
 					PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
-					ae->nop+=5;
+					ae->nop+=5;ae->tick+=19;
 				} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0) {
 					___output(ae,0xFD);___output(ae,0x86);
 					PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
-					ae->nop+=5;
+					ae->nop+=5;ae->tick+=19;
 				} else {
 					___output(ae,0xC6);
 					PushExpression(ae,ae->idx+1,E_EXPRESSION_V8);
-					ae->nop+=2;
+					ae->nop+=2;ae->tick+=7;
 				}
 		}
 		ae->idx++;
@@ -8351,30 +8521,30 @@ void _ADD(struct s_assenv *ae) {
 		switch (GetCRC(ae->wl[ae->idx+1].w)) {
 			case CRC_HL:
 				switch (GetCRC(ae->wl[ae->idx+2].w)) {
-					case CRC_BC:___output(ae,0x09);ae->nop+=3;break;
-					case CRC_DE:___output(ae,0x19);ae->nop+=3;break;
-					case CRC_HL:___output(ae,0x29);ae->nop+=3;break;
-					case CRC_SP:___output(ae,0x39);ae->nop+=3;break;
+					case CRC_BC:___output(ae,0x09);ae->nop+=3;ae->tick+=11;break;
+					case CRC_DE:___output(ae,0x19);ae->nop+=3;ae->tick+=11;break;
+					case CRC_HL:___output(ae,0x29);ae->nop+=3;ae->tick+=11;break;
+					case CRC_SP:___output(ae,0x39);ae->nop+=3;ae->tick+=11;break;
 					default:
 						MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is ADD HL,[BC,DE,HL,SP]\n");
 				}
 				break;
 			case CRC_IX:
 				switch (GetCRC(ae->wl[ae->idx+2].w)) {
-					case CRC_BC:___output(ae,0xDD);___output(ae,0x09);ae->nop+=4;break;
-					case CRC_DE:___output(ae,0xDD);___output(ae,0x19);ae->nop+=4;break;
-					case CRC_IX:___output(ae,0xDD);___output(ae,0x29);ae->nop+=4;break;
-					case CRC_SP:___output(ae,0xDD);___output(ae,0x39);ae->nop+=4;break;
+					case CRC_BC:___output(ae,0xDD);___output(ae,0x09);ae->nop+=4;ae->tick+=15;break;
+					case CRC_DE:___output(ae,0xDD);___output(ae,0x19);ae->nop+=4;ae->tick+=15;break;
+					case CRC_IX:___output(ae,0xDD);___output(ae,0x29);ae->nop+=4;ae->tick+=15;break;
+					case CRC_SP:___output(ae,0xDD);___output(ae,0x39);ae->nop+=4;ae->tick+=15;break;
 					default:
 						MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is ADD IX,[BC,DE,IX,SP]\n");
 				}
 				break;
 			case CRC_IY:
 				switch (GetCRC(ae->wl[ae->idx+2].w)) {
-					case CRC_BC:___output(ae,0xFD);___output(ae,0x09);ae->nop+=4;break;
-					case CRC_DE:___output(ae,0xFD);___output(ae,0x19);ae->nop+=4;break;
-					case CRC_IY:___output(ae,0xFD);___output(ae,0x29);ae->nop+=4;break;
-					case CRC_SP:___output(ae,0xFD);___output(ae,0x39);ae->nop+=4;break;
+					case CRC_BC:___output(ae,0xFD);___output(ae,0x09);ae->nop+=4;ae->tick+=15;break;
+					case CRC_DE:___output(ae,0xFD);___output(ae,0x19);ae->nop+=4;ae->tick+=15;break;
+					case CRC_IY:___output(ae,0xFD);___output(ae,0x29);ae->nop+=4;ae->tick+=15;break;
+					case CRC_SP:___output(ae,0xFD);___output(ae,0x39);ae->nop+=4;ae->tick+=15;break;
 					default:
 						MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is ADD IY,[BC,DE,IY,SP]\n");
 				}
@@ -8393,31 +8563,31 @@ void _CP(struct s_assenv *ae) {
 		if (!ae->wl[ae->idx+1].t) ae->idx++;
 		/* also implicit A */
 		switch (GetCRC(ae->wl[ae->idx+1].w)) {
-			case CRC_A:___output(ae,0xBF);ae->nop+=1;break;
-			case CRC_MHL:___output(ae,0xBE);ae->nop+=2;break;
-			case CRC_B:___output(ae,0xB8);ae->nop+=1;break;
-			case CRC_C:___output(ae,0xB9);ae->nop+=1;break;
-			case CRC_D:___output(ae,0xBA);ae->nop+=1;break;
-			case CRC_E:___output(ae,0xBB);ae->nop+=1;break;
-			case CRC_H:___output(ae,0xBC);ae->nop+=1;break;
-			case CRC_L:___output(ae,0xBD);ae->nop+=1;break;
-			case CRC_IXH:case CRC_HX:case CRC_XH:___output(ae,0xDD);___output(ae,0xBC);ae->nop+=2;break;
-			case CRC_IXL:case CRC_LX:case CRC_XL:___output(ae,0xDD);___output(ae,0xBD);ae->nop+=2;break;
-			case CRC_IYH:case CRC_HY:case CRC_YH:___output(ae,0xFD);___output(ae,0xBC);ae->nop+=2;break;
-			case CRC_IYL:case CRC_LY:case CRC_YL:___output(ae,0xFD);___output(ae,0xBD);ae->nop+=2;break;
+			case CRC_A:___output(ae,0xBF);ae->nop+=1;ae->tick+=4;break;
+			case CRC_MHL:___output(ae,0xBE);ae->nop+=2;ae->tick+=7;break;
+			case CRC_B:___output(ae,0xB8);ae->nop+=1;ae->tick+=4;break;
+			case CRC_C:___output(ae,0xB9);ae->nop+=1;ae->tick+=4;break;
+			case CRC_D:___output(ae,0xBA);ae->nop+=1;ae->tick+=4;break;
+			case CRC_E:___output(ae,0xBB);ae->nop+=1;ae->tick+=4;break;
+			case CRC_H:___output(ae,0xBC);ae->nop+=1;ae->tick+=4;break;
+			case CRC_L:___output(ae,0xBD);ae->nop+=1;ae->tick+=4;break;
+			case CRC_IXH:case CRC_HX:case CRC_XH:___output(ae,0xDD);___output(ae,0xBC);ae->nop+=2;ae->tick+=8;break;
+			case CRC_IXL:case CRC_LX:case CRC_XL:___output(ae,0xDD);___output(ae,0xBD);ae->nop+=2;ae->tick+=8;break;
+			case CRC_IYH:case CRC_HY:case CRC_YH:___output(ae,0xFD);___output(ae,0xBC);ae->nop+=2;ae->tick+=8;break;
+			case CRC_IYL:case CRC_LY:case CRC_YL:___output(ae,0xFD);___output(ae,0xBD);ae->nop+=2;ae->tick+=8;break;
 			default:
 				if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0) {
 					___output(ae,0xDD);___output(ae,0xBE);
 					PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
-					ae->nop+=5;
+					ae->nop+=5;ae->tick+=19;
 				} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0) {
 					___output(ae,0xFD);___output(ae,0xBE);
 					PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
-					ae->nop+=5;
+					ae->nop+=5;ae->tick+=19;
 				} else {
 					___output(ae,0xFE);
 					PushExpression(ae,ae->idx+1,E_EXPRESSION_V8);
-					ae->nop+=2;
+					ae->nop+=2;ae->tick+=7;
 				}
 		}
 		ae->idx++;
@@ -8429,21 +8599,21 @@ void _CP(struct s_assenv *ae) {
 void _RET(struct s_assenv *ae) {
 	if (!ae->wl[ae->idx].t && ae->wl[ae->idx+1].t==1) {
 		switch (GetCRC(ae->wl[ae->idx+1].w)) {
-			case CRC_NZ:___output(ae,0xC0);ae->nop+=2;break;
-			case CRC_Z:___output(ae,0xC8);ae->nop+=2;break;
-			case CRC_C:___output(ae,0xD8);ae->nop+=2;break;
-			case CRC_NC:___output(ae,0xD0);ae->nop+=2;break;
-			case CRC_PE:___output(ae,0xE8);ae->nop+=2;break;
-			case CRC_PO:___output(ae,0xE0);ae->nop+=2;break;
-			case CRC_P:___output(ae,0xF0);ae->nop+=2;break;
-			case CRC_M:___output(ae,0xF8);ae->nop+=2;break;
+			case CRC_NZ:___output(ae,0xC0);ae->nop+=2;ae->tick+=5;break;
+			case CRC_Z:___output(ae,0xC8);ae->nop+=2;ae->tick+=5;break;
+			case CRC_C:___output(ae,0xD8);ae->nop+=2;ae->tick+=5;break;
+			case CRC_NC:___output(ae,0xD0);ae->nop+=2;ae->tick+=5;break;
+			case CRC_PE:___output(ae,0xE8);ae->nop+=2;ae->tick+=5;break;
+			case CRC_PO:___output(ae,0xE0);ae->nop+=2;ae->tick+=5;break;
+			case CRC_P:___output(ae,0xF0);ae->nop+=2;ae->tick+=5;break;
+			case CRC_M:___output(ae,0xF8);ae->nop+=2;ae->tick+=5;break;
 			default:
 				MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Available flags for RET are C,NC,Z,NZ,PE,PO,P,M\n");
 		}
 		ae->idx++;
 	} else if (ae->wl[ae->idx].t==1) {
 		___output(ae,0xC9);
-		ae->nop+=3;
+		ae->nop+=3;ae->tick+=10;
 	} else {
 		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Invalid RET syntax\n");
 	}
@@ -8452,14 +8622,14 @@ void _RET(struct s_assenv *ae) {
 void _CALL(struct s_assenv *ae) {
 	if (!ae->wl[ae->idx].t && ae->wl[ae->idx+1].t==0 && ae->wl[ae->idx+2].t==1) {
 		switch (GetCRC(ae->wl[ae->idx+1].w)) {
-			case CRC_C:___output(ae,0xDC);ae->nop+=3;break;
-			case CRC_Z:___output(ae,0xCC);ae->nop+=3;break;
-			case CRC_NZ:___output(ae,0xC4);ae->nop+=3;break;
-			case CRC_NC:___output(ae,0xD4);ae->nop+=3;break;
-			case CRC_PE:___output(ae,0xEC);ae->nop+=3;break;
-			case CRC_PO:___output(ae,0xE4);ae->nop+=3;break;
-			case CRC_P:___output(ae,0xF4);ae->nop+=3;break;
-			case CRC_M:___output(ae,0xFC);ae->nop+=3;break;
+			case CRC_C:___output(ae,0xDC);ae->nop+=3;ae->tick+=10;break;
+			case CRC_Z:___output(ae,0xCC);ae->nop+=3;ae->tick+=10;break;
+			case CRC_NZ:___output(ae,0xC4);ae->nop+=3;ae->tick+=10;break;
+			case CRC_NC:___output(ae,0xD4);ae->nop+=3;ae->tick+=10;break;
+			case CRC_PE:___output(ae,0xEC);ae->nop+=3;ae->tick+=10;break;
+			case CRC_PO:___output(ae,0xE4);ae->nop+=3;ae->tick+=10;break;
+			case CRC_P:___output(ae,0xF4);ae->nop+=3;ae->tick+=10;break;
+			case CRC_M:___output(ae,0xFC);ae->nop+=3;ae->tick+=10;break;
 			default:
 				MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Available flags for CALL are C,NC,Z,NZ,PE,PO,P,M\n");
 		}
@@ -8469,7 +8639,7 @@ void _CALL(struct s_assenv *ae) {
 		___output(ae,0xCD);
 		PushExpression(ae,ae->idx+1,E_EXPRESSION_V16C);
 		ae->idx++;
-		ae->nop+=5;
+		ae->nop+=5;ae->tick+=17;
 	} else {
 		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Invalid CALL syntax\n");
 	}
@@ -8478,10 +8648,10 @@ void _CALL(struct s_assenv *ae) {
 void _JR(struct s_assenv *ae) {
 	if (!ae->wl[ae->idx].t && ae->wl[ae->idx+1].t==0 && ae->wl[ae->idx+2].t==1) {
 		switch (GetCRC(ae->wl[ae->idx+1].w)) {
-			case CRC_NZ:___output(ae,0x20);ae->nop+=2;break;
-			case CRC_C:___output(ae,0x38);ae->nop+=2;break;
-			case CRC_Z:___output(ae,0x28);ae->nop+=2;break;
-			case CRC_NC:___output(ae,0x30);ae->nop+=2;break;
+			case CRC_NZ:___output(ae,0x20);ae->nop+=2;ae->tick+=7;break;
+			case CRC_C:___output(ae,0x38);ae->nop+=2;ae->tick+=7;break;
+			case CRC_Z:___output(ae,0x28);ae->nop+=2;ae->tick+=7;break;
+			case CRC_NC:___output(ae,0x30);ae->nop+=2;ae->tick+=7;break;
 			default:
 				MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Available flags for JR are C,NC,Z,NZ\n");
 		}
@@ -8491,7 +8661,7 @@ void _JR(struct s_assenv *ae) {
 		___output(ae,0x18);
 		PushExpression(ae,ae->idx+1,E_EXPRESSION_J8);
 		ae->idx++;
-		ae->nop+=3;
+		ae->nop+=3;ae->tick+=12;
 	} else {
 		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Invalid JR syntax\n");
 	}
@@ -8500,14 +8670,14 @@ void _JR(struct s_assenv *ae) {
 void _JP(struct s_assenv *ae) {
 	if (!ae->wl[ae->idx].t && ae->wl[ae->idx+1].t==0 && ae->wl[ae->idx+2].t==1) {
 		switch (GetCRC(ae->wl[ae->idx+1].w)) {
-			case CRC_C:___output(ae,0xDA);ae->nop+=3;break;
-			case CRC_Z:___output(ae,0xCA);ae->nop+=3;break;
-			case CRC_NZ:___output(ae,0xC2);ae->nop+=3;break;
-			case CRC_NC:___output(ae,0xD2);ae->nop+=3;break;
-			case CRC_PE:___output(ae,0xEA);ae->nop+=3;break;
-			case CRC_PO:___output(ae,0xE2);ae->nop+=3;break;
-			case CRC_P:___output(ae,0xF2);ae->nop+=3;break;
-			case CRC_M:___output(ae,0xFA);ae->nop+=3;break;
+			case CRC_C:___output(ae,0xDA);ae->nop+=3;ae->tick+=10;break;
+			case CRC_Z:___output(ae,0xCA);ae->nop+=3;ae->tick+=10;break;
+			case CRC_NZ:___output(ae,0xC2);ae->nop+=3;ae->tick+=10;break;
+			case CRC_NC:___output(ae,0xD2);ae->nop+=3;ae->tick+=10;break;
+			case CRC_PE:___output(ae,0xEA);ae->nop+=3;ae->tick+=10;break;
+			case CRC_PO:___output(ae,0xE2);ae->nop+=3;ae->tick+=10;break;
+			case CRC_P:___output(ae,0xF2);ae->nop+=3;ae->tick+=10;break;
+			case CRC_M:___output(ae,0xFA);ae->nop+=3;ae->tick+=10;break;
 			default:
 				MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Available flags for JP are C,NC,Z,NZ,PE,PO,P,M\n");
 		}
@@ -8519,15 +8689,17 @@ void _JP(struct s_assenv *ae) {
 		ae->idx+=2;
 	} else if (!ae->wl[ae->idx].t && ae->wl[ae->idx+1].t==1) {
 		switch (GetCRC(ae->wl[ae->idx+1].w)) {
-			case CRC_HL:case CRC_MHL:___output(ae,0xE9);ae->nop+=1;break;
-			case CRC_IX:case CRC_MIX:___output(ae,0xDD);___output(ae,0xE9);ae->nop+=2;break;
-			case CRC_IY:case CRC_MIY:___output(ae,0xFD);___output(ae,0xE9);ae->nop+=2;break;
+			case CRC_HL:case CRC_MHL:___output(ae,0xE9);ae->nop+=1;ae->tick+=4;break;
+			case CRC_IX:case CRC_MIX:___output(ae,0xDD);___output(ae,0xE9);ae->nop+=2;ae->tick+=8;break;
+			case CRC_IY:case CRC_MIY:___output(ae,0xFD);___output(ae,0xE9);ae->nop+=2;ae->tick+=8;break;
 			default:
 				if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0 || strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0) {
 					MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"JP (IX) or JP (IY) only\n");
 				} else {
 					___output(ae,0xC3);
 					PushExpression(ae,ae->idx+1,E_EXPRESSION_V16);
+					ae->tick+=10;
+					ae->nop+=3;
 				}
 		}
 		ae->idx++;
@@ -8541,33 +8713,33 @@ void _DEC(struct s_assenv *ae) {
 	if (!ae->wl[ae->idx].t) {
 		do {
 			switch (GetCRC(ae->wl[ae->idx+1].w)) {
-				case CRC_A:___output(ae,0x3D);ae->nop+=1;break;
-				case CRC_B:___output(ae,0x05);ae->nop+=1;break;
-				case CRC_C:___output(ae,0x0D);ae->nop+=1;break;
-				case CRC_D:___output(ae,0x15);ae->nop+=1;break;
-				case CRC_E:___output(ae,0x1D);ae->nop+=1;break;
-				case CRC_H:___output(ae,0x25);ae->nop+=1;break;
-				case CRC_L:___output(ae,0x2D);ae->nop+=1;break;
-				case CRC_IXH:case CRC_HX:case CRC_XH:___output(ae,0xDD);___output(ae,0x25);ae->nop+=2;break;
-				case CRC_IXL:case CRC_LX:case CRC_XL:___output(ae,0xDD);___output(ae,0x2D);ae->nop+=2;break;
-				case CRC_IYH:case CRC_HY:case CRC_YH:___output(ae,0xFD);___output(ae,0x25);ae->nop+=2;break;
-				case CRC_IYL:case CRC_LY:case CRC_YL:___output(ae,0xFD);___output(ae,0x2D);ae->nop+=2;break;
-				case CRC_BC:___output(ae,0x0B);ae->nop+=2;break;
-				case CRC_DE:___output(ae,0x1B);ae->nop+=2;break;
-				case CRC_HL:___output(ae,0x2B);ae->nop+=2;break;
-				case CRC_IX:___output(ae,0xDD);___output(ae,0x2B);ae->nop+=3;break;
-				case CRC_IY:___output(ae,0xFD);___output(ae,0x2B);ae->nop+=3;break;
-				case CRC_SP:___output(ae,0x3B);ae->nop+=2;break;
-				case CRC_MHL:___output(ae,0x35);ae->nop+=3;break;
+				case CRC_A:___output(ae,0x3D);ae->nop+=1;ae->tick+=4;break;
+				case CRC_B:___output(ae,0x05);ae->nop+=1;ae->tick+=4;break;
+				case CRC_C:___output(ae,0x0D);ae->nop+=1;ae->tick+=4;break;
+				case CRC_D:___output(ae,0x15);ae->nop+=1;ae->tick+=4;break;
+				case CRC_E:___output(ae,0x1D);ae->nop+=1;ae->tick+=4;break;
+				case CRC_H:___output(ae,0x25);ae->nop+=1;ae->tick+=4;break;
+				case CRC_L:___output(ae,0x2D);ae->nop+=1;ae->tick+=4;break;
+				case CRC_IXH:case CRC_HX:case CRC_XH:___output(ae,0xDD);___output(ae,0x25);ae->nop+=2;ae->tick+=8;break;
+				case CRC_IXL:case CRC_LX:case CRC_XL:___output(ae,0xDD);___output(ae,0x2D);ae->nop+=2;ae->tick+=8;break;
+				case CRC_IYH:case CRC_HY:case CRC_YH:___output(ae,0xFD);___output(ae,0x25);ae->nop+=2;ae->tick+=8;break;
+				case CRC_IYL:case CRC_LY:case CRC_YL:___output(ae,0xFD);___output(ae,0x2D);ae->nop+=2;ae->tick+=8;break;
+				case CRC_BC:___output(ae,0x0B);ae->nop+=2;ae->tick+=6;break;
+				case CRC_DE:___output(ae,0x1B);ae->nop+=2;ae->tick+=6;break;
+				case CRC_HL:___output(ae,0x2B);ae->nop+=2;ae->tick+=6;break;
+				case CRC_IX:___output(ae,0xDD);___output(ae,0x2B);ae->nop+=3;ae->tick+=10;break;
+				case CRC_IY:___output(ae,0xFD);___output(ae,0x2B);ae->nop+=3;ae->tick+=10;break;
+				case CRC_SP:___output(ae,0x3B);ae->nop+=2;ae->tick+=10;break;
+				case CRC_MHL:___output(ae,0x35);ae->nop+=3;ae->tick+=11;break;
 				default:
 					if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0) {
 						___output(ae,0xDD);___output(ae,0x35);
 						PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
-						ae->nop+=6;
+						ae->nop+=6;ae->tick+=23;
 					} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0) {
 						___output(ae,0xFD);___output(ae,0x35);
 						PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
-						ae->nop+=6;
+						ae->nop+=6;ae->tick+=23;
 					} else {
 						MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Use DEC with A,B,C,D,E,H,L,XH,XL,YH,YL,BC,DE,HL,SP,(HL),(IX),(IY)\n");
 					}
@@ -8582,33 +8754,33 @@ void _INC(struct s_assenv *ae) {
 	if (!ae->wl[ae->idx].t) {
 		do {
 			switch (GetCRC(ae->wl[ae->idx+1].w)) {
-				case CRC_A:___output(ae,0x3C);ae->nop+=1;break;
-				case CRC_B:___output(ae,0x04);ae->nop+=1;break;
-				case CRC_C:___output(ae,0x0C);ae->nop+=1;break;
-				case CRC_D:___output(ae,0x14);ae->nop+=1;break;
-				case CRC_E:___output(ae,0x1C);ae->nop+=1;break;
-				case CRC_H:___output(ae,0x24);ae->nop+=1;break;
-				case CRC_L:___output(ae,0x2C);ae->nop+=1;break;
-				case CRC_IXH:case CRC_HX:case CRC_XH:___output(ae,0xDD);___output(ae,0x24);ae->nop+=2;break;
-				case CRC_IXL:case CRC_LX:case CRC_XL:___output(ae,0xDD);___output(ae,0x2C);ae->nop+=2;break;
-				case CRC_IYH:case CRC_HY:case CRC_YH:___output(ae,0xFD);___output(ae,0x24);ae->nop+=2;break;
-				case CRC_IYL:case CRC_LY:case CRC_YL:___output(ae,0xFD);___output(ae,0x2C);ae->nop+=2;break;
-				case CRC_BC:___output(ae,0x03);ae->nop+=2;break;
-				case CRC_DE:___output(ae,0x13);ae->nop+=2;break;
-				case CRC_HL:___output(ae,0x23);ae->nop+=2;break;
-				case CRC_IX:___output(ae,0xDD);___output(ae,0x23);ae->nop+=3;break;
-				case CRC_IY:___output(ae,0xFD);___output(ae,0x23);ae->nop+=3;break;
-				case CRC_SP:___output(ae,0x33);ae->nop+=2;break;
-				case CRC_MHL:___output(ae,0x34);ae->nop+=3;break;
+				case CRC_A:___output(ae,0x3C);ae->nop+=1;ae->tick+=4;break;
+				case CRC_B:___output(ae,0x04);ae->nop+=1;ae->tick+=4;break;
+				case CRC_C:___output(ae,0x0C);ae->nop+=1;ae->tick+=4;break;
+				case CRC_D:___output(ae,0x14);ae->nop+=1;ae->tick+=4;break;
+				case CRC_E:___output(ae,0x1C);ae->nop+=1;ae->tick+=4;break;
+				case CRC_H:___output(ae,0x24);ae->nop+=1;ae->tick+=4;break;
+				case CRC_L:___output(ae,0x2C);ae->nop+=1;ae->tick+=4;break;
+				case CRC_IXH:case CRC_HX:case CRC_XH:___output(ae,0xDD);___output(ae,0x24);ae->nop+=2;ae->tick+=8;break;
+				case CRC_IXL:case CRC_LX:case CRC_XL:___output(ae,0xDD);___output(ae,0x2C);ae->nop+=2;ae->tick+=8;break;
+				case CRC_IYH:case CRC_HY:case CRC_YH:___output(ae,0xFD);___output(ae,0x24);ae->nop+=2;ae->tick+=8;break;
+				case CRC_IYL:case CRC_LY:case CRC_YL:___output(ae,0xFD);___output(ae,0x2C);ae->nop+=2;ae->tick+=8;break;
+				case CRC_BC:___output(ae,0x03);ae->nop+=2;ae->tick+=6;break;
+				case CRC_DE:___output(ae,0x13);ae->nop+=2;ae->tick+=6;break;
+				case CRC_HL:___output(ae,0x23);ae->nop+=2;ae->tick+=6;break;
+				case CRC_IX:___output(ae,0xDD);___output(ae,0x23);ae->nop+=3;ae->tick+=10;break;
+				case CRC_IY:___output(ae,0xFD);___output(ae,0x23);ae->nop+=3;ae->tick+=10;break;
+				case CRC_SP:___output(ae,0x33);ae->nop+=2;ae->tick+=6;break;
+				case CRC_MHL:___output(ae,0x34);ae->nop+=3;ae->tick+=11;break;
 				default:
 					if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0) {
 						___output(ae,0xDD);___output(ae,0x34);
 						PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
-						ae->nop+=6;
+						ae->nop+=6;ae->tick+=23;
 					} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0) {
 						___output(ae,0xFD);___output(ae,0x34);
 						PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
-						ae->nop+=6;
+						ae->nop+=6;ae->tick+=23;
 					} else {
 						MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Use INC with A,B,C,D,E,H,L,XH,XL,YH,YL,BC,DE,HL,SP,(HL),(IX),(IY)\n");
 					}
@@ -8629,18 +8801,18 @@ void _SUB(struct s_assenv *ae) {
 	if ((!ae->wl[ae->idx].t && ae->wl[ae->idx+1].t==1)  || ((!ae->wl[ae->idx].t && !ae->wl[ae->idx+1].t && ae->wl[ae->idx+2].t==1) && strcmp(ae->wl[ae->idx+1].w,"A")==0)) {
 		if (!ae->wl[ae->idx+1].t) ae->idx++;
 		switch (GetCRC(ae->wl[ae->idx+1].w)) {
-			case CRC_A:___output(ae,OPCODE+7);ae->nop+=1;break;
-			case CRC_MHL:___output(ae,OPCODE+6);ae->nop+=2;break;
-			case CRC_B:___output(ae,OPCODE);ae->nop+=1;break;
-			case CRC_C:___output(ae,OPCODE+1);ae->nop+=1;break;
-			case CRC_D:___output(ae,OPCODE+2);ae->nop+=1;break;
-			case CRC_E:___output(ae,OPCODE+3);ae->nop+=1;break;
-			case CRC_H:___output(ae,OPCODE+4);ae->nop+=1;break;
-			case CRC_L:___output(ae,OPCODE+5);ae->nop+=1;break;
-			case CRC_IXH:case CRC_HX:case CRC_XH:___output(ae,0xDD);___output(ae,OPCODE+4);ae->nop+=2;break;
-			case CRC_IXL:case CRC_LX:case CRC_XL:___output(ae,0xDD);___output(ae,OPCODE+5);ae->nop+=2;break;
-			case CRC_IYH:case CRC_HY:case CRC_YH:___output(ae,0xFD);___output(ae,OPCODE+4);ae->nop+=2;break;
-			case CRC_IYL:case CRC_LY:case CRC_YL:___output(ae,0xFD);___output(ae,OPCODE+5);ae->nop+=2;break;
+			case CRC_A:___output(ae,OPCODE+7);ae->nop+=1;ae->tick+=4;break;
+			case CRC_MHL:___output(ae,OPCODE+6);ae->nop+=2;ae->tick+=7;break;
+			case CRC_B:___output(ae,OPCODE);ae->nop+=1;ae->tick+=4;break;
+			case CRC_C:___output(ae,OPCODE+1);ae->nop+=1;ae->tick+=4;break;
+			case CRC_D:___output(ae,OPCODE+2);ae->nop+=1;ae->tick+=4;break;
+			case CRC_E:___output(ae,OPCODE+3);ae->nop+=1;ae->tick+=4;break;
+			case CRC_H:___output(ae,OPCODE+4);ae->nop+=1;ae->tick+=4;break;
+			case CRC_L:___output(ae,OPCODE+5);ae->nop+=1;ae->tick+=4;break;
+			case CRC_IXH:case CRC_HX:case CRC_XH:___output(ae,0xDD);___output(ae,OPCODE+4);ae->nop+=2;ae->tick+=8;break;
+			case CRC_IXL:case CRC_LX:case CRC_XL:___output(ae,0xDD);___output(ae,OPCODE+5);ae->nop+=2;ae->tick+=8;break;
+			case CRC_IYH:case CRC_HY:case CRC_YH:___output(ae,0xFD);___output(ae,OPCODE+4);ae->nop+=2;ae->tick+=8;break;
+			case CRC_IYL:case CRC_LY:case CRC_YL:___output(ae,0xFD);___output(ae,OPCODE+5);ae->nop+=2;ae->tick+=8;break;
 			case CRC_IX:case CRC_IY:
 				MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Use SUB with A,B,C,D,E,H,L,XH,XL,YH,YL,(HL),(IX),(IY)\n");
 				ae->idx++;
@@ -8649,15 +8821,15 @@ void _SUB(struct s_assenv *ae) {
 				if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0) {
 					___output(ae,0xDD);___output(ae,OPCODE+6);
 					PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
-					ae->nop+=5;
+					ae->nop+=5;ae->tick+=19;
 				} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0) {
 					___output(ae,0xFD);___output(ae,OPCODE+6);
 					PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
-					ae->nop+=5;
+					ae->nop+=5;ae->tick+=19;
 				} else {
 					___output(ae,0xD6);
 					PushExpression(ae,ae->idx+1,E_EXPRESSION_V8);
-					ae->nop+=2;
+					ae->nop+=2;ae->tick+=7;
 				}
 		}
 		ae->idx++;
@@ -8673,31 +8845,31 @@ void _AND(struct s_assenv *ae) {
 	
 	if (!ae->wl[ae->idx].t && ae->wl[ae->idx+1].t==1) {
 		switch (GetCRC(ae->wl[ae->idx+1].w)) {
-			case CRC_A:___output(ae,OPCODE+7);ae->nop+=1;break;
-			case CRC_MHL:___output(ae,OPCODE+6);ae->nop+=2;break;
-			case CRC_B:___output(ae,OPCODE);ae->nop+=1;break;
-			case CRC_C:___output(ae,OPCODE+1);ae->nop+=1;break;
-			case CRC_D:___output(ae,OPCODE+2);ae->nop+=1;break;
-			case CRC_E:___output(ae,OPCODE+3);ae->nop+=1;break;
-			case CRC_H:___output(ae,OPCODE+4);ae->nop+=1;break;
-			case CRC_L:___output(ae,OPCODE+5);ae->nop+=1;break;
-			case CRC_IXH:case CRC_HX:case CRC_XH:___output(ae,0xDD);___output(ae,OPCODE+4);ae->nop+=2;break;
-			case CRC_IXL:case CRC_LX:case CRC_XL:___output(ae,0xDD);___output(ae,OPCODE+5);ae->nop+=2;break;
-			case CRC_IYH:case CRC_HY:case CRC_YH:___output(ae,0xFD);___output(ae,OPCODE+4);ae->nop+=2;break;
-			case CRC_IYL:case CRC_LY:case CRC_YL:___output(ae,0xFD);___output(ae,OPCODE+5);ae->nop+=2;break;
+			case CRC_A:___output(ae,OPCODE+7);ae->nop+=1;ae->tick+=4;break;
+			case CRC_MHL:___output(ae,OPCODE+6);ae->nop+=2;ae->tick+=7;break;
+			case CRC_B:___output(ae,OPCODE);ae->nop+=1;ae->tick+=4;break;
+			case CRC_C:___output(ae,OPCODE+1);ae->nop+=1;ae->tick+=4;break;
+			case CRC_D:___output(ae,OPCODE+2);ae->nop+=1;ae->tick+=4;break;
+			case CRC_E:___output(ae,OPCODE+3);ae->nop+=1;ae->tick+=4;break;
+			case CRC_H:___output(ae,OPCODE+4);ae->nop+=1;ae->tick+=4;break;
+			case CRC_L:___output(ae,OPCODE+5);ae->nop+=1;ae->tick+=4;break;
+			case CRC_IXH:case CRC_HX:case CRC_XH:___output(ae,0xDD);___output(ae,OPCODE+4);ae->nop+=2;ae->tick+=8;break;
+			case CRC_IXL:case CRC_LX:case CRC_XL:___output(ae,0xDD);___output(ae,OPCODE+5);ae->nop+=2;ae->tick+=8;break;
+			case CRC_IYH:case CRC_HY:case CRC_YH:___output(ae,0xFD);___output(ae,OPCODE+4);ae->nop+=2;ae->tick+=8;break;
+			case CRC_IYL:case CRC_LY:case CRC_YL:___output(ae,0xFD);___output(ae,OPCODE+5);ae->nop+=2;ae->tick+=8;break;
 			default:
 				if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0) {
 					___output(ae,0xDD);___output(ae,OPCODE+6);
 					PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
-					ae->nop+=5;
+					ae->nop+=5;ae->tick+=19;
 				} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0) {
 					___output(ae,0xFD);___output(ae,OPCODE+6);
 					PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
-					ae->nop+=5;
+					ae->nop+=5;ae->tick+=19;
 				} else {
 					___output(ae,0xE6);
 					PushExpression(ae,ae->idx+1,E_EXPRESSION_V8);
-					ae->nop+=2;
+					ae->nop+=2;ae->tick+=7;
 				}
 		}
 		ae->idx++;
@@ -8713,31 +8885,31 @@ void _OR(struct s_assenv *ae) {
 	
 	if (!ae->wl[ae->idx].t && ae->wl[ae->idx+1].t==1) {
 		switch (GetCRC(ae->wl[ae->idx+1].w)) {
-			case CRC_A:___output(ae,OPCODE+7);ae->nop+=1;break;
-			case CRC_MHL:___output(ae,OPCODE+6);ae->nop+=2;break;
-			case CRC_B:___output(ae,OPCODE);ae->nop+=1;break;
-			case CRC_C:___output(ae,OPCODE+1);ae->nop+=1;break;
-			case CRC_D:___output(ae,OPCODE+2);ae->nop+=1;break;
-			case CRC_E:___output(ae,OPCODE+3);ae->nop+=1;break;
-			case CRC_H:___output(ae,OPCODE+4);ae->nop+=1;break;
-			case CRC_L:___output(ae,OPCODE+5);ae->nop+=1;break;
-			case CRC_IXH:case CRC_HX:case CRC_XH:___output(ae,0xDD);___output(ae,OPCODE+4);ae->nop+=2;break;
-			case CRC_IXL:case CRC_LX:case CRC_XL:___output(ae,0xDD);___output(ae,OPCODE+5);ae->nop+=2;break;
-			case CRC_IYH:case CRC_HY:case CRC_YH:___output(ae,0xFD);___output(ae,OPCODE+4);ae->nop+=2;break;
-			case CRC_IYL:case CRC_LY:case CRC_YL:___output(ae,0xFD);___output(ae,OPCODE+5);ae->nop+=2;break;
+			case CRC_A:___output(ae,OPCODE+7);ae->nop+=1;ae->tick+=4;ae->tick+=4;break;
+			case CRC_MHL:___output(ae,OPCODE+6);ae->nop+=2;ae->tick+=7;break;
+			case CRC_B:___output(ae,OPCODE);ae->nop+=1;ae->tick+=4;break;
+			case CRC_C:___output(ae,OPCODE+1);ae->nop+=1;ae->tick+=4;break;
+			case CRC_D:___output(ae,OPCODE+2);ae->nop+=1;ae->tick+=4;break;
+			case CRC_E:___output(ae,OPCODE+3);ae->nop+=1;ae->tick+=4;break;
+			case CRC_H:___output(ae,OPCODE+4);ae->nop+=1;ae->tick+=4;break;
+			case CRC_L:___output(ae,OPCODE+5);ae->nop+=1;ae->tick+=4;break;
+			case CRC_IXH:case CRC_HX:case CRC_XH:___output(ae,0xDD);___output(ae,OPCODE+4);ae->nop+=2;ae->tick+=8;break;
+			case CRC_IXL:case CRC_LX:case CRC_XL:___output(ae,0xDD);___output(ae,OPCODE+5);ae->nop+=2;ae->tick+=8;break;
+			case CRC_IYH:case CRC_HY:case CRC_YH:___output(ae,0xFD);___output(ae,OPCODE+4);ae->nop+=2;ae->tick+=8;break;
+			case CRC_IYL:case CRC_LY:case CRC_YL:___output(ae,0xFD);___output(ae,OPCODE+5);ae->nop+=2;ae->tick+=8;break;
 			default:
 				if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0) {
 					___output(ae,0xDD);___output(ae,OPCODE+6);
 					PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
-					ae->nop+=5;
+					ae->nop+=5;ae->tick+=19;
 				} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0) {
 					___output(ae,0xFD);___output(ae,OPCODE+6);
 					PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
-					ae->nop+=5;
+					ae->nop+=5;ae->tick+=19;
 				} else {
 					___output(ae,0xF6);
 					PushExpression(ae,ae->idx+1,E_EXPRESSION_V8);
-					ae->nop+=2;
+					ae->nop+=2;ae->tick+=7;
 				}
 		}
 		ae->idx++;
@@ -8753,31 +8925,31 @@ void _XOR(struct s_assenv *ae) {
 	
 	if (!ae->wl[ae->idx].t && ae->wl[ae->idx+1].t==1) {
 		switch (GetCRC(ae->wl[ae->idx+1].w)) {
-			case CRC_A:___output(ae,OPCODE+7);ae->nop+=1;break;
-			case CRC_MHL:___output(ae,OPCODE+6);ae->nop+=2;break;
-			case CRC_B:___output(ae,OPCODE);ae->nop+=1;break;
-			case CRC_C:___output(ae,OPCODE+1);ae->nop+=1;break;
-			case CRC_D:___output(ae,OPCODE+2);ae->nop+=1;break;
-			case CRC_E:___output(ae,OPCODE+3);ae->nop+=1;break;
-			case CRC_H:___output(ae,OPCODE+4);ae->nop+=1;break;
-			case CRC_L:___output(ae,OPCODE+5);ae->nop+=1;break;
-			case CRC_IXH:case CRC_HX:case CRC_XH:___output(ae,0xDD);___output(ae,OPCODE+4);ae->nop+=2;break;
-			case CRC_IXL:case CRC_LX:case CRC_XL:___output(ae,0xDD);___output(ae,OPCODE+5);ae->nop+=2;break;
-			case CRC_IYH:case CRC_HY:case CRC_YH:___output(ae,0xFD);___output(ae,OPCODE+4);ae->nop+=2;break;
-			case CRC_IYL:case CRC_LY:case CRC_YL:___output(ae,0xFD);___output(ae,OPCODE+5);ae->nop+=2;break;
+			case CRC_A:___output(ae,OPCODE+7);ae->nop+=1;ae->tick+=4;break;
+			case CRC_MHL:___output(ae,OPCODE+6);ae->nop+=2;ae->tick+=7;break;
+			case CRC_B:___output(ae,OPCODE);ae->nop+=1;ae->tick+=4;break;
+			case CRC_C:___output(ae,OPCODE+1);ae->nop+=1;ae->tick+=4;break;
+			case CRC_D:___output(ae,OPCODE+2);ae->nop+=1;ae->tick+=4;break;
+			case CRC_E:___output(ae,OPCODE+3);ae->nop+=1;ae->tick+=4;break;
+			case CRC_H:___output(ae,OPCODE+4);ae->nop+=1;ae->tick+=4;break;
+			case CRC_L:___output(ae,OPCODE+5);ae->nop+=1;ae->tick+=4;break;
+			case CRC_IXH:case CRC_HX:case CRC_XH:___output(ae,0xDD);___output(ae,OPCODE+4);ae->nop+=2;ae->tick+=8;break;
+			case CRC_IXL:case CRC_LX:case CRC_XL:___output(ae,0xDD);___output(ae,OPCODE+5);ae->nop+=2;ae->tick+=8;break;
+			case CRC_IYH:case CRC_HY:case CRC_YH:___output(ae,0xFD);___output(ae,OPCODE+4);ae->nop+=2;ae->tick+=8;break;
+			case CRC_IYL:case CRC_LY:case CRC_YL:___output(ae,0xFD);___output(ae,OPCODE+5);ae->nop+=2;ae->tick+=8;break;
 			default:
 				if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0) {
 					___output(ae,0xDD);___output(ae,OPCODE+6);
 					PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
-					ae->nop+=5;
+					ae->nop+=5;ae->tick+=19;
 				} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0) {
 					___output(ae,0xFD);___output(ae,OPCODE+6);
 					PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
-					ae->nop+=5;
+					ae->nop+=5;ae->tick+=19;
 				} else {
 					___output(ae,0xEE);
 					PushExpression(ae,ae->idx+1,E_EXPRESSION_V8);
-					ae->nop+=2;
+					ae->nop+=2;ae->tick+=7;
 				}
 		}
 		ae->idx++;
@@ -8792,12 +8964,12 @@ void _POP(struct s_assenv *ae) {
 		do {
 			ae->idx++;
 			switch (GetCRC(ae->wl[ae->idx].w)) {
-				case CRC_AF:___output(ae,0xF1);ae->nop+=3;break;
-				case CRC_BC:___output(ae,0xC1);ae->nop+=3;break;
-				case CRC_DE:___output(ae,0xD1);ae->nop+=3;break;
-				case CRC_HL:___output(ae,0xE1);ae->nop+=3;break;
-				case CRC_IX:___output(ae,0xDD);___output(ae,0xE1);ae->nop+=4;break;
-				case CRC_IY:___output(ae,0xFD);___output(ae,0xE1);ae->nop+=4;break;
+				case CRC_AF:___output(ae,0xF1);ae->nop+=3;ae->tick+=10;break;
+				case CRC_BC:___output(ae,0xC1);ae->nop+=3;ae->tick+=10;break;
+				case CRC_DE:___output(ae,0xD1);ae->nop+=3;ae->tick+=10;break;
+				case CRC_HL:___output(ae,0xE1);ae->nop+=3;ae->tick+=10;break;
+				case CRC_IX:___output(ae,0xDD);___output(ae,0xE1);ae->nop+=4;ae->tick+=14;break;
+				case CRC_IY:___output(ae,0xFD);___output(ae,0xE1);ae->nop+=4;ae->tick+=14;break;
 				default:
 					MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Use POP with AF,BC,DE,HL,IX,IY\n");
 			}
@@ -8811,12 +8983,12 @@ void _PUSH(struct s_assenv *ae) {
 		do {
 			ae->idx++;
 			switch (GetCRC(ae->wl[ae->idx].w)) {
-				case CRC_AF:___output(ae,0xF5);ae->nop+=4;break;
-				case CRC_BC:___output(ae,0xC5);ae->nop+=4;break;
-				case CRC_DE:___output(ae,0xD5);ae->nop+=4;break;
-				case CRC_HL:___output(ae,0xE5);ae->nop+=4;break;
-				case CRC_IX:___output(ae,0xDD);___output(ae,0xE5);ae->nop+=5;break;
-				case CRC_IY:___output(ae,0xFD);___output(ae,0xE5);ae->nop+=5;break;
+				case CRC_AF:___output(ae,0xF5);ae->nop+=4;ae->tick+=11;break;
+				case CRC_BC:___output(ae,0xC5);ae->nop+=4;ae->tick+=11;break;
+				case CRC_DE:___output(ae,0xD5);ae->nop+=4;ae->tick+=11;break;
+				case CRC_HL:___output(ae,0xE5);ae->nop+=4;ae->tick+=11;break;
+				case CRC_IX:___output(ae,0xDD);___output(ae,0xE5);ae->nop+=5;ae->tick+=15;break;
+				case CRC_IY:___output(ae,0xFD);___output(ae,0xE5);ae->nop+=5;ae->tick+=15;break;
 				default:
 					MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Use PUSH with AF,BC,DE,HL,IX,IY\n");
 			}
@@ -8833,6 +9005,7 @@ void _IM(struct s_assenv *ae) {
 		PushExpression(ae,ae->idx+1,E_EXPRESSION_IM);
 		ae->idx++;
 		ae->nop+=2;
+		ae->tick+=8;
 	} else {
 		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"IM need one parameter\n");
 	}
@@ -8842,6 +9015,7 @@ void _RLCA(struct s_assenv *ae) {
 	if (ae->wl[ae->idx].t) {
 		___output(ae,0x7);
 		ae->nop+=1;
+		ae->tick+=4;
 	} else {
 		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"RLCA does not need parameter\n");
 	}
@@ -8850,6 +9024,7 @@ void _RRCA(struct s_assenv *ae) {
 	if (ae->wl[ae->idx].t) {
 		___output(ae,0xF);
 		ae->nop+=1;
+		ae->tick+=4;
 	} else {
 		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"RRCA does not need parameter\n");
 	}
@@ -8859,6 +9034,7 @@ void _NEG(struct s_assenv *ae) {
 		___output(ae,0xED);
 		___output(ae,0x44);
 		ae->nop+=2;
+		ae->tick+=8;
 	} else {
 		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"NEG does not need parameter\n");
 	}
@@ -8867,6 +9043,7 @@ void _DAA(struct s_assenv *ae) {
 	if (ae->wl[ae->idx].t) {
 		___output(ae,0x27);
 		ae->nop+=1;
+		ae->tick+=4;
 	} else {
 		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"DAA does not need parameter\n");
 	}
@@ -8875,6 +9052,7 @@ void _CPL(struct s_assenv *ae) {
 	if (ae->wl[ae->idx].t) {
 		___output(ae,0x2F);
 		ae->nop+=1;
+		ae->tick+=4;
 	} else {
 		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"CPL does not need parameter\n");
 	}
@@ -8884,6 +9062,7 @@ void _RETI(struct s_assenv *ae) {
 		___output(ae,0xED);
 		___output(ae,0x4D);
 		ae->nop+=4;
+		ae->tick+=14;
 	} else {
 		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"RETI does not need parameter\n");
 	}
@@ -8892,6 +9071,7 @@ void _SCF(struct s_assenv *ae) {
 	if (ae->wl[ae->idx].t) {
 		___output(ae,0x37);
 		ae->nop+=1;
+		ae->tick+=4;
 	} else {
 		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"SCF does not need parameter\n");
 	}
@@ -8901,6 +9081,7 @@ void _LDD(struct s_assenv *ae) {
 		___output(ae,0xED);
 		___output(ae,0xA8);
 		ae->nop+=5;
+		ae->tick+=16;
 	} else {
 		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"LDD does not need parameter\n");
 	}
@@ -8910,6 +9091,7 @@ void _LDDR(struct s_assenv *ae) {
 		___output(ae,0xED);
 		___output(ae,0xB8);
 		ae->nop+=5;
+		ae->tick+=16;
 	} else {
 		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"LDDR does not need parameter\n");
 	}
@@ -8919,6 +9101,7 @@ void _LDI(struct s_assenv *ae) {
 		___output(ae,0xED);
 		___output(ae,0xA0);
 		ae->nop+=5;
+		ae->tick+=16;
 	} else {
 		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"LDI does not need parameter\n");
 	}
@@ -8928,6 +9111,7 @@ void _LDIR(struct s_assenv *ae) {
 		___output(ae,0xED);
 		___output(ae,0xB0);
 		ae->nop+=5;
+		ae->tick+=16;
 	} else {
 		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"LDIR does not need parameter\n");
 	}
@@ -8935,7 +9119,8 @@ void _LDIR(struct s_assenv *ae) {
 void _CCF(struct s_assenv *ae) {
 	if (ae->wl[ae->idx].t) {
 		___output(ae,0x3F);
-		ae->nop+=5;
+		ae->nop+=1;
+		ae->tick+=4;
 	} else {
 		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"CCF does not need parameter\n");
 	}
@@ -8945,6 +9130,7 @@ void _CPD(struct s_assenv *ae) {
 		___output(ae,0xED);
 		___output(ae,0xA9);
 		ae->nop+=4;
+		ae->tick+=16;
 	} else {
 		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"CPD does not need parameter\n");
 	}
@@ -8954,6 +9140,7 @@ void _CPDR(struct s_assenv *ae) {
 		___output(ae,0xED);
 		___output(ae,0xB9);
 		ae->nop+=4;
+		ae->tick+=16;
 	} else {
 		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"CPDR does not need parameter\n");
 	}
@@ -8963,6 +9150,7 @@ void _CPI(struct s_assenv *ae) {
 		___output(ae,0xED);
 		___output(ae,0xA1);
 		ae->nop+=4;
+		ae->tick+=16;
 	} else {
 		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"CPI does not need parameter\n");
 	}
@@ -8972,6 +9160,7 @@ void _CPIR(struct s_assenv *ae) {
 		___output(ae,0xED);
 		___output(ae,0xB1);
 		ae->nop+=4;
+		ae->tick+=16;
 	} else {
 		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"CPIR does not need parameter\n");
 	}
@@ -8981,6 +9170,7 @@ void _OUTD(struct s_assenv *ae) {
 		___output(ae,0xED);
 		___output(ae,0xAB);
 		ae->nop+=5;
+		ae->tick+=16;
 	} else {
 		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"OUTD does not need parameter\n");
 	}
@@ -8990,6 +9180,7 @@ void _OTDR(struct s_assenv *ae) {
 		___output(ae,0xED);
 		___output(ae,0xBB);
 		ae->nop+=5;
+		ae->tick+=16;
 	} else {
 		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"OTDR does not need parameter\n");
 	}
@@ -8999,6 +9190,7 @@ void _OUTI(struct s_assenv *ae) {
 		___output(ae,0xED);
 		___output(ae,0xA3);
 		ae->nop+=5;
+		ae->tick+=16;
 	} else {
 		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"OUTI does not need parameter\n");
 	}
@@ -9008,6 +9200,7 @@ void _OTIR(struct s_assenv *ae) {
 		___output(ae,0xED);
 		___output(ae,0xB3);
 		ae->nop+=5;
+		ae->tick+=16;
 	} else {
 		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"OTIR does not need parameter\n");
 	}
@@ -9017,6 +9210,7 @@ void _RETN(struct s_assenv *ae) {
 		___output(ae,0xED);
 		___output(ae,0x45);
 		ae->nop+=4;
+		ae->tick+=14;
 	} else {
 		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"RETN does not need parameter\n");
 	}
@@ -9026,6 +9220,7 @@ void _IND(struct s_assenv *ae) {
 		___output(ae,0xED);
 		___output(ae,0xAA);
 		ae->nop+=5;
+		ae->tick+=16;
 	} else {
 		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"IND does not need parameter\n");
 	}
@@ -9035,6 +9230,7 @@ void _INDR(struct s_assenv *ae) {
 		___output(ae,0xED);
 		___output(ae,0xBA);
 		ae->nop+=5;
+		ae->tick+=16;
 	} else {
 		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"INDR does not need parameter\n");
 	}
@@ -9044,6 +9240,7 @@ void _INI(struct s_assenv *ae) {
 		___output(ae,0xED);
 		___output(ae,0xA2);
 		ae->nop+=5;
+		ae->tick+=16;
 	} else {
 		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"INI does not need parameter\n");
 	}
@@ -9053,6 +9250,7 @@ void _INIR(struct s_assenv *ae) {
 		___output(ae,0xED);
 		___output(ae,0xB2);
 		ae->nop+=5;
+		ae->tick+=16;
 	} else {
 		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"INIR does not need parameter\n");
 	}
@@ -9061,6 +9259,7 @@ void _EXX(struct s_assenv *ae) {
 	if (ae->wl[ae->idx].t==1) {
 		___output(ae,0xD9);
 		ae->nop+=1;
+		ae->tick+=4;
 	} else {
 		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"EXX does not need parameter\n");
 	}
@@ -9069,6 +9268,7 @@ void _HALT(struct s_assenv *ae) {
 	if (ae->wl[ae->idx].t==1) {
 		___output(ae,0x76);
 		ae->nop+=1;
+		ae->tick+=4;
 	} else {
 		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"HALT does not need parameter\n");
 	}
@@ -9078,6 +9278,7 @@ void _RLA(struct s_assenv *ae) {
 	if (ae->wl[ae->idx].t==1) {
 		___output(ae,0x17);
 		ae->nop+=1;
+		ae->tick+=4;
 	} else {
 		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"RLA does not need parameter\n");
 	}
@@ -9086,6 +9287,7 @@ void _RRA(struct s_assenv *ae) {
 	if (ae->wl[ae->idx].t==1) {
 		___output(ae,0x1F);
 		ae->nop+=1;
+		ae->tick+=4;
 	} else {
 		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"RRA does not need parameter\n");
 	}
@@ -9095,6 +9297,7 @@ void _RLD(struct s_assenv *ae) {
 		___output(ae,0xED);
 		___output(ae,0x6F);
 		ae->nop+=5;
+		ae->tick+=18;
 	} else {
 		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"RLD does not need parameter\n");
 	}
@@ -9104,6 +9307,7 @@ void _RRD(struct s_assenv *ae) {
 		___output(ae,0xED);
 		___output(ae,0x67);
 		ae->nop+=5;
+		ae->tick+=18;
 	} else {
 		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"RRD does not need parameter\n");
 	}
@@ -9113,6 +9317,7 @@ void _RRD(struct s_assenv *ae) {
 void _EXA(struct s_assenv *ae) {
 	if (ae->wl[ae->idx].t==1) {
 		___output(ae,0x08);ae->nop+=1;
+		ae->tick+=4;
 	} else {
 		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"EXA alias does not need parameter\n");
 	}
@@ -9124,6 +9329,7 @@ void _NOP(struct s_assenv *ae) {
 	if (ae->wl[ae->idx].t) {
 		___output(ae,0x00);
 		ae->nop+=1;
+		ae->tick+=4;
 	} else if (!ae->wl[ae->idx].t && ae->wl[ae->idx+1].t==1) {
 		ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
 		o=RoundComputeExpressionCore(ae,ae->wl[ae->idx+1].w,ae->codeadr,0);
@@ -9131,6 +9337,7 @@ void _NOP(struct s_assenv *ae) {
 			while (o>0) {
 				___output(ae,0x00);
 				ae->nop+=1;
+				ae->tick+=4;
 				o--;
 			}
 		}
@@ -9142,6 +9349,7 @@ void _DI(struct s_assenv *ae) {
 	if (ae->wl[ae->idx].t) {
 	___output(ae,0xF3);
 	ae->nop+=1;
+	ae->tick+=4;
 	} else {
 		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"DI does not need parameter\n");
 	}
@@ -9150,6 +9358,7 @@ void _EI(struct s_assenv *ae) {
 	if (ae->wl[ae->idx].t) {
 		___output(ae,0xFB);
 		ae->nop+=1;
+		ae->tick+=4;
 	} else {
 		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"EI does not need parameter\n");
 	}
@@ -9165,6 +9374,7 @@ void _RST(struct s_assenv *ae) {
 		}
 		ae->idx++;
 		ae->nop+=4;
+		ae->tick+=11;
 	} else {
 		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"RST need one parameter\n");
 	}
@@ -9180,6 +9390,7 @@ void _DJNZ(struct s_assenv *ae) {
 			___output(ae,0x10);
 			PushExpression(ae,ae->idx+1,E_EXPRESSION_J8);
 			ae->nop+=3;
+			ae->tick+=13;
 		}
 		ae->idx++;
 	} else {
@@ -9193,47 +9404,47 @@ void _LD(struct s_assenv *ae) {
 		switch (GetCRC(ae->wl[ae->idx+1].w)) {
 			case CRC_A:
 				switch (GetCRC(ae->wl[ae->idx+2].w)) {
-					case CRC_I:___output(ae,0xED);___output(ae,0x57);ae->nop+=3;break;
-					case CRC_R:___output(ae,0xED);___output(ae,0x5F);ae->nop+=3;break;
-					case CRC_B:___output(ae,0x78);ae->nop+=1;break;
-					case CRC_C:___output(ae,0x79);ae->nop+=1;break;
-					case CRC_D:___output(ae,0x7A);ae->nop+=1;break;
-					case CRC_E:___output(ae,0x7B);ae->nop+=1;break;
-					case CRC_H:___output(ae,0x7C);ae->nop+=1;break;
-					case CRC_L:___output(ae,0x7D);ae->nop+=1;break;
-					case CRC_IXH:case CRC_HX:case CRC_XH:___output(ae,0xDD);___output(ae,0x7C);ae->nop+=2;break;
-					case CRC_IXL:case CRC_LX:case CRC_XL:___output(ae,0xDD);___output(ae,0x7D);ae->nop+=2;break;
-					case CRC_IYH:case CRC_HY:case CRC_YH:___output(ae,0xFD);___output(ae,0x7C);ae->nop+=2;break;
-					case CRC_IYL:case CRC_LY:case CRC_YL:___output(ae,0xFD);___output(ae,0x7D);ae->nop+=2;break;
-					case CRC_MHL:___output(ae,0x7E);ae->nop+=2;break;
-					case CRC_A:___output(ae,0x7F);ae->nop+=1;break;
-					case CRC_MBC:___output(ae,0x0A);ae->nop+=2;break;
-					case CRC_MDE:___output(ae,0x1A);ae->nop+=2;break;
+					case CRC_I:___output(ae,0xED);___output(ae,0x57);ae->nop+=3;ae->tick+=9;break;
+					case CRC_R:___output(ae,0xED);___output(ae,0x5F);ae->nop+=3;ae->tick+=9;break;
+					case CRC_B:___output(ae,0x78);ae->nop+=1;ae->tick+=4;break;
+					case CRC_C:___output(ae,0x79);ae->nop+=1;ae->tick+=4;break;
+					case CRC_D:___output(ae,0x7A);ae->nop+=1;ae->tick+=4;break;
+					case CRC_E:___output(ae,0x7B);ae->nop+=1;ae->tick+=4;break;
+					case CRC_H:___output(ae,0x7C);ae->nop+=1;ae->tick+=4;break;
+					case CRC_L:___output(ae,0x7D);ae->nop+=1;ae->tick+=4;break;
+					case CRC_IXH:case CRC_HX:case CRC_XH:___output(ae,0xDD);___output(ae,0x7C);ae->nop+=2;ae->tick+=8;break;
+					case CRC_IXL:case CRC_LX:case CRC_XL:___output(ae,0xDD);___output(ae,0x7D);ae->nop+=2;ae->tick+=8;break;
+					case CRC_IYH:case CRC_HY:case CRC_YH:___output(ae,0xFD);___output(ae,0x7C);ae->nop+=2;ae->tick+=8;break;
+					case CRC_IYL:case CRC_LY:case CRC_YL:___output(ae,0xFD);___output(ae,0x7D);ae->nop+=2;ae->tick+=8;break;
+					case CRC_MHL:___output(ae,0x7E);ae->nop+=2;ae->tick+=7;break;
+					case CRC_A:___output(ae,0x7F);ae->nop+=1;ae->tick+=4;break;
+					case CRC_MBC:___output(ae,0x0A);ae->nop+=2;ae->tick+=7;break;
+					case CRC_MDE:___output(ae,0x1A);ae->nop+=2;ae->tick+=7;break;
 					default:
 					/* (ix+expression) (iy+expression) (expression) expression */
 					if (strncmp(ae->wl[ae->idx+2].w,"(IX",3)==0) {
 						___output(ae,0xDD);___output(ae,0x7E);
 						PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);
-						ae->nop+=5;
+						ae->nop+=5;ae->tick+=19;
 					} else if (strncmp(ae->wl[ae->idx+2].w,"(IY",3)==0) {
 						___output(ae,0xFD);___output(ae,0x7E);
 						PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);
-						ae->nop+=5;
+						ae->nop+=5;ae->tick+=19;
 					} else if (StringIsMem(ae->wl[ae->idx+2].w)) {
 						___output(ae,0x3A);
 						PushExpression(ae,ae->idx+2,E_EXPRESSION_V16);
-						ae->nop+=4;
+						ae->nop+=4;ae->tick+=13;
 					} else {
 						___output(ae,0x3E);
 						PushExpression(ae,ae->idx+2,E_EXPRESSION_V8);
-						ae->nop+=2;
+						ae->nop+=2;ae->tick+=7;
 					}
 				}
 				break;
 			case CRC_I:
 				if (GetCRC(ae->wl[ae->idx+2].w)==CRC_A) {
 					___output(ae,0xED);___output(ae,0x47);
-					ae->nop+=3;
+					ae->nop+=3;ae->tick+=9;
 				} else {
 					MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"LD I,A only\n");
 				}
@@ -9241,269 +9452,269 @@ void _LD(struct s_assenv *ae) {
 			case CRC_R:
 				if (GetCRC(ae->wl[ae->idx+2].w)==CRC_A) {
 					___output(ae,0xED);___output(ae,0x4F);
-					ae->nop+=3;
+					ae->nop+=3;ae->tick+=9;
 				} else {
 					MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"LD R,A only\n");
 				}
 				break;
 			case CRC_B:
 				switch (GetCRC(ae->wl[ae->idx+2].w)) {
-					case CRC_B:___output(ae,0x40);ae->nop+=1;break;
-					case CRC_C:___output(ae,0x41);ae->nop+=1;break;
-					case CRC_D:___output(ae,0x42);ae->nop+=1;break;
-					case CRC_E:___output(ae,0x43);ae->nop+=1;break;
-					case CRC_H:___output(ae,0x44);ae->nop+=1;break;
-					case CRC_L:___output(ae,0x45);ae->nop+=1;break;
-					case CRC_IXH:case CRC_HX:case CRC_XH:___output(ae,0xDD);___output(ae,0x44);ae->nop+=2;break;
-					case CRC_IXL:case CRC_LX:case CRC_XL:___output(ae,0xDD);___output(ae,0x45);ae->nop+=2;break;
-					case CRC_IYH:case CRC_HY:case CRC_YH:___output(ae,0xFD);___output(ae,0x44);ae->nop+=2;break;
-					case CRC_IYL:case CRC_LY:case CRC_YL:___output(ae,0xFD);___output(ae,0x45);ae->nop+=2;break;
-					case CRC_MHL:___output(ae,0x46);ae->nop+=2;break;
-					case CRC_A:___output(ae,0x47);ae->nop+=1;break;
+					case CRC_B:___output(ae,0x40);ae->nop+=1;ae->tick+=4;break;
+					case CRC_C:___output(ae,0x41);ae->nop+=1;ae->tick+=4;break;
+					case CRC_D:___output(ae,0x42);ae->nop+=1;ae->tick+=4;break;
+					case CRC_E:___output(ae,0x43);ae->nop+=1;ae->tick+=4;break;
+					case CRC_H:___output(ae,0x44);ae->nop+=1;ae->tick+=4;break;
+					case CRC_L:___output(ae,0x45);ae->nop+=1;ae->tick+=4;break;
+					case CRC_IXH:case CRC_HX:case CRC_XH:___output(ae,0xDD);___output(ae,0x44);ae->nop+=2;ae->tick+=8;break;
+					case CRC_IXL:case CRC_LX:case CRC_XL:___output(ae,0xDD);___output(ae,0x45);ae->nop+=2;ae->tick+=8;break;
+					case CRC_IYH:case CRC_HY:case CRC_YH:___output(ae,0xFD);___output(ae,0x44);ae->nop+=2;ae->tick+=8;break;
+					case CRC_IYL:case CRC_LY:case CRC_YL:___output(ae,0xFD);___output(ae,0x45);ae->nop+=2;ae->tick+=8;break;
+					case CRC_MHL:___output(ae,0x46);ae->nop+=2;ae->tick+=7;break;
+					case CRC_A:___output(ae,0x47);ae->nop+=1;ae->tick+=4;break;
 					default:
 					/* (ix+expression) (iy+expression) expression */
 					if (strncmp(ae->wl[ae->idx+2].w,"(IX",3)==0) {
 						___output(ae,0xDD);___output(ae,0x46);
 						PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);
-						ae->nop+=5;
+						ae->nop+=5;ae->tick+=19;
 					} else if (strncmp(ae->wl[ae->idx+2].w,"(IY",3)==0) {
 						___output(ae,0xFD);___output(ae,0x46);
 						PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);
-						ae->nop+=5;
+						ae->nop+=5;ae->tick+=19;
 					} else {
 						___output(ae,0x06);
 						PushExpression(ae,ae->idx+2,E_EXPRESSION_V8);
-						ae->nop+=2;
+						ae->nop+=2;ae->tick+=7;
 					}
 				}
 				break;
 			case CRC_C:
 				switch (GetCRC(ae->wl[ae->idx+2].w)) {
-					case CRC_B:___output(ae,0x48);ae->nop+=1;break;
-					case CRC_C:___output(ae,0x49);ae->nop+=1;break;
-					case CRC_D:___output(ae,0x4A);ae->nop+=1;break;
-					case CRC_E:___output(ae,0x4B);ae->nop+=1;break;
-					case CRC_H:___output(ae,0x4C);ae->nop+=1;break;
-					case CRC_L:___output(ae,0x4D);ae->nop+=1;break;
-					case CRC_IXH:case CRC_HX:case CRC_XH:___output(ae,0xDD);___output(ae,0x4C);ae->nop+=2;break;
-					case CRC_IXL:case CRC_LX:case CRC_XL:___output(ae,0xDD);___output(ae,0x4D);ae->nop+=2;break;
-					case CRC_IYH:case CRC_HY:case CRC_YH:___output(ae,0xFD);___output(ae,0x4C);ae->nop+=2;break;
-					case CRC_IYL:case CRC_LY:case CRC_YL:___output(ae,0xFD);___output(ae,0x4D);ae->nop+=2;break;
-					case CRC_MHL:___output(ae,0x4E);ae->nop+=2;break;
-					case CRC_A:___output(ae,0x4F);ae->nop+=1;break;
+					case CRC_B:___output(ae,0x48);ae->nop+=1;ae->tick+=4;break;
+					case CRC_C:___output(ae,0x49);ae->nop+=1;ae->tick+=4;break;
+					case CRC_D:___output(ae,0x4A);ae->nop+=1;ae->tick+=4;break;
+					case CRC_E:___output(ae,0x4B);ae->nop+=1;ae->tick+=4;break;
+					case CRC_H:___output(ae,0x4C);ae->nop+=1;ae->tick+=4;break;
+					case CRC_L:___output(ae,0x4D);ae->nop+=1;ae->tick+=4;break;
+					case CRC_IXH:case CRC_HX:case CRC_XH:___output(ae,0xDD);___output(ae,0x4C);ae->nop+=2;ae->tick+=8;break;
+					case CRC_IXL:case CRC_LX:case CRC_XL:___output(ae,0xDD);___output(ae,0x4D);ae->nop+=2;ae->tick+=8;break;
+					case CRC_IYH:case CRC_HY:case CRC_YH:___output(ae,0xFD);___output(ae,0x4C);ae->nop+=2;ae->tick+=8;break;
+					case CRC_IYL:case CRC_LY:case CRC_YL:___output(ae,0xFD);___output(ae,0x4D);ae->nop+=2;ae->tick+=8;break;
+					case CRC_MHL:___output(ae,0x4E);ae->nop+=2;ae->tick+=7;break;
+					case CRC_A:___output(ae,0x4F);ae->nop+=1;ae->tick+=4;break;
 					default:
 					/* (ix+expression) (iy+expression) expression */
 					if (strncmp(ae->wl[ae->idx+2].w,"(IX",3)==0) {
 						___output(ae,0xDD);___output(ae,0x4E);
 						PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);
-						ae->nop+=5;
+						ae->nop+=5;ae->tick+=19;
 					} else if (strncmp(ae->wl[ae->idx+2].w,"(IY",3)==0) {
 						___output(ae,0xFD);___output(ae,0x4E);
 						PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);
-						ae->nop+=5;
+						ae->nop+=5;ae->tick+=19;
 					} else {
 						___output(ae,0x0E);
 						PushExpression(ae,ae->idx+2,E_EXPRESSION_V8);
-						ae->nop+=2;
+						ae->nop+=2;ae->tick+=7;
 					}
 				}
 				break;
 			case CRC_D:
 				switch (GetCRC(ae->wl[ae->idx+2].w)) {
-					case CRC_B:___output(ae,0x50);ae->nop+=1;break;
-					case CRC_C:___output(ae,0x51);ae->nop+=1;break;
-					case CRC_D:___output(ae,0x52);ae->nop+=1;break;
-					case CRC_E:___output(ae,0x53);ae->nop+=1;break;
-					case CRC_H:___output(ae,0x54);ae->nop+=1;break;
-					case CRC_L:___output(ae,0x55);ae->nop+=1;break;
-					case CRC_IXH:case CRC_HX:case CRC_XH:___output(ae,0xDD);___output(ae,0x54);ae->nop+=2;break;
-					case CRC_IXL:case CRC_LX:case CRC_XL:___output(ae,0xDD);___output(ae,0x55);ae->nop+=2;break;
-					case CRC_IYH:case CRC_HY:case CRC_YH:___output(ae,0xFD);___output(ae,0x54);ae->nop+=2;break;
-					case CRC_IYL:case CRC_LY:case CRC_YL:___output(ae,0xFD);___output(ae,0x55);ae->nop+=2;break;
-					case CRC_MHL:___output(ae,0x56);ae->nop+=2;break;
-					case CRC_A:___output(ae,0x57);ae->nop+=1;break;
+					case CRC_B:___output(ae,0x50);ae->nop+=1;ae->tick+=4;break;
+					case CRC_C:___output(ae,0x51);ae->nop+=1;ae->tick+=4;break;
+					case CRC_D:___output(ae,0x52);ae->nop+=1;ae->tick+=4;break;
+					case CRC_E:___output(ae,0x53);ae->nop+=1;ae->tick+=4;break;
+					case CRC_H:___output(ae,0x54);ae->nop+=1;ae->tick+=4;break;
+					case CRC_L:___output(ae,0x55);ae->nop+=1;ae->tick+=4;break;
+					case CRC_IXH:case CRC_HX:case CRC_XH:___output(ae,0xDD);___output(ae,0x54);ae->nop+=2;ae->tick+=8;break;
+					case CRC_IXL:case CRC_LX:case CRC_XL:___output(ae,0xDD);___output(ae,0x55);ae->nop+=2;ae->tick+=8;break;
+					case CRC_IYH:case CRC_HY:case CRC_YH:___output(ae,0xFD);___output(ae,0x54);ae->nop+=2;ae->tick+=8;break;
+					case CRC_IYL:case CRC_LY:case CRC_YL:___output(ae,0xFD);___output(ae,0x55);ae->nop+=2;ae->tick+=8;break;
+					case CRC_MHL:___output(ae,0x56);ae->nop+=2;ae->tick+=7;break;
+					case CRC_A:___output(ae,0x57);ae->nop+=1;ae->tick+=4;break;
 					default:
 					/* (ix+expression) (iy+expression) expression */
 					if (strncmp(ae->wl[ae->idx+2].w,"(IX",3)==0) {
 						___output(ae,0xDD);___output(ae,0x56);
 						PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);
-						ae->nop+=5;
+						ae->nop+=5;ae->tick+=19;
 					} else if (strncmp(ae->wl[ae->idx+2].w,"(IY",3)==0) {
 						___output(ae,0xFD);___output(ae,0x56);
 						PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);
-						ae->nop+=5;
+						ae->nop+=5;ae->tick+=19;
 					} else {
 						___output(ae,0x16);
 						PushExpression(ae,ae->idx+2,E_EXPRESSION_V8);
-						ae->nop+=2;
+						ae->nop+=2;ae->tick+=7;
 					}
 				}
 				break;
 			case CRC_E:
 				switch (GetCRC(ae->wl[ae->idx+2].w)) {
-					case CRC_B:___output(ae,0x58);ae->nop+=1;break;
-					case CRC_C:___output(ae,0x59);ae->nop+=1;break;
-					case CRC_D:___output(ae,0x5A);ae->nop+=1;break;
-					case CRC_E:___output(ae,0x5B);ae->nop+=1;break;
-					case CRC_H:___output(ae,0x5C);ae->nop+=1;break;
-					case CRC_L:___output(ae,0x5D);ae->nop+=1;break;
-					case CRC_IXH:case CRC_HX:case CRC_XH:___output(ae,0xDD);___output(ae,0x5C);ae->nop+=2;break;
-					case CRC_IXL:case CRC_LX:case CRC_XL:___output(ae,0xDD);___output(ae,0x5D);ae->nop+=2;break;
-					case CRC_IYH:case CRC_HY:case CRC_YH:___output(ae,0xFD);___output(ae,0x5C);ae->nop+=2;break;
-					case CRC_IYL:case CRC_LY:case CRC_YL:___output(ae,0xFD);___output(ae,0x5D);ae->nop+=2;break;
-					case CRC_MHL:___output(ae,0x5E);ae->nop+=2;break;
-					case CRC_A:___output(ae,0x5F);ae->nop+=1;break;
+					case CRC_B:___output(ae,0x58);ae->nop+=1;ae->tick+=4;break;
+					case CRC_C:___output(ae,0x59);ae->nop+=1;ae->tick+=4;break;
+					case CRC_D:___output(ae,0x5A);ae->nop+=1;ae->tick+=4;break;
+					case CRC_E:___output(ae,0x5B);ae->nop+=1;ae->tick+=4;break;
+					case CRC_H:___output(ae,0x5C);ae->nop+=1;ae->tick+=4;break;
+					case CRC_L:___output(ae,0x5D);ae->nop+=1;ae->tick+=4;break;
+					case CRC_IXH:case CRC_HX:case CRC_XH:___output(ae,0xDD);___output(ae,0x5C);ae->nop+=2;ae->tick+=8;break;
+					case CRC_IXL:case CRC_LX:case CRC_XL:___output(ae,0xDD);___output(ae,0x5D);ae->nop+=2;ae->tick+=8;break;
+					case CRC_IYH:case CRC_HY:case CRC_YH:___output(ae,0xFD);___output(ae,0x5C);ae->nop+=2;ae->tick+=8;break;
+					case CRC_IYL:case CRC_LY:case CRC_YL:___output(ae,0xFD);___output(ae,0x5D);ae->nop+=2;ae->tick+=8;break;
+					case CRC_MHL:___output(ae,0x5E);ae->nop+=2;ae->tick+=7;break;
+					case CRC_A:___output(ae,0x5F);ae->nop+=1;ae->tick+=4;break;
 					default:
 					/* (ix+expression) (iy+expression) expression */
 					if (strncmp(ae->wl[ae->idx+2].w,"(IX",3)==0) {
 						___output(ae,0xDD);___output(ae,0x5E);
 						PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);
-						ae->nop+=5;
+						ae->nop+=5;ae->tick+=19;
 					} else if (strncmp(ae->wl[ae->idx+2].w,"(IY",3)==0) {
 						___output(ae,0xFD);___output(ae,0x5E);
 						PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);
-						ae->nop+=5;
+						ae->nop+=5;ae->tick+=19;
 					} else {
 						___output(ae,0x1E);
 						PushExpression(ae,ae->idx+2,E_EXPRESSION_V8);
-						ae->nop+=2;
+						ae->nop+=2;ae->tick+=7;
 					}
 				}
 				break;
 			case CRC_IYH:case CRC_HY:case CRC_YH:
 				switch (GetCRC(ae->wl[ae->idx+2].w)) {
-					case CRC_B:___output(ae,0xFD);___output(ae,0x60);ae->nop+=2;break;
-					case CRC_C:___output(ae,0xFD);___output(ae,0x61);ae->nop+=2;break;
-					case CRC_D:___output(ae,0xFD);___output(ae,0x62);ae->nop+=2;break;
-					case CRC_E:___output(ae,0xFD);___output(ae,0x63);ae->nop+=2;break;
-					case CRC_IYH:case CRC_HY:case CRC_YH:___output(ae,0xFD);___output(ae,0x64);ae->nop+=2;break;
-					case CRC_IYL:case CRC_LY:case CRC_YL:___output(ae,0xFD);___output(ae,0x65);ae->nop+=2;break;
-					case CRC_A:___output(ae,0xFD);___output(ae,0x67);ae->nop+=2;break;
+					case CRC_B:___output(ae,0xFD);___output(ae,0x60);ae->nop+=2;ae->tick+=8;break;
+					case CRC_C:___output(ae,0xFD);___output(ae,0x61);ae->nop+=2;ae->tick+=8;break;
+					case CRC_D:___output(ae,0xFD);___output(ae,0x62);ae->nop+=2;ae->tick+=8;break;
+					case CRC_E:___output(ae,0xFD);___output(ae,0x63);ae->nop+=2;ae->tick+=8;break;
+					case CRC_IYH:case CRC_HY:case CRC_YH:___output(ae,0xFD);___output(ae,0x64);ae->nop+=2;ae->tick+=8;break;
+					case CRC_IYL:case CRC_LY:case CRC_YL:___output(ae,0xFD);___output(ae,0x65);ae->nop+=2;ae->tick+=8;break;
+					case CRC_A:___output(ae,0xFD);___output(ae,0x67);ae->nop+=2;ae->tick+=8;break;
 					default:
 						___output(ae,0xFD);___output(ae,0x26);
 						PushExpression(ae,ae->idx+2,E_EXPRESSION_V8);
-						ae->nop+=3;
+						ae->nop+=3;ae->tick+=11;
 				}
 				break;
 			case CRC_IYL:case CRC_LY:case CRC_YL:
 				switch (GetCRC(ae->wl[ae->idx+2].w)) {
-					case CRC_B:___output(ae,0xFD);___output(ae,0x68);ae->nop+=2;break;
-					case CRC_C:___output(ae,0xFD);___output(ae,0x69);ae->nop+=2;break;
-					case CRC_D:___output(ae,0xFD);___output(ae,0x6A);ae->nop+=2;break;
-					case CRC_E:___output(ae,0xFD);___output(ae,0x6B);ae->nop+=2;break;
-					case CRC_IYH:case CRC_HY:case CRC_YH:___output(ae,0xFD);___output(ae,0x6C);ae->nop+=2;break;
-					case CRC_IYL:case CRC_LY:case CRC_YL:___output(ae,0xFD);___output(ae,0x6D);ae->nop+=2;break;
-					case CRC_A:___output(ae,0xFD);___output(ae,0x6F);ae->nop+=2;break;
+					case CRC_B:___output(ae,0xFD);___output(ae,0x68);ae->nop+=2;ae->tick+=8;break;
+					case CRC_C:___output(ae,0xFD);___output(ae,0x69);ae->nop+=2;ae->tick+=8;break;
+					case CRC_D:___output(ae,0xFD);___output(ae,0x6A);ae->nop+=2;ae->tick+=8;break;
+					case CRC_E:___output(ae,0xFD);___output(ae,0x6B);ae->nop+=2;ae->tick+=8;break;
+					case CRC_IYH:case CRC_HY:case CRC_YH:___output(ae,0xFD);___output(ae,0x6C);ae->nop+=2;ae->tick+=8;break;
+					case CRC_IYL:case CRC_LY:case CRC_YL:___output(ae,0xFD);___output(ae,0x6D);ae->nop+=2;ae->tick+=8;break;
+					case CRC_A:___output(ae,0xFD);___output(ae,0x6F);ae->nop+=2;ae->tick+=8;break;
 					default:
 						___output(ae,0xFD);___output(ae,0x2E);
 						PushExpression(ae,ae->idx+2,E_EXPRESSION_V8);
-						ae->nop+=3;
+						ae->nop+=3;ae->tick+=11;
 				}
 				break;
 			case CRC_IXH:case CRC_HX:case CRC_XH:
 				switch (GetCRC(ae->wl[ae->idx+2].w)) {
-					case CRC_B:___output(ae,0xDD);___output(ae,0x60);ae->nop+=2;break;
-					case CRC_C:___output(ae,0xDD);___output(ae,0x61);ae->nop+=2;break;
-					case CRC_D:___output(ae,0xDD);___output(ae,0x62);ae->nop+=2;break;
-					case CRC_E:___output(ae,0xDD);___output(ae,0x63);ae->nop+=2;break;
-					case CRC_IXH:case CRC_HX:case CRC_XH:___output(ae,0xDD);___output(ae,0x64);ae->nop+=2;break;
-					case CRC_IXL:case CRC_LX:case CRC_XL:___output(ae,0xDD);___output(ae,0x65);ae->nop+=2;break;
-					case CRC_A:___output(ae,0xDD);___output(ae,0x67);ae->nop+=2;break;
+					case CRC_B:___output(ae,0xDD);___output(ae,0x60);ae->nop+=2;ae->tick+=8;break;
+					case CRC_C:___output(ae,0xDD);___output(ae,0x61);ae->nop+=2;ae->tick+=8;break;
+					case CRC_D:___output(ae,0xDD);___output(ae,0x62);ae->nop+=2;ae->tick+=8;break;
+					case CRC_E:___output(ae,0xDD);___output(ae,0x63);ae->nop+=2;ae->tick+=8;break;
+					case CRC_IXH:case CRC_HX:case CRC_XH:___output(ae,0xDD);___output(ae,0x64);ae->nop+=2;ae->tick+=8;break;
+					case CRC_IXL:case CRC_LX:case CRC_XL:___output(ae,0xDD);___output(ae,0x65);ae->nop+=2;ae->tick+=8;break;
+					case CRC_A:___output(ae,0xDD);___output(ae,0x67);ae->nop+=2;ae->tick+=8;break;
 					default:
 						___output(ae,0xDD);___output(ae,0x26);
 						PushExpression(ae,ae->idx+2,E_EXPRESSION_V8);
-						ae->nop+=3;
+						ae->nop+=3;ae->tick+=11;
 				}
 				break;
 			case CRC_IXL:case CRC_LX:case CRC_XL:
 				switch (GetCRC(ae->wl[ae->idx+2].w)) {
-					case CRC_B:___output(ae,0xDD);___output(ae,0x68);ae->nop+=2;break;
-					case CRC_C:___output(ae,0xDD);___output(ae,0x69);ae->nop+=2;break;
-					case CRC_D:___output(ae,0xDD);___output(ae,0x6A);ae->nop+=2;break;
-					case CRC_E:___output(ae,0xDD);___output(ae,0x6B);ae->nop+=2;break;
-					case CRC_IXH:case CRC_HX:case CRC_XH:___output(ae,0xDD);___output(ae,0x6C);ae->nop+=2;break;
-					case CRC_IXL:case CRC_LX:case CRC_XL:___output(ae,0xDD);___output(ae,0x6D);ae->nop+=2;break;
-					case CRC_A:___output(ae,0xDD);___output(ae,0x6F);ae->nop+=2;break;
+					case CRC_B:___output(ae,0xDD);___output(ae,0x68);ae->nop+=2;ae->tick+=8;break;
+					case CRC_C:___output(ae,0xDD);___output(ae,0x69);ae->nop+=2;ae->tick+=8;break;
+					case CRC_D:___output(ae,0xDD);___output(ae,0x6A);ae->nop+=2;ae->tick+=8;break;
+					case CRC_E:___output(ae,0xDD);___output(ae,0x6B);ae->nop+=2;ae->tick+=8;break;
+					case CRC_IXH:case CRC_HX:case CRC_XH:___output(ae,0xDD);___output(ae,0x6C);ae->nop+=2;ae->tick+=8;break;
+					case CRC_IXL:case CRC_LX:case CRC_XL:___output(ae,0xDD);___output(ae,0x6D);ae->nop+=2;ae->tick+=8;break;
+					case CRC_A:___output(ae,0xDD);___output(ae,0x6F);ae->nop+=2;ae->tick+=8;break;
 					default:
 						___output(ae,0xDD);___output(ae,0x2E);
 						PushExpression(ae,ae->idx+2,E_EXPRESSION_V8);
-						ae->nop+=3;
+						ae->nop+=3;ae->tick+=11;
 				}
 				break;
 			case CRC_H:
 				switch (GetCRC(ae->wl[ae->idx+2].w)) {
-					case CRC_B:___output(ae,0x60);ae->nop+=1;break;
-					case CRC_C:___output(ae,0x61);ae->nop+=1;break;
-					case CRC_D:___output(ae,0x62);ae->nop+=1;break;
-					case CRC_E:___output(ae,0x63);ae->nop+=1;break;
-					case CRC_H:___output(ae,0x64);ae->nop+=1;break;
-					case CRC_L:___output(ae,0x65);ae->nop+=1;break;
-					case CRC_MHL:___output(ae,0x66);ae->nop+=2;break;
-					case CRC_A:___output(ae,0x67);ae->nop+=1;break;
+					case CRC_B:___output(ae,0x60);ae->nop+=1;ae->tick+=4;break;
+					case CRC_C:___output(ae,0x61);ae->nop+=1;ae->tick+=4;break;
+					case CRC_D:___output(ae,0x62);ae->nop+=1;ae->tick+=4;break;
+					case CRC_E:___output(ae,0x63);ae->nop+=1;ae->tick+=4;break;
+					case CRC_H:___output(ae,0x64);ae->nop+=1;ae->tick+=4;break;
+					case CRC_L:___output(ae,0x65);ae->nop+=1;ae->tick+=4;break;
+					case CRC_MHL:___output(ae,0x66);ae->nop+=2;ae->tick+=7;break;
+					case CRC_A:___output(ae,0x67);ae->nop+=1;ae->tick+=4;break;
 					default:
 					/* (ix+expression) (iy+expression) expression */
 					if (strncmp(ae->wl[ae->idx+2].w,"(IX",3)==0) {
 						___output(ae,0xDD);___output(ae,0x66);
 						PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);
-						ae->nop+=5;
+						ae->nop+=5;ae->tick+=19;
 					} else if (strncmp(ae->wl[ae->idx+2].w,"(IY",3)==0) {
 						___output(ae,0xFD);___output(ae,0x66);
 						PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);
-						ae->nop+=5;
+						ae->nop+=5;ae->tick+=19;
 					} else {
 						___output(ae,0x26);
 						PushExpression(ae,ae->idx+2,E_EXPRESSION_V8);
-						ae->nop+=2;
+						ae->nop+=2;ae->tick+=7;
 					}
 				}
 				break;
 			case CRC_L:
 				switch (GetCRC(ae->wl[ae->idx+2].w)) {
-					case CRC_B:___output(ae,0x68);ae->nop+=1;break;
-					case CRC_C:___output(ae,0x69);ae->nop+=1;break;
-					case CRC_D:___output(ae,0x6A);ae->nop+=1;break;
-					case CRC_E:___output(ae,0x6B);ae->nop+=1;break;
-					case CRC_H:___output(ae,0x6C);ae->nop+=1;break;
-					case CRC_L:___output(ae,0x6D);ae->nop+=1;break;
-					case CRC_MHL:___output(ae,0x6E);ae->nop+=2;break;
-					case CRC_A:___output(ae,0x6F);ae->nop+=1;break;
+					case CRC_B:___output(ae,0x68);ae->nop+=1;ae->tick+=4;break;
+					case CRC_C:___output(ae,0x69);ae->nop+=1;ae->tick+=4;break;
+					case CRC_D:___output(ae,0x6A);ae->nop+=1;ae->tick+=4;break;
+					case CRC_E:___output(ae,0x6B);ae->nop+=1;ae->tick+=4;break;
+					case CRC_H:___output(ae,0x6C);ae->nop+=1;ae->tick+=4;break;
+					case CRC_L:___output(ae,0x6D);ae->nop+=1;ae->tick+=4;break;
+					case CRC_MHL:___output(ae,0x6E);ae->nop+=2;ae->tick+=7;break;
+					case CRC_A:___output(ae,0x6F);ae->nop+=1;ae->tick+=4;break;
 					default:
 					/* (ix+expression) (iy+expression) expression */
 					if (strncmp(ae->wl[ae->idx+2].w,"(IX",3)==0) {
 						___output(ae,0xDD);___output(ae,0x6E);
 						PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);
-						ae->nop+=5;
+						ae->nop+=5;ae->tick+=19;
 					} else if (strncmp(ae->wl[ae->idx+2].w,"(IY",3)==0) {
 						___output(ae,0xFD);___output(ae,0x6E);
 						PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);
-						ae->nop+=5;
+						ae->nop+=5;ae->tick+=19;
 					} else {
 						___output(ae,0x2E);
 						PushExpression(ae,ae->idx+2,E_EXPRESSION_V8);
-						ae->nop+=2;
+						ae->nop+=2;ae->tick+=7;
 					}
 				}
 				break;
 			case CRC_MHL:
 				switch (GetCRC(ae->wl[ae->idx+2].w)) {
-					case CRC_B:___output(ae,0x70);ae->nop+=2;break;
-					case CRC_C:___output(ae,0x71);ae->nop+=2;break;
-					case CRC_D:___output(ae,0x72);ae->nop+=2;break;
-					case CRC_E:___output(ae,0x73);ae->nop+=2;break;
-					case CRC_H:___output(ae,0x74);ae->nop+=2;break;
-					case CRC_L:___output(ae,0x75);ae->nop+=2;break;
-					case CRC_A:___output(ae,0x77);ae->nop+=2;break;
+					case CRC_B:___output(ae,0x70);ae->nop+=2;ae->tick+=7;break;
+					case CRC_C:___output(ae,0x71);ae->nop+=2;ae->tick+=7;break;
+					case CRC_D:___output(ae,0x72);ae->nop+=2;ae->tick+=7;break;
+					case CRC_E:___output(ae,0x73);ae->nop+=2;ae->tick+=7;break;
+					case CRC_H:___output(ae,0x74);ae->nop+=2;ae->tick+=7;break;
+					case CRC_L:___output(ae,0x75);ae->nop+=2;ae->tick+=7;break;
+					case CRC_A:___output(ae,0x77);ae->nop+=2;ae->tick+=7;break;
 					default:
 					/* expression */
 					___output(ae,0x36);
 					PushExpression(ae,ae->idx+2,E_EXPRESSION_V8);
-					ae->nop+=3;
+					ae->nop+=3;ae->tick+=10;
 				}
 				break;
 			case CRC_MBC:
 				if (GetCRC(ae->wl[ae->idx+2].w)==CRC_A)  {
 					___output(ae,0x02);
-					ae->nop+=2;
+					ae->nop+=2;ae->tick+=7;
 				} else {
 					MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"LD (BC),A only\n");
 				}
@@ -9511,16 +9722,16 @@ void _LD(struct s_assenv *ae) {
 			case CRC_MDE:
 				if (GetCRC(ae->wl[ae->idx+2].w)==CRC_A)  {
 					___output(ae,0x12);
-					ae->nop+=2;
+					ae->nop+=2;ae->tick+=7;
 				} else {
 					MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"LD (DE),A only\n");
 				}
 				break;
 			case CRC_HL:
 				switch (GetCRC(ae->wl[ae->idx+2].w)) {
-					case CRC_BC:___output(ae,0x60);___output(ae,0x69);ae->nop+=2;break;
-					case CRC_DE:___output(ae,0x62);___output(ae,0x6B);ae->nop+=2;break;
-					case CRC_HL:___output(ae,0x64);___output(ae,0x6D);ae->nop+=2;break;
+					case CRC_BC:___output(ae,0x60);___output(ae,0x69);ae->nop+=2;ae->tick+=8;break;
+					case CRC_DE:___output(ae,0x62);___output(ae,0x6B);ae->nop+=2;ae->tick+=8;break;
+					case CRC_HL:___output(ae,0x64);___output(ae,0x6D);ae->nop+=2;ae->tick+=8;break;
 					default:
 					if (strncmp(ae->wl[ae->idx+2].w,"(IX+",4)==0) {
 						/* enhanced LD HL,(IX+nn) */
@@ -9528,35 +9739,35 @@ void _LD(struct s_assenv *ae) {
 						PushExpression(ae,ae->idx+2,E_EXPRESSION_IV81);
 						___output(ae,0xDD);___output(ae,0x6E);
 						PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);
-						ae->nop+=10;
+						ae->nop+=10;ae->tick+=19;ae->tick+=19;
 					} else if (strncmp(ae->wl[ae->idx+2].w,"(IY+",4)==0) {
 						/* enhanced LD HL,(IY+nn) */
 						___output(ae,0xFD);___output(ae,0x66);
 						PushExpression(ae,ae->idx+2,E_EXPRESSION_IV81);
 						___output(ae,0xFD);___output(ae,0x6E);
 						PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);
-						ae->nop+=10;
+						ae->nop+=10;ae->tick+=19;ae->tick+=19;
 					} else if (StringIsMem(ae->wl[ae->idx+2].w)) {
 						___output(ae,0x2A);
 						PushExpression(ae,ae->idx+2,E_EXPRESSION_V16);
-						ae->nop+=5;
+						ae->nop+=5;ae->tick+=16;
 					} else {
 						___output(ae,0x21);
 						PushExpression(ae,ae->idx+2,E_EXPRESSION_V16);
-						ae->nop+=3;
+						ae->nop+=3;ae->tick+=10;
 					}
 				}
 				break;
 			case CRC_BC:
 				switch (GetCRC(ae->wl[ae->idx+2].w)) {
-					case CRC_BC:___output(ae,0x40);___output(ae,0x49);ae->nop+=2;break;
-					case CRC_DE:___output(ae,0x42);___output(ae,0x4B);ae->nop+=2;break;
-					case CRC_HL:___output(ae,0x44);___output(ae,0x4D);ae->nop+=2;break;
+					case CRC_BC:___output(ae,0x40);___output(ae,0x49);ae->nop+=2;ae->tick+=8;break;
+					case CRC_DE:___output(ae,0x42);___output(ae,0x4B);ae->nop+=2;ae->tick+=8;break;
+					case CRC_HL:___output(ae,0x44);___output(ae,0x4D);ae->nop+=2;ae->tick+=8;break;
 					/* enhanced LD BC,IX / LD BC,IY */
 					case CRC_IX:___output(ae,0xDD);___output(ae,0x44);ae->nop+=4;
-						    ___output(ae,0xDD);___output(ae,0x4D);break;
+						    ___output(ae,0xDD);___output(ae,0x4D);ae->tick+=16;break;
 					case CRC_IY:___output(ae,0xFD);___output(ae,0x44);ae->nop+=4;
-						    ___output(ae,0xFD);___output(ae,0x4D);break;
+						    ___output(ae,0xFD);___output(ae,0x4D);ae->tick+=16;break;
 					default:
 					if (strncmp(ae->wl[ae->idx+2].w,"(IX+",4)==0) {
 						/* enhanced LD BC,(IX+nn) */
@@ -9564,35 +9775,35 @@ void _LD(struct s_assenv *ae) {
 						PushExpression(ae,ae->idx+2,E_EXPRESSION_IV81);
 						___output(ae,0xDD);___output(ae,0x4E);
 						PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);
-						ae->nop+=10;
+						ae->nop+=10;ae->tick+=19;ae->tick+=19;
 					} else if (strncmp(ae->wl[ae->idx+2].w,"(IY+",4)==0) {
 						/* enhanced LD BC,(IY+nn) */
 						___output(ae,0xFD);___output(ae,0x46);
 						PushExpression(ae,ae->idx+2,E_EXPRESSION_IV81);
 						___output(ae,0xFD);___output(ae,0x4E);
 						PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);
-						ae->nop+=10;
+						ae->nop+=10;ae->tick+=19;ae->tick+=19;
 					} else if (StringIsMem(ae->wl[ae->idx+2].w)) {
 						___output(ae,0xED);___output(ae,0x4B);
 						PushExpression(ae,ae->idx+2,E_EXPRESSION_IV16);
-						ae->nop+=6;
+						ae->nop+=6;ae->tick+=20;
 					} else {
 						___output(ae,0x01);
 						PushExpression(ae,ae->idx+2,E_EXPRESSION_V16);
-						ae->nop+=3;
+						ae->nop+=3;ae->tick+=10;
 					}
 				}
 				break;
 			case CRC_DE:
 				switch (GetCRC(ae->wl[ae->idx+2].w)) {
-					case CRC_BC:___output(ae,0x50);___output(ae,0x59);ae->nop+=2;break;
-					case CRC_DE:___output(ae,0x52);___output(ae,0x5B);ae->nop+=2;break;
-					case CRC_HL:___output(ae,0x54);___output(ae,0x5D);ae->nop+=2;break;
+					case CRC_BC:___output(ae,0x50);___output(ae,0x59);ae->nop+=2;ae->tick+=8;break;
+					case CRC_DE:___output(ae,0x52);___output(ae,0x5B);ae->nop+=2;ae->tick+=8;break;
+					case CRC_HL:___output(ae,0x54);___output(ae,0x5D);ae->nop+=2;ae->tick+=8;break;
 					/* enhanced LD DE,IX / LD DE,IY */
 					case CRC_IX:___output(ae,0xDD);___output(ae,0x54);ae->nop+=4;
-						    ___output(ae,0xDD);___output(ae,0x5D);break;
+						    ___output(ae,0xDD);___output(ae,0x5D);ae->tick+=16;break;
 					case CRC_IY:___output(ae,0xFD);___output(ae,0x54);ae->nop+=4;
-						    ___output(ae,0xFD);___output(ae,0x5D);break;
+						    ___output(ae,0xFD);___output(ae,0x5D);ae->tick+=16;break;
 					default:
 					if (strncmp(ae->wl[ae->idx+2].w,"(IX+",4)==0) {
 						/* enhanced LD DE,(IX+nn) */
@@ -9600,22 +9811,22 @@ void _LD(struct s_assenv *ae) {
 						PushExpression(ae,ae->idx+2,E_EXPRESSION_IV81);
 						___output(ae,0xDD);___output(ae,0x5E);
 						PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);
-						ae->nop+=10;
+						ae->nop+=10;ae->tick+=19;ae->tick+=19;
 					} else if (strncmp(ae->wl[ae->idx+2].w,"(IY+",4)==0) {
 						/* enhanced LD DE,(IY+nn) */
 						___output(ae,0xFD);___output(ae,0x56);
 						PushExpression(ae,ae->idx+2,E_EXPRESSION_IV81);
 						___output(ae,0xFD);___output(ae,0x5E);
 						PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);
-						ae->nop+=10;
+						ae->nop+=10;ae->tick+=19;ae->tick+=19;
 					} else if (StringIsMem(ae->wl[ae->idx+2].w)) {
 						___output(ae,0xED);___output(ae,0x5B);
 						PushExpression(ae,ae->idx+2,E_EXPRESSION_IV16);
-						ae->nop+=6;
+						ae->nop+=6;ae->tick+=20;
 					} else {
 						___output(ae,0x11);
 						PushExpression(ae,ae->idx+2,E_EXPRESSION_V16);
-						ae->nop+=3;
+						ae->nop+=3;ae->tick+=10;
 					}
 				}
 				break;
@@ -9623,18 +9834,18 @@ void _LD(struct s_assenv *ae) {
 				switch (GetCRC(ae->wl[ae->idx+2].w)) {
 					/* enhanced LD IX,BC / LD IX,DE */
 					case CRC_BC:___output(ae,0xDD);___output(ae,0x60);
-						    ___output(ae,0xDD);___output(ae,0x69);ae->nop+=4;break;
+						    ___output(ae,0xDD);___output(ae,0x69);ae->nop+=4;ae->tick+=16;break;
 					case CRC_DE:___output(ae,0xDD);___output(ae,0x62);
-						    ___output(ae,0xDD);___output(ae,0x6B);ae->nop+=4;break;
+						    ___output(ae,0xDD);___output(ae,0x6B);ae->nop+=4;ae->tick+=16;break;
 					default:
 				if (StringIsMem(ae->wl[ae->idx+2].w)) {
 					___output(ae,0xDD);___output(ae,0x2A);
 					PushExpression(ae,ae->idx+2,E_EXPRESSION_IV16);
-					ae->nop+=6;
+					ae->nop+=6;ae->tick+=20;
 				} else {
 					___output(ae,0xDD);___output(ae,0x21);
 					PushExpression(ae,ae->idx+2,E_EXPRESSION_IV16);
-					ae->nop+=4;
+					ae->nop+=4;ae->tick+=14;
 				}
 				}
 				break;
@@ -9642,35 +9853,35 @@ void _LD(struct s_assenv *ae) {
 				switch (GetCRC(ae->wl[ae->idx+2].w)) {
 					/* enhanced LD IY,BC / LD IY,DE */
 					case CRC_BC:___output(ae,0xFD);___output(ae,0x60);
-						    ___output(ae,0xFD);___output(ae,0x69);ae->nop+=4;break;
+						    ___output(ae,0xFD);___output(ae,0x69);ae->nop+=4;ae->tick+=16;break;
 					case CRC_DE:___output(ae,0xFD);___output(ae,0x62);
-						    ___output(ae,0xFD);___output(ae,0x6B);ae->nop+=4;break;
+						    ___output(ae,0xFD);___output(ae,0x6B);ae->nop+=4;ae->tick+=16;break;
 					default:
 				if (StringIsMem(ae->wl[ae->idx+2].w)) {
 					___output(ae,0xFD);___output(ae,0x2A);
 					PushExpression(ae,ae->idx+2,E_EXPRESSION_IV16);
-					ae->nop+=6;
+					ae->nop+=6;ae->tick+=20;
 				} else {
 					___output(ae,0xFD);___output(ae,0x21);
 					PushExpression(ae,ae->idx+2,E_EXPRESSION_IV16);
-					ae->nop+=4;
+					ae->nop+=4;ae->tick+=14;
 				}
 				}
 				break;
 			case CRC_SP:
 				switch (GetCRC(ae->wl[ae->idx+2].w)) {
-					case CRC_HL:___output(ae,0xF9);ae->nop+=2;break;
-					case CRC_IX:___output(ae,0xDD);___output(ae,0xF9);ae->nop+=3;break;
-					case CRC_IY:___output(ae,0xFD);___output(ae,0xF9);ae->nop+=3;break;
+					case CRC_HL:___output(ae,0xF9);ae->nop+=2;ae->tick+=6;break;
+					case CRC_IX:___output(ae,0xDD);___output(ae,0xF9);ae->nop+=3;ae->tick+=10;break;
+					case CRC_IY:___output(ae,0xFD);___output(ae,0xF9);ae->nop+=3;ae->tick+=10;break;
 					default:
 						if (StringIsMem(ae->wl[ae->idx+2].w)) {
 							___output(ae,0xED);___output(ae,0x7B);
 							PushExpression(ae,ae->idx+2,E_EXPRESSION_IV16);
-							ae->nop+=6;
+							ae->nop+=6;ae->tick+=20;
 						} else {
 							___output(ae,0x31);
 							PushExpression(ae,ae->idx+2,E_EXPRESSION_V16);
-							ae->nop+=3;
+							ae->nop+=3;ae->tick+=10;
 						}
 				}
 				break;
@@ -9678,47 +9889,47 @@ void _LD(struct s_assenv *ae) {
 				/* (ix+expression) (iy+expression) (expression) expression */
 				if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0) {
 					switch (GetCRC(ae->wl[ae->idx+2].w)) {
-						case CRC_B:___output(ae,0xDD);___output(ae,0x70);PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);ae->nop+=5;break;
-						case CRC_C:___output(ae,0xDD);___output(ae,0x71);PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);ae->nop+=5;break;
-						case CRC_D:___output(ae,0xDD);___output(ae,0x72);PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);ae->nop+=5;break;
-						case CRC_E:___output(ae,0xDD);___output(ae,0x73);PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);ae->nop+=5;break;
-						case CRC_H:___output(ae,0xDD);___output(ae,0x74);PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);ae->nop+=5;break;
-						case CRC_L:___output(ae,0xDD);___output(ae,0x75);PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);ae->nop+=5;break;
-						case CRC_A:___output(ae,0xDD);___output(ae,0x77);PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);ae->nop+=5;break;
-						case CRC_HL:___output(ae,0xDD);___output(ae,0x74);PushExpression(ae,ae->idx+1,E_EXPRESSION_IV81);___output(ae,0xDD);___output(ae,0x75);PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);ae->nop+=10;break;
-						case CRC_DE:___output(ae,0xDD);___output(ae,0x72);PushExpression(ae,ae->idx+1,E_EXPRESSION_IV81);___output(ae,0xDD);___output(ae,0x73);PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);ae->nop+=10;break;
-						case CRC_BC:___output(ae,0xDD);___output(ae,0x70);PushExpression(ae,ae->idx+1,E_EXPRESSION_IV81);___output(ae,0xDD);___output(ae,0x71);PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);ae->nop+=10;break;
+						case CRC_B:___output(ae,0xDD);___output(ae,0x70);PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);ae->nop+=5;ae->tick+=19;break;
+						case CRC_C:___output(ae,0xDD);___output(ae,0x71);PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);ae->nop+=5;ae->tick+=19;break;
+						case CRC_D:___output(ae,0xDD);___output(ae,0x72);PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);ae->nop+=5;ae->tick+=19;break;
+						case CRC_E:___output(ae,0xDD);___output(ae,0x73);PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);ae->nop+=5;ae->tick+=19;break;
+						case CRC_H:___output(ae,0xDD);___output(ae,0x74);PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);ae->nop+=5;ae->tick+=19;break;
+						case CRC_L:___output(ae,0xDD);___output(ae,0x75);PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);ae->nop+=5;ae->tick+=19;break;
+						case CRC_A:___output(ae,0xDD);___output(ae,0x77);PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);ae->nop+=5;ae->tick+=19;break;
+						case CRC_HL:___output(ae,0xDD);___output(ae,0x74);PushExpression(ae,ae->idx+1,E_EXPRESSION_IV81);___output(ae,0xDD);___output(ae,0x75);PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);ae->nop+=10;ae->tick+=38;break;
+						case CRC_DE:___output(ae,0xDD);___output(ae,0x72);PushExpression(ae,ae->idx+1,E_EXPRESSION_IV81);___output(ae,0xDD);___output(ae,0x73);PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);ae->nop+=10;ae->tick+=38;break;
+						case CRC_BC:___output(ae,0xDD);___output(ae,0x70);PushExpression(ae,ae->idx+1,E_EXPRESSION_IV81);___output(ae,0xDD);___output(ae,0x71);PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);ae->nop+=10;ae->tick+=38;break;
 						default:___output(ae,0xDD);___output(ae,0x36);
 							PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
 							PushExpression(ae,ae->idx+2,E_EXPRESSION_3V8);
-							ae->nop+=6;
+							ae->nop+=6;ae->tick+=23;
 					}
 				} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0) {
 					switch (GetCRC(ae->wl[ae->idx+2].w)) {
-						case CRC_B:___output(ae,0xFD);___output(ae,0x70);PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);ae->nop+=5;break;
-						case CRC_C:___output(ae,0xFD);___output(ae,0x71);PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);ae->nop+=5;break;
-						case CRC_D:___output(ae,0xFD);___output(ae,0x72);PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);ae->nop+=5;break;
-						case CRC_E:___output(ae,0xFD);___output(ae,0x73);PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);ae->nop+=5;break;
-						case CRC_H:___output(ae,0xFD);___output(ae,0x74);PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);ae->nop+=5;break;
-						case CRC_L:___output(ae,0xFD);___output(ae,0x75);PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);ae->nop+=5;break;
-						case CRC_A:___output(ae,0xFD);___output(ae,0x77);PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);ae->nop+=5;break;
-						case CRC_HL:___output(ae,0xFD);___output(ae,0x74);PushExpression(ae,ae->idx+1,E_EXPRESSION_IV81);___output(ae,0xFD);___output(ae,0x75);PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);ae->nop+=10;break;
-						case CRC_DE:___output(ae,0xFD);___output(ae,0x72);PushExpression(ae,ae->idx+1,E_EXPRESSION_IV81);___output(ae,0xFD);___output(ae,0x73);PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);ae->nop+=10;break;
-						case CRC_BC:___output(ae,0xFD);___output(ae,0x70);PushExpression(ae,ae->idx+1,E_EXPRESSION_IV81);___output(ae,0xFD);___output(ae,0x71);PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);ae->nop+=10;break;
+						case CRC_B:___output(ae,0xFD);___output(ae,0x70);PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);ae->nop+=5;ae->tick+=19;break;
+						case CRC_C:___output(ae,0xFD);___output(ae,0x71);PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);ae->nop+=5;ae->tick+=19;break;
+						case CRC_D:___output(ae,0xFD);___output(ae,0x72);PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);ae->nop+=5;ae->tick+=19;break;
+						case CRC_E:___output(ae,0xFD);___output(ae,0x73);PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);ae->nop+=5;ae->tick+=19;break;
+						case CRC_H:___output(ae,0xFD);___output(ae,0x74);PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);ae->nop+=5;ae->tick+=19;break;
+						case CRC_L:___output(ae,0xFD);___output(ae,0x75);PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);ae->nop+=5;ae->tick+=19;break;
+						case CRC_A:___output(ae,0xFD);___output(ae,0x77);PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);ae->nop+=5;ae->tick+=19;break;
+						case CRC_HL:___output(ae,0xFD);___output(ae,0x74);PushExpression(ae,ae->idx+1,E_EXPRESSION_IV81);___output(ae,0xFD);___output(ae,0x75);PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);ae->nop+=10;ae->tick+=38;break;
+						case CRC_DE:___output(ae,0xFD);___output(ae,0x72);PushExpression(ae,ae->idx+1,E_EXPRESSION_IV81);___output(ae,0xFD);___output(ae,0x73);PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);ae->nop+=10;ae->tick+=38;break;
+						case CRC_BC:___output(ae,0xFD);___output(ae,0x70);PushExpression(ae,ae->idx+1,E_EXPRESSION_IV81);___output(ae,0xFD);___output(ae,0x71);PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);ae->nop+=10;ae->tick+=38;break;
 						default:___output(ae,0xFD);___output(ae,0x36);
 							PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
 							PushExpression(ae,ae->idx+2,E_EXPRESSION_3V8);
-							ae->nop+=6;
+							ae->nop+=6;ae->tick+=23;
 					}
 				} else if (StringIsMem(ae->wl[ae->idx+1].w)) {
 					switch (GetCRC(ae->wl[ae->idx+2].w)) {
-						case CRC_A:___output(ae,0x32);PushExpression(ae,ae->idx+1,E_EXPRESSION_V16);ae->nop+=4;break;
-						case CRC_BC:___output(ae,0xED);___output(ae,0x43);PushExpression(ae,ae->idx+1,E_EXPRESSION_IV16);ae->nop+=6;break;
-						case CRC_DE:___output(ae,0xED);___output(ae,0x53);PushExpression(ae,ae->idx+1,E_EXPRESSION_IV16);ae->nop+=6;break;
-						case CRC_HL:___output(ae,0x22);PushExpression(ae,ae->idx+1,E_EXPRESSION_V16);ae->nop+=5;break;
-						case CRC_IX:___output(ae,0xDD);___output(ae,0x22);PushExpression(ae,ae->idx+1,E_EXPRESSION_IV16);ae->nop+=6;break;
-						case CRC_IY:___output(ae,0xFD);___output(ae,0x22);PushExpression(ae,ae->idx+1,E_EXPRESSION_IV16);ae->nop+=6;break;
-						case CRC_SP:___output(ae,0xED);___output(ae,0x73);PushExpression(ae,ae->idx+1,E_EXPRESSION_IV16);ae->nop+=6;break;
+						case CRC_A:___output(ae,0x32);PushExpression(ae,ae->idx+1,E_EXPRESSION_V16);ae->nop+=4;ae->tick+=13;break;
+						case CRC_BC:___output(ae,0xED);___output(ae,0x43);PushExpression(ae,ae->idx+1,E_EXPRESSION_IV16);ae->nop+=6;ae->tick+=20;break;
+						case CRC_DE:___output(ae,0xED);___output(ae,0x53);PushExpression(ae,ae->idx+1,E_EXPRESSION_IV16);ae->nop+=6;ae->tick+=20;break;
+						case CRC_HL:___output(ae,0x22);PushExpression(ae,ae->idx+1,E_EXPRESSION_V16);ae->nop+=5;ae->tick+=16;break;
+						case CRC_IX:___output(ae,0xDD);___output(ae,0x22);PushExpression(ae,ae->idx+1,E_EXPRESSION_IV16);ae->nop+=6;ae->tick+=20;break;
+						case CRC_IY:___output(ae,0xFD);___output(ae,0x22);PushExpression(ae,ae->idx+1,E_EXPRESSION_IV16);ae->nop+=6;ae->tick+=20;break;
+						case CRC_SP:___output(ae,0xED);___output(ae,0x73);PushExpression(ae,ae->idx+1,E_EXPRESSION_IV16);ae->nop+=6;ae->tick+=20;break;
 						default:
 							MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"LD (#nnnn),[A,BC,DE,HL,SP,IX,IY] only\n");
 					}
@@ -9738,25 +9949,25 @@ void _RLC(struct s_assenv *ae) {
 	/* on check qu'il y a un ou deux parametres */
 	if (ae->wl[ae->idx+1].t==1) {
 		switch (GetCRC(ae->wl[ae->idx+1].w)) {
-			case CRC_B:___output(ae,0xCB);___output(ae,0x0);ae->nop+=2;break;
-			case CRC_C:___output(ae,0xCB);___output(ae,0x1);ae->nop+=2;break;
-			case CRC_D:___output(ae,0xCB);___output(ae,0x2);ae->nop+=2;break;
-			case CRC_E:___output(ae,0xCB);___output(ae,0x3);ae->nop+=2;break;
-			case CRC_H:___output(ae,0xCB);___output(ae,0x4);ae->nop+=2;break;
-			case CRC_L:___output(ae,0xCB);___output(ae,0x5);ae->nop+=2;break;
-			case CRC_MHL:___output(ae,0xCB);___output(ae,0x6);ae->nop+=4;break;
-			case CRC_A:___output(ae,0xCB);___output(ae,0x7);ae->nop+=2;break;
+			case CRC_B:___output(ae,0xCB);___output(ae,0x0);ae->nop+=2;ae->tick+=8;break;
+			case CRC_C:___output(ae,0xCB);___output(ae,0x1);ae->nop+=2;ae->tick+=8;break;
+			case CRC_D:___output(ae,0xCB);___output(ae,0x2);ae->nop+=2;ae->tick+=8;break;
+			case CRC_E:___output(ae,0xCB);___output(ae,0x3);ae->nop+=2;ae->tick+=8;break;
+			case CRC_H:___output(ae,0xCB);___output(ae,0x4);ae->nop+=2;ae->tick+=8;break;
+			case CRC_L:___output(ae,0xCB);___output(ae,0x5);ae->nop+=2;ae->tick+=8;break;
+			case CRC_MHL:___output(ae,0xCB);___output(ae,0x6);ae->nop+=4;ae->tick+=15;break;
+			case CRC_A:___output(ae,0xCB);___output(ae,0x7);ae->nop+=2;ae->tick+=8;break;
 			default:
 				if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0) {
 					___output(ae,0xDD);___output(ae,0xCB);
 					PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
 					___output(ae,0x6);
-					ae->nop+=7;
+					ae->nop+=7;ae->tick+=23;
 				} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0) {
 					___output(ae,0xFD);___output(ae,0xCB);
 					PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
 					___output(ae,0x6);
-					ae->nop+=7;
+					ae->nop+=7;ae->tick+=23;
 				} else {
 					MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is RLC reg8/(HL)/(IX+n)/(IY+n)\n");
 				}
@@ -9772,13 +9983,13 @@ void _RLC(struct s_assenv *ae) {
 		}
 		___output(ae,0xCB);
 		switch (GetCRC(ae->wl[ae->idx+2].w)) {
-			case CRC_B:PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);___output(ae,0x0);ae->nop+=7;break;
-			case CRC_C:PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);___output(ae,0x1);ae->nop+=7;break;
-			case CRC_D:PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);___output(ae,0x2);ae->nop+=7;break;
-			case CRC_E:PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);___output(ae,0x3);ae->nop+=7;break;
-			case CRC_H:PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);___output(ae,0x4);ae->nop+=7;break;
-			case CRC_L:PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);___output(ae,0x5);ae->nop+=7;break;
-			case CRC_A:PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);___output(ae,0x7);ae->nop+=7;break;
+			case CRC_B:PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);___output(ae,0x0);ae->nop+=7;ae->tick+=23;break;
+			case CRC_C:PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);___output(ae,0x1);ae->nop+=7;ae->tick+=23;break;
+			case CRC_D:PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);___output(ae,0x2);ae->nop+=7;ae->tick+=23;break;
+			case CRC_E:PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);___output(ae,0x3);ae->nop+=7;ae->tick+=23;break;
+			case CRC_H:PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);___output(ae,0x4);ae->nop+=7;ae->tick+=23;break;
+			case CRC_L:PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);___output(ae,0x5);ae->nop+=7;ae->tick+=23;break;
+			case CRC_A:PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);___output(ae,0x7);ae->nop+=7;ae->tick+=23;break;
 			default:			
 				MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is RLC (IX+n),reg8\n");
 		}
@@ -9791,24 +10002,24 @@ void _RRC(struct s_assenv *ae) {
 	/* on check qu'il y a un ou deux parametres */
 	if (ae->wl[ae->idx+1].t==1) {
 		switch (GetCRC(ae->wl[ae->idx+1].w)) {
-			case CRC_B:___output(ae,0xCB);___output(ae,0x8);ae->nop+=2;break;
-			case CRC_C:___output(ae,0xCB);___output(ae,0x9);ae->nop+=2;break;
-			case CRC_D:___output(ae,0xCB);___output(ae,0xA);ae->nop+=2;break;
-			case CRC_E:___output(ae,0xCB);___output(ae,0xB);ae->nop+=2;break;
-			case CRC_H:___output(ae,0xCB);___output(ae,0xC);ae->nop+=2;break;
-			case CRC_L:___output(ae,0xCB);___output(ae,0xD);ae->nop+=2;break;
-			case CRC_MHL:___output(ae,0xCB);___output(ae,0xE);ae->nop+=4;break;
-			case CRC_A:___output(ae,0xCB);___output(ae,0xF);ae->nop+=2;break;
+			case CRC_B:___output(ae,0xCB);___output(ae,0x8);ae->nop+=2;ae->tick+=8;break;
+			case CRC_C:___output(ae,0xCB);___output(ae,0x9);ae->nop+=2;ae->tick+=8;break;
+			case CRC_D:___output(ae,0xCB);___output(ae,0xA);ae->nop+=2;ae->tick+=8;break;
+			case CRC_E:___output(ae,0xCB);___output(ae,0xB);ae->nop+=2;ae->tick+=8;break;
+			case CRC_H:___output(ae,0xCB);___output(ae,0xC);ae->nop+=2;ae->tick+=8;break;
+			case CRC_L:___output(ae,0xCB);___output(ae,0xD);ae->nop+=2;ae->tick+=8;break;
+			case CRC_MHL:___output(ae,0xCB);___output(ae,0xE);ae->nop+=4;ae->tick+=15;break;
+			case CRC_A:___output(ae,0xCB);___output(ae,0xF);ae->nop+=2;ae->tick+=8;break;
 			default:
 				if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0) {
 					___output(ae,0xDD);___output(ae,0xCB);
 					PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
 					___output(ae,0xE);
-					ae->nop+=7;
+					ae->nop+=7;ae->tick+=23;
 				} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0) {
 					___output(ae,0xFD);___output(ae,0xCB);
 					PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
-					___output(ae,0xE);
+					___output(ae,0xE);ae->tick+=23;
 					ae->nop+=7;
 				} else {
 					MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is RRC reg8/(HL)/(IX+n)/(IY+n)\n");
@@ -9825,13 +10036,13 @@ void _RRC(struct s_assenv *ae) {
 		}
 		___output(ae,0xCB);
 		switch (GetCRC(ae->wl[ae->idx+2].w)) {
-			case CRC_B:PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);___output(ae,0x8);ae->nop+=7;break;
-			case CRC_C:PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);___output(ae,0x9);ae->nop+=7;break;
-			case CRC_D:PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);___output(ae,0xA);ae->nop+=7;break;
-			case CRC_E:PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);___output(ae,0xB);ae->nop+=7;break;
-			case CRC_H:PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);___output(ae,0xC);ae->nop+=7;break;
-			case CRC_L:PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);___output(ae,0xD);ae->nop+=7;break;
-			case CRC_A:PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);___output(ae,0xF);ae->nop+=7;break;
+			case CRC_B:PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);___output(ae,0x8);ae->nop+=7;ae->tick+=23;break;
+			case CRC_C:PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);___output(ae,0x9);ae->nop+=7;ae->tick+=23;break;
+			case CRC_D:PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);___output(ae,0xA);ae->nop+=7;ae->tick+=23;break;
+			case CRC_E:PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);___output(ae,0xB);ae->nop+=7;ae->tick+=23;break;
+			case CRC_H:PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);___output(ae,0xC);ae->nop+=7;ae->tick+=23;break;
+			case CRC_L:PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);___output(ae,0xD);ae->nop+=7;ae->tick+=23;break;
+			case CRC_A:PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);___output(ae,0xF);ae->nop+=7;ae->tick+=23;break;
 			default:			
 				MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is RRC (IX+n),reg8\n");
 		}
@@ -9845,28 +10056,28 @@ void _RL(struct s_assenv *ae) {
 	/* on check qu'il y a un ou deux parametres */
 	if (ae->wl[ae->idx+1].t==1) {
 		switch (GetCRC(ae->wl[ae->idx+1].w)) {
-			case CRC_BC:___output(ae,0xCB);___output(ae,0x10);___output(ae,0xCB);___output(ae,0x11);ae->nop+=4;break;
-			case CRC_B:___output(ae,0xCB);___output(ae,0x10);ae->nop+=2;break;
-			case CRC_C:___output(ae,0xCB);___output(ae,0x11);ae->nop+=2;break;
-			case CRC_DE:___output(ae,0xCB);___output(ae,0x12);___output(ae,0xCB);___output(ae,0x13);ae->nop+=4;break;
-			case CRC_D:___output(ae,0xCB);___output(ae,0x12);ae->nop+=2;break;
-			case CRC_E:___output(ae,0xCB);___output(ae,0x13);ae->nop+=2;break;
-			case CRC_HL:___output(ae,0xCB);___output(ae,0x14);___output(ae,0xCB);___output(ae,0x15);ae->nop+=4;break;
-			case CRC_H:___output(ae,0xCB);___output(ae,0x14);ae->nop+=2;break;
-			case CRC_L:___output(ae,0xCB);___output(ae,0x15);ae->nop+=2;break;
-			case CRC_MHL:___output(ae,0xCB);___output(ae,0x16);ae->nop+=4;break;
-			case CRC_A:___output(ae,0xCB);___output(ae,0x17);ae->nop+=2;break;
+			case CRC_BC:___output(ae,0xCB);___output(ae,0x10);___output(ae,0xCB);___output(ae,0x11);ae->nop+=4;ae->tick+=16;break;
+			case CRC_B:___output(ae,0xCB);___output(ae,0x10);ae->nop+=2;ae->tick+=8;break;
+			case CRC_C:___output(ae,0xCB);___output(ae,0x11);ae->nop+=2;ae->tick+=8;break;
+			case CRC_DE:___output(ae,0xCB);___output(ae,0x12);___output(ae,0xCB);___output(ae,0x13);ae->nop+=4;ae->tick+=16;break;
+			case CRC_D:___output(ae,0xCB);___output(ae,0x12);ae->nop+=2;ae->tick+=8;break;
+			case CRC_E:___output(ae,0xCB);___output(ae,0x13);ae->nop+=2;ae->tick+=8;break;
+			case CRC_HL:___output(ae,0xCB);___output(ae,0x14);___output(ae,0xCB);___output(ae,0x15);ae->nop+=4;ae->tick+=16;break;
+			case CRC_H:___output(ae,0xCB);___output(ae,0x14);ae->nop+=2;ae->tick+=8;break;
+			case CRC_L:___output(ae,0xCB);___output(ae,0x15);ae->nop+=2;ae->tick+=8;break;
+			case CRC_MHL:___output(ae,0xCB);___output(ae,0x16);ae->nop+=4;ae->tick+=15;break;
+			case CRC_A:___output(ae,0xCB);___output(ae,0x17);ae->nop+=2;ae->tick+=8;break;
 			default:
 				if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0) {
 					___output(ae,0xDD);___output(ae,0xCB);
 					PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
 					___output(ae,0x16);
-					ae->nop+=7;
+					ae->nop+=7;ae->tick+=23;
 				} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0) {
 					___output(ae,0xFD);___output(ae,0xCB);
 					PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
 					___output(ae,0x16);
-					ae->nop+=7;
+					ae->nop+=7;ae->tick+=23;
 				} else {
 					MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is RL reg8/(HL)/(IX+n)/(IY+n)\n");
 				}
@@ -9882,13 +10093,13 @@ void _RL(struct s_assenv *ae) {
 		}
 		___output(ae,0xCB);
 		switch (GetCRC(ae->wl[ae->idx+2].w)) {
-			case CRC_B:PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);___output(ae,0x10);ae->nop+=7;break;
-			case CRC_C:PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);___output(ae,0x11);ae->nop+=7;break;
-			case CRC_D:PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);___output(ae,0x12);ae->nop+=7;break;
-			case CRC_E:PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);___output(ae,0x13);ae->nop+=7;break;
-			case CRC_H:PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);___output(ae,0x14);ae->nop+=7;break;
-			case CRC_L:PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);___output(ae,0x15);ae->nop+=7;break;
-			case CRC_A:PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);___output(ae,0x17);ae->nop+=7;break;
+			case CRC_B:PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);___output(ae,0x10);ae->nop+=7;ae->tick+=23;break;
+			case CRC_C:PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);___output(ae,0x11);ae->nop+=7;ae->tick+=23;break;
+			case CRC_D:PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);___output(ae,0x12);ae->nop+=7;ae->tick+=23;break;
+			case CRC_E:PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);___output(ae,0x13);ae->nop+=7;ae->tick+=23;break;
+			case CRC_H:PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);___output(ae,0x14);ae->nop+=7;ae->tick+=23;break;
+			case CRC_L:PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);___output(ae,0x15);ae->nop+=7;ae->tick+=23;break;
+			case CRC_A:PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);___output(ae,0x17);ae->nop+=7;ae->tick+=23;break;
 			default:			
 				MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is RL (IX+n),reg8\n");
 		}
@@ -9903,28 +10114,28 @@ void _RR(struct s_assenv *ae) {
 	/* on check qu'il y a un ou deux parametres */
 	if (ae->wl[ae->idx+1].t==1) {
 		switch (GetCRC(ae->wl[ae->idx+1].w)) {
-			case CRC_BC:___output(ae,0xCB);___output(ae,0x18);___output(ae,0xCB);___output(ae,0x19);ae->nop+=4;break;
-			case CRC_B:___output(ae,0xCB);___output(ae,0x18);ae->nop+=2;break;
-			case CRC_C:___output(ae,0xCB);___output(ae,0x19);ae->nop+=2;break;
-			case CRC_DE:___output(ae,0xCB);___output(ae,0x1A);___output(ae,0xCB);___output(ae,0x1B);ae->nop+=4;break;
-			case CRC_D:___output(ae,0xCB);___output(ae,0x1A);ae->nop+=2;break;
-			case CRC_E:___output(ae,0xCB);___output(ae,0x1B);ae->nop+=2;break;
-			case CRC_HL:___output(ae,0xCB);___output(ae,0x1C);___output(ae,0xCB);___output(ae,0x1D);ae->nop+=4;break;
-			case CRC_H:___output(ae,0xCB);___output(ae,0x1C);ae->nop+=2;break;
-			case CRC_L:___output(ae,0xCB);___output(ae,0x1D);ae->nop+=2;break;
-			case CRC_MHL:___output(ae,0xCB);___output(ae,0x1E);ae->nop+=4;break;
-			case CRC_A:___output(ae,0xCB);___output(ae,0x1F);ae->nop+=2;break;
+			case CRC_BC:___output(ae,0xCB);___output(ae,0x18);___output(ae,0xCB);___output(ae,0x19);ae->nop+=4;ae->tick+=16;break;
+			case CRC_B:___output(ae,0xCB);___output(ae,0x18);ae->nop+=2;ae->tick+=8;break;
+			case CRC_C:___output(ae,0xCB);___output(ae,0x19);ae->nop+=2;ae->tick+=8;break;
+			case CRC_DE:___output(ae,0xCB);___output(ae,0x1A);___output(ae,0xCB);___output(ae,0x1B);ae->nop+=4;ae->tick+=16;break;
+			case CRC_D:___output(ae,0xCB);___output(ae,0x1A);ae->nop+=2;ae->tick+=8;break;
+			case CRC_E:___output(ae,0xCB);___output(ae,0x1B);ae->nop+=2;ae->tick+=8;break;
+			case CRC_HL:___output(ae,0xCB);___output(ae,0x1C);___output(ae,0xCB);___output(ae,0x1D);ae->nop+=4;ae->tick+=16;break;
+			case CRC_H:___output(ae,0xCB);___output(ae,0x1C);ae->nop+=2;ae->tick+=8;break;
+			case CRC_L:___output(ae,0xCB);___output(ae,0x1D);ae->nop+=2;ae->tick+=8;break;
+			case CRC_MHL:___output(ae,0xCB);___output(ae,0x1E);ae->nop+=4;ae->tick+=15;break;
+			case CRC_A:___output(ae,0xCB);___output(ae,0x1F);ae->nop+=2;ae->tick+=8;break;
 			default:
 				if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0) {
 					___output(ae,0xDD);___output(ae,0xCB);
 					PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
 					___output(ae,0x1E);
-					ae->nop+=7;
+					ae->nop+=7;ae->tick+=23;
 				} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0) {
 					___output(ae,0xFD);___output(ae,0xCB);
 					PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
 					___output(ae,0x1E);
-					ae->nop+=7;
+					ae->nop+=7;ae->tick+=23;
 				} else {
 					MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is RR reg8/(HL)/(IX+n)/(IY+n)\n");
 				}
@@ -9940,13 +10151,13 @@ void _RR(struct s_assenv *ae) {
 		}
 		___output(ae,0xCB);
 		switch (GetCRC(ae->wl[ae->idx+2].w)) {
-			case CRC_B:PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);___output(ae,0x18);ae->nop+=7;break;
-			case CRC_C:PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);___output(ae,0x19);ae->nop+=7;break;
-			case CRC_D:PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);___output(ae,0x1A);ae->nop+=7;break;
-			case CRC_E:PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);___output(ae,0x1B);ae->nop+=7;break;
-			case CRC_H:PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);___output(ae,0x1C);ae->nop+=7;break;
-			case CRC_L:PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);___output(ae,0x1D);ae->nop+=7;break;
-			case CRC_A:PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);___output(ae,0x1F);ae->nop+=7;break;
+			case CRC_B:PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);___output(ae,0x18);ae->nop+=7;ae->tick+=23;break;
+			case CRC_C:PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);___output(ae,0x19);ae->nop+=7;ae->tick+=23;break;
+			case CRC_D:PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);___output(ae,0x1A);ae->nop+=7;ae->tick+=23;break;
+			case CRC_E:PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);___output(ae,0x1B);ae->nop+=7;ae->tick+=23;break;
+			case CRC_H:PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);___output(ae,0x1C);ae->nop+=7;ae->tick+=23;break;
+			case CRC_L:PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);___output(ae,0x1D);ae->nop+=7;ae->tick+=23;break;
+			case CRC_A:PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);___output(ae,0x1F);ae->nop+=7;ae->tick+=23;break;
 			default:			
 				MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is RR (IX+n),reg8\n");
 		}
@@ -9957,36 +10168,32 @@ void _RR(struct s_assenv *ae) {
 	}
 }
 
-
-
-
-
 void _SLA(struct s_assenv *ae) {
 	/* on check qu'il y a un ou deux parametres */
 	if (ae->wl[ae->idx+1].t==1) {
 		switch (GetCRC(ae->wl[ae->idx+1].w)) {
-			case CRC_BC:___output(ae,0xCB);___output(ae,0x21);___output(ae,0xCB);___output(ae,0x10);ae->nop+=4;break; /* SLA C : RL B */
-			case CRC_B:___output(ae,0xCB);___output(ae,0x20);ae->nop+=2;break;
-			case CRC_C:___output(ae,0xCB);___output(ae,0x21);ae->nop+=2;break;
-			case CRC_DE:___output(ae,0xCB);___output(ae,0x23);___output(ae,0xCB);___output(ae,0x12);ae->nop+=4;break; /* SLA E : RL D */
-			case CRC_D:___output(ae,0xCB);___output(ae,0x22);ae->nop+=2;break;
-			case CRC_E:___output(ae,0xCB);___output(ae,0x23);ae->nop+=2;break;
-			case CRC_HL:___output(ae,0xCB);___output(ae,0x25);___output(ae,0xCB);___output(ae,0x14);ae->nop+=4;break; /* SLA L : RL H */
-			case CRC_H:___output(ae,0xCB);___output(ae,0x24);ae->nop+=2;break;
-			case CRC_L:___output(ae,0xCB);___output(ae,0x25);ae->nop+=2;break;
-			case CRC_MHL:___output(ae,0xCB);___output(ae,0x26);ae->nop+=4;break;
-			case CRC_A:___output(ae,0xCB);___output(ae,0x27);ae->nop+=2;break;
+			case CRC_BC:___output(ae,0xCB);___output(ae,0x21);___output(ae,0xCB);___output(ae,0x10);ae->nop+=4;ae->tick+=16;break; /* SLA C : RL B */
+			case CRC_B:___output(ae,0xCB);___output(ae,0x20);ae->nop+=2;ae->tick+=8;break;
+			case CRC_C:___output(ae,0xCB);___output(ae,0x21);ae->nop+=2;ae->tick+=8;break;
+			case CRC_DE:___output(ae,0xCB);___output(ae,0x23);___output(ae,0xCB);___output(ae,0x12);ae->nop+=4;ae->tick+=16;break; /* SLA E : RL D */
+			case CRC_D:___output(ae,0xCB);___output(ae,0x22);ae->nop+=2;ae->tick+=8;break;
+			case CRC_E:___output(ae,0xCB);___output(ae,0x23);ae->nop+=2;ae->tick+=8;break;
+			case CRC_HL:___output(ae,0xCB);___output(ae,0x25);___output(ae,0xCB);___output(ae,0x14);ae->nop+=4;ae->tick+=16;break; /* SLA L : RL H */
+			case CRC_H:___output(ae,0xCB);___output(ae,0x24);ae->nop+=2;ae->tick+=8;break;
+			case CRC_L:___output(ae,0xCB);___output(ae,0x25);ae->nop+=2;ae->tick+=8;break;
+			case CRC_MHL:___output(ae,0xCB);___output(ae,0x26);ae->nop+=4;ae->tick+=15;break;
+			case CRC_A:___output(ae,0xCB);___output(ae,0x27);ae->nop+=2;ae->tick+=8;break;
 			default:
 				if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0) {
 					___output(ae,0xDD);___output(ae,0xCB);
 					PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
 					___output(ae,0x26);
-					ae->nop+=7;
+					ae->nop+=7;ae->tick+=23;
 				} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0) {
 					___output(ae,0xFD);___output(ae,0xCB);
 					PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
 					___output(ae,0x26);
-					ae->nop+=7;
+					ae->nop+=7;ae->tick+=23;
 				} else {
 					MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is SLA reg8/(HL)/(IX+n)/(IY+n)\n");
 				}
@@ -10002,13 +10209,13 @@ void _SLA(struct s_assenv *ae) {
 		}
 		___output(ae,0xCB);
 		switch (GetCRC(ae->wl[ae->idx+2].w)) {
-			case CRC_B:PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);___output(ae,0x20);ae->nop+=7;break;
-			case CRC_C:PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);___output(ae,0x21);ae->nop+=7;break;
-			case CRC_D:PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);___output(ae,0x22);ae->nop+=7;break;
-			case CRC_E:PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);___output(ae,0x23);ae->nop+=7;break;
-			case CRC_H:PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);___output(ae,0x24);ae->nop+=7;break;
-			case CRC_L:PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);___output(ae,0x25);ae->nop+=7;break;
-			case CRC_A:PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);___output(ae,0x27);ae->nop+=7;break;
+			case CRC_B:PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);___output(ae,0x20);ae->nop+=7;ae->tick+=23;break;
+			case CRC_C:PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);___output(ae,0x21);ae->nop+=7;ae->tick+=23;break;
+			case CRC_D:PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);___output(ae,0x22);ae->nop+=7;ae->tick+=23;break;
+			case CRC_E:PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);___output(ae,0x23);ae->nop+=7;ae->tick+=23;break;
+			case CRC_H:PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);___output(ae,0x24);ae->nop+=7;ae->tick+=23;break;
+			case CRC_L:PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);___output(ae,0x25);ae->nop+=7;ae->tick+=23;break;
+			case CRC_A:PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);___output(ae,0x27);ae->nop+=7;ae->tick+=23;break;
 			default:			
 				MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is SLA (IX+n),reg8\n");
 		}
@@ -10023,28 +10230,28 @@ void _SRA(struct s_assenv *ae) {
 	/* on check qu'il y a un ou deux parametres */
 	if (ae->wl[ae->idx+1].t==1) {
 		switch (GetCRC(ae->wl[ae->idx+1].w)) {
-			case CRC_BC:___output(ae,0xCB);___output(ae,0x28);___output(ae,0xCB);___output(ae,0x19);ae->nop+=4;break; /* SRA B : RR C */
-			case CRC_B:___output(ae,0xCB);___output(ae,0x28);ae->nop+=2;break;
-			case CRC_C:___output(ae,0xCB);___output(ae,0x29);ae->nop+=2;break;
-			case CRC_DE:___output(ae,0xCB);___output(ae,0x2A);___output(ae,0xCB);___output(ae,0x1B);ae->nop+=4;break; /* SRA D : RR E */
-			case CRC_D:___output(ae,0xCB);___output(ae,0x2A);ae->nop+=2;break;
-			case CRC_E:___output(ae,0xCB);___output(ae,0x2B);ae->nop+=2;break;
-			case CRC_HL:___output(ae,0xCB);___output(ae,0x2C);___output(ae,0xCB);___output(ae,0x1D);ae->nop+=4;break; /* SRA H : RR L */
-			case CRC_H:___output(ae,0xCB);___output(ae,0x2C);ae->nop+=2;break;
-			case CRC_L:___output(ae,0xCB);___output(ae,0x2D);ae->nop+=2;break;
-			case CRC_MHL:___output(ae,0xCB);___output(ae,0x2E);ae->nop+=4;break;
-			case CRC_A:___output(ae,0xCB);___output(ae,0x2F);ae->nop+=2;break;
+			case CRC_BC:___output(ae,0xCB);___output(ae,0x28);___output(ae,0xCB);___output(ae,0x19);ae->nop+=4;ae->tick+=16;break; /* SRA B : RR C */
+			case CRC_B:___output(ae,0xCB);___output(ae,0x28);ae->nop+=2;ae->tick+=8;break;
+			case CRC_C:___output(ae,0xCB);___output(ae,0x29);ae->nop+=2;ae->tick+=8;break;
+			case CRC_DE:___output(ae,0xCB);___output(ae,0x2A);___output(ae,0xCB);___output(ae,0x1B);ae->nop+=4;ae->tick+=16;break; /* SRA D : RR E */
+			case CRC_D:___output(ae,0xCB);___output(ae,0x2A);ae->nop+=2;ae->tick+=8;break;
+			case CRC_E:___output(ae,0xCB);___output(ae,0x2B);ae->nop+=2;ae->tick+=8;break;
+			case CRC_HL:___output(ae,0xCB);___output(ae,0x2C);___output(ae,0xCB);___output(ae,0x1D);ae->nop+=4;ae->tick+=16;break; /* SRA H : RR L */
+			case CRC_H:___output(ae,0xCB);___output(ae,0x2C);ae->nop+=2;ae->tick+=8;break;
+			case CRC_L:___output(ae,0xCB);___output(ae,0x2D);ae->nop+=2;ae->tick+=8;break;
+			case CRC_MHL:___output(ae,0xCB);___output(ae,0x2E);ae->nop+=4;ae->tick+=15;break;
+			case CRC_A:___output(ae,0xCB);___output(ae,0x2F);ae->nop+=2;ae->tick+=8;break;
 			default:
 				if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0) {
 					___output(ae,0xDD);___output(ae,0xCB);
 					PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
 					___output(ae,0x2E);
-					ae->nop+=7;
+					ae->nop+=7;ae->tick+=23;
 				} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0) {
 					___output(ae,0xFD);___output(ae,0xCB);
 					PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
 					___output(ae,0x2E);
-					ae->nop+=7;
+					ae->nop+=7;ae->tick+=23;
 				} else {
 					MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is SRA reg8/(HL)/(IX+n)/(IY+n)\n");
 				}
@@ -10060,13 +10267,13 @@ void _SRA(struct s_assenv *ae) {
 		}
 		___output(ae,0xCB);
 		switch (GetCRC(ae->wl[ae->idx+2].w)) {
-			case CRC_B:PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);___output(ae,0x28);ae->nop+=7;break;
-			case CRC_C:PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);___output(ae,0x29);ae->nop+=7;break;
-			case CRC_D:PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);___output(ae,0x2A);ae->nop+=7;break;
-			case CRC_E:PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);___output(ae,0x2B);ae->nop+=7;break;
-			case CRC_H:PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);___output(ae,0x2C);ae->nop+=7;break;
-			case CRC_L:PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);___output(ae,0x2D);ae->nop+=7;break;
-			case CRC_A:PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);___output(ae,0x2F);ae->nop+=7;break;
+			case CRC_B:PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);___output(ae,0x28);ae->nop+=7;ae->tick+=23;break;
+			case CRC_C:PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);___output(ae,0x29);ae->nop+=7;ae->tick+=23;break;
+			case CRC_D:PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);___output(ae,0x2A);ae->nop+=7;ae->tick+=23;break;
+			case CRC_E:PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);___output(ae,0x2B);ae->nop+=7;ae->tick+=23;break;
+			case CRC_H:PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);___output(ae,0x2C);ae->nop+=7;ae->tick+=23;break;
+			case CRC_L:PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);___output(ae,0x2D);ae->nop+=7;ae->tick+=23;break;
+			case CRC_A:PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);___output(ae,0x2F);ae->nop+=7;ae->tick+=23;break;
 			default:			
 				MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is SRA (IX+n),reg8\n");
 		}
@@ -10082,28 +10289,28 @@ void _SLL(struct s_assenv *ae) {
 	/* on check qu'il y a un ou deux parametres */
 	if (ae->wl[ae->idx+1].t==1) {
 		switch (GetCRC(ae->wl[ae->idx+1].w)) {
-			case CRC_BC:___output(ae,0xCB);___output(ae,0x31);___output(ae,0xCB);___output(ae,0x10);ae->nop+=4;break; /* SLL C : RL B */
-			case CRC_B:___output(ae,0xCB);___output(ae,0x30);ae->nop+=2;break;
-			case CRC_C:___output(ae,0xCB);___output(ae,0x31);ae->nop+=2;break;
-			case CRC_DE:___output(ae,0xCB);___output(ae,0x33);___output(ae,0xCB);___output(ae,0x12);ae->nop+=4;break; /* SLL E : RL D */
-			case CRC_D:___output(ae,0xCB);___output(ae,0x32);ae->nop+=2;break;
-			case CRC_E:___output(ae,0xCB);___output(ae,0x33);ae->nop+=2;break;
-			case CRC_HL:___output(ae,0xCB);___output(ae,0x35);___output(ae,0xCB);___output(ae,0x14);ae->nop+=4;break; /* SLL L : RL H */
-			case CRC_H:___output(ae,0xCB);___output(ae,0x34);ae->nop+=2;break;
-			case CRC_L:___output(ae,0xCB);___output(ae,0x35);ae->nop+=2;break;
-			case CRC_MHL:___output(ae,0xCB);___output(ae,0x36);ae->nop+=4;break;
-			case CRC_A:___output(ae,0xCB);___output(ae,0x37);ae->nop+=2;break;
+			case CRC_BC:___output(ae,0xCB);___output(ae,0x31);___output(ae,0xCB);___output(ae,0x10);ae->nop+=4;ae->tick+=16;break; /* SLL C : RL B */
+			case CRC_B:___output(ae,0xCB);___output(ae,0x30);ae->nop+=2;ae->tick+=8;break;
+			case CRC_C:___output(ae,0xCB);___output(ae,0x31);ae->nop+=2;ae->tick+=8;break;
+			case CRC_DE:___output(ae,0xCB);___output(ae,0x33);___output(ae,0xCB);___output(ae,0x12);ae->nop+=4;ae->tick+=16;break; /* SLL E : RL D */
+			case CRC_D:___output(ae,0xCB);___output(ae,0x32);ae->nop+=2;ae->tick+=8;break;
+			case CRC_E:___output(ae,0xCB);___output(ae,0x33);ae->nop+=2;ae->tick+=8;break;
+			case CRC_HL:___output(ae,0xCB);___output(ae,0x35);___output(ae,0xCB);___output(ae,0x14);ae->nop+=4;ae->tick+=16;break; /* SLL L : RL H */
+			case CRC_H:___output(ae,0xCB);___output(ae,0x34);ae->nop+=2;ae->tick+=8;break;
+			case CRC_L:___output(ae,0xCB);___output(ae,0x35);ae->nop+=2;ae->tick+=8;break;
+			case CRC_MHL:___output(ae,0xCB);___output(ae,0x36);ae->nop+=4;ae->tick+=15;break;
+			case CRC_A:___output(ae,0xCB);___output(ae,0x37);ae->nop+=2;ae->tick+=8;break;
 			default:
 				if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0) {
 					___output(ae,0xDD);___output(ae,0xCB);
 					PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
 					___output(ae,0x36);
-					ae->nop+=7;
+					ae->nop+=7;ae->tick+=23;
 				} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0) {
 					___output(ae,0xFD);___output(ae,0xCB);
 					PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
 					___output(ae,0x36);
-					ae->nop+=7;
+					ae->nop+=7;ae->tick+=23;
 				} else {
 					MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is SLL reg8/(HL)/(IX+n)/(IY+n)\n");
 				}
@@ -10119,13 +10326,13 @@ void _SLL(struct s_assenv *ae) {
 		}
 		___output(ae,0xCB);
 		switch (GetCRC(ae->wl[ae->idx+2].w)) {
-			case CRC_B:PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);___output(ae,0x30);ae->nop+=7;break;
-			case CRC_C:PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);___output(ae,0x31);ae->nop+=7;break;
-			case CRC_D:PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);___output(ae,0x32);ae->nop+=7;break;
-			case CRC_E:PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);___output(ae,0x33);ae->nop+=7;break;
-			case CRC_H:PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);___output(ae,0x34);ae->nop+=7;break;
-			case CRC_L:PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);___output(ae,0x35);ae->nop+=7;break;
-			case CRC_A:PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);___output(ae,0x37);ae->nop+=7;break;
+			case CRC_B:PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);___output(ae,0x30);ae->nop+=7;ae->tick+=23;break;
+			case CRC_C:PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);___output(ae,0x31);ae->nop+=7;ae->tick+=23;break;
+			case CRC_D:PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);___output(ae,0x32);ae->nop+=7;ae->tick+=23;break;
+			case CRC_E:PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);___output(ae,0x33);ae->nop+=7;ae->tick+=23;break;
+			case CRC_H:PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);___output(ae,0x34);ae->nop+=7;ae->tick+=23;break;
+			case CRC_L:PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);___output(ae,0x35);ae->nop+=7;ae->tick+=23;break;
+			case CRC_A:PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);___output(ae,0x37);ae->nop+=7;ae->tick+=23;break;
 			default:			
 				MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is SLL (IX+n),reg8\n");
 		}
@@ -10140,28 +10347,28 @@ void _SRL(struct s_assenv *ae) {
 	/* on check qu'il y a un ou deux parametres */
 	if (ae->wl[ae->idx+1].t==1) {
 		switch (GetCRC(ae->wl[ae->idx+1].w)) {
-			case CRC_BC:___output(ae,0xCB);___output(ae,0x38);___output(ae,0xCB);___output(ae,0x11);ae->nop+=4;break; /* SRL B : RL C */
-			case CRC_B:___output(ae,0xCB);___output(ae,0x38);ae->nop+=2;break;
-			case CRC_C:___output(ae,0xCB);___output(ae,0x39);ae->nop+=2;break;
-			case CRC_DE:___output(ae,0xCB);___output(ae,0x3A);___output(ae,0xCB);___output(ae,0x13);ae->nop+=4;break; /* SRL D : RL E */
-			case CRC_D:___output(ae,0xCB);___output(ae,0x3A);ae->nop+=2;break;
-			case CRC_E:___output(ae,0xCB);___output(ae,0x3B);ae->nop+=2;break;
-			case CRC_HL:___output(ae,0xCB);___output(ae,0x3C);___output(ae,0xCB);___output(ae,0x15);ae->nop+=4;break; /* SRL H : RL L */
-			case CRC_H:___output(ae,0xCB);___output(ae,0x3C);ae->nop+=2;break;
-			case CRC_L:___output(ae,0xCB);___output(ae,0x3D);ae->nop+=2;break;
-			case CRC_MHL:___output(ae,0xCB);___output(ae,0x3E);ae->nop+=4;break;
-			case CRC_A:___output(ae,0xCB);___output(ae,0x3F);ae->nop+=2;break;
+			case CRC_BC:___output(ae,0xCB);___output(ae,0x38);___output(ae,0xCB);___output(ae,0x11);ae->nop+=4;ae->tick+=16;break; /* SRL B : RL C */
+			case CRC_B:___output(ae,0xCB);___output(ae,0x38);ae->nop+=2;ae->tick+=8;break;
+			case CRC_C:___output(ae,0xCB);___output(ae,0x39);ae->nop+=2;ae->tick+=8;break;
+			case CRC_DE:___output(ae,0xCB);___output(ae,0x3A);___output(ae,0xCB);___output(ae,0x13);ae->nop+=4;ae->tick+=16;break; /* SRL D : RL E */
+			case CRC_D:___output(ae,0xCB);___output(ae,0x3A);ae->nop+=2;ae->tick+=8;break;
+			case CRC_E:___output(ae,0xCB);___output(ae,0x3B);ae->nop+=2;ae->tick+=8;break;
+			case CRC_HL:___output(ae,0xCB);___output(ae,0x3C);___output(ae,0xCB);___output(ae,0x15);ae->nop+=4;ae->tick+=16;break; /* SRL H : RL L */
+			case CRC_H:___output(ae,0xCB);___output(ae,0x3C);ae->nop+=2;ae->tick+=8;break;
+			case CRC_L:___output(ae,0xCB);___output(ae,0x3D);ae->nop+=2;ae->tick+=8;break;
+			case CRC_MHL:___output(ae,0xCB);___output(ae,0x3E);ae->nop+=4;ae->tick+=15;break;
+			case CRC_A:___output(ae,0xCB);___output(ae,0x3F);ae->nop+=2;ae->tick+=8;break;
 			default:
 				if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0) {
 					___output(ae,0xDD);___output(ae,0xCB);
 					PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
 					___output(ae,0x3E);
-					ae->nop+=7;
+					ae->nop+=7;ae->tick+=23;
 				} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0) {
 					___output(ae,0xFD);___output(ae,0xCB);
 					PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
 					___output(ae,0x3E);
-					ae->nop+=7;
+					ae->nop+=7;ae->tick+=23;
 				} else {
 					MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is SRL reg8/(HL)/(IX+n)/(IY+n)\n");
 				}
@@ -10177,13 +10384,13 @@ void _SRL(struct s_assenv *ae) {
 		}
 		___output(ae,0xCB);
 		switch (GetCRC(ae->wl[ae->idx+2].w)) {
-			case CRC_B:PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);___output(ae,0x38);ae->nop+=7;break;
-			case CRC_C:PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);___output(ae,0x39);ae->nop+=7;break;
-			case CRC_D:PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);___output(ae,0x3A);ae->nop+=7;break;
-			case CRC_E:PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);___output(ae,0x3B);ae->nop+=7;break;
-			case CRC_H:PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);___output(ae,0x3C);ae->nop+=7;break;
-			case CRC_L:PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);___output(ae,0x3D);ae->nop+=7;break;
-			case CRC_A:PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);___output(ae,0x3F);ae->nop+=7;break;
+			case CRC_B:PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);___output(ae,0x38);ae->nop+=7;ae->tick+=23;break;
+			case CRC_C:PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);___output(ae,0x39);ae->nop+=7;ae->tick+=23;break;
+			case CRC_D:PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);___output(ae,0x3A);ae->nop+=7;ae->tick+=23;break;
+			case CRC_E:PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);___output(ae,0x3B);ae->nop+=7;ae->tick+=23;break;
+			case CRC_H:PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);___output(ae,0x3C);ae->nop+=7;ae->tick+=23;break;
+			case CRC_L:PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);___output(ae,0x3D);ae->nop+=7;ae->tick+=23;break;
+			case CRC_A:PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);___output(ae,0x3F);ae->nop+=7;ae->tick+=23;break;
 			default:			
 				MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is SRL (IX+n),reg8\n");
 		}
@@ -10208,25 +10415,25 @@ void _BIT(struct s_assenv *ae) {
 		o=0x40+o*8;
 		if (ae->wl[ae->idx+1].t==0 && ae->wl[ae->idx+2].t==1) {
 			switch (GetCRC(ae->wl[ae->idx+2].w)) {
-				case CRC_B:___output(ae,0xCB);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x0+o);ae->nop+=2;break;
-				case CRC_C:___output(ae,0xCB);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x1+o);ae->nop+=2;break;
-				case CRC_D:___output(ae,0xCB);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x2+o);ae->nop+=2;break;
-				case CRC_E:___output(ae,0xCB);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x3+o);ae->nop+=2;break;
-				case CRC_H:___output(ae,0xCB);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x4+o);ae->nop+=2;break;
-				case CRC_L:___output(ae,0xCB);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x5+o);ae->nop+=2;break;
-				case CRC_MHL:___output(ae,0xCB);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x6+o);ae->nop+=3;break;
-				case CRC_A:___output(ae,0xCB);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x7+o);ae->nop+=2;break;
+				case CRC_B:___output(ae,0xCB);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x0+o);ae->nop+=2;ae->tick+=8;break;
+				case CRC_C:___output(ae,0xCB);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x1+o);ae->nop+=2;ae->tick+=8;break;
+				case CRC_D:___output(ae,0xCB);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x2+o);ae->nop+=2;ae->tick+=8;break;
+				case CRC_E:___output(ae,0xCB);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x3+o);ae->nop+=2;ae->tick+=8;break;
+				case CRC_H:___output(ae,0xCB);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x4+o);ae->nop+=2;ae->tick+=8;break;
+				case CRC_L:___output(ae,0xCB);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x5+o);ae->nop+=2;ae->tick+=8;break;
+				case CRC_MHL:___output(ae,0xCB);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x6+o);ae->nop+=3;ae->tick+=12;break;
+				case CRC_A:___output(ae,0xCB);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x7+o);ae->nop+=2;ae->tick+=8;break;
 				default:
 					if (strncmp(ae->wl[ae->idx+2].w,"(IX",3)==0) {
 						___output(ae,0xDD);___output(ae,0xCB);
 						PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);
 						PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x6+o);
-						ae->nop+=6;
+						ae->nop+=6;ae->tick+=20;
 					} else if (strncmp(ae->wl[ae->idx+2].w,"(IY",3)==0) {
 						___output(ae,0xFD);___output(ae,0xCB);
 						PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);
 						PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x6+o);
-						ae->nop+=6;
+						ae->nop+=6;ae->tick+=20;
 					} else {
 						MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is BIT n,reg8/(HL)/(IX+n)/(IY+n)\n");
 					}
@@ -10242,13 +10449,13 @@ void _BIT(struct s_assenv *ae) {
 			}
 			___output(ae,0xCB);
 			switch (GetCRC(ae->wl[ae->idx+3].w)) {
-				case CRC_B:PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x0+o);ae->nop+=6;break;
-				case CRC_C:PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x1+o);ae->nop+=6;break;
-				case CRC_D:PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x2+o);ae->nop+=6;break;
-				case CRC_E:PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x3+o);ae->nop+=6;break;
-				case CRC_H:PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x4+o);ae->nop+=6;break;
-				case CRC_L:PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x5+o);ae->nop+=6;break;
-				case CRC_A:PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x7+o);ae->nop+=6;break;
+				case CRC_B:PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x0+o);ae->nop+=6;ae->tick+=20;break;
+				case CRC_C:PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x1+o);ae->nop+=6;ae->tick+=20;break;
+				case CRC_D:PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x2+o);ae->nop+=6;ae->tick+=20;break;
+				case CRC_E:PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x3+o);ae->nop+=6;ae->tick+=20;break;
+				case CRC_H:PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x4+o);ae->nop+=6;ae->tick+=20;break;
+				case CRC_L:PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x5+o);ae->nop+=6;ae->tick+=20;break;
+				case CRC_A:PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x7+o);ae->nop+=6;ae->tick+=20;break;
 				default:			
 					MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is BIT n,(IX+n),reg8\n");
 			}
@@ -10271,25 +10478,25 @@ void _RES(struct s_assenv *ae) {
 		o=0x80+o*8;
 		if (ae->wl[ae->idx+1].t==0 && ae->wl[ae->idx+2].t==1) {
 			switch (GetCRC(ae->wl[ae->idx+2].w)) {
-				case CRC_B:___output(ae,0xCB);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x0+o);ae->nop+=2;break;
-				case CRC_C:___output(ae,0xCB);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x1+o);ae->nop+=2;break;
-				case CRC_D:___output(ae,0xCB);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x2+o);ae->nop+=2;break;
-				case CRC_E:___output(ae,0xCB);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x3+o);ae->nop+=2;break;
-				case CRC_H:___output(ae,0xCB);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x4+o);ae->nop+=2;break;
-				case CRC_L:___output(ae,0xCB);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x5+o);ae->nop+=2;break;
-				case CRC_MHL:___output(ae,0xCB);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x6+o);ae->nop+=4;break;
-				case CRC_A:___output(ae,0xCB);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x7+o);ae->nop+=2;break;
+				case CRC_B:___output(ae,0xCB);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x0+o);ae->nop+=2;ae->tick+=8;break;
+				case CRC_C:___output(ae,0xCB);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x1+o);ae->nop+=2;ae->tick+=8;break;
+				case CRC_D:___output(ae,0xCB);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x2+o);ae->nop+=2;ae->tick+=8;break;
+				case CRC_E:___output(ae,0xCB);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x3+o);ae->nop+=2;ae->tick+=8;break;
+				case CRC_H:___output(ae,0xCB);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x4+o);ae->nop+=2;ae->tick+=8;break;
+				case CRC_L:___output(ae,0xCB);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x5+o);ae->nop+=2;ae->tick+=8;break;
+				case CRC_MHL:___output(ae,0xCB);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x6+o);ae->nop+=4;ae->tick+=15;break;
+				case CRC_A:___output(ae,0xCB);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x7+o);ae->nop+=2;ae->tick+=8;break;
 				default:
 					if (strncmp(ae->wl[ae->idx+2].w,"(IX",3)==0) {
 						___output(ae,0xDD);___output(ae,0xCB);
 						PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);
 						PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x6+o);
-						ae->nop+=7;
+						ae->nop+=7;ae->tick+=23;
 					} else if (strncmp(ae->wl[ae->idx+2].w,"(IY",3)==0) {
 						___output(ae,0xFD);___output(ae,0xCB);
 						PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);
 						PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x6+o);
-						ae->nop+=7;
+						ae->nop+=7;ae->tick+=23;
 					} else {
 						MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is RES n,reg8/(HL)/(IX+n)/(IY+n)\n");
 					}
@@ -10305,13 +10512,13 @@ void _RES(struct s_assenv *ae) {
 			}
 			___output(ae,0xCB);
 			switch (GetCRC(ae->wl[ae->idx+3].w)) {
-				case CRC_B:PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x0+o);ae->nop+=7;break;
-				case CRC_C:PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x1+o);ae->nop+=7;break;
-				case CRC_D:PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x2+o);ae->nop+=7;break;
-				case CRC_E:PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x3+o);ae->nop+=7;break;
-				case CRC_H:PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x4+o);ae->nop+=7;break;
-				case CRC_L:PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x5+o);ae->nop+=7;break;
-				case CRC_A:PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x7+o);ae->nop+=7;break;
+				case CRC_B:PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x0+o);ae->nop+=7;ae->tick+=23;break;
+				case CRC_C:PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x1+o);ae->nop+=7;ae->tick+=23;break;
+				case CRC_D:PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x2+o);ae->nop+=7;ae->tick+=23;break;
+				case CRC_E:PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x3+o);ae->nop+=7;ae->tick+=23;break;
+				case CRC_H:PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x4+o);ae->nop+=7;ae->tick+=23;break;
+				case CRC_L:PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x5+o);ae->nop+=7;ae->tick+=23;break;
+				case CRC_A:PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x7+o);ae->nop+=7;ae->tick+=23;break;
 				default:			
 					MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is RES n,(IX+n),reg8\n");
 			}
@@ -10334,25 +10541,25 @@ void _SET(struct s_assenv *ae) {
 		o=0xC0+o*8;
 		if (ae->wl[ae->idx+1].t==0 && ae->wl[ae->idx+2].t==1) {
 			switch (GetCRC(ae->wl[ae->idx+2].w)) {
-				case CRC_B:___output(ae,0xCB);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x0+o);ae->nop+=2;break;
-				case CRC_C:___output(ae,0xCB);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x1+o);ae->nop+=2;break;
-				case CRC_D:___output(ae,0xCB);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x2+o);ae->nop+=2;break;
-				case CRC_E:___output(ae,0xCB);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x3+o);ae->nop+=2;break;
-				case CRC_H:___output(ae,0xCB);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x4+o);ae->nop+=2;break;
-				case CRC_L:___output(ae,0xCB);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x5+o);ae->nop+=2;break;
-				case CRC_MHL:___output(ae,0xCB);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x6+o);ae->nop+=4;break;
-				case CRC_A:___output(ae,0xCB);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x7+o);ae->nop+=2;break;
+				case CRC_B:___output(ae,0xCB);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x0+o);ae->nop+=2;ae->tick+=8;break;
+				case CRC_C:___output(ae,0xCB);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x1+o);ae->nop+=2;ae->tick+=8;break;
+				case CRC_D:___output(ae,0xCB);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x2+o);ae->nop+=2;ae->tick+=8;break;
+				case CRC_E:___output(ae,0xCB);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x3+o);ae->nop+=2;ae->tick+=8;break;
+				case CRC_H:___output(ae,0xCB);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x4+o);ae->nop+=2;ae->tick+=8;break;
+				case CRC_L:___output(ae,0xCB);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x5+o);ae->nop+=2;ae->tick+=8;break;
+				case CRC_MHL:___output(ae,0xCB);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x6+o);ae->nop+=4;ae->tick+=15;break;
+				case CRC_A:___output(ae,0xCB);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x7+o);ae->nop+=2;ae->tick+=8;break;
 				default:
 					if (strncmp(ae->wl[ae->idx+2].w,"(IX",3)==0) {
 						___output(ae,0xDD);___output(ae,0xCB);
 						PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);
 						PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x6+o);
-						ae->nop+=7;
+						ae->nop+=7;ae->tick+=23;
 					} else if (strncmp(ae->wl[ae->idx+2].w,"(IY",3)==0) {
 						___output(ae,0xFD);___output(ae,0xCB);
 						PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);
 						PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x6+o);
-						ae->nop+=7;
+						ae->nop+=7;ae->tick+=23;
 					} else {
 						MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is SET n,reg8/(HL)/(IX+n)/(IY+n)\n");
 					}
@@ -10368,13 +10575,13 @@ void _SET(struct s_assenv *ae) {
 			}
 			___output(ae,0xCB);
 			switch (GetCRC(ae->wl[ae->idx+3].w)) {
-				case CRC_B:PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x0+o);ae->nop+=7;break;
-				case CRC_C:PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x1+o);ae->nop+=7;break;
-				case CRC_D:PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x2+o);ae->nop+=7;break;
-				case CRC_E:PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x3+o);ae->nop+=7;break;
-				case CRC_H:PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x4+o);ae->nop+=7;break;
-				case CRC_L:PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x5+o);ae->nop+=7;break;
-				case CRC_A:PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x7+o);ae->nop+=7;break;
+				case CRC_B:PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x0+o);ae->nop+=7;ae->tick+=23;break;
+				case CRC_C:PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x1+o);ae->nop+=7;ae->tick+=23;break;
+				case CRC_D:PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x2+o);ae->nop+=7;ae->tick+=23;break;
+				case CRC_E:PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x3+o);ae->nop+=7;ae->tick+=23;break;
+				case CRC_H:PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x4+o);ae->nop+=7;ae->tick+=23;break;
+				case CRC_L:PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x5+o);ae->nop+=7;ae->tick+=23;break;
+				case CRC_A:PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x7+o);ae->nop+=7;ae->tick+=23;break;
 				default:			
 					MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is SET n,(IX+n),reg8\n");
 			}
@@ -18835,6 +19042,19 @@ int RasmAssembleInfoParam(const char *datain, int lenin, unsigned char **dataout
 #define AUTOTEST_MODULE02 "unglobal: nop: .prox: nop: module un: deuxglobal: nop: .prox: nop: djnz .prox: nop: doublon: nop: module deux: troisglobal: nop: " \
 			" .prox: nop: djnz .prox: nop: doublon: nop: assert doublon>troisglobal: module: jr un_doublon: jr deux_doublon: jr un_deuxglobal.prox: jr deux_troisglobal.prox "
 
+#define AUTOTEST_GETNOP_LD "ticker start,testouille:"\
+			"ld a,1: ld a,b: ld b,a: ld a,i: ld i,a: ld a,r: ld r,a:"\
+			"ld a,(5): ld a,(hl): ld a,(de): ld (de),a: ld (hl),h: ld a,lx: ld lx,c:"\
+			"ld (1234),a: ld hl,1234: ld bc,1234: ld ix,1234: ld hl,(123): ld bc,(123): ld ix,(123): ld sp,(123):"\
+			"ld (123),hl: ld (123),de: ld (123),iy: ld (123),sp: ld yh,45: ld sp,hl: ld sp,ix:"\
+			"ticker stop,testouille:"\
+			"v1=getnop('ld a,1: ld a,b: ld b,a: ld a,i: ld i,a: ld a,r: ld r,a'):"\
+			"v1+=getnop('ld a,(5): ld a,(hl): ld a,(de): ld (de),a: ld (hl),h: ld a,lx: ld lx,c'):"\
+			"v1+=getnop('ld (1234),a: ld hl,1234: ld bc,1234: ld ix,1234: ld hl,(123): ld bc,(123): ld ix,(123): ld sp,(123)'):"\
+			"v1+=getnop('ld (123),hl: ld (123),de: ld (123),iy: ld (123),sp: ld yh,45: ld sp,hl: ld sp,ix'):"\
+			"assert v1==testouille"
+
+
 #define AUTOTEST_SNASET "buildsna:bank 0:nop:"\
 	":snaset Z80_AF,0x1234 :snaset Z80_A,0x11 :snaset Z80_F,0x11 :snaset Z80_BC,0x11 :snaset Z80_B,0x11 :snaset Z80_C,0x11 :snaset Z80_DE,0x11 :snaset Z80_D,0x11"\
 	":snaset Z80_E,0x11 :snaset Z80_HL,0x11 :snaset Z80_H,0x11 :snaset Z80_L,0x11 :snaset Z80_R,0x11 :snaset Z80_I,0x11 :snaset Z80_IFF0,0x11 :snaset Z80_IFF1,0x11"\
@@ -18958,11 +19178,11 @@ struct s_autotest_keyword autotest_keyword[]={
 	{"assert getnop('set 0,a')==2 : nop",0}, {"assert getnop('set 2,a')==2 : nop",0}, {"assert getnop('set 5,a')==2 : nop",0},
 	{"assert getnop('set 0,b')==2 : nop",0}, {"assert getnop('set 0,c')==2 : nop",0}, {"assert getnop('set 0,d')==2 : nop",0},
 	{"assert getnop('set 0,e')==2 : nop",0}, {"assert getnop('set 0,h')==2 : nop",0}, {"assert getnop('set 0,l')==2 : nop",0},
-	{"assert getnop('set 0,(hl)')==3 : nop",0}, {"assert getnop('set 1,(ix+12),d')==6 : nop",0}, {"assert getnop('set 3,(iy-34),h')==6 : nop",0},
+	{"assert getnop('set 0,(hl)')==4 : nop",0}, {"assert getnop('set 1,(ix+12),d')==7 : nop",0}, {"assert getnop('set 3,(iy-34),h')==7 : nop",0},
 	{"assert getnop('res 0,a')==2 : nop",0}, {"assert getnop('res 2,a')==2 : nop",0}, {"assert getnop('res 5,a')==2 : nop",0},
 	{"assert getnop('res 0,b')==2 : nop",0}, {"assert getnop('res 0,c')==2 : nop",0}, {"assert getnop('res 0,d')==2 : nop",0},
 	{"assert getnop('res 0,e')==2 : nop",0}, {"assert getnop('res 0,h')==2 : nop",0}, {"assert getnop('res 0,l')==2 : nop",0},
-	{"assert getnop('res 0,(hl)')==3 : nop",0}, {"assert getnop('res 1,(ix+12),d')==6 : nop",0}, {"assert getnop('res 3,(iy-34),h')==6 : nop",0},
+	{"assert getnop('res 0,(hl)')==4 : nop",0}, {"assert getnop('res 1,(ix+12),d')==7 : nop",0}, {"assert getnop('res 3,(iy-34),h')==7 : nop",0},
 	{"assert getnop('bit 0,a')==2 : nop",0}, {"assert getnop('bit 2,a')==2 : nop",0}, {"assert getnop('bit 5,a')==2 : nop",0},
 	{"assert getnop('bit 0,b')==2 : nop",0}, {"assert getnop('bit 0,c')==2 : nop",0}, {"assert getnop('bit 0,d')==2 : nop",0},
 	{"assert getnop('bit 0,e')==2 : nop",0}, {"assert getnop('bit 0,h')==2 : nop",0}, {"assert getnop('bit 0,l')==2 : nop",0},
@@ -19712,6 +19932,11 @@ printf("testing code skip OK\n");
 	if (!ret) {} else {printf("Autotest %03d ERROR (formula case 2 function+multiple parenthesis)\n",cpt);exit(-1);}
 	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
 printf("testing formula functions + multiple parenthesis OK\n");
+
+	ret=RasmAssemble(AUTOTEST_GETNOP_LD,strlen(AUTOTEST_GETNOP_LD),&opcode,&opcodelen);
+	if (!ret) {} else {printf("Autotest %03d ERROR (math function GETNOP with multiple LD syncronised with TICKER)\n",cpt);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing synchronisation between TICKER and GETNOP on multiple LD OK\n");
 
 	ret=RasmAssemble(AUTOTEST_SHIFTMAX,strlen(AUTOTEST_SHIFTMAX),&opcode,&opcodelen);
 	if (!ret) {} else {printf("Autotest %03d ERROR (shifting more than 31 must give zero result)\n",cpt);exit(-1);}
