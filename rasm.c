@@ -3807,6 +3807,15 @@ char *TranslateTag(struct s_assenv *ae, char *varbuffer, int *touched, int enabl
 
 #define CRC_EX		0x4BD5DD15
 #define CRC_EXX		0xE06FF76D
+#define CRC_LDIR	0xF7F59DA3
+#define CRC_LDDR	0xF7F5A79E
+#define CRC_INIR	0xDFE98BAA
+#define CRC_INDR	0xDFE99DA5
+#define CRC_OTIR	0xEFB9D7B6
+#define CRC_OTDR	0xEFB9A1B1
+#define CRC_CPIR	0xFF96FA6
+#define CRC_CPDR	0xFF959A1
+
 
 
 int __GETNOP(struct s_assenv *ae,char *oplist, int didx)
@@ -3885,6 +3894,8 @@ int __GETNOP(struct s_assenv *ae,char *oplist, int didx)
 			case CRC_RST:
 			case CRC_RETN:
 			case CRC_RETI:
+			case CRC_CPDR:
+			case CRC_CPIR:
 			case CRC_CPD:
 			case CRC_CPI:tick+=4;break;
 
@@ -3894,6 +3905,12 @@ int __GETNOP(struct s_assenv *ae,char *oplist, int didx)
 			case CRC_LDI:
 			case CRC_OUTI:
 			case CRC_OUTD:
+			case CRC_LDIR:
+			case CRC_LDDR:
+			case CRC_INIR:
+			case CRC_INDR:
+			case CRC_OTIR:
+			case CRC_OTDR:
 			case CRC_IND:
 			case CRC_INI:tick+=5;break;
 
@@ -4021,12 +4038,11 @@ int __GETNOP(struct s_assenv *ae,char *oplist, int didx)
 			case CRC_JP:
 				// JP is supposed to loop!
 				if (zearg) {
-					if (*zearg=='C' && strncmp(zearg,"NC",2)==0 && *zearg=='Z' && strncmp(zearg,"NZ",2)==0)
-						tick+=3;
-					else if (strcmp(zearg,"(IX)")==0)
+					if (strcmp(zearg,"(IX)")==0)
 						tick+=2;
 					else if (strcmp(zearg,"(HL)")==0)
 						tick+=1;
+					else tick+=3;
 				} else tick+=3;
 				break;
 			case CRC_DJNZ:
@@ -4238,22 +4254,404 @@ int __GETTICK(struct s_assenv *ae,char *oplist, int didx)
 	}
 	/* duplicata */
 	opref=TxtStrDup(oplist);
+	/* clean-up */
+	TxtReplace(opref,"\t"," ",0);
+	TxtReplace(opref,"  "," ",1);
+	TxtReplace(opref,": ",":",1);
+	/* simplify extended registers to XL or IX */
+	TxtReplace(opref,"IY","IX",0);
+	TxtReplace(opref,"IXL","XL",0);
+	TxtReplace(opref,"IXH","XL",0);
+	TxtReplace(opref,"LX","XL",0);
+	TxtReplace(opref,"HX","XL",0);
+	TxtReplace(opref,"LY","XL",0);
+	TxtReplace(opref,"HY","XL",0);
+	TxtReplace(opref,"YL","XL",0);
+	TxtReplace(opref,"XH","XL",0);
+	TxtReplace(opref,"YH","XL",0);
+
 	/* count opcodes */
-	opcode=TxtSplitWithChar(oplist,':');
+	opcode=TxtSplitWithChar(opref,':');
 
 	idx=0;
 	while (opcode[idx]) {
-		crc=GetCRC(opcode[idx]);
+		char *zeopcode,*terminator,*zearg=NULL;
+		char **listarg;
 
-		/* partial support for DEC,DJNZ,RET,JR */
+		zeopcode=opcode[idx];
+		/* trim */
+		while (*zeopcode==' ') zeopcode++;
+		terminator=zeopcode;
+		while (*terminator!=0 && *terminator!=' ') terminator++;
+		if (*terminator) {
+			zearg=terminator+1;
+			*terminator=0;
+			/* no space in args */
+			TxtReplace(zearg," ","",1);
+		}
+		crc=GetCRC(zeopcode);
+
+		/*************************************
+		* very simple and simplified parsing *
+		*************************************/
 		switch (crc) {
-			/**************************/
-			case CRC_JP:tick+=10;break;
-			case CRC_DJNZ:tick+=13;break;
-			case CRC_JR:tick+=12;break;
-			case CRC_RET:tick+=10;break;
+			case CRC_RLA:
+			case CRC_RLCA:
+			case CRC_RRCA:
+			case CRC_RRA:
+			case CRC_NOP:
+			case CRC_CCF:
+			case CRC_DAA:
+			case CRC_SCF:
+			case CRC_CPL:
+			case CRC_EXX:
+			case CRC_EI:
+			case CRC_DI:tick+=4;break;
+
+			case CRC_IM:
+			case CRC_NEG:tick+=8;break;
+
+			case CRC_RST:tick+=11;break;
+
+			case CRC_RETN:
+			case CRC_RETI:tick+=14;break;
+
+			case CRC_CPIR:
+			case CRC_CPDR:
+			case CRC_CPD:
+			case CRC_CPI:
+			case CRC_OUTI:
+			case CRC_OUTD:
+			case CRC_LDD:
+			case CRC_LDI:
+			case CRC_LDIR:
+			case CRC_LDDR:
+			case CRC_INIR:
+			case CRC_INDR:
+			case CRC_OTIR:
+			case CRC_OTDR:
+			case CRC_IND:
+			case CRC_INI:tick+=16;break;
+
+			case CRC_RLD:
+			case CRC_RRD:tick+=18;break;
+
+			case CRC_EX:
+				if (zearg) {
+					if (strstr(zearg,"AF") || strstr(zearg,"DE")) tick+=4; else
+					if (strstr(zearg,"(SP)") && strstr(zearg,"HL")) tick+=19; else
+					if (strstr(zearg,"(SP)") && strstr(zearg,"IX")) tick+=23;
+				} else {
+					MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported opcode [%s] for GETTICK, see documentation about this directive\n",opcode[idx]);
+				}
+				break;
+
+			case CRC_PUSH:
+				if (zearg) {
+					if (strcmp(zearg,"IX")==0) tick+=15; else tick+=11;
+				} else {
+					MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported opcode [%s] for GETTICK, see documentation about this directive\n",opcode[idx]);
+				}
+				break;
+
+			case CRC_POP:
+				if (zearg) {
+					if (strcmp(zearg,"IX")==0) tick+=14; else tick+=10;
+				} else {
+					MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported opcode [%s] for GETTICK, see documentation about this directive\n",opcode[idx]);
+				}
+				break;
+
+			case CRC_SLA:
+			case CRC_SLL:
+			case CRC_SRA:
+			case CRC_SRL:
+			case CRC_RL:
+			case CRC_RLC:
+			case CRC_RR:
+			case CRC_RRC:
+				if (zearg) {
+					if (strstr(zearg,"(HL)")) tick+=15; else
+					if (strstr(zearg,"(IX")) tick+=23; else
+						tick+=8;
+				} else {
+					MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported opcode [%s] for GETTICK, see documentation about this directive\n",opcode[idx]);
+				}
+				break;
+
+			case CRC_OUT:
+				if (zearg) {
+					if (strstr(zearg,"(C),")) tick+=12; else tick+=11;
+				} else {
+					MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported opcode [%s] for GETTICK, see documentation about this directive\n",opcode[idx]);
+				}
+				break;
+			case CRC_IN:
+				if (zearg) {
+					if (strstr(zearg,"(C)")) tick+=12; else tick+=11;
+				} else {
+					MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported opcode [%s] for GETTICK, see documentation about this directive\n",opcode[idx]);
+				}
+				break;
+
+			case CRC_ADD:
+			     if (zearg) {
+					/* simplify deprecated notation */
+					TxtReplace(zearg,"A,","",0);
+					if (strcmp(zearg,"IX,BC")==0 || strcmp(zearg,"IX,DE")==0 || strcmp(zearg,"IX,IX")==0 || strcmp(zearg,"IX,SP")==0) tick+=15; else
+					if (strcmp(zearg,"HL,BC")==0 || strcmp(zearg,"HL,DE")==0 || strcmp(zearg,"HL,HL")==0 || strcmp(zearg,"HL,SP")==0) tick+=11; else
+					if (strstr(zearg,"(HL)")) tick+=7; else
+					if (strstr(zearg,"(IX")) tick+=19; else
+					if (strstr(zearg,"XL")) tick+=8; else
+					if ((*zearg>='A' && *zearg<='E') || *zearg=='H' || *zearg=='L') tick+=4; else tick+=7;
+				} else {
+					MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported opcode [%s] for GETTICK, see documentation about this directive\n",opcode[idx]);
+				}
+				break;
+
+			/* ADC/SBC/SUB/XOR/AND/OR */
+			case CRC_ADC:
+			case CRC_SBC:
+				if (zearg) {
+					/* simplify deprecated notation */
+					TxtReplace(zearg,"A,","",0);
+					if (strcmp(zearg,"HL,BC")==0 || strcmp(zearg,"HL,DE")==0 ||strcmp(zearg,"HL,HL")==0 ||strcmp(zearg,"HL,SP")==0) {tick+=15;break;}
+				}
+			case CRC_SUB:
+			     if (zearg) {
+					/* simplify deprecated notation */
+					TxtReplace(zearg,"A,","",0);
+				}
+			case CRC_XOR:
+			case CRC_AND:
+			case CRC_OR:
+			     if (zearg) {
+					if (strstr(zearg,"(HL)")) tick+=7; else
+					if (strstr(zearg,"(IX")) tick+=19; else
+					if (strstr(zearg,"XL")) tick+=8; else
+					if ((*zearg>='A' && *zearg<='E') || *zearg=='H' || *zearg=='L') tick+=4; else tick+=7;
+				} else {
+					MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported opcode [%s] for GETTICK, see documentation about this directive\n",opcode[idx]);
+				}
+				break;
+
+			/* BIT/RES/SET */
+			case CRC_BIT:
+				if (strstr(zearg,"(HL)")) tick+=12; else
+				if (strstr(zearg,"(IX")) tick+=20; else tick+=8;
+				break;
+			case CRC_RES:
+			case CRC_SET:
+				if (strstr(zearg,"(HL)")) tick+=15; else
+				if (strstr(zearg,"(IX")) tick+=23; else tick+=8;
+				break;
+			case CRC_DEC:
+			case CRC_INC:
+				if (strcmp(zearg,"XL")==0) tick+=8;
+				else if (strcmp(zearg,"SP")==0 || strcmp(zearg,"BC")==0 || strcmp(zearg,"DE")==0 || strcmp(zearg,"HL")==0) tick+=6;
+				else if (strcmp(zearg,"IX")==0) tick+=10;
+				else if (strcmp(zearg,"(HL)")==0) tick+=11;
+				else if (strncmp(zearg,"(IX",3)==0) tick+=23;
+				else tick+=4;
+				break;
+			case CRC_JP:
+				// JP is supposed to loop!
+				if (zearg) {
+					if (strcmp(zearg,"(IX)")==0)
+						tick+=8;
+					else if (strcmp(zearg,"(HL)")==0)
+						tick+=4;
+					else tick+=10;
+				} else tick+=10;
+				break;
+			case CRC_DJNZ:
+				// DJNZ is supposed to loop!
+				tick+=13;
+				break;
+			case CRC_JR:
+				// JR is supposed to loop!
+				tick+=12;
+				break;
+			case CRC_RET:
+				// conditionnal RET shorter because it's supposed to be the exit!
+				if (!zearg) tick+=10; else tick+=5;
+				break;
+
+			case CRC_LD:
+				/* big cake! */
+				if (zearg && strchr(zearg,',')) {
+					int crc1,crc2;
+
+					/* split args */
+					listarg=TxtSplitWithChar(zearg,',');
+					crc1=GetCRC(listarg[0]);
+					crc2=GetCRC(listarg[1]);
+
+					switch (crc1) {
+						case CRC_I:
+						case CRC_R:
+							switch (crc2) {
+								case CRC_A:
+									tick+=9;
+									break;
+								default:
+									MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported LD %s,%s for GETTICK, see documentation\n",listarg[0],listarg[1]);
+							}
+							break;
+						case CRC_A:
+						case CRC_B:
+						case CRC_C:
+						case CRC_D:
+						case CRC_E:
+						case CRC_H:
+						case CRC_L:
+							switch (crc2) {
+								case CRC_A:
+								case CRC_B:
+								case CRC_C:
+								case CRC_D:
+								case CRC_E:
+								case CRC_H:
+								case CRC_L:
+									tick+=4;
+									break;
+								case CRC_I:
+								case CRC_R:
+									if (crc1==CRC_A) tick+=9; else
+									MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported LD %s,%s for GETTICK, see documentation\n",listarg[0],listarg[1]);
+									break;
+								case CRC_MBC:
+								case CRC_MDE:
+									if (crc1!=CRC_A) {
+										MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported LD %s,%s for GETTICK, see documentation\n",listarg[0],listarg[1]);
+										break;
+									}
+								case CRC_MHL:
+									tick+=7;
+									break;
+								case CRC_XL:
+									tick+=8;
+									break;
+								default:
+									/* MIX + memory + value */
+									if (strncmp(listarg[1],"(IX",3)==0) {
+										tick+=19;
+									} else if (listarg[1][0]=='(' && listarg[1][strlen(listarg[1])-1]==')') {
+										/* memory */
+										if (crc1==CRC_A) {
+										tick+=13;
+										} else {
+											MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported LD %s,%s for GETTICK, see documentation\n",listarg[0],listarg[1]);
+										}
+									} else {
+										/* numeric value as default */
+										tick+=7;
+									}
+							}
+							break;
+
+						case CRC_XL:
+							switch (crc2) {
+								case CRC_A:
+								case CRC_B:
+								case CRC_C:
+								case CRC_D:
+								case CRC_E:
+								case CRC_H:
+								case CRC_L:
+								case CRC_XL:
+									tick+=8;
+									break;
+								default:
+									/* value */
+									tick+=11;
+							}
+							break;
+
+						case CRC_BC:
+						case CRC_DE:
+							/* memory / value */
+							if (listarg[1][0]=='(' && listarg[1][strlen(listarg[1])-1]==')') tick+=20; else tick+=10;
+							break;
+						case CRC_HL:
+							/* memory / value */
+							if (listarg[1][0]=='(' && listarg[1][strlen(listarg[1])-1]==')') tick+=16; else tick+=10;
+							break;
+						case CRC_SP:
+							if (crc2==CRC_HL) {
+								tick+=6;
+							} else if (crc2==CRC_IX) {
+								/* IX */
+								tick+=10;
+							} else if (listarg[1][0]=='(' && listarg[1][strlen(listarg[1])-1]==')') {
+								/* memory */
+								tick+=20;
+							} else tick+=10;
+							break;
+						case CRC_IX:
+							/* memory / value */
+							if (listarg[1][0]=='(' && listarg[1][strlen(listarg[1])-1]==')') tick+=20; else tick+=14;
+							break;
+
+						case CRC_MBC:
+						case CRC_MDE:
+							if (crc2==CRC_A) {
+								tick+=7;
+							} else {
+								MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported LD %s,%s for GETTICK, see documentation\n",listarg[0],listarg[1]);
+							}
+							break;
+						case CRC_MHL:
+							switch (crc2) {
+								case CRC_A:
+								case CRC_B:
+								case CRC_C:
+								case CRC_D:
+								case CRC_E:
+								case CRC_H:
+								case CRC_L:
+									tick+=7;
+									break;
+								default:
+									MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported LD %s,%s for GETTICK, see documentation\n",listarg[0],listarg[1]);
+							}
+							break;
+						default:
+							if (strncmp(listarg[0],"(IX",3)==0) {
+								/* MIX */
+								switch (crc2) {
+									case CRC_A:
+									case CRC_B:
+									case CRC_C:
+									case CRC_D:
+									case CRC_E:
+									case CRC_H:
+									case CRC_L:tick+=19;break;
+									default:tick+=23;
+								}
+							} else if (listarg[0][0]=='(' && listarg[0][strlen(listarg[0])-1]==')') {
+								/* memory */
+								switch (crc2) {
+									case CRC_A:tick+=13;break;
+									case CRC_HL:tick+=16;break;
+									case CRC_BC:
+									case CRC_DE:
+									case CRC_SP:
+									case CRC_IX:tick+=20;break;
+									default:
+										MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported LD %s,%s for GETTICK, see documentation\n",listarg[0],listarg[1]);
+								}
+							} else {
+								MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported LD %s,%s for GETTICK, see documentation\n",listarg[0],listarg[1]);
+							}
+					}
+				} else {
+					MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported opcode LD for GETTICK, need 2 arguments [%s]\n",zearg);
+				}
+				break;
+
 			default: 
-				MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported opcode [%s] for GETTICK, see documentation about this directive",opcode[idx]);
+				MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported opcode [%s] for GETTICK, see documentation about this directive\n",opcode[idx]);
 		}
 		idx++;
 	}
@@ -8297,7 +8695,7 @@ void _OUT(struct s_assenv *ae) {
 			___output(ae,0xD3);
 			PushExpression(ae,ae->idx+1,E_EXPRESSION_V8);
 			ae->nop+=3;
-			ae->tick+=12;
+			ae->tick+=11;
 		} else {
 			MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"OUT (C),[0,A,B,C,D,E,H,L] or OUT (n),A only\n");
 		}
@@ -8729,7 +9127,7 @@ void _DEC(struct s_assenv *ae) {
 				case CRC_HL:___output(ae,0x2B);ae->nop+=2;ae->tick+=6;break;
 				case CRC_IX:___output(ae,0xDD);___output(ae,0x2B);ae->nop+=3;ae->tick+=10;break;
 				case CRC_IY:___output(ae,0xFD);___output(ae,0x2B);ae->nop+=3;ae->tick+=10;break;
-				case CRC_SP:___output(ae,0x3B);ae->nop+=2;ae->tick+=10;break;
+				case CRC_SP:___output(ae,0x3B);ae->nop+=2;ae->tick+=6;break;
 				case CRC_MHL:___output(ae,0x35);ae->nop+=3;ae->tick+=11;break;
 				default:
 					if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0) {
@@ -8885,7 +9283,7 @@ void _OR(struct s_assenv *ae) {
 	
 	if (!ae->wl[ae->idx].t && ae->wl[ae->idx+1].t==1) {
 		switch (GetCRC(ae->wl[ae->idx+1].w)) {
-			case CRC_A:___output(ae,OPCODE+7);ae->nop+=1;ae->tick+=4;ae->tick+=4;break;
+			case CRC_A:___output(ae,OPCODE+7);ae->nop+=1;ae->tick+=4;break;
 			case CRC_MHL:___output(ae,OPCODE+6);ae->nop+=2;ae->tick+=7;break;
 			case CRC_B:___output(ae,OPCODE);ae->nop+=1;ae->tick+=4;break;
 			case CRC_C:___output(ae,OPCODE+1);ae->nop+=1;ae->tick+=4;break;
@@ -12111,7 +12509,8 @@ void __TICKER(struct s_assenv *ae) {
 				ObjectArrayAddDynamicValueConcat((void **)&ae->ticker,&ae->iticker,&ae->mticker,&ticker,sizeof(struct s_ticker));
 			}
 			ae->ticker[i].nopstart=ae->nop;
-		} else if (strcmp(ae->wl[ae->idx+1].w,"STOP")==0) {
+			ae->ticker[i].tickerstart=ae->tick;
+		} else if (strncmp(ae->wl[ae->idx+1].w,"STOP",4)==0) {
 			for (i=0;i<ae->iticker;i++) {
 				if (ae->ticker[i].crc==crc && strcmp(ae->wl[ae->idx+2].w,ae->ticker[i].varname)==0) {
 					break;
@@ -12121,20 +12520,22 @@ void __TICKER(struct s_assenv *ae) {
 				/* set var */
 				if ((tvar=SearchDico(ae,ae->wl[ae->idx+2].w,crc))!=NULL) {
 					/* compute nop count */
-					tvar->v=ae->nop-ae->ticker[i].nopstart;
+					if (ae->wl[ae->idx+1].w[4]=='Z') tvar->v=ae->tick-ae->ticker[i].tickerstart;
+					else tvar->v=ae->nop-ae->ticker[i].nopstart;
 				} else {
 					/* create var with nop count */
-					ExpressionSetDicoVar(ae,ae->wl[ae->idx+2].w,ae->nop-ae->ticker[i].nopstart);
+					if (ae->wl[ae->idx+1].w[4]=='Z') ExpressionSetDicoVar(ae,ae->wl[ae->idx+2].w,ae->tick-ae->ticker[i].tickerstart);
+					else ExpressionSetDicoVar(ae,ae->wl[ae->idx+2].w,ae->nop-ae->ticker[i].nopstart);
 				}
 			} else {
 				MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"TICKER not found\n");
 			}
 		} else {
-			MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"usage is TICKER start/stop,<variable>\n");
+			MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"usage is TICKER start/stop(z),<variable>\n");
 		}
 		ae->idx+=2;
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"usage is TICKER start/stop,<variable>\n");
+		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"usage is TICKER start/stop(z),<variable>\n");
 	}
 }
 
@@ -19054,6 +19455,70 @@ int RasmAssembleInfoParam(const char *datain, int lenin, unsigned char **dataout
 			"v1+=getnop('ld (123),hl: ld (123),de: ld (123),iy: ld (123),sp: ld yh,45: ld sp,hl: ld sp,ix'):"\
 			"assert v1==testouille"
 
+#define AUTOTEST_TICKER_FULL "ticker start,v1 : rla: rlca: rrca: rra: nop: ccf: daa: scf: cpl: exx: ei: di : ticker stopzx,v1:"\
+"ticker start,v2 :im 0: neg : rst #10: retn : reti:ticker stopzx,v2:"\
+"ticker start,v3 :cpir : cpdr : cpd : cpi : outi : outd : ldd :ldi :ldir:lddr:inir:indr:otir:otdr:ind:ini:ticker stopzx,v3:"\
+"ticker start,v4 :rld:rrd:ticker stopzx,v4:"\
+"assert v1==gettick('rla: rlca: rrca: rra: nop: ccf: daa: scf: cpl: exx: ei: di'):"\
+"assert v2==gettick('im : neg : rst : retn : reti'):"\
+"assert v3==gettick('cpir : cpdr : cpd : cpi : outi : outd : ldd :ldi :ldir:lddr:inir:indr:otir:otdr:ind:ini'):"\
+"assert v4==gettick('rld:rrd'):"\
+"ticker start,v5 : ex af,af' : ex hl,de : ex de,hl : ex (sp),hl : ex hl,(sp) : ex (sp),ix : ex ix,(sp) : exx : ticker stopzx,v5:"\
+"assert v5==gettick(\"ex af,af' : ex hl,de : ex de,hl : ex (sp),hl : ex hl,(sp) : ex (sp),ix : ex ix,(sp) : exx\"):"\
+"ticker start,v6 : push af : push bc : push ix : pop ix : pop bc : pop af : ticker stopzx,v6:"\
+"ticker start,v7 : sla a : sla b : sla (hl) : sla (ix+5) : sla (ix-20),b : ticker stopzx,v7:"\
+"assert v7==gettick('sla a : sla b : sla (hl) : sla (ix+5) : sla (ix-20),b'):"\
+"ticker start,v8 : sll a : sll b : sll (hl) : sll (ix+5) : sll (ix-20),b : ticker stopzx,v8:"\
+"assert v8==gettick('sll a : sll b : sll (hl) : sll (ix+5) : sll (ix-20),b'):"\
+"ticker start,v9 : sra a : sra b : sra (hl) : sra (ix+5) : sra (ix-20),b : ticker stopzx,v9:"\
+"assert v9==gettick('sra a : sra b : sra (hl) : sra (ix+5) : sra (ix-20),b'):"\
+"ticker start,v10 : srl a : srl b : srl (hl) : srl (ix+5) : srl (ix-20),b : ticker stopzx,v10:"\
+"assert v10==gettick('srl a : srl b : srl (hl) : srl (ix+5) : srl (ix-20),b'):"\
+"ticker start,v11 : rl a : rl b : rl (hl) : rl (ix+5) : rl (ix-20),b : ticker stopzx,v11:"\
+"assert v11==gettick('rl a : rl b : rl (hl) : rl (ix+5) : rl (ix-20),b'):"\
+"ticker start,v12 : rlc a : rlc b : rlc (hl) : rlc (ix+5) : rlc (ix-20),b : ticker stopzx,v12:"\
+"assert v12==gettick('rlc a : rlc b : rlc (hl) : rlc (ix+5) : rlc (ix-20),b'):"\
+"ticker start,v13 : rr a : rr b : rr (hl) : rr (ix+5) : rr (ix-20),b : ticker stopzx,v13:"\
+"assert v13==gettick('rr a : rr b : rr (hl) : rr (ix+5) : rr (ix-20),b'):"\
+"ticker start,v14 : rrc a : rrc b : rrc (hl) : rrc (ix+5) : rrc (ix-20),b : ticker stopzx,v14:"\
+"assert v14==gettick('rrc a : rrc b : rrc (hl) : rrc (ix+5) : rrc (ix-20),b'):"\
+"ticker start,v20 : out (c),a : out (c),c : out (0),a : out (c),0 : in a,(c) : in f,(c) : in a,(0) : ticker stopzx,v20:"\
+"assert v20==gettick('out (c),a : out (c),c : out (0),a : out (c),0 : in a,(c) : in f,(c) : in a,(0) '):"\
+"ticker start,v21 : add a,a : add b : add ix,bc : add iy,sp : add hl,de : add (hl) : add xl : add (ix+3) : add #12 : ticker stopzx,v21:"\
+"assert v21==gettick('add a,a : add b : add ix,bc : add iy,sp : add hl,de : add (hl) : add xl : add (ix+3) : add #12'):"\
+"ticker start,v22 : adc hl,bc : adc hl,hl : sbc hl,hl : sbc hl,sp : sbc hl,bc : adc hl,sp : ticker stopzx,v22:"\
+"assert v22==gettick('adc hl,bc : adc hl,hl : sbc hl,hl : sbc hl,sp : sbc hl,bc : adc hl,sp'):"\
+"ticker start,v23 : sub a : sub a,b : sub c : sub #44 : sub (hl) : sub xl : sub (ix+20) : ticker stopzx,v23:"\
+"assert v23==gettick('sub a : sub a,b : sub c : sub #44 : sub (hl) : sub xl : sub (ix+20)'):"\
+"ticker start,v24 : xor a : xor b : xor c : xor #44 : xor (hl) : xor xl : xor (ix+20) : ticker stopzx,v24:"\
+"assert v24==gettick('xor a : xor b : xor c : xor #44 : xor (hl) : xor xl : xor (ix+20)'):"\
+"ticker start,v25 : and a : and b : and c : and #44 : and (hl) : and xl : and (ix+20) : ticker stopzx,v25:"\
+"assert v25==gettick('and a : and b : and c : and #44 : and (hl) : and xl : and (ix+20)'):"\
+"ticker start,v26 : or a : or b : or c : or #44 : or (hl) : or xl : or (ix+20) : ticker stopzx,v26:"\
+"assert v26==gettick('or a : or b : or c : or #44 : or (hl) : or xl : or (ix+20)'):"\
+"ticker start,v27 : bit 0,a : bit 1,b : bit 2,c : bit 3,d : bit 4,(hl) : bit 5,(ix+0) : bit 6,(ix+0),e  : ticker stopzx,v27:"\
+"assert v27==gettick('bit 0,a : bit 1,b : bit 2,c : bit 3,d : bit 4,(hl) : bit 5,(ix+0) : bit 6,(ix+0),e'):"\
+"ticker start,v28 : res 0,a : res 1,b : res 2,c : res 3,d : res 4,(hl) : res 5,(ix+0) : res 6,(ix+0),e  : ticker stopzx,v28:"\
+"assert v28==gettick('res 0,a : res 1,b : res 2,c : res 3,d : res 4,(hl) : res 5,(ix+0) : res 6,(ix+0),e'):"\
+"ticker start,v29 : set 0,a : set 1,b : set 2,c : set 3,d : set 4,(hl) : set 5,(ix+0) : set 6,(ix+0),e  : ticker stopzx,v29:"\
+"assert v29==gettick('set 0,a : set 1,b : set 2,c : set 3,d : set 4,(hl) : set 5,(ix+0) : set 6,(ix+0),e'):"\
+"ticker start,v30 : dec a : dec b : dec lx : dec bc : dec hl : dec sp : dec ix : dec (hl) : dec (ix+100) : ticker stopzx,v30:"\
+"assert v30==gettick('dec a : dec b : dec lx : dec bc : dec hl : dec sp : dec ix : dec (hl) : dec (ix+100) '):"\
+"ticker start,v31 : inc a : inc b : inc lx : inc bc : inc hl : inc sp : inc ix : inc (hl) : inc (ix+100)  : ticker stopzx,v31:"\
+"assert v31==gettick('inc a : inc b : inc lx : inc bc : inc hl : inc sp : inc ix : inc (hl) : inc (ix+100) '):"\
+"ticker start,v32 : jp 0 : jp c,0 : jp pe,0 : jp (ix) : jp (hl) : djnz $ : ticker stopzx,v32:"\
+"assert v32==gettick('jp 0 : jp c,0 : jp pe,0 : jp (ix) : jp (hl) : djnz $'):"\
+"ticker start,v40 : ld a,i : ld a,r : ld r,a : ld i,a : ld a,a : ld b,c : ld d,e : ld a,yl : ld d,yh : ld a,(bc)  : ticker stopzx,v40:"\
+"assert v40==gettick('ld a,i : ld a,r : ld r,a : ld i,a : ld a,a : ld b,c : ld d,e : ld a,yl : ld d,yh : ld a,(bc)'):"\
+"ticker start,v41 : ld a,(de) : ld a,(hl) : ld l,(hl) : ld (hl),d : ld (hl),a : ld a,#12 : ld b,#12 : ld a,(#1234) : ld (#1234),a : ticker stopzx,v41:"\
+"assert v41==gettick('ld a,(de) : ld a,(hl) : ld l,(hl) : ld (hl),d : ld (hl),a : ld a,#12 : ld b,#12 : ld a,(#1234) : ld (#1234),a'):"\
+"ticker start,v42 : ld bc,123 : ld hl,123 : ld sp,123 : ld bc,(123) : ld hl,(123) : ld sp,(123) : ld ix,123 : ld ix,(123) : ticker stopzx,v42:"\
+"assert v42==gettick('ld bc,123 : ld hl,123 : ld sp,123 : ld bc,(123) : ld hl,(123) : ld sp,(123) : ld ix,123 : ld ix,(123)'):"\
+"ticker start,v43 : ld (123),bc : ld (123),hl : ld (123),ix : ld (123),sp : ld hy,#12 : ld ly,b : ld sp,hl : ld sp,ix : ticker stopzx,v43:"\
+"assert v43==gettick('ld (123),bc : ld (123),hl : ld (123),ix : ld (123),sp : ld hy,#12 : ld ly,b : ld sp,hl : ld sp,ix'):"\
+"ticker start,v44 : ld a,(ix+0) : ld h,(ix+0) : ld (ix+0),a : ld (ix+0),l : ld (ix+0),#12 : ticker stopzx,v44:"\
+"assert v44==gettick('ld a,(ix+0) : ld h,(ix+0) : ld (ix+0),a : ld (ix+0),l : ld (ix+0),#12')"
+
 
 #define AUTOTEST_SNASET "buildsna:bank 0:nop:"\
 	":snaset Z80_AF,0x1234 :snaset Z80_A,0x11 :snaset Z80_F,0x11 :snaset Z80_BC,0x11 :snaset Z80_B,0x11 :snaset Z80_C,0x11 :snaset Z80_DE,0x11 :snaset Z80_D,0x11"\
@@ -19937,6 +20402,11 @@ printf("testing formula functions + multiple parenthesis OK\n");
 	if (!ret) {} else {printf("Autotest %03d ERROR (math function GETNOP with multiple LD syncronised with TICKER)\n",cpt);exit(-1);}
 	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
 printf("testing synchronisation between TICKER and GETNOP on multiple LD OK\n");
+
+	ret=RasmAssemble(AUTOTEST_TICKER_FULL,strlen(AUTOTEST_TICKER_FULL),&opcode,&opcodelen);
+	if (!ret) {} else {printf("Autotest %03d ERROR (math function GETTICK with almost full instruction set)\n",cpt);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing synchronisation between TICKER and GETTICK on almost full instruction set OK\n");
 
 	ret=RasmAssemble(AUTOTEST_SHIFTMAX,strlen(AUTOTEST_SHIFTMAX),&opcode,&opcodelen);
 	if (!ret) {} else {printf("Autotest %03d ERROR (shifting more than 31 must give zero result)\n",cpt);exit(-1);}
