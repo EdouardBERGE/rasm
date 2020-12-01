@@ -3958,12 +3958,6 @@ int __GETNOP(struct s_assenv *ae,char *oplist, int didx)
 				break;
 
 			case CRC_OUT:
-				if (zearg) {
-					if (strstr(zearg,"(C),")) tick+=4; else tick+=3;
-				} else {
-					MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported opcode [%s] for GETNOP, see documentation about this directive\n",opcode[idx]);
-				}
-				break;
 			case CRC_IN:
 				if (zearg) {
 					if (strstr(zearg,"(C)")) tick+=4; else tick+=3;
@@ -8652,7 +8646,7 @@ void _IN(struct s_assenv *ae) {
 			switch (GetCRC(ae->wl[ae->idx+1].w)) {
 				case CRC_0:
 				case CRC_F:___output(ae,0xED);___output(ae,0x70);ae->nop+=4;ae->tick+=12;break;
-				case CRC_A:___output(ae,0xED);___output(ae,0x78);ae->nop+=3;ae->tick+=12;break;
+				case CRC_A:___output(ae,0xED);___output(ae,0x78);ae->nop+=4;ae->tick+=12;break;
 				case CRC_B:___output(ae,0xED);___output(ae,0x40);ae->nop+=4;ae->tick+=12;break;
 				case CRC_C:___output(ae,0xED);___output(ae,0x48);ae->nop+=4;ae->tick+=12;break;
 				case CRC_D:___output(ae,0xED);___output(ae,0x50);ae->nop+=4;ae->tick+=12;break;
@@ -19455,6 +19449,70 @@ int RasmAssembleInfoParam(const char *datain, int lenin, unsigned char **dataout
 			"v1+=getnop('ld (123),hl: ld (123),de: ld (123),iy: ld (123),sp: ld yh,45: ld sp,hl: ld sp,ix'):"\
 			"assert v1==testouille"
 
+#define AUTOTEST_TICKERNOP_FULL "ticker start,v1 : rla: rlca: rrca: rra: nop: ccf: daa: scf: cpl: exx: ei: di : ticker stop,v1:"\
+"ticker start,v2 :im 0: neg : rst #10: retn : reti:ticker stop,v2:"\
+"ticker start,v3 :cpir : cpdr : cpd : cpi : outi : outd : ldd :ldi :ldir:lddr:inir:indr:otir:otdr:ind:ini:ticker stop,v3:"\
+"ticker start,v4 :rld:rrd:ticker stop,v4:"\
+"assert v1==getnop('rla: rlca: rrca: rra: nop: ccf: daa: scf: cpl: exx: ei: di'):"\
+"assert v2==getnop('im : neg : rst : retn : reti'):"\
+"assert v3==getnop('cpir : cpdr : cpd : cpi : outi : outd : ldd :ldi :ldir:lddr:inir:indr:otir:otdr:ind:ini'):"\
+"assert v4==getnop('rld:rrd'):"\
+"ticker start,v5 : ex af,af' : ex hl,de : ex de,hl : ex (sp),hl : ex hl,(sp) : ex (sp),ix : ex ix,(sp) : exx : ticker stop,v5:"\
+"assert v5==getnop(\"ex af,af' : ex hl,de : ex de,hl : ex (sp),hl : ex hl,(sp) : ex (sp),ix : ex ix,(sp) : exx\"):"\
+"ticker start,v6 : push af : push bc : push ix : pop ix : pop bc : pop af : ticker stop,v6:"\
+"ticker start,v7 : sla a : sla b : sla (hl) : sla (ix+5) : sla (ix-20),b : ticker stop,v7:"\
+"assert v7==getnop('sla a : sla b : sla (hl) : sla (ix+5) : sla (ix-20),b'):"\
+"ticker start,v8 : sll a : sll b : sll (hl) : sll (ix+5) : sll (ix-20),b : ticker stop,v8:"\
+"assert v8==getnop('sll a : sll b : sll (hl) : sll (ix+5) : sll (ix-20),b'):"\
+"ticker start,v9 : sra a : sra b : sra (hl) : sra (ix+5) : sra (ix-20),b : ticker stop,v9:"\
+"assert v9==getnop('sra a : sra b : sra (hl) : sra (ix+5) : sra (ix-20),b'):"\
+"ticker start,v10 : srl a : srl b : srl (hl) : srl (ix+5) : srl (ix-20),b : ticker stop,v10:"\
+"assert v10==getnop('srl a : srl b : srl (hl) : srl (ix+5) : srl (ix-20),b'):"\
+"ticker start,v11 : rl a : rl b : rl (hl) : rl (ix+5) : rl (ix-20),b : ticker stop,v11:"\
+"assert v11==getnop('rl a : rl b : rl (hl) : rl (ix+5) : rl (ix-20),b'):"\
+"ticker start,v12 : rlc a : rlc b : rlc (hl) : rlc (ix+5) : rlc (ix-20),b : ticker stop,v12:"\
+"assert v12==getnop('rlc a : rlc b : rlc (hl) : rlc (ix+5) : rlc (ix-20),b'):"\
+"ticker start,v13 : rr a : rr b : rr (hl) : rr (ix+5) : rr (ix-20),b : ticker stop,v13:"\
+"assert v13==getnop('rr a : rr b : rr (hl) : rr (ix+5) : rr (ix-20),b'):"\
+"ticker start,v14 : rrc a : rrc b : rrc (hl) : rrc (ix+5) : rrc (ix-20),b : ticker stop,v14:"\
+"assert v14==getnop('rrc a : rrc b : rrc (hl) : rrc (ix+5) : rrc (ix-20),b'):"\
+"ticker start,v20 : out (c),a : out (c),c : out (0),a : out (c),0 : in a,(c) : in f,(c) : in a,(0) : ticker stop,v20:"\
+"assert v20==getnop('out (c),a : out (c),c : out (0),a : out (c),0 : in a,(c) : in f,(c) : in a,(0) '):"\
+"ticker start,v21 : add a,a : add b : add ix,bc : add iy,sp : add hl,de : add (hl) : add xl : add (ix+3) : add #12 : ticker stop,v21:"\
+"assert v21==getnop('add a,a : add b : add ix,bc : add iy,sp : add hl,de : add (hl) : add xl : add (ix+3) : add #12'):"\
+"ticker start,v22 : adc hl,bc : adc hl,hl : sbc hl,hl : sbc hl,sp : sbc hl,bc : adc hl,sp : ticker stop,v22:"\
+"assert v22==getnop('adc hl,bc : adc hl,hl : sbc hl,hl : sbc hl,sp : sbc hl,bc : adc hl,sp'):"\
+"ticker start,v23 : sub a : sub a,b : sub c : sub #44 : sub (hl) : sub xl : sub (ix+20) : ticker stop,v23:"\
+"assert v23==getnop('sub a : sub a,b : sub c : sub #44 : sub (hl) : sub xl : sub (ix+20)'):"\
+"ticker start,v24 : xor a : xor b : xor c : xor #44 : xor (hl) : xor xl : xor (ix+20) : ticker stop,v24:"\
+"assert v24==getnop('xor a : xor b : xor c : xor #44 : xor (hl) : xor xl : xor (ix+20)'):"\
+"ticker start,v25 : and a : and b : and c : and #44 : and (hl) : and xl : and (ix+20) : ticker stop,v25:"\
+"assert v25==getnop('and a : and b : and c : and #44 : and (hl) : and xl : and (ix+20)'):"\
+"ticker start,v26 : or a : or b : or c : or #44 : or (hl) : or xl : or (ix+20) : ticker stop,v26:"\
+"assert v26==getnop('or a : or b : or c : or #44 : or (hl) : or xl : or (ix+20)'):"\
+"ticker start,v27 : bit 0,a : bit 1,b : bit 2,c : bit 3,d : bit 4,(hl) : bit 5,(ix+0) : bit 6,(ix+0),e  : ticker stop,v27:"\
+"assert v27==getnop('bit 0,a : bit 1,b : bit 2,c : bit 3,d : bit 4,(hl) : bit 5,(ix+0) : bit 6,(ix+0),e'):"\
+"ticker start,v28 : res 0,a : res 1,b : res 2,c : res 3,d : res 4,(hl) : res 5,(ix+0) : res 6,(ix+0),e  : ticker stop,v28:"\
+"assert v28==getnop('res 0,a : res 1,b : res 2,c : res 3,d : res 4,(hl) : res 5,(ix+0) : res 6,(ix+0),e'):"\
+"ticker start,v29 : set 0,a : set 1,b : set 2,c : set 3,d : set 4,(hl) : set 5,(ix+0) : set 6,(ix+0),e  : ticker stop,v29:"\
+"assert v29==getnop('set 0,a : set 1,b : set 2,c : set 3,d : set 4,(hl) : set 5,(ix+0) : set 6,(ix+0),e'):"\
+"ticker start,v30 : dec a : dec b : dec lx : dec bc : dec hl : dec sp : dec ix : dec (hl) : dec (ix+100) : ticker stop,v30:"\
+"assert v30==getnop('dec a : dec b : dec lx : dec bc : dec hl : dec sp : dec ix : dec (hl) : dec (ix+100) '):"\
+"ticker start,v31 : inc a : inc b : inc lx : inc bc : inc hl : inc sp : inc ix : inc (hl) : inc (ix+100)  : ticker stop,v31:"\
+"assert v31==getnop('inc a : inc b : inc lx : inc bc : inc hl : inc sp : inc ix : inc (hl) : inc (ix+100) '):"\
+"ticker start,v32 : jp 0 : jp c,0 : jp pe,0 : jp (ix) : jp (hl) : djnz $ : ticker stop,v32:"\
+"assert v32==getnop('jp 0 : jp c,0 : jp pe,0 : jp (ix) : jp (hl) : djnz $'):"\
+"ticker start,v40 : ld a,i : ld a,r : ld r,a : ld i,a : ld a,a : ld b,c : ld d,e : ld a,yl : ld d,yh : ld a,(bc)  : ticker stop,v40:"\
+"assert v40==getnop('ld a,i : ld a,r : ld r,a : ld i,a : ld a,a : ld b,c : ld d,e : ld a,yl : ld d,yh : ld a,(bc)'):"\
+"ticker start,v41 : ld a,(de) : ld a,(hl) : ld l,(hl) : ld (hl),d : ld (hl),a : ld a,#12 : ld b,#12 : ld a,(#1234) : ld (#1234),a : ticker stop,v41:"\
+"assert v41==getnop('ld a,(de) : ld a,(hl) : ld l,(hl) : ld (hl),d : ld (hl),a : ld a,#12 : ld b,#12 : ld a,(#1234) : ld (#1234),a'):"\
+"ticker start,v42 : ld bc,123 : ld hl,123 : ld sp,123 : ld bc,(123) : ld hl,(123) : ld sp,(123) : ld ix,123 : ld ix,(123) : ticker stop,v42:"\
+"assert v42==getnop('ld bc,123 : ld hl,123 : ld sp,123 : ld bc,(123) : ld hl,(123) : ld sp,(123) : ld ix,123 : ld ix,(123)'):"\
+"ticker start,v43 : ld (123),bc : ld (123),hl : ld (123),ix : ld (123),sp : ld hy,#12 : ld ly,b : ld sp,hl : ld sp,ix : ticker stop,v43:"\
+"assert v43==getnop('ld (123),bc : ld (123),hl : ld (123),ix : ld (123),sp : ld hy,#12 : ld ly,b : ld sp,hl : ld sp,ix'):"\
+"ticker start,v44 : ld a,(ix+0) : ld h,(ix+0) : ld (ix+0),a : ld (ix+0),l : ld (ix+0),#12 : ticker stop,v44:"\
+"assert v44==getnop('ld a,(ix+0) : ld h,(ix+0) : ld (ix+0),a : ld (ix+0),l : ld (ix+0),#12')"
+
 #define AUTOTEST_TICKER_FULL "ticker start,v1 : rla: rlca: rrca: rra: nop: ccf: daa: scf: cpl: exx: ei: di : ticker stopzx,v1:"\
 "ticker start,v2 :im 0: neg : rst #10: retn : reti:ticker stopzx,v2:"\
 "ticker start,v3 :cpir : cpdr : cpd : cpi : outi : outd : ldd :ldi :ldir:lddr:inir:indr:otir:otdr:ind:ini:ticker stopzx,v3:"\
@@ -20402,6 +20460,11 @@ printf("testing formula functions + multiple parenthesis OK\n");
 	if (!ret) {} else {printf("Autotest %03d ERROR (math function GETNOP with multiple LD syncronised with TICKER)\n",cpt);exit(-1);}
 	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
 printf("testing synchronisation between TICKER and GETNOP on multiple LD OK\n");
+
+	ret=RasmAssemble(AUTOTEST_TICKERNOP_FULL,strlen(AUTOTEST_TICKERNOP_FULL),&opcode,&opcodelen);
+	if (!ret) {} else {printf("Autotest %03d ERROR (math function GETNOP with almost full instruction set)\n",cpt);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing synchronisation between TICKER and GETNOP on almost full instruction set OK\n");
 
 	ret=RasmAssemble(AUTOTEST_TICKER_FULL,strlen(AUTOTEST_TICKER_FULL),&opcode,&opcodelen);
 	if (!ret) {} else {printf("Autotest %03d ERROR (math function GETTICK with almost full instruction set)\n",cpt);exit(-1);}
