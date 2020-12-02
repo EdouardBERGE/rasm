@@ -3792,6 +3792,7 @@ char *TranslateTag(struct s_assenv *ae, char *varbuffer, int *touched, int enabl
 #define CRC_XOR		0xE1DB3971
 #define CRC_AND		0xE07FDB4B
 #define CRC_OR		0x4BD52919
+#define CRC_CP		0x4BD5D10B
 
 #define CRC_PUSH	0x97A1EDB8
 #define CRC_POP		0xE1BB1967
@@ -3869,6 +3870,7 @@ int __GETNOP(struct s_assenv *ae,char *oplist, int didx)
 			/* no space in args */
 			TxtReplace(zearg," ","",1);
 		}
+		if (!zeopcode[0]) {idx++;continue;}
 		crc=GetCRC(zeopcode);
 
 		/*************************************
@@ -3999,6 +4001,7 @@ int __GETNOP(struct s_assenv *ae,char *oplist, int didx)
 			case CRC_XOR:
 			case CRC_AND:
 			case CRC_OR:
+			case CRC_CP:
 			     if (zearg) {
 					if (strstr(zearg,"(HL)") || strcmp(zearg,"XL")==0) tick+=2; else
 					if (strstr(zearg,"(IX")) tick+=5; else
@@ -4283,6 +4286,7 @@ int __GETTICK(struct s_assenv *ae,char *oplist, int didx)
 			/* no space in args */
 			TxtReplace(zearg," ","",1);
 		}
+		if (!zeopcode[0]) {idx++;continue;}
 		crc=GetCRC(zeopcode);
 
 		/*************************************
@@ -4419,6 +4423,7 @@ int __GETTICK(struct s_assenv *ae,char *oplist, int didx)
 			case CRC_XOR:
 			case CRC_AND:
 			case CRC_OR:
+			case CRC_CP:
 			     if (zearg) {
 					if (strstr(zearg,"(HL)")) tick+=7; else
 					if (strstr(zearg,"(IX")) tick+=19; else
@@ -19452,11 +19457,11 @@ int RasmAssembleInfoParam(const char *datain, int lenin, unsigned char **dataout
 #define AUTOTEST_TICKERNOP_FULL "ticker start,v1 : rla: rlca: rrca: rra: nop: ccf: daa: scf: cpl: exx: ei: di : ticker stop,v1:"\
 "ticker start,v2 :im 0: neg : rst #10: retn : reti:ticker stop,v2:"\
 "ticker start,v3 :cpir : cpdr : cpd : cpi : outi : outd : ldd :ldi :ldir:lddr:inir:indr:otir:otdr:ind:ini:ticker stop,v3:"\
-"ticker start,v4 :rld:rrd:ticker stop,v4:"\
+"ticker start,v4 :rld:rrd:cp (hl):cp #12:cp a:cp c:cp (ix+0):cp (iy+5):cp ly:cp xl:ticker stop,v4:"\
 "assert v1==getnop('rla: rlca: rrca: rra: nop: ccf: daa: scf: cpl: exx: ei: di'):"\
 "assert v2==getnop('im : neg : rst : retn : reti'):"\
 "assert v3==getnop('cpir : cpdr : cpd : cpi : outi : outd : ldd :ldi :ldir:lddr:inir:indr:otir:otdr:ind:ini'):"\
-"assert v4==getnop('rld:rrd'):"\
+"assert v4==getnop('rld:rrd:cp (hl):cp #12:cp a:cp c:cp (ix+0):cp (iy+5):cp ly:cp xl'):"\
 "ticker start,v5 : ex af,af' : ex hl,de : ex de,hl : ex (sp),hl : ex hl,(sp) : ex (sp),ix : ex ix,(sp) : exx : ticker stop,v5:"\
 "assert v5==getnop(\"ex af,af' : ex hl,de : ex de,hl : ex (sp),hl : ex hl,(sp) : ex (sp),ix : ex ix,(sp) : exx\"):"\
 "ticker start,v6 : push af : push bc : push ix : pop ix : pop bc : pop af : ticker stop,v6:"\
@@ -19516,11 +19521,11 @@ int RasmAssembleInfoParam(const char *datain, int lenin, unsigned char **dataout
 #define AUTOTEST_TICKER_FULL "ticker start,v1 : rla: rlca: rrca: rra: nop: ccf: daa: scf: cpl: exx: ei: di : ticker stopzx,v1:"\
 "ticker start,v2 :im 0: neg : rst #10: retn : reti:ticker stopzx,v2:"\
 "ticker start,v3 :cpir : cpdr : cpd : cpi : outi : outd : ldd :ldi :ldir:lddr:inir:indr:otir:otdr:ind:ini:ticker stopzx,v3:"\
-"ticker start,v4 :rld:rrd:ticker stopzx,v4:"\
+"ticker start,v4 :rld:rrd::cp (hl):cp #12:cp a:cp c:cp (ix+0):cp (iy+5):cp ly:cp xl:ticker stopzx,v4:"\
 "assert v1==gettick('rla: rlca: rrca: rra: nop: ccf: daa: scf: cpl: exx: ei: di'):"\
 "assert v2==gettick('im : neg : rst : retn : reti'):"\
 "assert v3==gettick('cpir : cpdr : cpd : cpi : outi : outd : ldd :ldi :ldir:lddr:inir:indr:otir:otdr:ind:ini'):"\
-"assert v4==gettick('rld:rrd'):"\
+"assert v4==gettick('rld:rrd:cp (hl):cp #12:cp a:cp c:cp (ix+0):cp (iy+5):cp ly:cp xl'):"\
 "ticker start,v5 : ex af,af' : ex hl,de : ex de,hl : ex (sp),hl : ex hl,(sp) : ex (sp),ix : ex ix,(sp) : exx : ticker stopzx,v5:"\
 "assert v5==gettick(\"ex af,af' : ex hl,de : ex de,hl : ex (sp),hl : ex hl,(sp) : ex (sp),ix : ex ix,(sp) : exx\"):"\
 "ticker start,v6 : push af : push bc : push ix : pop ix : pop bc : pop af : ticker stopzx,v6:"\
