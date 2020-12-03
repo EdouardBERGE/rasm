@@ -6858,7 +6858,7 @@ void ExpressionFastTranslate(struct s_assenv *ae, char **ptr_expr, int fullrepla
 						lenadd=strlen(locallabel)-strlen(varbuffer+tagoffset);
 						expr=*ptr_expr=MemRealloc(expr,strlen(expr)+lenadd+1);
 
-printf("expr[%s] move to %d from %d len=%d\n",expr,startvar+lenadd,startvar,rlen+lenbuf);
+//printf("expr[%s] move to %d from %d len=%d\n",expr,startvar+lenadd,startvar,rlen+lenbuf);
 						MemMove(expr+startvar+lenadd,expr+startvar,rlen+lenbuf);
 						strncpy(expr+startvar,locallabel,lenadd);
 
