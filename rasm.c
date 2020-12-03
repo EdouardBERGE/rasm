@@ -6648,7 +6648,6 @@ void ExpressionFastTranslate(struct s_assenv *ae, char **ptr_expr, int fullrepla
 			if (curlyflag) {
 				char *minivarbuffer;
 				int touched;
-//printf("ExpressionFastTranslate curly\n");
 				minivarbuffer=TranslateTag(ae,TxtStrDup(varbuffer), &touched,0,E_TAGOPTION_NONE|(fullreplace?0:E_TAGOPTION_PRESERVE));
 				StateMachineResizeBuffer(&varbuffer,strlen(minivarbuffer)+1,&maxivar);
 				strcpy(varbuffer,minivarbuffer);
@@ -6671,7 +6670,7 @@ void ExpressionFastTranslate(struct s_assenv *ae, char **ptr_expr, int fullrepla
 				/******* ivar must be updated in case of label or alias following ***********/
 				ivar=newlen;
 			}
-			
+
 			/* recherche dans dictionnaire et remplacement */
 			crc=GetCRC(varbuffer);
 			found_replace=0;
@@ -6791,7 +6790,7 @@ void ExpressionFastTranslate(struct s_assenv *ae, char **ptr_expr, int fullrepla
 				}
 			}
 			if (!found_replace) {
-				//printf("fasttranslate test local label\n");
+	//printf("fasttranslate test local label\n");
 				/* non trouve c'est peut-etre un label local - mais pas de l'octal */
 				if (varbuffer[0]=='@' && (varbuffer[1]<'0' || varbuffer[1]>'9')) {
 					char *zepoint;
@@ -6848,34 +6847,54 @@ void ExpressionFastTranslate(struct s_assenv *ae, char **ptr_expr, int fullrepla
 						tagoffset=0;
 						MakeError(ae,GetCurrentFile(ae),GetExpLine(ae,0),"Unknown prefix tag\n");
 					}
-					
-					if (varbuffer[tagoffset]=='@') {
+				
+					if (varbuffer[tagoffset]=='.') {
+						int lenadd;
+						startvar+=tagoffset;
+						lenbuf=strlen(varbuffer+tagoffset);
+						locallabel=MakeLocalLabel(ae,varbuffer+tagoffset,NULL);
+						/*** le grand remplacement meriterait une modif pour DEK dans MakeLocalLabel ***/
+						rlen=strlen(expr+startvar+lenbuf)+1;
+						lenadd=strlen(locallabel)-strlen(varbuffer+tagoffset);
+						expr=*ptr_expr=MemRealloc(expr,strlen(expr)+lenadd+1);
+
+printf("expr[%s] move to %d from %d len=%d\n",expr,startvar+lenadd,startvar,rlen+lenbuf);
+						MemMove(expr+startvar+lenadd,expr+startvar,rlen+lenbuf);
+						strncpy(expr+startvar,locallabel,lenadd);
+
+						MemFree(locallabel);
+						found_replace=1;
+						idx+=lenadd;
+					} else	if (varbuffer[tagoffset]=='@') {
 						char *zepoint;
 						startvar+=tagoffset;
 						lenbuf=strlen(varbuffer+tagoffset);
 //printf("MakeLocalLabel(ae,varbuffer,&dek); (3)\n");
 						locallabel=MakeLocalLabel(ae,varbuffer+tagoffset,&dek);
+//printf("local [%s] =>",locallabel);
 						/*** le grand remplacement ***/
 						rlen=strlen(expr+startvar+lenbuf)+1;
 						expr=*ptr_expr=MemRealloc(expr,strlen(expr)+dek+1);
 						/* move end of expression in order to insert local ID */
-						zepoint=strchr(varbuffer,'.');
+						zepoint=strchr(varbuffer+tagoffset,'.'); // +tagoffset
 						if (zepoint) {
 							/* far proximity access */
 							int suffixlen,dotpos;
 							dotpos=(zepoint-varbuffer);
 							suffixlen=lenbuf-dotpos;
-
+		//printf("prox [%s] => ",expr);
 							MemMove(expr+startvar+dotpos+dek,expr+startvar+dotpos,rlen+suffixlen);
 							strncpy(expr+startvar+dotpos,locallabel,dek);
 						} else {
 							/* legacy */
+		//printf("legacy [%s] => ",expr);
 							MemMove(expr+startvar+lenbuf+dek,expr+startvar+lenbuf,rlen);
 							strncpy(expr+startvar+lenbuf,locallabel,dek);
 						}
 						idx+=dek;
 						MemFree(locallabel);
 						found_replace=1;
+	//printf("exprout=[%s]\n",expr);
 					} else if (varbuffer[tagoffset]=='$') {
 						int tagvalue=-1;
 						/*
@@ -19608,6 +19627,7 @@ int RasmAssembleInfoParam(const char *datain, int lenin, unsigned char **dataout
 
 #define AUTOTEST_ECPR1 "buildcpr extended : bank 32 : label1 : assert {slot}label1==1 : assert {bank}label1==0 : nop"
 
+#define AUTOTEST_BANKPROX " buildcpr: bank 0: grouik: .tape1: nop: ld hl,{bank}.tape2: bank 1: ld hl,{bank}.tape2: defw {bank}.tape2: .tape2: nop: "
 
 struct s_autotest_keyword {
 	char *keywordtest;
@@ -20342,6 +20362,12 @@ printf("testing modules + proximity (bis) OK\n");
 	if (!ret && opcode[1]==3) {} else {printf("Autotest %03d ERROR (proximity labels)\n",cpt);exit(-1);}
 	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
 printf("testing proximity labels OK\n");
+
+	ret=RasmAssembleInfo(AUTOTEST_BANKPROX,strlen(AUTOTEST_BANKPROX),&opcode,&opcodelen,&debug);
+	if (!ret) {} else {printf("Autotest %03d ERROR (BANK tag + proximity labels)\n",cpt);for (i=0;i<debug->nberror;i++) printf("%d -> %s\n",i,debug->error[i].msg);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+	RasmFreeInfoStruct(debug);
+printf("testing BANK tag + proximity labels OK\n");
 
 	ret=RasmAssemble(AUTOTEST_STRUCT,strlen(AUTOTEST_STRUCT),&opcode,&opcodelen);
 	if (!ret) {} else {printf("Autotest %03d ERROR (structs)\n",cpt);exit(-1);}
