@@ -4776,7 +4776,7 @@ double ComputeExpressionCore(struct s_assenv *ae,char *original_zeexpression,int
 	/* dictionnary */
 	struct s_expr_dico *curdic;
 	struct s_label *curlabel;
-	int minusptr,imkey,bank,page,getslot=0;
+	int minusptr,imkey,bank,page;
 	double curval;
 	int is_string=0;
 	/* negative value */
@@ -5305,16 +5305,9 @@ double ComputeExpressionCore(struct s_assenv *ae,char *original_zeexpression,int
 							if (ae->computectx->varbuffer[minusptr]!='{') {
 								bank=0;
 								page=0;
-							} else if (strncmp(ae->computectx->varbuffer+minusptr,"{SLOT}",6)==0) {
-								bank=6;
-								page=0;
-								getslot=1;
-								/* obligé de recalculer le CRC */
-								crc=GetCRC(ae->computectx->varbuffer+minusptr+bank);
 							} else if (strncmp(ae->computectx->varbuffer+minusptr,"{BANK}",6)==0) {
 								bank=6;
 								page=0;
-								getslot=0;
 								/* obligé de recalculer le CRC */
 								crc=GetCRC(ae->computectx->varbuffer+minusptr+bank);
 							} else if (strncmp(ae->computectx->varbuffer+minusptr,"{PAGE}",6)==0) {
@@ -5463,15 +5456,7 @@ printf("page=%d | ptr=%X ibank=%d\n",page,curlabel->ptr,curlabel->ibank);
 														}
 														break;
 													case 0:
-														if (!getslot) {
-															if (ae->extendedCPR) {
-																curval=curlabel->ibank&31;
-															} else {
-																curval=curlabel->ibank;
-															}
-														} else {
-															curval=curlabel->ibank>>5;
-														}
+														curval=curlabel->ibank;
 														break;
 													default:MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"INTERNAL ERROR (unknown paging)\n",GetExpFile(ae,didx),GetExpLine(ae,didx));FreeAssenv(ae);exit(-664);
 												}
@@ -6840,7 +6825,7 @@ void ExpressionFastTranslate(struct s_assenv *ae, char **ptr_expr, int fullrepla
 //@@TODO ajouter une recherche d'alias?
 
 				} else if (varbuffer[0]=='{') {
-					if (strncmp(varbuffer,"{BANK}",6)==0 || strncmp(varbuffer,"{PAGE}",6)==0 || strncmp(varbuffer,"{SLOT}",6)==0) tagoffset=6; else
+					if (strncmp(varbuffer,"{BANK}",6)==0 || strncmp(varbuffer,"{PAGE}",6)==0) tagoffset=6; else
 					if (strncmp(varbuffer,"{PAGESET}",9)==0) tagoffset=9; else
 					if (strncmp(varbuffer,"{SIZEOF}",8)==0) tagoffset=8; else
 					{
@@ -8776,7 +8761,7 @@ void _EX(struct s_assenv *ae) {
 		}
 		ae->idx+=2;
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Use EX reg16,reg16\n");
+		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Use EX reg16,[DE|(SP)]\n");
 	}
 }
 
@@ -16069,7 +16054,7 @@ printf("-check ORG\n");
 		}
 	}
 #if TRACE_ASSEMBLE
-printf("crunch if any\n");
+printf("crunch if any %d blocks\n",ae->ilz);
 #endif
 	/***************************************************
 	         c r u n c h   L Z   s e c t i o n s
@@ -16081,6 +16066,14 @@ printf("crunch if any\n");
 #if TRACE_ASSEMBLE
 printf("Crunch LZ[%d] (%d) %s\n",i,ae->lzsection[i].lzversion,ae->lzsection[i].lzversion==8?"mizou":"");
 #endif
+
+				if (ae->lzsection[i].memend==-1) {
+					/* patch idx */
+					ae->idx=ae->lzsection[i].iw;
+					MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Crunched section was not closed\n");
+					continue;
+				}
+
 				/* compute labels and expression inside crunched blocks */
 				PopAllExpression(ae,i);
 
@@ -16118,6 +16111,9 @@ printf("Crunch LZ[%d] (%d) %s\n",i,ae->lzsection[i].lzversion,ae->lzsection[i].l
 							#endif
 							break;
 						case 18:
+#if TRACE_ASSEMBLE
+							printf("crunching bank %d ptr=%d lng=%d version=%d minmatch=%d\n",ae->lzsection[i].ibank,ae->lzsection[i].memstart,input_size,ae->lzsection[i].version,ae->lzsection[i].minmatch);
+#endif
 							#ifndef NO_3RD_PARTIES
 							if (input_size>=1024) rasm_printf(ae,KWARNING"LZSA is crunching %.1fkb this may take a while, be patient...\n",input_size/1024.0);
 							LZSA_crunch(input_data,input_size,&lzdata,&lzlen,ae->lzsection[i].version,ae->lzsection[i].minmatch);
@@ -18457,7 +18453,7 @@ printf("-build wordlist\n");
 #if TRACE_PREPRO
 printf("c='%c' automate[c]=%d\n",c>31?c:'.',Automate[((int)c)&0xFF]);			
 #endif
-					exit(0);
+					exit(1);
 					break;
 				case 1:
 					if (c=='\'' && idx>2 && strncmp(&listing[l].listing[idx-3],"AF'",3)==0) {
@@ -19625,7 +19621,7 @@ int RasmAssembleInfoParam(const char *datain, int lenin, unsigned char **dataout
 ":assert hard2soft_ink(22)==9 :assert hard2soft_ink(23)==11 :assert hard2soft_ink(24)==4 :assert hard2soft_ink(25)==22 :assert hard2soft_ink(26)==21 "\
 ":assert hard2soft_ink(27)==23 :assert hard2soft_ink(28)==3 :assert hard2soft_ink(29)==5 :assert h2s_ink(30)==12 :assert h2s_ink(31)==14 :nop "
 
-#define AUTOTEST_ECPR1 "buildcpr extended : bank 32 : label1 : assert {slot}label1==1 : assert {bank}label1==0 : nop"
+#define AUTOTEST_ECPR1 "buildcpr extended : bank 32 : label1 : assert {bank}label1==32 : nop"
 
 #define AUTOTEST_BANKPROX " buildcpr: bank 0: grouik: .tape1: nop: ld hl,{bank}.tape2: bank 1: ld hl,{bank}.tape2: defw {bank}.tape2: .tape2: nop: "
 
@@ -20898,7 +20894,7 @@ printf("*** LZSA2 and INCLZSA2 tests disabled as there is no LZSA v2 support for
 	ret=RasmAssemble(AUTOTEST_ECPR1,strlen(AUTOTEST_ECPR1),&opcode,&opcodelen);
 	if (!ret) {} else {printf("Autotest %03d ERROR (extended CPR test 1)\n",cpt);exit(-1);}
 	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
-printf("testing simple extended CPR + {slot} tag and modifie {bank} behaviour OK\n");
+printf("testing simple extended CPR behaviour OK\n");
 
 
 
