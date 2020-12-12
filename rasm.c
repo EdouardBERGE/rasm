@@ -21359,6 +21359,7 @@ printf("\n\n\n\n");
 printf("******* license for AP-Ultra & LZSA crunchers ****************************\n\n\n\n");
 printf(" * apultra.c - command line compression utility for the apultra library\n");
 printf(" * Copyright (C) 2019 Emmanuel Marty\n");
+printf(" *          https://github.com/emmanuel-marty\n");
 printf(" *\n");
 printf(" * This software is provided 'as-is', without any express or implied\n");
 printf(" * warranty.  In no event will the authors be held liable for any damages\n");
