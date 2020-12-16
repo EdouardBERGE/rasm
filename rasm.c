@@ -10748,13 +10748,13 @@ void _SRL(struct s_assenv *ae) {
 	/* on check qu'il y a un ou deux parametres */
 	if (ae->wl[ae->idx+1].t==1) {
 		switch (GetCRC(ae->wl[ae->idx+1].w)) {
-			case CRC_BC:___output(ae,0xCB);___output(ae,0x38);___output(ae,0xCB);___output(ae,0x11);ae->nop+=4;ae->tick+=16;break; /* SRL B : RL C */
+			case CRC_BC:___output(ae,0xCB);___output(ae,0x38);___output(ae,0xCB);___output(ae,0x19);ae->nop+=4;ae->tick+=16;break; /* SRL B : RR C */
 			case CRC_B:___output(ae,0xCB);___output(ae,0x38);ae->nop+=2;ae->tick+=8;break;
 			case CRC_C:___output(ae,0xCB);___output(ae,0x39);ae->nop+=2;ae->tick+=8;break;
-			case CRC_DE:___output(ae,0xCB);___output(ae,0x3A);___output(ae,0xCB);___output(ae,0x13);ae->nop+=4;ae->tick+=16;break; /* SRL D : RL E */
+			case CRC_DE:___output(ae,0xCB);___output(ae,0x3A);___output(ae,0xCB);___output(ae,0x1B);ae->nop+=4;ae->tick+=16;break; /* SRL D : RR E */
 			case CRC_D:___output(ae,0xCB);___output(ae,0x3A);ae->nop+=2;ae->tick+=8;break;
 			case CRC_E:___output(ae,0xCB);___output(ae,0x3B);ae->nop+=2;ae->tick+=8;break;
-			case CRC_HL:___output(ae,0xCB);___output(ae,0x3C);___output(ae,0xCB);___output(ae,0x15);ae->nop+=4;ae->tick+=16;break; /* SRL H : RL L */
+			case CRC_HL:___output(ae,0xCB);___output(ae,0x3C);___output(ae,0xCB);___output(ae,0x1D);ae->nop+=4;ae->tick+=16;break; /* SRL H : RR L */
 			case CRC_H:___output(ae,0xCB);___output(ae,0x3C);ae->nop+=2;ae->tick+=8;break;
 			case CRC_L:___output(ae,0xCB);___output(ae,0x3D);ae->nop+=2;ae->tick+=8;break;
 			case CRC_MHL:___output(ae,0xCB);___output(ae,0x3E);ae->nop+=4;ae->tick+=15;break;
@@ -21360,6 +21360,10 @@ printf("******* license for AP-Ultra & LZSA crunchers **************************
 printf(" * apultra.c - command line compression utility for the apultra library\n");
 printf(" * Copyright (C) 2019 Emmanuel Marty\n");
 printf(" *          https://github.com/emmanuel-marty\n");
+printf(" *\n");
+printf(" LZSA code use Zlib license\n");
+printf(" Match finder use CC0 license due to using portions of code from Eric Bigger's\n");
+printf("                                  Wimlib in the suffix array-based matchfinder\n");
 printf(" *\n");
 printf(" * This software is provided 'as-is', without any express or implied\n");
 printf(" * warranty.  In no event will the authors be held liable for any damages\n");
