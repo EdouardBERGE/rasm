@@ -15262,6 +15262,8 @@ void __SUMMEM(struct s_assenv *ae) {
 			poker.method=E_POKER_SUM8;
 			poker.istart=ae->idx+1;
 			poker.iend=ae->idx+2;
+			ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,1);
+			ExpressionFastTranslate(ae,&ae->wl[ae->idx+2].w,1);
 			poker.outputadr=ae->outputadr;
 			poker.ibank=ae->activebank;
 			ObjectArrayAddDynamicValueConcat((void**)&ae->poker,&ae->nbpoker,&ae->maxpoker,&poker,sizeof(poker));
@@ -15281,6 +15283,8 @@ void __XORMEM(struct s_assenv *ae) {
 			poker.method=E_POKER_XOR8;
 			poker.istart=ae->idx+1;
 			poker.iend=ae->idx+2;
+			ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,1);
+			ExpressionFastTranslate(ae,&ae->wl[ae->idx+2].w,1);
 			poker.outputadr=ae->outputadr;
 			poker.ibank=ae->activebank;
 			ObjectArrayAddDynamicValueConcat((void**)&ae->poker,&ae->nbpoker,&ae->maxpoker,&poker,sizeof(poker));
@@ -16278,6 +16282,7 @@ printf("include %d other ORG for the memove size=%d\n",morgzone-iorgzone,lzmove)
 					xorval=xorval^ae->mem[ae->poker[i].ibank][j];
 				}
 				ae->mem[ae->poker[i].ibank][ae->poker[i].outputadr]=xorval;
+	//printf("poker XOR from #%04X to #%04X at #%04X\n",istart,iend,ae->poker[i].outputadr);
 				break;
 			case E_POKER_SUM8:
 				sumval=0;
