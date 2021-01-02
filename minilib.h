@@ -665,15 +665,15 @@ char *_internal_fgetsmulti(char *filename, int read_mode)
 	#define FUNC "_internal_fgetsmulti"
 	static char buffer[MAX_LINE_BUFFER+1]={0};
 	FILE *last_id=NULL;
-	char * (*_file_get_string)(char *, int, FILE *);
+	char * (*_file_get_string)(char *, int, FILE *)=fgets;
 	
 	last_id=FileOpen(filename,"r");
 	
 	switch (read_mode)
 	{
+		default:logerr("Unknown read mode! (%d)",read_mode);
 		case RAW_READING:_file_get_string=fgets;break;
 		case CLOSE_READING:_file_get_string=_internal_fgetsClose;break;
-		default:logerr("Unknown read mode! (%d)",read_mode);
 	}	
 	
 	if (_file_get_string(buffer,MAX_LINE_BUFFER,last_id)!=NULL)
@@ -709,9 +709,9 @@ char **_internal_fgetsmultilines(char *filename, int read_mode)
 	
 	switch (read_mode)
 	{
+		default:logerr("Unknown read mode! (%d)",read_mode);
 		case RAW_READING:_file_get_string=fgets;break;
 		case CLOSE_READING:_file_get_string=_internal_fgetsClose;break;
-		default:logerr("Unknown read mode! (%d)",read_mode);
 	}	
 
 
