@@ -14258,6 +14258,13 @@ int __internal_getsample24big(unsigned char *data, int *idx) {
 /* float & endian shit */
 int _isLittleEndian() /* from lz4.h */
 {
+#ifdef NO_3RD_PARTIES
+	#if defined(__cplusplus) || (defined (__STDC_VERSION__) && (__STDC_VERSION__ >= 199901L) /* C99 */)
+		typedef uint32_t U32;
+	#else
+		typedef unsigned int        U32;
+	#endif
+#endif
     const union { U32 u; unsigned char c[4]; } one = { 1 };
     return one.c[0];
 }
