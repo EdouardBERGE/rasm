@@ -4,6 +4,7 @@ EXEC=rasm.exe
 CFLAGS=-lm -lrt -march=native -o $(EXEC)
 CFLAGS_OPT = $(CFLAGS) -O2
 CFLAGS_DBG = $(CFLAGS) -g -pthread -DRDD
+CFLAGS_3RD = $(CFLAGS) -g -pthread -DNO_3RD_PARTIES
 
 SRC_APUDIR=./apultra-master/src
 SRC_LZSADIR=./lzsa-master/src
@@ -33,9 +34,12 @@ LZSA_OBJ+=$(SRC_LZSADIR)/shrink_context.o
 LZSA_OBJ+=$(SRC_LZSADIR)/shrink_inmem.o
 LZSA_OBJ+=$(SRC_LZSADIR)/stream.o
 
-.PHONY: prod debug clean
+.PHONY: prod third debug clean
 
 default: prod
+
+third:
+	$(CC) rasm.c $(CFLAGS_3RD)
 
 debug:
 	$(CC) $(SRC_APUDIR)/expand.c $(APU_FLAGS)                                -o $(SRC_APUDIR)/expand.o
