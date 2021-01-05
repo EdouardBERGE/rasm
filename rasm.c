@@ -1,6 +1,6 @@
 #define PROGRAM_NAME      "RASM"
 #define PROGRAM_VERSION   "1.4 nightly"
-#define PROGRAM_DATE      "xx/11/2020"
+#define PROGRAM_DATE      "xx/01/2021"
 #define PROGRAM_COPYRIGHT "© 2017 BERGE Edouard / roudoudou from Resistance"
 
 #define RASM_VERSION PROGRAM_NAME" v"PROGRAM_VERSION" (build "PROGRAM_DATE")"
@@ -11454,6 +11454,27 @@ void _DEFSTR(struct s_assenv *ae) {
 #endif
 
 #undef FUNC
+#define FUNC "Import/Export CORE"
+
+// symbol export
+void __SYMBOL(struct s_assenv *ae) {
+}
+
+// symbol import
+void __EXTERNAL(struct s_assenv *ae) {
+}
+
+// procedure export
+void __PROCEDURE(struct s_assenv *ae) {
+}
+
+void __ENDPROC(struct s_assenv *ae) {
+}
+
+
+
+
+#undef FUNC
 #define FUNC "Directive CORE"
 
 void __internal_UpdateLZBlockIfAny(struct s_assenv *ae) {
@@ -13020,6 +13041,43 @@ void __FAIL(struct s_assenv *ae) {
 	__PRINT(ae);
 	__STOP(ae);
 	MaxError(ae);
+}
+
+void __HICONFINE(struct s_assenv *ae) {
+	int aval,ifill=0;
+
+	if (ae->io) {
+		ae->orgzone[ae->io-1].memend=ae->outputadr; // mandatory but why???
+	}
+	if (!ae->wl[ae->idx].t) {
+		ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
+		aval=RoundComputeExpression(ae,ae->wl[ae->idx+1].w,ae->codeadr,0,0)-1;
+		ae->idx++;
+		/* confine with fill ? */
+		if (!ae->wl[ae->idx].t) {
+			ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
+			ifill=RoundComputeExpression(ae,ae->wl[ae->idx+1].w,ae->codeadr,0,0);
+			ae->idx++;
+			if (ifill<0 || ifill>255) {
+				MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"ALIGN fill value must be 0 to 255\n");
+				ifill=0;
+			}
+		}
+		if (aval<1 || aval>256) {
+			MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"HICONFINE size must be in [2-256] interval\n");
+			aval=1;
+		}
+		/* touch codeadr only if needed */
+		if (((ae->codeadr+aval)&0xFF00)!=(ae->codeadr&0xFF00)) {
+			/* physical ALIGN fill bytes */
+			while ((ae->codeadr&0xFF)!=0) {
+				___output(ae,ifill);
+				ae->nop+=1;
+			}
+		}
+	} else {
+		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"HICONFINE <confined size>[,fill] directive need one or two integers parameters\n");
+	}
 }
 
 void __ALIGN(struct s_assenv *ae) {
@@ -15477,6 +15535,7 @@ struct s_asm_keyword instruction[]={
 {"INCLUDE",0,__READ}, // anti-label
 {"HEXBIN",0,__HEXBIN},
 {"ALIGN",0,__ALIGN},
+{"HICONFINE",0,__HICONFINE},
 {"ELSEIF",0,__ELSEIF},
 {"ELSE",0,__ELSE},
 {"IF",0,__IF},
@@ -19283,6 +19342,10 @@ int RasmAssembleInfoParam(const char *datain, int lenin, unsigned char **dataout
 #define AUTOTEST_DEFUSED	"ld hl,labelused :ifdef labelused:fail 'labelexiste':endif:ifndef labelused:else:fail 'labelexiste':endif:" \
 				"ifnused labelused:fail 'labelused':endif:ifused labelused:else:fail 'labelused':endif:labelused"
 
+#define AUTOTEST_ALIGN		"org 0:nop: align 64: defb 64: align 128: defb 128: align 256: defb 255 "
+
+#define AUTOTEST_HICONFINE	"org 0: nop: org 250: hiconfine 10: defb #aa: org 500: hiconfine 12: defb #bb: assert $<512 "
+
 #define AUTOTEST_SAVEINVALID1	"nop : save'gruik',20,-100"
 
 #define AUTOTEST_SAVEINVALID2	"nop : save'gruik',-20,100"
@@ -20145,6 +20208,16 @@ printf("testing opcode overriding LIMIT OK\n");
 	if (ret) {} else {printf("Autotest %03d ERROR (limit: ld hl,#1234 in #FFFF)\n",cpt);exit(-1);}
 	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
 printf("testing opcode with variable overriding LIMIT OK\n");
+	
+	ret=RasmAssemble(AUTOTEST_ALIGN,strlen(AUTOTEST_ALIGN),&opcode,&opcodelen);
+	if (!ret && opcodelen==257 && opcode[64]==64 && opcode[128]==128 && opcode[256]==255) {} else {printf("Autotest %03d ERROR (ALIGN directive)\n",cpt);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing ALIGN OK\n");
+	
+	ret=RasmAssemble(AUTOTEST_HICONFINE,strlen(AUTOTEST_HICONFINE),&opcode,&opcodelen);
+	if (!ret && opcodelen==501 && opcode[256]==0xAA && opcode[500]==0xBB) {} else {printf("Autotest %03d ERROR (HICONFINE directive)\n",cpt);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing HICONFINE OK\n");
 	
 	ret=RasmAssemble(AUTOTEST_DELAYED_RUN,strlen(AUTOTEST_DELAYED_RUN),&opcode,&opcodelen);
 	if (!ret) {} else {printf("Autotest %03d ERROR (delayed RUN set)\n",cpt);exit(-1);}
