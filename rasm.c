@@ -13043,7 +13043,7 @@ void __FAIL(struct s_assenv *ae) {
 	MaxError(ae);
 }
 
-void __HICONFINE(struct s_assenv *ae) {
+void __CONFINE(struct s_assenv *ae) {
 	int aval,ifill=0;
 
 	if (ae->io) {
@@ -13064,7 +13064,7 @@ void __HICONFINE(struct s_assenv *ae) {
 			}
 		}
 		if (aval<1 || aval>256) {
-			MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"HICONFINE size must be in [2-256] interval\n");
+			MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"CONFINE size must be in [2-256] interval\n");
 			aval=1;
 		}
 		/* touch codeadr only if needed */
@@ -13076,7 +13076,7 @@ void __HICONFINE(struct s_assenv *ae) {
 			}
 		}
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"HICONFINE <confined size>[,fill] directive need one or two integers parameters\n");
+		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"CONFINE <confined size>[,fill] directive need one or two integers parameters\n");
 	}
 }
 
@@ -15535,7 +15535,7 @@ struct s_asm_keyword instruction[]={
 {"INCLUDE",0,__READ}, // anti-label
 {"HEXBIN",0,__HEXBIN},
 {"ALIGN",0,__ALIGN},
-{"HICONFINE",0,__HICONFINE},
+{"CONFINE",0,__CONFINE},
 {"ELSEIF",0,__ELSEIF},
 {"ELSE",0,__ELSE},
 {"IF",0,__IF},
@@ -19344,7 +19344,7 @@ int RasmAssembleInfoParam(const char *datain, int lenin, unsigned char **dataout
 
 #define AUTOTEST_ALIGN		"org 0:nop: align 64: defb 64: align 128: defb 128: align 256: defb 255 "
 
-#define AUTOTEST_HICONFINE	"org 0: nop: org 250: hiconfine 10: defb #aa: org 500: hiconfine 12: defb #bb: assert $<512 "
+#define AUTOTEST_CONFINE	"org 0: nop: org 250: confine 10: defb #aa: org 500: confine 12: defb #bb: assert $<512 "
 
 #define AUTOTEST_SAVEINVALID1	"nop : save'gruik',20,-100"
 
@@ -20214,10 +20214,10 @@ printf("testing opcode with variable overriding LIMIT OK\n");
 	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
 printf("testing ALIGN OK\n");
 	
-	ret=RasmAssemble(AUTOTEST_HICONFINE,strlen(AUTOTEST_HICONFINE),&opcode,&opcodelen);
+	ret=RasmAssemble(AUTOTEST_CONFINE,strlen(AUTOTEST_CONFINE),&opcode,&opcodelen);
 	if (!ret && opcodelen==501 && opcode[256]==0xAA && opcode[500]==0xBB) {} else {printf("Autotest %03d ERROR (HICONFINE directive)\n",cpt);exit(-1);}
 	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
-printf("testing HICONFINE OK\n");
+printf("testing CONFINE OK\n");
 	
 	ret=RasmAssemble(AUTOTEST_DELAYED_RUN,strlen(AUTOTEST_DELAYED_RUN),&opcode,&opcodelen);
 	if (!ret) {} else {printf("Autotest %03d ERROR (delayed RUN set)\n",cpt);exit(-1);}
