@@ -13044,7 +13044,7 @@ void __FAIL(struct s_assenv *ae) {
 }
 
 void __CONFINE(struct s_assenv *ae) {
-	int aval,ifill=0;
+	int aval,ifill=0,warning=0;
 
 	if (ae->io) {
 		ae->orgzone[ae->io-1].memend=ae->outputadr; // mandatory but why???
@@ -13053,15 +13053,18 @@ void __CONFINE(struct s_assenv *ae) {
 		ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
 		aval=RoundComputeExpression(ae,ae->wl[ae->idx+1].w,ae->codeadr,0,0)-1;
 		ae->idx++;
-		/* confine with fill ? */
-		if (!ae->wl[ae->idx].t) {
-			ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
-			ifill=RoundComputeExpression(ae,ae->wl[ae->idx+1].w,ae->codeadr,0,0);
-			ae->idx++;
-			if (ifill<0 || ifill>255) {
-				MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"ALIGN fill value must be 0 to 255\n");
-				ifill=0;
+		while (!ae->wl[ae->idx].t) {
+			if (strcmp(ae->wl[ae->idx+1].w,"WARNING")==0) {
+				warning=1;
+			} else /* confine with fill ? */ {
+				ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
+				ifill=RoundComputeExpression(ae,ae->wl[ae->idx+1].w,ae->codeadr,0,0);
+				if (ifill<0 || ifill>255) {
+					MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"ALIGN fill value must be 0 to 255\n");
+					ifill=0;
+				}
 			}
+			ae->idx++;
 		}
 		if (aval<1 || aval>256) {
 			MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"CONFINE size must be in [2-256] interval\n");
@@ -13069,6 +13072,10 @@ void __CONFINE(struct s_assenv *ae) {
 		}
 		/* touch codeadr only if needed */
 		if (((ae->codeadr+aval)&0xFF00)!=(ae->codeadr&0xFF00)) {
+			if (!ae->nowarning) {
+				rasm_printf(ae,KWARNING"[%s:%d] Warning: confinement overflows %d byte%s\n",GetCurrentFile(ae),ae->wl[ae->idx].l,ae->codeadr+aval-256,ae->codeadr+aval-256>1?"s":"");
+				if (ae->erronwarn) MaxError(ae);
+			}
 			/* physical ALIGN fill bytes */
 			while ((ae->codeadr&0xFF)!=0) {
 				___output(ae,ifill);
