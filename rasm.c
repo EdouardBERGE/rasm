@@ -13073,7 +13073,9 @@ void __CONFINE(struct s_assenv *ae) {
 		/* touch codeadr only if needed */
 		if (((ae->codeadr+aval)&0xFF00)!=(ae->codeadr&0xFF00)) {
 			if (!ae->nowarning) {
-				rasm_printf(ae,KWARNING"[%s:%d] Warning: confinement overflows %d byte%s\n",GetCurrentFile(ae),ae->wl[ae->idx].l,ae->codeadr+aval-256,ae->codeadr+aval-256>1?"s":"");
+				rasm_printf(ae,KWARNING"[%s:%d] Warning: confinement overflows %d byte%s, loss of %d byte%s\n",GetCurrentFile(ae),ae->wl[ae->idx].l,
+						((ae->codeadr+aval)&0xFF)+1,(((ae->codeadr+aval)&0xFF)+1)>1?"s":"",
+						aval-((ae->codeadr+aval)&0xFF)-1,aval-((ae->codeadr+aval)&0xFF)-1>1?"s":"");
 				if (ae->erronwarn) MaxError(ae);
 			}
 			/* physical ALIGN fill bytes */
