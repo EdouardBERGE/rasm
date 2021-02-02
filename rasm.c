@@ -88,9 +88,26 @@ cc rasm.c -O2 -lm -march=native -o rasm
 #ifndef NO_3RD_PARTIES
 #define __FILENAME__ "3rd parties"
 /* 3rd parties compression */
+#define MAX_OFFSET_ZX0    32640
 #include"zx7.h"
 #include"lz4.h"
 #include"exomizer.h"
+
+typedef struct block_t {
+    struct block_t *chain;
+    struct block_t *ghost_chain;
+    int bits;
+    int index;
+    int offset;
+    int length;
+    int references;
+} BLOCK;
+
+BLOCK *allocate(int bits, int index, int offset, int length, BLOCK *chain);
+void assign(BLOCK **ptr, BLOCK *chain);
+BLOCK *zx0_optimize(unsigned char *input_data, int input_size, int skip, int offset_limit);
+unsigned char *zx0_compress(BLOCK *optimal, unsigned char *input_data, int input_size, int skip, int backwards_mode, int *output_size, int *delta);
+
 #endif
 
 #ifdef __MORPHOS__
@@ -11712,6 +11729,60 @@ void __LZ4(struct s_assenv *ae) {
 	ae->lz=ae->ilz;
 	ObjectArrayAddDynamicValueConcat((void**)&ae->lzsection,&ae->ilz,&ae->mlz,&curlz,sizeof(curlz));
 }
+void __LZX0(struct s_assenv *ae) {
+	struct s_lz_section curlz;
+	
+	if (!ae->wl[ae->idx].t) {
+		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"LZ directive does not need any parameter\n");
+		return;
+	}
+	#ifdef NO_3RD_PARTIES
+		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Cannot use 3rd parties cruncher with this version of RASM\n");
+		FreeAssenv(ae);
+		exit(-5);
+	#endif
+	
+	if (ae->lz>=0 && ae->lz<ae->ilz && ae->lzsection[ae->ilz-1].lzversion) {
+		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Cannot start a new LZ section inside another one (%d)\n",ae->lz);
+		FreeAssenv(ae);
+		exit(-5);
+	}
+	curlz.iw=ae->idx;
+	curlz.iorgzone=ae->io-1;
+	curlz.ibank=ae->activebank;
+	curlz.memstart=ae->outputadr;
+	curlz.memend=-1;
+	curlz.lzversion=70;
+	ae->lz=ae->ilz;
+	ObjectArrayAddDynamicValueConcat((void**)&ae->lzsection,&ae->ilz,&ae->mlz,&curlz,sizeof(curlz));
+}
+void __LZX0B(struct s_assenv *ae) {
+	struct s_lz_section curlz;
+	
+	if (!ae->wl[ae->idx].t) {
+		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"LZ directive does not need any parameter\n");
+		return;
+	}
+	#ifdef NO_3RD_PARTIES
+		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Cannot use 3rd parties cruncher with this version of RASM\n");
+		FreeAssenv(ae);
+		exit(-5);
+	#endif
+	
+	if (ae->lz>=0 && ae->lz<ae->ilz && ae->lzsection[ae->ilz-1].lzversion) {
+		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Cannot start a new LZ section inside another one (%d)\n",ae->lz);
+		FreeAssenv(ae);
+		exit(-5);
+	}
+	curlz.iw=ae->idx;
+	curlz.iorgzone=ae->io-1;
+	curlz.ibank=ae->activebank;
+	curlz.memstart=ae->outputadr;
+	curlz.memend=-1;
+	curlz.lzversion=71;
+	ae->lz=ae->ilz;
+	ObjectArrayAddDynamicValueConcat((void**)&ae->lzsection,&ae->ilz,&ae->mlz,&curlz,sizeof(curlz));
+}
 void __LZX7(struct s_assenv *ae) {
 	struct s_lz_section curlz;
 	
@@ -15096,10 +15167,39 @@ if (curhexbin->crunch) printf("CRUNCHED! (%d)\n",curhexbin->crunch);
 									rasm_printf(ae,KVERBOSE"crunched with LZ4 into %d byte(s)\n",outputidx);
 									#endif
 									break;
+
+								case 70:
+									{
+									int delta,slzlen;
+
+									if (outputidx>=1024) rasm_printf(ae,KWARNING"ZX0 is crunching %.1fkb this may take a while, be patient...\n",outputidx/1024.0);
+									newdata=zx0_compress(zx0_optimize(outputdata, outputidx, 0, MAX_OFFSET_ZX0), outputdata, outputidx, 0, 0, &slzlen, &delta);
+									outputidx=slzlen;
+									MemFree(outputdata);
+									outputdata=newdata;
+									#if TRACE_PREPRO
+									rasm_printf(ae,KVERBOSE"crunched with ZX0 into %d byte(s) delta=%d\n",outputidx,delta);
+									#endif
+									}
+									break;
+								case 71:
+									{
+									int delta,slzlen;
+
+									if (outputidx>=1024) rasm_printf(ae,KWARNING"ZX0 is crunching %.1fkb this may take a while, be patient...\n",outputidx/1024.0);
+									newdata=zx0_compress(zx0_optimize(outputdata, outputidx, 0, MAX_OFFSET_ZX0), outputdata, outputidx, 0, 1, &slzlen, &delta);
+									outputidx=slzlen;
+									MemFree(outputdata);
+									outputdata=newdata;
+									#if TRACE_PREPRO
+									rasm_printf(ae,KVERBOSE"crunched with ZX0 backward into %d byte(s) delta=%d\n",outputidx,delta);
+									#endif
+									}
+									break;
 								case 7:
 									{
-									size_t slzlen;
-									newdata=ZX7_compress(optimize(outputdata, outputidx), outputdata, outputidx, &slzlen);
+									int slzlen;
+									newdata=ZX7_compress(zx7_optimize(outputdata, outputidx), outputdata, outputidx, &slzlen);
 									outputidx=slzlen;
 									MemFree(outputdata);
 									outputdata=newdata;
@@ -15584,6 +15684,8 @@ struct s_asm_keyword instruction[]={
 {"LIMIT",0,__LIMIT},
 {"LZEXO",0,__LZEXO},
 {"LZX7",0,__LZX7},
+{"LZX0",0,__LZX0},
+{"LZX0B",0,__LZX0B},
 {"LZAPU",0,__LZAPU},
 {"LZSA1",0,__LZSA1},
 {"LZSA2",0,__LZSA2},
@@ -15640,7 +15742,7 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 	int icrc,curcrc,i,j,k;
 	unsigned char *lzdata=NULL;
 	int lzlen,lzshift,input_size;
-	size_t slzlen;
+	int slzlen,delta;
 	unsigned char *input_data;
 	struct s_orgzone orgzone={0};
 	int iorgzone,ibank,offset,endoffset,morgzone,saveorgzone;
@@ -16166,9 +16268,24 @@ printf("Crunch LZ[%d] (%d) %s\n",i,ae->lzsection[i].lzversion,ae->lzsection[i].l
 					if (ae->erronwarn) MaxError(ae);
 				} else {
 					switch (ae->lzsection[i].lzversion) {
+
+						case 70:
+							#ifndef NO_3RD_PARTIES
+							if (input_size>=1024) rasm_printf(ae,KWARNING"ZX0 is crunching %.1fkb this may take a while, be patient...\n",input_size/1024.0);
+							lzdata=zx0_compress(zx0_optimize(input_data, input_size, 0, MAX_OFFSET_ZX0), input_data, input_size, 0, 0, &slzlen, &delta);
+							lzlen=slzlen;
+							#endif
+							break;
+						case 71:
+							#ifndef NO_3RD_PARTIES
+							if (input_size>=1024) rasm_printf(ae,KWARNING"ZX0 is crunching %.1fkb this may take a while, be patient...\n",input_size/1024.0);
+							lzdata=zx0_compress(zx0_optimize(input_data, input_size, 0, MAX_OFFSET_ZX0), input_data, input_size, 0, 1, &slzlen, &delta);
+							lzlen=slzlen;
+							#endif
+							break;
 						case 7:
 							#ifndef NO_3RD_PARTIES
-							lzdata=ZX7_compress(optimize(input_data, input_size), input_data, input_size, &slzlen);
+							lzdata=ZX7_compress(zx7_optimize(input_data, input_size), input_data, input_size, &slzlen);
 							lzlen=slzlen;
 							#endif
 							break;
@@ -16194,7 +16311,7 @@ printf("Crunch LZ[%d] (%d) %s\n",i,ae->lzsection[i].lzversion,ae->lzsection[i].l
 							printf("crunching bank %d ptr=%d lng=%d version=%d minmatch=%d\n",ae->lzsection[i].ibank,ae->lzsection[i].memstart,input_size,ae->lzsection[i].version,ae->lzsection[i].minmatch);
 #endif
 							#ifndef NO_3RD_PARTIES
-							if (input_size>=1024) rasm_printf(ae,KWARNING"LZSA is crunching %.1fkb this may take a while, be patient...\n",input_size/1024.0);
+							if (input_size>=16384 && ae->lzsection[i].version==2) rasm_printf(ae,KWARNING"LZSA is crunching %.1fkb this may take a while, be patient...\n",input_size/1024.0);
 							LZSA_crunch(input_data,input_size,&lzdata,&lzlen,ae->lzsection[i].version,ae->lzsection[i].minmatch);
 							#endif
 							break;
@@ -18319,6 +18436,26 @@ if (!idx) printf("[%s]\n",listing[l].listing);
 								if (c==quote_type) {
 									waiting_quote=2;
 								}
+							} else if (strcmp(bval,"INCZX0")==0) {
+								incstartL=l;
+								incbin=1;
+								crunch=70;
+								waiting_quote=1;
+								rewrite=idx-6-1;
+								/* quote right after keyword */
+								if (c==quote_type) {
+									waiting_quote=2;
+								}
+							} else if (strcmp(bval,"INCZX0B")==0) {
+								incstartL=l;
+								incbin=1;
+								crunch=71;
+								waiting_quote=1;
+								rewrite=idx-7-1;
+								/* quote right after keyword */
+								if (c==quote_type) {
+									waiting_quote=2;
+								}
 							} else if (strcmp(bval,"INCZX7")==0) {
 								incstartL=l;
 								incbin=1;
@@ -19470,6 +19607,20 @@ int RasmAssembleInfoParam(const char *datain, int lenin, unsigned char **dataout
 #define AUTOTEST_LZX7_D	"lzx7 : incbin 'autotest_include.raw',100 : lzclose"
 #define AUTOTEST_LZX7_E	"inczx7 'autotest_include.raw',0,1000"
 #define AUTOTEST_LZX7_F	"lzx7 : incbin'autotest_include.raw',0,1000 : lzclose"
+
+#define AUTOTEST_LZX0_A	"lzx0 : incbin 'autotest_include.raw' : lzclose"
+#define AUTOTEST_LZX0_B	"inczx0 'autotest_include.raw'"
+#define AUTOTEST_LZX0_C	"inczx0 'autotest_include.raw',100"
+#define AUTOTEST_LZX0_D	"lzx0 : incbin 'autotest_include.raw',100 : lzclose"
+#define AUTOTEST_LZX0_E	"inczx0 'autotest_include.raw',0,1000"
+#define AUTOTEST_LZX0_F	"lzx0 : incbin'autotest_include.raw',0,1000 : lzclose"
+
+#define AUTOTEST_LZX0B_A "lzx0b : incbin 'autotest_include.raw' : lzclose"
+#define AUTOTEST_LZX0B_B "inczx0b 'autotest_include.raw'"
+#define AUTOTEST_LZX0B_C "inczx0b 'autotest_include.raw',100"
+#define AUTOTEST_LZX0B_D "lzx0b : incbin 'autotest_include.raw',100 : lzclose"
+#define AUTOTEST_LZX0B_E "inczx0b 'autotest_include.raw',0,1000"
+#define AUTOTEST_LZX0B_F "lzx0b : incbin'autotest_include.raw',0,1000 : lzclose"
 
 
 #define AUTOTEST_MAXERROR	"repeat 20:aglapi:rend:nop"
@@ -20849,6 +21000,68 @@ printf("testing LZEXO variant+offset OK\n");
 printf("testing LZEXO variant+size OK\n");
 
 
+	ret=RasmAssemble(AUTOTEST_LZX0_A,strlen(AUTOTEST_LZX0_A),&opcode,&opcodelen);
+	if (!ret && opcodelen==384) {} else {printf("Autotest %03d ERROR (INCBIN + LZX0 segment)\n",cpt);MiniDump(opcode,opcodelen);exit(-1);}
+	i=opcodelen;
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing INCBIN + LZX0 segment OK\n");
+
+	ret=RasmAssemble(AUTOTEST_LZX0_B,strlen(AUTOTEST_LZX0_B),&opcode,&opcodelen);
+	if (!ret && opcodelen==i) {} else {printf("Autotest %03d ERROR (INCZX0 must crunch like LZX0 segment)\n",cpt);MiniDump(opcode,opcodelen);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing INCZX0 OK\n");
+
+	ret=RasmAssemble(AUTOTEST_LZX0_C,strlen(AUTOTEST_LZX0_C),&opcode,&opcodelen);
+	if (!ret) {} else {printf("Autotest %03d ERROR (INCZX0+offset)\n",cpt);MiniDump(opcode,opcodelen);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+	i=opcodelen;
+	ret=RasmAssemble(AUTOTEST_LZX0_D,strlen(AUTOTEST_LZX0_D),&opcode,&opcodelen);
+	if (!ret && i==opcodelen) {} else {printf("Autotest %03d ERROR (LZX0+INCBIN+offset)\n",cpt);MiniDump(opcode,opcodelen);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing LZX0 variant+offset OK\n");
+
+	ret=RasmAssemble(AUTOTEST_LZX0_E,strlen(AUTOTEST_LZX0_E),&opcode,&opcodelen);
+	if (!ret) {} else {printf("Autotest %03d ERROR (INCZX0+size)\n",cpt);MiniDump(opcode,opcodelen);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+	i=opcodelen;
+	ret=RasmAssemble(AUTOTEST_LZX0_F,strlen(AUTOTEST_LZX0_F),&opcode,&opcodelen);
+	if (!ret && i==opcodelen) {} else {printf("Autotest %03d ERROR (LZX0+INCBIN+size)\n",cpt);MiniDump(opcode,opcodelen);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing LZX0 variant+size OK\n");
+
+
+
+	ret=RasmAssemble(AUTOTEST_LZX0B_A,strlen(AUTOTEST_LZX0B_A),&opcode,&opcodelen);
+	if (!ret && opcodelen==384) {} else {printf("Autotest %03d ERROR (INCBIN + LZX0B segment)\n",cpt);MiniDump(opcode,opcodelen);exit(-1);}
+	i=opcodelen;
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing INCBIN + LZX0B segment OK\n");
+
+	ret=RasmAssemble(AUTOTEST_LZX0B_B,strlen(AUTOTEST_LZX0B_B),&opcode,&opcodelen);
+	if (!ret && opcodelen==i) {} else {printf("Autotest %03d ERROR (INCZX0B must crunch like LZX0B segment)\n",cpt);MiniDump(opcode,opcodelen);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing INCZX0B OK\n");
+
+	ret=RasmAssemble(AUTOTEST_LZX0B_C,strlen(AUTOTEST_LZX0B_C),&opcode,&opcodelen);
+	if (!ret) {} else {printf("Autotest %03d ERROR (INCZX0B+offset)\n",cpt);MiniDump(opcode,opcodelen);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+	i=opcodelen;
+	ret=RasmAssemble(AUTOTEST_LZX0B_D,strlen(AUTOTEST_LZX0B_D),&opcode,&opcodelen);
+	if (!ret && i==opcodelen) {} else {printf("Autotest %03d ERROR (LZX0B+INCBIN+offset)\n",cpt);MiniDump(opcode,opcodelen);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing LZX0B variant+offset OK\n");
+
+	ret=RasmAssemble(AUTOTEST_LZX0B_E,strlen(AUTOTEST_LZX0B_E),&opcode,&opcodelen);
+	if (!ret) {} else {printf("Autotest %03d ERROR (INCZX0B+size)\n",cpt);MiniDump(opcode,opcodelen);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+	i=opcodelen;
+	ret=RasmAssemble(AUTOTEST_LZX0B_F,strlen(AUTOTEST_LZX0B_F),&opcode,&opcodelen);
+	if (!ret && i==opcodelen) {} else {printf("Autotest %03d ERROR (LZX0B+INCBIN+size)\n",cpt);MiniDump(opcode,opcodelen);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing LZX0B variant+size OK\n");
+
+
+
 	ret=RasmAssemble(AUTOTEST_LZX7_A,strlen(AUTOTEST_LZX7_A),&opcode,&opcodelen);
 	if (!ret && opcodelen==535) {} else {printf("Autotest %03d ERROR (INCBIN + LZX7 segment)\n",cpt);MiniDump(opcode,opcodelen);exit(-1);}
 	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
@@ -21250,7 +21463,7 @@ void Usage(int help)
 	
 	printf("%s (c) 2017 Edouard BERGE (use -n option to display all licenses / -autotest for self-testing)\n",RASM_VERSION);
 	#ifndef NO_3RD_PARTIES
-	printf("LZ4 (c) Yann Collet / ZX7 (c) Einar Saukas / Exomizer 2 (c) Magnus Lind / LZSA & AP-Ultra (c) Emmanuel Marty\n");
+	printf("LZ4 (c) Yann Collet / ZX0 & ZX7 (c) Einar Saukas / Exomizer 2 (c) Magnus Lind / LZSA & AP-Ultra (c) Emmanuel Marty\n");
 	#endif
 	printf("\n");
 	printf("SYNTAX: rasm <inputfile> [options]\n");
@@ -21395,9 +21608,9 @@ printf(" - LZ4 source repository : https://github.com/lz4/lz4\n");
 
 
 printf("\n\n\n\n");
-printf("******* license for ZX7 cruncher / sources were modified ***********\n\n\n\n");
-
-printf(" * (c) Copyright 2012 by Einar Saukas. All rights reserved.\n");
+printf("******* license for ZX0 / ZX7 cruncher / sources were modified ***********\n\n\n\n");
+printf("BSD 3-Clause License\n");
+printf(" * (c) Copyright 2012/2021 by Einar Saukas. All rights reserved.\n");
 printf(" *\n");
 printf(" * Redistribution and use in source and binary forms, with or without\n");
 printf(" * modification, are permitted provided that the following conditions are met:\n");
@@ -21419,6 +21632,7 @@ printf(" * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUS
 printf(" * ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT\n");
 printf(" * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS\n");
 printf(" * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.\n");
+
 
 
 printf("\n\n\n\n");
