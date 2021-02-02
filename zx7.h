@@ -46,9 +46,9 @@ typedef struct optimal_t {
     int len;
 } Optimal;
 
-Optimal *optimize(unsigned char *input_data, size_t input_size);
+Optimal *zx7_optimize(unsigned char *input_data, int input_size);
 
-unsigned char *ZX7_compress(Optimal *optimal, unsigned char *input_data, size_t input_size, size_t *output_size);
+unsigned char *ZX7_compress(Optimal *optimal, unsigned char *input_data, int input_size, int *output_size);
 
 /*
  * (c) Copyright 2012 by Einar Saukas. All rights reserved.
@@ -75,7 +75,7 @@ unsigned char *ZX7_compress(Optimal *optimal, unsigned char *input_data, size_t 
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-int elias_gamma_bits(int value) {
+int zx7_elias_gamma_bits(int value) {
     int bits;
 
     bits = 1;
@@ -87,10 +87,10 @@ int elias_gamma_bits(int value) {
 }
 
 int count_bits(int offset, int len) {
-    return 1 + (offset > 128 ? 12 : 8) + elias_gamma_bits(len-1);
+    return 1 + (offset > 128 ? 12 : 8) + zx7_elias_gamma_bits(len-1);
 }
 
-Optimal* optimize(unsigned char *input_data, size_t input_size) {
+Optimal* zx7_optimize(unsigned char *input_data, int input_size) {
     size_t *min;
     size_t *max;
     Match *matches;
@@ -190,20 +190,20 @@ Optimal* optimize(unsigned char *input_data, size_t input_size) {
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-unsigned char* output_data;
-size_t output_index;
-size_t bit_index;
-int bit_mask;
+extern unsigned char* output_data;
+extern int output_index;
+extern int bit_index;
+extern int bit_mask;
 
-void write_byte(int value) {
+void zx7_write_byte(int value) {
     output_data[output_index++] = value;
 }
 
-void write_bit(int value) {
+void zx7_write_bit(int value) {
     if (bit_mask == 0) {
         bit_mask = 128;
         bit_index = output_index;
-        write_byte(0);
+        zx7_write_byte(0);
     }
     if (value > 0) {
         output_data[bit_index] |= bit_mask;
@@ -211,18 +211,18 @@ void write_bit(int value) {
     bit_mask >>= 1;
 }
 
-void write_elias_gamma(int value) {
+void zx7_write_elias_gamma(int value) {
     int i;
 
     for (i = 2; i <= value; i <<= 1) {
-        write_bit(0);
+        zx7_write_bit(0);
     }
     while ((i >>= 1) > 0) {
-        write_bit(value & i);
+        zx7_write_bit(value & i);
     }
 }
 
-unsigned char *ZX7_compress(Optimal *optimal, unsigned char *input_data, size_t input_size, size_t *output_size) {
+unsigned char *ZX7_compress(Optimal *optimal, unsigned char *input_data, int input_size, int *output_size) {
     size_t input_index;
     size_t input_prev;
     int offset1;
@@ -246,48 +246,48 @@ unsigned char *ZX7_compress(Optimal *optimal, unsigned char *input_data, size_t 
     bit_mask = 0;
 
     /* first byte is always literal */
-    write_byte(input_data[0]);
+    zx7_write_byte(input_data[0]);
 
     /* process remaining bytes */
     while ((input_index = optimal[input_index].bits) > 0) {
         if (optimal[input_index].len == 0) {
 
             /* literal indicator */
-            write_bit(0);
+            zx7_write_bit(0);
 
             /* literal value */
-            write_byte(input_data[input_index]);
+            zx7_write_byte(input_data[input_index]);
 
         } else {
 
             /* sequence indicator */
-            write_bit(1);
+            zx7_write_bit(1);
 
             /* sequence length */
-            write_elias_gamma(optimal[input_index].len-1);
+            zx7_write_elias_gamma(optimal[input_index].len-1);
 
             /* sequence offset */
             offset1 = optimal[input_index].offset-1;
             if (offset1 < 128) {
-                write_byte(offset1);
+                zx7_write_byte(offset1);
             } else {
                 offset1 -= 128;
-                write_byte((offset1 & 127) | 128);
+                zx7_write_byte((offset1 & 127) | 128);
                 for (mask = 1024; mask > 127; mask >>= 1) {
-                    write_bit(offset1 & mask);
+                    zx7_write_bit(offset1 & mask);
                 }
             }
         }
     }
 
     /* sequence indicator */
-    write_bit(1);
+    zx7_write_bit(1);
 
     /* end marker > MAX_LEN */
     for (i = 0; i < 16; i++) {
-        write_bit(0);
+        zx7_write_bit(0);
     }
-    write_bit(1);
+    zx7_write_bit(1);
 
     return output_data;
 }
