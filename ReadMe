@@ -2,7 +2,7 @@
 Yes! Another Z80 assembler but this one has...
 
 - DAMN fast assembling (millions of instructions in a blink of an eye)
-- integrated crunched sections (LZ48/LZ49/LZ4/ZX7/Exomizer/APlib/LZSA1/LZSA2) + load&crunch on the fly
+- integrated crunched sections (LZ48/LZ49/LZ4/ZX0/ZX7/Exomizer/APlib/LZSA1/LZSA2) + load&crunch on the fly
 - CPC cartridge, ZX snapshots, CPC snapshots up to 4M, TAPE output
 - save unlimited binaries with or without AMSDOS/HOBETA header
 - handle multiple EDSK update or generation simultaneously
