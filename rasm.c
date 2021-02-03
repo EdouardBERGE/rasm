@@ -88,7 +88,7 @@ cc rasm.c -O2 -lm -march=native -o rasm
 #ifndef NO_3RD_PARTIES
 #define __FILENAME__ "3rd parties"
 /* 3rd parties compression */
-#define MAX_OFFSET_ZX0    32640
+int MAX_OFFSET_ZX0=32640;
 #include"zx7.h"
 #include"lz4.h"
 #include"exomizer.h"
@@ -410,7 +410,7 @@ struct s_lz_section {
 	int iw;
 	int memstart,memend;
 	int lzversion; /* 0 -> NO CRUNCH but must be delayed / 4 -> LZ4 / 7 -> ZX7 / 48 -> LZ48 / 49 -> LZ49 / 8 -> Exomizer */
-	int version,minmatch; /* LZSA */
+	int version,minmatch; /* LZSA + ZX0 */
 	int iorgzone;
 	int ibank;
 	/* idx backup */
@@ -11747,6 +11747,7 @@ void __LZX0(struct s_assenv *ae) {
 		FreeAssenv(ae);
 		exit(-5);
 	}
+	curlz.version=MAX_OFFSET_ZX0;
 	curlz.iw=ae->idx;
 	curlz.iorgzone=ae->io-1;
 	curlz.ibank=ae->activebank;
@@ -11774,6 +11775,7 @@ void __LZX0B(struct s_assenv *ae) {
 		FreeAssenv(ae);
 		exit(-5);
 	}
+	curlz.version=MAX_OFFSET_ZX0;
 	curlz.iw=ae->idx;
 	curlz.iorgzone=ae->io-1;
 	curlz.ibank=ae->activebank;
@@ -15172,7 +15174,7 @@ if (curhexbin->crunch) printf("CRUNCHED! (%d)\n",curhexbin->crunch);
 									{
 									int delta,slzlen;
 
-									if (outputidx>=1024) rasm_printf(ae,KWARNING"ZX0 is crunching %.1fkb this may take a while, be patient...\n",outputidx/1024.0);
+									if (outputidx>=1024 && MAX_OFFSET_ZX0>5000) rasm_printf(ae,KWARNING"ZX0 is crunching %.1fkb this may take a while, be patient...\n",outputidx/1024.0);
 									newdata=zx0_compress(zx0_optimize(outputdata, outputidx, 0, MAX_OFFSET_ZX0), outputdata, outputidx, 0, 0, &slzlen, &delta);
 									outputidx=slzlen;
 									MemFree(outputdata);
@@ -15186,7 +15188,7 @@ if (curhexbin->crunch) printf("CRUNCHED! (%d)\n",curhexbin->crunch);
 									{
 									int delta,slzlen;
 
-									if (outputidx>=1024) rasm_printf(ae,KWARNING"ZX0 is crunching %.1fkb this may take a while, be patient...\n",outputidx/1024.0);
+									if (outputidx>=1024 && MAX_OFFSET_ZX0>5000) rasm_printf(ae,KWARNING"ZX0 is crunching %.1fkb this may take a while, be patient...\n",outputidx/1024.0);
 									newdata=zx0_compress(zx0_optimize(outputdata, outputidx, 0, MAX_OFFSET_ZX0), outputdata, outputidx, 0, 1, &slzlen, &delta);
 									outputidx=slzlen;
 									MemFree(outputdata);
@@ -16271,14 +16273,14 @@ printf("Crunch LZ[%d] (%d) %s\n",i,ae->lzsection[i].lzversion,ae->lzsection[i].l
 
 						case 70:
 							#ifndef NO_3RD_PARTIES
-							if (input_size>=1024) rasm_printf(ae,KWARNING"ZX0 is crunching %.1fkb this may take a while, be patient...\n",input_size/1024.0);
+							if (input_size>=1024 && MAX_OFFSET_ZX0>5000) rasm_printf(ae,KWARNING"ZX0 is crunching %.1fkb this may take a while, be patient...\n",input_size/1024.0);
 							lzdata=zx0_compress(zx0_optimize(input_data, input_size, 0, MAX_OFFSET_ZX0), input_data, input_size, 0, 0, &slzlen, &delta);
 							lzlen=slzlen;
 							#endif
 							break;
 						case 71:
 							#ifndef NO_3RD_PARTIES
-							if (input_size>=1024) rasm_printf(ae,KWARNING"ZX0 is crunching %.1fkb this may take a while, be patient...\n",input_size/1024.0);
+							if (input_size>=1024 && MAX_OFFSET_ZX0>5000) rasm_printf(ae,KWARNING"ZX0 is crunching %.1fkb this may take a while, be patient...\n",input_size/1024.0);
 							lzdata=zx0_compress(zx0_optimize(input_data, input_size, 0, MAX_OFFSET_ZX0), input_data, input_size, 0, 1, &slzlen, &delta);
 							lzlen=slzlen;
 							#endif
@@ -21751,6 +21753,8 @@ int ParseOptions(char **argv,int argc, struct s_parameter *param)
 		RasmAutotest();
 	} else if (strcmp(argv[i],"-uz")==0) {
 		param->as80=2;
+	} else if (strcmp(argv[i],"-quick")==0) {
+		MAX_OFFSET_ZX0=2176;
 	} else if (strcmp(argv[i],"-msep")==0) {
 		if (i+1<argc) {
 			param->module_separator=argv[++i][0];
