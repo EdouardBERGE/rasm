@@ -1,5 +1,5 @@
 ; -----------------------------------------------------------------------------
-; ZX0 decoder by Einar Saukas
+; ZX0 decoder by Einar Saukas modified by Golem13/Gynecon for firmware support
 ; "Standard" version (70 bytes only)
 ; Compatible with Amstrad firmware (does not use extended register or index)
 ; -----------------------------------------------------------------------------
