@@ -1,6 +1,6 @@
 #define PROGRAM_NAME      "RASM"
-#define PROGRAM_VERSION   "1.4 nightly"
-#define PROGRAM_DATE      "xx/01/2021"
+#define PROGRAM_VERSION   "1.5 nightly"
+#define PROGRAM_DATE      "xx/02/2021"
 #define PROGRAM_COPYRIGHT "© 2017 BERGE Edouard / roudoudou from Resistance"
 
 #define RASM_VERSION PROGRAM_NAME" v"PROGRAM_VERSION" (build "PROGRAM_DATE")"
@@ -188,6 +188,7 @@ struct s_parameter {
 	char **pathdef;
 	int npath,mpath;
 	int noampersand;
+	int cprinfo;
 	char module_separator;
 };
 
@@ -833,7 +834,7 @@ struct s_assenv {
 	unsigned char **mem;
 	int iwnamebank[BANK_MAX_NUMBER];
 	int nbbank,maxbank;
-	int forcetape,forcezx,forcecpr,forceROM,bankmode,activebank,amsdos,forcesnapshot,packedbank,extendedCPR,xpr;
+	int forcetape,forcezx,forcecpr,forceROM,bankmode,activebank,amsdos,forcesnapshot,packedbank,extendedCPR,xpr,cprinfo;
 	struct s_snapshot snapshot;
 	struct s_zxsnapshot zxsnapshot;
 	int bankset[BANK_MAX_NUMBER>>2];   /* 64K selected flag */
@@ -13034,6 +13035,13 @@ void __PRINT(struct s_assenv *ae) {
 			} else if (strncmp(ae->wl[ae->idx+1].w,"{INT}",5)==0) {
 				string2print=TxtStrDup(ae->wl[ae->idx+1].w+5);
 				entier=1;
+			} else if (strncmp(ae->wl[ae->idx+1].w,"{INT",4)==0 && ae->wl[ae->idx+1].w[4] && ae->wl[ae->idx+1].w[5]=='}') {
+				string2print=TxtStrDup(ae->wl[ae->idx+1].w+6);
+				entier=ae->wl[ae->idx+1].w[4]-'0';
+				if (entier<2 && entier>5) {
+					MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"invalid prefix, must be from INT2 to INT5\n");
+					entier=5;
+				}
 			} else {
 				string2print=TxtStrDup(ae->wl[ae->idx+1].w);
 			}
@@ -13077,7 +13085,7 @@ void __PRINT(struct s_assenv *ae) {
 				}
 				rasm_printf(ae," ");
 			} else if (entier) {
-				rasm_printf(ae,"%d ",(int)RoundComputeExpressionCore(ae,string2print,ae->codeadr,0));
+				rasm_printf(ae,"%0*d ",entier,(int)RoundComputeExpressionCore(ae,string2print,ae->codeadr,0));break;
 			} else {
 				rasm_printf(ae,"%.2lf ",ComputeExpressionCore(ae,string2print,ae->codeadr,0));
 			}
@@ -16532,7 +16540,7 @@ printf("output files\n");
 		if (ae->nbsave==0 || ae->forcecpr || ae->forcesnapshot || ae->forceROM || ae->forcetape) {
 			/*********************************************
 			**********************************************
-						  C A R T R I D G E
+			               C A R T R I D G E
 			**********************************************
 			*********************************************/
 			if (ae->forcecpr) {
@@ -16613,21 +16621,23 @@ printf("output files\n");
 						if (ae->iwnamebank[i]>0) {
 							lm=strlen(ae->wl[ae->iwnamebank[i]].w)-2;
 						}
-						rasm_printf(ae,KVERBOSE"WriteCPR bank %2d of %5d byte%s start at #%04X",i,endoffset-offset,endoffset-offset>1?"s":" ",offset);
+						if (ae->cprinfo) rasm_printf(ae,KVERBOSE"WriteCPR bank %2d of %5d byte%s start at #%04X",i,endoffset-offset,endoffset-offset>1?"s":" ",offset);
 						if (endoffset-offset>16384) {
-							rasm_printf(ae,"\nROM is too big!!!\n");
+							rasm_printf(ae,"\nROM %d is too big!!!\n",i);
 							FileWriteBinaryClose(TMP_filename);
 							FileRemoveIfExists(TMP_filename);
 							FreeAssenv(ae);
 							exit(ABORT_ERROR);
 						}
-						if (lm) {
-							rasm_printf(ae," (%-*.*s)\n",lm,lm,ae->wl[ae->iwnamebank[i]].w+1);
-						} else {
-							rasm_printf(ae,"\n");
+						if (ae->cprinfo) {
+							if (lm) {
+								rasm_printf(ae," (%-*.*s)\n",lm,lm,ae->wl[ae->iwnamebank[i]].w+1);
+							} else {
+								rasm_printf(ae,"\n");
+							}
 						}
 					} else {
-						rasm_printf(ae,KVERBOSE"WriteCPR bank %2d (empty)\n",i);
+						if (ae->cprinfo) rasm_printf(ae,KVERBOSE"WriteCPR bank %2d (empty)\n",i);
 					}
 					ChunkSize=16384;
 					if (ae->extendedCPR) {
@@ -17815,6 +17825,7 @@ printf("paramz 1\n");
 			ae->snapshot.version=3;
 		}
 		ae->xpr=param->xpr;
+		ae->cprinfo=param->cprinfo;
 		ae->maxerr=param->maxerr;
 		ae->extended_error=param->extended_error;
 		ae->nowarning=param->nowarning;
@@ -21513,7 +21524,9 @@ void Usage(int help)
 		printf("-pasmo PASMO behaviour mimic\n");
 		printf("-amper use ampersand for hex values\n");
 		printf("-msep <separator> set separator for modules\n");
-		
+		printf("MISCELLANEOUS:\n");
+		printf("-quick          enable fast mode for ZX0 crunching\n");
+		printf("-cprquiet       do not display ROM detailed informations\n");
 		printf("EDSK generation/update:\n");
 		printf("-eo overwrite files on disk if it already exists\n");
 		printf("SNAPSHOT:\n");
@@ -21763,6 +21776,8 @@ int ParseOptions(char **argv,int argc, struct s_parameter *param)
 		param->erronwarn=1;
 	} else if (strcmp(argv[i],"-pasmo")==0) {
 		param->pasmo=1;
+	} else if (strcmp(argv[i],"-cprquiet")==0) {
+		param->cprinfo=0;
 	} else if (strcmp(argv[i],"-ass")==0) {
 		param->as80=1;
 	} else if (strcmp(argv[i],"-amper")==0 || strcmp(argv[i],"--noampersand")==0) {
@@ -22026,6 +22041,7 @@ int main(int argc, char **argv)
 	struct s_parameter param={0};
 	int ret;
 
+	param.cprinfo=1;
 	param.maxerr=20;
 	param.rough=0.5;
 	param.module_separator='_';
