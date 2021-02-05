@@ -13038,7 +13038,7 @@ void __PRINT(struct s_assenv *ae) {
 			} else if (strncmp(ae->wl[ae->idx+1].w,"{INT",4)==0 && ae->wl[ae->idx+1].w[4] && ae->wl[ae->idx+1].w[5]=='}') {
 				string2print=TxtStrDup(ae->wl[ae->idx+1].w+6);
 				entier=ae->wl[ae->idx+1].w[4]-'0';
-				if (entier<2 && entier>5) {
+				if (entier<2 || entier>5) {
 					MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"invalid prefix, must be from INT2 to INT5\n");
 					entier=5;
 				}
@@ -13085,7 +13085,7 @@ void __PRINT(struct s_assenv *ae) {
 				}
 				rasm_printf(ae," ");
 			} else if (entier) {
-				rasm_printf(ae,"%0*d ",entier,(int)RoundComputeExpressionCore(ae,string2print,ae->codeadr,0));break;
+				rasm_printf(ae,"%0*d ",entier,(int)RoundComputeExpressionCore(ae,string2print,ae->codeadr,0));
 			} else {
 				rasm_printf(ae,"%.2lf ",ComputeExpressionCore(ae,string2print,ae->codeadr,0));
 			}
