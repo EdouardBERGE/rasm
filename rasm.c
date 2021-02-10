@@ -9,6 +9,7 @@
 #define TRACE_GENERALE 0
 #define TRACE_PREPRO 0
 #define TRACE_ASSEMBLE 0
+#define TRACE_POPEXPR 0
 #define TRACE_COMPUTE_EXPRESSION 0
 #define TRACE_HEXBIN 0
 #define TRACE_MAKEAMSDOSREAL 0
@@ -370,6 +371,9 @@ struct s_alias {
 	int crc,len,autorise_export;
 	int iw;
 	int used;
+	/* v1.5 */
+	int ptr;
+	float v;
 };
 
 struct s_ticker {
@@ -6332,6 +6336,8 @@ printf("MakeAlias (2) EXPR=[%s EQU %s]\n",expr,ptr_exp2);
 				curalias.alias=TxtStrDup(expr);
 			}
 			curalias.crc=GetCRC(curalias.alias);
+			curalias.ptr=ae->codeadr;
+
 			if ((ialias=SearchAlias(ae,curalias.crc,curalias.alias))>=0) {
 				MakeError(ae,GetCurrentFile(ae),GetExpLine(ae,0),"Duplicate alias [%s]\n",expr);
 				MemFree(curalias.alias);
@@ -8227,6 +8233,11 @@ void PopAllExpression(struct s_assenv *ae, int crunched_zone)
 		} else {
 			expr=ae->wl[ae->expression[i].iw].w;
 		}
+
+#if TRACE_POPEXPR
+	printf("PopAll (%d) expr=[%s] ptr=%X\n",crunched_zone,expr,ae->expression[i].ptr);
+#endif
+
 		v=ComputeExpressionCore(ae,expr,ae->expression[i].ptr,i);
 		r=(long)floor(v+ae->rough);
 		switch (ae->expression[i].zetype) {
@@ -16251,6 +16262,18 @@ printf("crunch if any %d blocks\n",ae->ilz);
 	         c r u n c h   L Z   s e c t i o n s
 	***************************************************/
 	if (!ae->stop || !ae->nberr) {
+
+		for (i=0;i<ae->ialias;i++) {
+			char alias_value[128];
+			float v;
+			//printf("alias[%d] [%s]=>[%s]\n",i,ae->alias[i].alias,ae->alias[i].translation);
+			v=ComputeExpressionCore(ae,ae->alias[i].translation,ae->alias[i].ptr,ae->alias[i].iw);
+			//printf(" => computed to %.2lf\n",v);
+			sprintf(alias_value,"%.8lf",v);
+			MemFree(ae->alias[i].translation);
+			ae->alias[i].translation=TxtStrDup(alias_value);
+		}
+
 		for (i=0;i<ae->ilz;i++) {
 			/* on dépile les symboles dans l'ordre mais on ne reloge pas sur les zones intermédiaires ou post-crunched */	
 			if (ae->lzsection[i].lzversion!=0) {
