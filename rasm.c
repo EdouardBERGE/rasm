@@ -10163,14 +10163,14 @@ void _LD(struct s_assenv *ae) {
 					case CRC_DE:___output(ae,0x62);___output(ae,0x6B);ae->nop+=2;ae->tick+=8;break;
 					case CRC_HL:___output(ae,0x64);___output(ae,0x6D);ae->nop+=2;ae->tick+=8;break;
 					default:
-					if (strncmp(ae->wl[ae->idx+2].w,"(IX+",4)==0) {
+					if (strncmp(ae->wl[ae->idx+2].w,"(IX",3)==0 && (ae->wl[ae->idx+2].w[3]=='+' || ae->wl[ae->idx+2].w[3]=='-')) {
 						/* enhanced LD HL,(IX+nn) */
 						___output(ae,0xDD);___output(ae,0x66);
 						PushExpression(ae,ae->idx+2,E_EXPRESSION_IV81);
 						___output(ae,0xDD);___output(ae,0x6E);
 						PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);
 						ae->nop+=10;ae->tick+=19;ae->tick+=19;
-					} else if (strncmp(ae->wl[ae->idx+2].w,"(IY+",4)==0) {
+					} else if (strncmp(ae->wl[ae->idx+2].w,"(IY",3)==0 && (ae->wl[ae->idx+2].w[3]=='+' || ae->wl[ae->idx+2].w[3]=='-')) {
 						/* enhanced LD HL,(IY+nn) */
 						___output(ae,0xFD);___output(ae,0x66);
 						PushExpression(ae,ae->idx+2,E_EXPRESSION_IV81);
@@ -10199,14 +10199,14 @@ void _LD(struct s_assenv *ae) {
 					case CRC_IY:___output(ae,0xFD);___output(ae,0x44);ae->nop+=4;
 						    ___output(ae,0xFD);___output(ae,0x4D);ae->tick+=16;break;
 					default:
-					if (strncmp(ae->wl[ae->idx+2].w,"(IX+",4)==0) {
+					if (strncmp(ae->wl[ae->idx+2].w,"(IX",3)==0 && (ae->wl[ae->idx+2].w[3]=='+' || ae->wl[ae->idx+2].w[3]=='-')) {
 						/* enhanced LD BC,(IX+nn) */
 						___output(ae,0xDD);___output(ae,0x46);
 						PushExpression(ae,ae->idx+2,E_EXPRESSION_IV81);
 						___output(ae,0xDD);___output(ae,0x4E);
 						PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);
 						ae->nop+=10;ae->tick+=19;ae->tick+=19;
-					} else if (strncmp(ae->wl[ae->idx+2].w,"(IY+",4)==0) {
+					} else if (strncmp(ae->wl[ae->idx+2].w,"(IY",3)==0 && (ae->wl[ae->idx+2].w[3]=='+' || ae->wl[ae->idx+2].w[3]=='-')) {
 						/* enhanced LD BC,(IY+nn) */
 						___output(ae,0xFD);___output(ae,0x46);
 						PushExpression(ae,ae->idx+2,E_EXPRESSION_IV81);
@@ -10235,14 +10235,14 @@ void _LD(struct s_assenv *ae) {
 					case CRC_IY:___output(ae,0xFD);___output(ae,0x54);ae->nop+=4;
 						    ___output(ae,0xFD);___output(ae,0x5D);ae->tick+=16;break;
 					default:
-					if (strncmp(ae->wl[ae->idx+2].w,"(IX+",4)==0) {
+					if (strncmp(ae->wl[ae->idx+2].w,"(IX",3)==0 && (ae->wl[ae->idx+2].w[3]=='+' || ae->wl[ae->idx+2].w[3]=='-')) {
 						/* enhanced LD DE,(IX+nn) */
 						___output(ae,0xDD);___output(ae,0x56);
 						PushExpression(ae,ae->idx+2,E_EXPRESSION_IV81);
 						___output(ae,0xDD);___output(ae,0x5E);
 						PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);
 						ae->nop+=10;ae->tick+=19;ae->tick+=19;
-					} else if (strncmp(ae->wl[ae->idx+2].w,"(IY+",4)==0) {
+					} else if (strncmp(ae->wl[ae->idx+2].w,"(IY",3)==0 && (ae->wl[ae->idx+2].w[3]=='+' || ae->wl[ae->idx+2].w[3]=='-')) {
 						/* enhanced LD DE,(IY+nn) */
 						___output(ae,0xFD);___output(ae,0x56);
 						PushExpression(ae,ae->idx+2,E_EXPRESSION_IV81);
