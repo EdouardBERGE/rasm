@@ -11507,11 +11507,7 @@ void __ENDPROC(struct s_assenv *ae) {
 #define FUNC "Directive CORE"
 
 void __internal_UpdateLZBlockIfAny(struct s_assenv *ae) {
-	/* there was a crunched block opened in the previous bank */
-	if (ae->lz>=0) {
-		//ae->lzsection[ae->ilz-1].iorgzone=ae->io-1;
-		//ae->lzsection[ae->ilz-1].ibank=ae->activebank;
-	}
+	/* if there was a crunched block opened in the previous bank */
 	ae->lz=-1;
 }
 
@@ -11743,7 +11739,7 @@ void __LZ4(struct s_assenv *ae) {
 }
 void __LZX0(struct s_assenv *ae) {
 	struct s_lz_section curlz;
-	
+
 	if (!ae->wl[ae->idx].t) {
 		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"LZ directive does not need any parameter\n");
 		return;
@@ -13956,11 +13952,11 @@ void __PROTECT(struct s_assenv *ae) {
 }
 
 void ___org_close(struct s_assenv *ae) {
-	__internal_UpdateLZBlockIfAny(ae);
 	if (ae->lz>=0 && ae->lzsection[ae->ilz-1].lzversion) {
 		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Cannot ORG inside a LZ section\n");
 		return;
 	}
+	__internal_UpdateLZBlockIfAny(ae);
 	/* close current ORG */
 	if (ae->io) {
 		ae->orgzone[ae->io-1].memend=ae->outputadr;
