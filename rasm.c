@@ -983,6 +983,9 @@ struct s_assenv {
 	struct s_rasm_info debug;
 	struct s_rasm_info **retdebug;
 	int debug_total_len;
+	/* delayed print */
+	int *dprint_idx;
+	int idprint,mdprint;
 };
 
 /*************************************
@@ -13009,6 +13012,14 @@ void __STOP(struct s_assenv *ae) {
 	ae->stop=1;
 }
 
+void __DELAYED_PRINT(struct s_assenv *ae) {
+	IntArrayAddDynamicValueConcat(&ae->dprint_idx,&ae->idprint,&ae->mdprint,ae->idx);
+	/* skip parameters */
+	while (ae->wl[ae->idx].t!=1) {
+		ae->idx++;
+	}
+}
+
 void __PRINT(struct s_assenv *ae) {
 	while (ae->wl[ae->idx].t!=1) {
 		if (!StringIsQuote(ae->wl[ae->idx+1].w)) {
@@ -15693,6 +15704,7 @@ struct s_asm_keyword instruction[]={
 {"LIST",0,__LIST},
 {"STOP",0,__STOP},
 {"PRINT",0,__PRINT},
+{"DELAYED_PRINT",0,__DELAYED_PRINT},
 {"FAIL",0,__FAIL},
 {"BREAKPOINT",0,__BREAKPOINT},
 {"BANK",0,__BANK},
@@ -16534,6 +16546,14 @@ printf("include %d other ORG for the memove size=%d\n",morgzone-iorgzone,lzmove)
 			}
 		}
 
+	}
+
+	/*******************************************************************************
+	      d e l a y e d      p r i n t s
+	*******************************************************************************/
+	for (i=0;i<ae->idprint;i++) {
+		ae->idx=ae->dprint_idx[i];
+		__PRINT(ae);
 	}
 
 /***************************************************************************************************************************************************************************************
