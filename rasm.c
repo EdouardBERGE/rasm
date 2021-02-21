@@ -309,8 +309,10 @@ enum e_expression {
 	E_EXPRESSION_J8,     /* relative 8bits jump */
 	E_EXPRESSION_0V8,    /* 8 bits value to current adress */
 	E_EXPRESSION_V8,     /* 8 bits value to current adress+1 */
+	E_EXPRESSION_J16,    /* 16 bits value to current adress+1 */
+	E_EXPRESSION_J16C,   /* 16 bits value to current adress+1 */
 	E_EXPRESSION_V16,    /* 16 bits value to current adress+1 */
-	E_EXPRESSION_V16C,   /* 16 bits value to current adress+1 */
+	//E_EXPRESSION_V16C,   /* 16 bits value to current adress+1 */
 	E_EXPRESSION_0V16,   /* 16 bits value to current adress */
 	E_EXPRESSION_0V32,   /* 32 bits value to current adress */
 	E_EXPRESSION_0VR,    /* AMSDOS real value (5 bytes) to current adress */
@@ -347,6 +349,22 @@ struct s_expr_dico {
 	double v;
 	int used;
 	int iw;
+	int external;
+};
+
+struct s_external_mapping {
+	int iorgzone;
+	int ptr;
+	int size;
+	int value; // do not relocate outside scope!
+};
+
+struct s_external {
+	char *name;
+	int crc;
+	/* mapping info */
+	struct s_external_mapping *mapping;
+	int nmapping,mmapping;
 };
 
 struct s_label {
@@ -986,6 +1004,13 @@ struct s_assenv {
 	/* delayed print */
 	int *dprint_idx;
 	int idprint,mdprint;
+	/* OBJ output */
+	int buildobj;
+	struct s_external *external;
+	int nexternal,mexternal;
+	int external_mapping_size;
+	struct s_external_mapping *relocation;
+	int nrelocation,mrelocation;
 };
 
 /*************************************
@@ -2609,6 +2634,12 @@ void FreeAssenv(struct s_assenv *ae)
 		ae->lastgloballabel=NULL;
 	}
 
+	/* external + mapping */
+	for (i=0;i<ae->nexternal;i++) {
+		if (ae->external[i].mmapping) MemFree(ae->external[i].mapping);
+	}
+	if (ae->mexternal) MemFree(ae->external);
+
 	for (i=0;i<ae->ialias;i++) {
 		MemFree(ae->alias[i].alias);
 		MemFree(ae->alias[i].translation);
@@ -3243,7 +3274,6 @@ struct s_expr_dico *SearchDico(struct s_assenv *ae, char *dico, int crc)
 	struct s_crcdico_tree *curdicotree;
 	int i,radix,dek=32;
 
-
 	curdicotree=&ae->dicotree;
 
 	while (dek) {
@@ -3259,6 +3289,32 @@ struct s_expr_dico *SearchDico(struct s_assenv *ae, char *dico, int crc)
 	for (i=0;i<curdicotree->ndico;i++) {
 		if (strcmp(curdicotree->dico[i].name,dico)==0) {
 			curdicotree->dico[i].used=1;
+
+			if (curdicotree->dico[i].external) {
+				if (ae->external_mapping_size) {
+					/* outside crunched section of in intermediate section */
+					if (ae->lz<1 || ae->lzsection[ae->ilz-1].lzversion==0) {
+						// add mapping
+						struct s_external_mapping mapping;
+						int iex;
+						mapping.iorgzone=ae->io-1;
+						mapping.ptr=ae->outputadr;
+						mapping.size=ae->external_mapping_size;
+						for (iex=0;iex<ae->nexternal;iex++) {
+							if (ae->external[iex].crc==crc && strcmp(ae->external[iex].name,dico)==0) {
+	//printf("add mapping for [%s] ptr=%d size=%d\n",dico,mapping.ptr,mapping.size);
+								ObjectArrayAddDynamicValueConcat((void **)&ae->external[iex].mapping,&ae->external[iex].nmapping,&ae->external[iex].mmapping,&mapping,sizeof(mapping));
+								break;
+							}
+						}
+					} else {
+						MakeError(ae,GetCurrentFile(ae),GetExpLine(ae,0),"cannot use external variable [%s] inside a crunched section!\n",dico);
+					}
+				} else {
+					MakeError(ae,GetCurrentFile(ae),GetExpLine(ae,0),"invalid usage of external variable [%s]\n",dico);
+				}
+			}
+
 			return &curdicotree->dico[i];
 		}
 	}
@@ -6271,7 +6327,7 @@ int RoundComputeExpressionCore(struct s_assenv *ae,char *zeexpression,int ptr,in
 	return floor(ComputeExpressionCore(ae,zeexpression,ptr,didx)+ae->rough);
 }
 
-void ExpressionSetDicoVar(struct s_assenv *ae,char *name, double v)
+void ExpressionSetDicoVar(struct s_assenv *ae,char *name, double v, int var_external)
 {
 	#undef FUNC
 	#define FUNC "ExpressionSetDicoVar"
@@ -6282,6 +6338,7 @@ void ExpressionSetDicoVar(struct s_assenv *ae,char *name, double v)
 	curdic.v=v;
 	curdic.iw=ae->idx;
 	curdic.autorise_export=ae->autorise_export;
+	curdic.external=var_external;
 	//ObjectArrayAddDynamicValueConcat((void**)&ae->dico,&ae->idic,&ae->mdic,&curdic,sizeof(curdic));
 	if (SearchLabel(ae,curdic.name,curdic.crc)) {
 		MakeError(ae,GetCurrentFile(ae),GetExpLine(ae,0),"cannot create variable [%s] as there is already a label with the same name\n",name);
@@ -6461,7 +6518,7 @@ printf("***********\n");
 									MakeError(ae,GetCurrentFile(ae),GetExpLine(ae,0),"Cannot do an operator assignment on non existing variable [%s]\n",expr);
 									return 0;
 								case 0: /* assign a new variable */
-									ExpressionSetDicoVar(ae,expr,v);
+									ExpressionSetDicoVar(ae,expr,v,0);
 									break;
 							}
 						}
@@ -7066,7 +7123,7 @@ void PushExpression(struct s_assenv *ae,int iw,enum e_expression zetype)
 		*/
 		if (!ae->wl[iw].e) {
 			switch (zetype) {
-				case E_EXPRESSION_V16C:
+				case E_EXPRESSION_J16C:
  					/* check non register usage */
 					switch (GetCRC(ae->wl[iw].w)) {
 						case CRC_IX:
@@ -7078,6 +7135,7 @@ void PushExpression(struct s_assenv *ae,int iw,enum e_expression zetype)
 					}
 				case E_EXPRESSION_J8:
 				case E_EXPRESSION_V8:
+				case E_EXPRESSION_J16:
 				case E_EXPRESSION_V16:
 				case E_EXPRESSION_IM:startptr=-1;
 							break;
@@ -7096,6 +7154,37 @@ void PushExpression(struct s_assenv *ae,int iw,enum e_expression zetype)
 			/* hack pourri pour gérer le $ */
 			ae->codeadr+=startptr;
 			/* ok mais les labels locaux des macros? */
+
+			/* if external declared then fill some informations */
+			if (ae->nexternal) {
+				switch (zetype) {
+					case E_EXPRESSION_0V8:
+					case E_EXPRESSION_V8:
+					case E_EXPRESSION_IV81:
+					case E_EXPRESSION_IV8:
+					case E_EXPRESSION_3V8:
+						ae->external_mapping_size=1;
+						break;
+					case E_EXPRESSION_J16C:
+					case E_EXPRESSION_J16:
+					case E_EXPRESSION_V16:
+					case E_EXPRESSION_0V16:
+					case E_EXPRESSION_IV16:
+						ae->external_mapping_size=2;
+						break;
+					case E_EXPRESSION_0V32:
+						ae->external_mapping_size=4;
+						break;
+					case E_EXPRESSION_0VR:
+					case E_EXPRESSION_0VRMike:
+						ae->external_mapping_size=5;
+						break;
+					default:
+						ae->external_mapping_size=0;
+						break;
+				}
+			}
+
 			if (ae->ir || ae->iw || ae->imacro) {
 				curexp.reference=TxtStrDup(ae->wl[iw].w);
 				ExpressionFastTranslate(ae,&curexp.reference,1);
@@ -7113,7 +7202,8 @@ void PushExpression(struct s_assenv *ae,int iw,enum e_expression zetype)
 			case E_EXPRESSION_0V32:curexp.ptr=ae->codeadr;ae->outputadr+=4;ae->codeadr+=4;break;
 			case E_EXPRESSION_0VR:curexp.ptr=ae->codeadr;ae->outputadr+=5;ae->codeadr+=5;break;
 			case E_EXPRESSION_0VRMike:curexp.ptr=ae->codeadr;ae->outputadr+=5;ae->codeadr+=5;break;
-			case E_EXPRESSION_V16C:
+			case E_EXPRESSION_J16C:
+			case E_EXPRESSION_J16:
 			case E_EXPRESSION_V16:curexp.ptr=ae->codeadr-1;ae->outputadr+=2;ae->codeadr+=2;break;
 			case E_EXPRESSION_IV81:curexp.ptr=ae->codeadr-2;ae->outputadr++;ae->codeadr++;break;
 			case E_EXPRESSION_IV8:curexp.ptr=ae->codeadr-2;ae->outputadr++;ae->codeadr++;break;
@@ -7145,7 +7235,8 @@ void PushExpression(struct s_assenv *ae,int iw,enum e_expression zetype)
 			case E_EXPRESSION_0V32:ae->outputadr+=4;ae->codeadr+=4;break;
 			case E_EXPRESSION_0VR:ae->outputadr+=5;ae->codeadr+=5;break;
 			case E_EXPRESSION_0VRMike:ae->outputadr+=5;ae->codeadr+=5;break;
-			case E_EXPRESSION_V16C:
+			case E_EXPRESSION_J16C:
+			case E_EXPRESSION_J16:
 			case E_EXPRESSION_V16:ae->outputadr+=2;ae->codeadr+=2;break;
 			case E_EXPRESSION_IV81:ae->outputadr++;ae->codeadr++;break;
 			case E_EXPRESSION_IV8:ae->outputadr++;ae->codeadr++;break;
@@ -8191,7 +8282,7 @@ void PopAllExpression(struct s_assenv *ae, int crunched_zone)
 	static int first=1;
 	double v;
 	long r;
-	int i;
+	int i,mapflag=0;
 	unsigned char *mem;
 	char *expr;
 	
@@ -8238,8 +8329,23 @@ void PopAllExpression(struct s_assenv *ae, int crunched_zone)
 		}
 
 #if TRACE_POPEXPR
-	printf("PopAll (%d) expr=[%s] ptr=%X\n",crunched_zone,expr,ae->expression[i].ptr);
+	printf("PopAll (%d) expr=[%s] ptr=%X outputadr=%X\n",crunched_zone,expr,ae->expression[i].ptr,ae->expression[i].wptr);
 #endif
+		if (ae->nexternal) {
+			int iex,jex;
+			mapflag=0;
+			for (iex=0;iex<ae->nexternal;iex++) {
+				for (jex=0;jex<ae->external[iex].nmapping;jex++) {
+					if (ae->expression[i].wptr==ae->external[iex].mapping[jex].ptr) {
+#if TRACE_POPEXPR
+						printf("MAPPING [%s] adr=%d size=%d\n",ae->external[iex].name,ae->expression[i].wptr,ae->external[iex].mapping[jex].size);
+#endif
+						mapflag=1;
+						break;
+					}
+				}
+			}
+		}
 
 		v=ComputeExpressionCore(ae,expr,ae->expression[i].ptr,i);
 		r=(long)floor(v+ae->rough);
@@ -8266,9 +8372,20 @@ void PopAllExpression(struct s_assenv *ae, int crunched_zone)
 				}
 				mem[ae->expression[i].wptr]=(unsigned char)r;
 				break;
+			case E_EXPRESSION_J16:
+			case E_EXPRESSION_J16C:
+				/* buildobj */
+				if (ae->buildobj && !mapflag) {
+					struct s_external_mapping relocation;
+					//printf("RELOCATION %04X\n",ae->expression[i].wptr);
+					relocation.iorgzone=ae->expression[i].ibank; // bank hack
+					relocation.ptr=ae->expression[i].wptr;
+					relocation.size=2;
+					relocation.value=r&0xFFFF;
+					ObjectArrayAddDynamicValueConcat((void**)&ae->relocation,&ae->nrelocation,&ae->mrelocation,&relocation,sizeof(relocation));
+				}
 			case E_EXPRESSION_IV16:
 			case E_EXPRESSION_V16:
-			case E_EXPRESSION_V16C:
 			case E_EXPRESSION_0V16:
 				if (r>65535 || r<-32768) {
 					if (!ae->nowarning) {
@@ -9066,11 +9183,11 @@ void _CALL(struct s_assenv *ae) {
 			default:
 				MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Available flags for CALL are C,NC,Z,NZ,PE,PO,P,M\n");
 		}
-		PushExpression(ae,ae->idx+2,E_EXPRESSION_V16C);
+		PushExpression(ae,ae->idx+2,E_EXPRESSION_J16C);
 		ae->idx+=2;
 	} else if (!ae->wl[ae->idx].t && ae->wl[ae->idx+1].t==1) {
 		___output(ae,0xCD);
-		PushExpression(ae,ae->idx+1,E_EXPRESSION_V16C);
+		PushExpression(ae,ae->idx+1,E_EXPRESSION_J16C);
 		ae->idx++;
 		ae->nop+=5;ae->tick+=17;
 	} else {
@@ -9117,7 +9234,7 @@ void _JP(struct s_assenv *ae) {
 		if (!strcmp(ae->wl[ae->idx+2].w,"(IX)") || !strcmp(ae->wl[ae->idx+2].w,"(IY)")) {
 			MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"conditionnal JP cannot use register adressing\n");
 		} else {
-			PushExpression(ae,ae->idx+2,E_EXPRESSION_V16);
+			PushExpression(ae,ae->idx+2,E_EXPRESSION_J16);
 		}
 		ae->idx+=2;
 	} else if (!ae->wl[ae->idx].t && ae->wl[ae->idx+1].t==1) {
@@ -9130,7 +9247,7 @@ void _JP(struct s_assenv *ae) {
 					MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"JP (IX) or JP (IY) only\n");
 				} else {
 					___output(ae,0xC3);
-					PushExpression(ae,ae->idx+1,E_EXPRESSION_V16);
+					PushExpression(ae,ae->idx+1,E_EXPRESSION_J16);
 					ae->tick+=10;
 					ae->nop+=3;
 				}
@@ -11492,8 +11609,17 @@ void _DEFSTR(struct s_assenv *ae) {
 void __SYMBOL(struct s_assenv *ae) {
 }
 
-// symbol import
+// external symbol import => declare one or more new external variables
 void __EXTERNAL(struct s_assenv *ae) {
+	struct s_external zexternal={0};
+
+	while (!ae->wl[ae->idx].t) {
+		ExpressionSetDicoVar(ae,ae->wl[ae->idx+1].w,0.0,1);
+		zexternal.name=TxtStrDup(ae->wl[ae->idx+1].w);
+		zexternal.crc=GetCRC(zexternal.name);
+		ObjectArrayAddDynamicValueConcat((void**)&ae->external,&ae->nexternal,&ae->mexternal,&zexternal,sizeof(struct s_external));
+		ae->idx++;
+	}
 }
 
 // procedure export
@@ -11566,6 +11692,12 @@ void __ENOEXPORT(struct s_assenv *ae) {
 	__internal_EXPORT(ae,1);
 }
 
+void __BUILDOBJ(struct s_assenv *ae) {
+	if (!ae->wl[ae->idx].t) {
+		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"BUILDOBJ does not need a parameter\n");
+	}
+	ae->buildobj=1;
+}
 void __BUILDZX(struct s_assenv *ae) {
 	if (!ae->wl[ae->idx].t) {
 		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"BUILDZX does not need a parameter\n");
@@ -12632,8 +12764,8 @@ void __TICKER(struct s_assenv *ae) {
 					else tvar->v=ae->nop-ae->ticker[i].nopstart;
 				} else {
 					/* create var with nop count */
-					if (ae->wl[ae->idx+1].w[4]=='Z') ExpressionSetDicoVar(ae,ae->wl[ae->idx+2].w,ae->tick-ae->ticker[i].tickerstart);
-					else ExpressionSetDicoVar(ae,ae->wl[ae->idx+2].w,ae->nop-ae->ticker[i].nopstart);
+					if (ae->wl[ae->idx+1].w[4]=='Z') ExpressionSetDicoVar(ae,ae->wl[ae->idx+2].w,ae->tick-ae->ticker[i].tickerstart,0);
+					else ExpressionSetDicoVar(ae,ae->wl[ae->idx+2].w,ae->nop-ae->ticker[i].nopstart,0);
 				}
 			} else {
 				MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"TICKER not found\n");
@@ -13393,7 +13525,7 @@ void __REPEAT(struct s_assenv *ae) {
 						rvar->v=1;
 					} else {
 						/* mais ne peut être un label ou un alias */
-						ExpressionSetDicoVar(ae,ae->wl[ae->idx].w, 1);
+						ExpressionSetDicoVar(ae,ae->wl[ae->idx].w, 1,0);
 					}
 					currepeat.repeatvar=ae->wl[ae->idx].w;
 					currepeat.repeatcrc=crc;
@@ -14911,7 +15043,7 @@ printf(" -> VTILES loading\n");
 										rvar->v=ae->hexbin[hbinidx].rawlen;
 									} else {
 										/* mais ne peut être un label ou un alias */
-										ExpressionSetDicoVar(ae,ae->wl[ae->idx+6].w,ae->hexbin[hbinidx].rawlen);
+										ExpressionSetDicoVar(ae,ae->wl[ae->idx+6].w,ae->hexbin[hbinidx].rawlen,0);
 									}
 									ae->idx+=6;
 								} else {
@@ -15724,6 +15856,7 @@ struct s_asm_keyword instruction[]={
 {"LZCLOSE",0,__LZCLOSE},
 {"SNASET",0,__SNASET},
 {"BUILDZX",0,__BUILDZX},
+{"BUILDOBJ",0,__BUILDOBJ},
 {"BUILDCPR",0,__BUILDCPR},
 {"BUILDSNA",0,__BUILDSNA},
 {"BUILDROM",0,__BUILDROM},
@@ -15744,6 +15877,7 @@ struct s_asm_keyword instruction[]={
 {"TIMESTAMP",0,__TIMESTAMP},
 {"SUMMEM",0,__SUMMEM},
 {"XORMEM",0,__XORMEM},
+{"EXTERNAL",0,__EXTERNAL},
 {"",0,NULL}
 };
 
@@ -15775,7 +15909,7 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 	unsigned char *input_data;
 	struct s_orgzone orgzone={0};
 	int iorgzone,ibank,offset,endoffset,morgzone,saveorgzone;
-	int il,maxrom;
+	int il,jl,maxrom;
 	char *TMP_filename=NULL;
 	int minmem=65536,maxmem=0,lzmove;
 	char symbol_line[1024];
@@ -15930,8 +16064,8 @@ printf("*** assembling ***\n");
 	}
 	/* default var */
 	ae->autorise_export=1;
-	ExpressionSetDicoVar(ae,"PI",3.1415926545);
-	ExpressionSetDicoVar(ae,"ASSEMBLER_RASM",1);
+	ExpressionSetDicoVar(ae,"PI",3.1415926545,0);
+	ExpressionSetDicoVar(ae,"ASSEMBLER_RASM",1,0);
 	
 	/* add a fictive expression to simplify test when parsing expressions */
 	ObjectArrayAddDynamicValueConcat((void **)&ae->expression,&ae->ie,&ae->me,&curexp,sizeof(curexp));
@@ -16274,9 +16408,8 @@ printf("crunch if any %d blocks\n",ae->ilz);
 		for (i=0;i<ae->ialias;i++) {
 			char alias_value[128];
 			float v;
-			//printf("alias[%d] [%s]=>[%s]\n",i,ae->alias[i].alias,ae->alias[i].translation);
-			v=ComputeExpressionCore(ae,ae->alias[i].translation,ae->alias[i].ptr,ae->alias[i].iw);
-			//printf(" => computed to %.2lf\n",v);
+			ae->idx=ae->alias[i].iw; // expression core hack
+			v=ComputeExpressionCore(ae,ae->alias[i].translation,ae->alias[i].ptr,0);
 			sprintf(alias_value,"%.8lf",v);
 			MemFree(ae->alias[i].translation);
 			ae->alias[i].translation=TxtStrDup(alias_value);
@@ -16432,6 +16565,23 @@ printf("include %d other ORG for the memove size=%d\n",morgzone-iorgzone,lzmove)
 						//printf("label reallocation jump over ORG %d\n",iorgzone);
 						iorgzone++;
 					}
+				} while (iorgzone<=morgzone);
+
+				/* relocate mapping after the same ORG zone and inside contiguous ORG
+				 * there is no check for outside/inside crunched section because this
+				 * was already done during mapping declaration but we must avoid to
+				 * shift before crunched section inside the same ORG */
+				iorgzone=saveorgzone;
+				do {
+					for (il=0;il<ae->nexternal;il++) {
+						for (jl=0;jl<ae->external[il].nmapping;jl++) {
+							if (ae->external[il].mapping[jl].iorgzone==iorgzone && ae->external[il].mapping[jl].ptr>ae->lzsection[i].memstart) {
+				//printf("shift mapping ptr=%d => %d\n",ae->external[il].mapping[jl].ptr,ae->external[il].mapping[jl].ptr+lzshift);
+								ae->external[il].mapping[jl].ptr+=lzshift;
+							}
+						}
+					}
+					iorgzone++;
 				} while (iorgzone<=morgzone);
 
 				/* relocate expressions in the same ORG zone AND contiguous ORG */
@@ -17199,19 +17349,77 @@ printf("output files\n");
 							__output_CDT(ae,TMP_filename,"TAPE.BIN",(char*)ae->mem[lastspaceid]+minmem,maxmem-minmem,minmem,run);
 						} else {
 						/***************************************************************
-						*      F I L E    o u t p u t                                  *
+						*      O B J      o u t p u t                                  *
 						***************************************************************/
-							rasm_printf(ae,KIO"Write binary file %s (%d byte%s)\n",TMP_filename,maxmem-minmem,maxmem-minmem>1?"s":"");
-							if (ae->amsdos) {
-								AmsdosHeader=MakeAMSDOSHeader(minmem,minmem,maxmem,TMP_filename); //@@TODO
-								FileWriteBinary(TMP_filename,(char *)AmsdosHeader,128);
-							}
-							if (maxmem-minmem>0) {
-								FileWriteBinary(TMP_filename,(char*)ae->mem[lastspaceid]+minmem,maxmem-minmem);
+							if (ae->buildobj) {
+								char objtmp[1024];
+								int iex,jex;
+
+								sprintf(TMP_filename,"%s.obj",ae->outputfilename);
+								FileRemoveIfExists(TMP_filename);
+								rasm_printf(ae,KIO"Write OBJ file %s\n",TMP_filename,maxmem-minmem);
+
+								for (i=0;i<ae->nexternal;i++) {
+									for (j=0;j<ae->external[i].nmapping;j++) {
+										strcpy(objtmp,"EXTERNAL ");
+										FileWriteBinary(TMP_filename,(char *)objtmp,strlen(objtmp));
+										FileWriteBinary(TMP_filename,(char *)ae->external[i].name,strlen(ae->external[i].name));
+										sprintf(objtmp," 0x%04X %d\n",ae->external[i].mapping[j].ptr,ae->external[i].mapping[j].size);
+										FileWriteBinary(TMP_filename,(char *)objtmp,strlen(objtmp));
+									}
+								}
+								for (i=0;i<ae->nrelocation;i++) {
+									if (ae->relocation[i].value>=minmem && ae->relocation[i].value<maxmem) {
+										sprintf(objtmp,"RELOCATION 0x%04X\n",ae->relocation[i].ptr);
+										FileWriteBinary(TMP_filename,(char *)objtmp,strlen(objtmp));
+									}
+								}
+								for (i=0;i<ae->nrelocation;i++) {
+									if (ae->relocation[i].value>=minmem && ae->relocation[i].value<maxmem) {
+									} else {
+										sprintf(objtmp,"LONGJUMP 0x%04X ; CALL or JP outside scope\n",ae->relocation[i].ptr);
+										FileWriteBinary(TMP_filename,(char *)objtmp,strlen(objtmp));
+									}
+								}
+								sprintf(objtmp,"DATA START=0x%04X LEN=0x%04X\n",minmem,maxmem-minmem);
+								FileWriteBinary(TMP_filename,(char *)objtmp,strlen(objtmp));
+								j=0;
+								for (i=minmem;i<maxmem;i++) {
+									if (!j) {
+										strcpy(objtmp,"BYTE ");
+									} else {
+										strcpy(objtmp,",");
+									}
+									FileWriteBinary(TMP_filename,(char *)objtmp,strlen(objtmp));
+									/* data */
+									sprintf(objtmp,"0x%02X",ae->mem[lastspaceid][i]);
+									FileWriteBinary(TMP_filename,(char *)objtmp,strlen(objtmp));
+									j++;
+									if (j==16) {
+										strcpy(objtmp,"\n");
+										FileWriteBinary(TMP_filename,(char *)objtmp,strlen(objtmp));
+										j=0;
+									}
+								}
+								strcpy(objtmp,"\n");
+								FileWriteBinary(TMP_filename,(char *)objtmp,strlen(objtmp));
 								FileWriteBinaryClose(TMP_filename);
 							} else {
+						/***************************************************************
+						*      F I L E    o u t p u t                                  *
+						***************************************************************/
+								rasm_printf(ae,KIO"Write binary file %s (%d byte%s)\n",TMP_filename,maxmem-minmem,maxmem-minmem>1?"s":"");
 								if (ae->amsdos) {
+									AmsdosHeader=MakeAMSDOSHeader(minmem,minmem,maxmem,TMP_filename); //@@TODO
+									FileWriteBinary(TMP_filename,(char *)AmsdosHeader,128);
+								}
+								if (maxmem-minmem>0) {
+									FileWriteBinary(TMP_filename,(char*)ae->mem[lastspaceid]+minmem,maxmem-minmem);
 									FileWriteBinaryClose(TMP_filename);
+								} else {
+									if (ae->amsdos) {
+										FileWriteBinaryClose(TMP_filename);
+									}
 								}
 							}
 						}
@@ -17887,7 +18095,7 @@ printf("paramz 1\n");
 			sep=strchr(param->symboldef[i],'=');
 			if (sep) {
 				*sep=0;
-				ExpressionSetDicoVar(ae,param->symboldef[i],atof(sep+1));
+				ExpressionSetDicoVar(ae,param->symboldef[i],atof(sep+1),1);
 			}
 		}
 		if (param->msymb) {
