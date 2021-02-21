@@ -1011,6 +1011,8 @@ struct s_assenv {
 	int external_mapping_size;
 	struct s_external_mapping *relocation;
 	int nrelocation,mrelocation;
+	char **procedurename;
+	int nprocedurename,mprocedurename;
 };
 
 /*************************************
@@ -11622,8 +11624,24 @@ void __EXTERNAL(struct s_assenv *ae) {
 	}
 }
 
-// procedure export
+// procedure export => tag and declare a label for export
 void __PROCEDURE(struct s_assenv *ae) {
+	char *dupname;
+	int cpt=1;
+	while (!ae->wl[ae->idx].t) {
+		ae->idx++;
+		/* store procedure label */
+		dupname=TxtStrDup(ae->wl[ae->idx].w);
+		ObjectArrayAddDynamicValueConcat((void**)&ae->procedurename,&ae->nprocedurename,&ae->mprocedurename,&dupname,sizeof(char *));
+		/* push label as usual */
+		PushLabel(ae);
+		if (cpt>1) {
+			if (!ae->nowarning) {
+				rasm_printf(ae,KWARNING"[%s:%d] Warning: PROCEDURE directive is not supposed to declare more than one label\n",GetCurrentFile(ae),ae->wl[ae->idx].l);
+				if (ae->erronwarn) MaxError(ae);
+			}
+		}
+	}
 }
 
 void __ENDPROC(struct s_assenv *ae) {
@@ -15878,6 +15896,7 @@ struct s_asm_keyword instruction[]={
 {"SUMMEM",0,__SUMMEM},
 {"XORMEM",0,__XORMEM},
 {"EXTERNAL",0,__EXTERNAL},
+{"PROCEDURE",0,__PROCEDURE},
 {"",0,NULL}
 };
 
@@ -17352,6 +17371,7 @@ printf("output files\n");
 						*      O B J      o u t p u t                                  *
 						***************************************************************/
 							if (ae->buildobj) {
+								struct s_label *curlabel;
 								char objtmp[1024];
 								int iex,jex;
 
@@ -17359,6 +17379,19 @@ printf("output files\n");
 								FileRemoveIfExists(TMP_filename);
 								rasm_printf(ae,KIO"Write OBJ file %s\n",TMP_filename,maxmem-minmem);
 
+								for (i=0;i<ae->nprocedurename;i++) {
+									curlabel=SearchLabel(ae,ae->procedurename[i],GetCRC(ae->procedurename[i]));
+									if (!curlabel) {
+										rasm_printf(ae,KERROR" INTERNAL ERROR: procedure [%s] not found in label pool\n");
+										MaxError(ae);
+									} else {
+										strcpy(objtmp,"PROCEDURE ");
+										FileWriteBinary(TMP_filename,(char *)objtmp,strlen(objtmp));
+										FileWriteBinary(TMP_filename,(char *)ae->procedurename[i],strlen(ae->procedurename[i]));
+										sprintf(objtmp," 0x%04X\n",curlabel->ptr);
+										FileWriteBinary(TMP_filename,(char *)objtmp,strlen(objtmp));
+									}
+								}
 								for (i=0;i<ae->nexternal;i++) {
 									for (j=0;j<ae->external[i].nmapping;j++) {
 										strcpy(objtmp,"EXTERNAL ");
