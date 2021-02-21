@@ -151,7 +151,7 @@ int main(int argc, char *argv[]) {
         reverse(input_data, input_data+input_size-1);
 
     /* generate output file */
-    output_data = compress(optimize(input_data, input_size, skip, quick_mode ? MAX_OFFSET_ZX7 : MAX_OFFSET_ZX0), input_data, input_size, skip, backwards_mode, &output_size, &delta);
+    output_data = compress(zx0_optimize(input_data, input_size, skip, quick_mode ? MAX_OFFSET_ZX7 : MAX_OFFSET_ZX0), input_data, input_size, skip, backwards_mode, &output_size, &delta);
 
     /* conditionally reverse output file */
     if (backwards_mode)
