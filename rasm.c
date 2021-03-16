@@ -856,7 +856,7 @@ struct s_assenv {
 	unsigned char **mem;
 	int iwnamebank[BANK_MAX_NUMBER];
 	int nbbank,maxbank;
-	int forcetape,forcezx,forcecpr,forceROM,bankmode,activebank,amsdos,forcesnapshot,packedbank,extendedCPR,xpr,cprinfo;
+	int forcetape,forcezx,forcecpr,forceROM,forceROMconcat,bankmode,activebank,amsdos,forcesnapshot,packedbank,extendedCPR,xpr,cprinfo;
 	struct s_snapshot snapshot;
 	struct s_zxsnapshot zxsnapshot;
 	int bankset[BANK_MAX_NUMBER>>2];   /* 64K selected flag */
@@ -11641,6 +11641,7 @@ void __PROCEDURE(struct s_assenv *ae) {
 				if (ae->erronwarn) MaxError(ae);
 			}
 		}
+		cpt++;
 	}
 }
 
@@ -11739,10 +11740,14 @@ void __BUILDCPR(struct s_assenv *ae) {
 	}
 }
 void __BUILDROM(struct s_assenv *ae) {
-	if (!ae->wl[ae->idx].t) {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"BUILDROM does not need a parameter\n");
-	}
 	if (!ae->forcesnapshot && !ae->forcetape && !ae->forcezx && !ae->forcecpr) {
+		if (!ae->wl[ae->idx].t && ae->wl[ae->idx+1].t) {
+			if (strcmp(ae->wl[ae->idx+1].w,"CONCAT")==0) {
+				ae->forceROMconcat=1;
+			} else {
+				MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"usage is BUILDROM [CONCAT]\n");
+			}
+		}
 		ae->forceROM=1;
 	} else {
 		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Cannot select ROM output when already in ZX/cartridge/snapshot/tape output\n");
@@ -16898,12 +16903,14 @@ printf("output files\n");
 
 				for (i=0;i<=maxrom;i++) {
 					/* number the file */
-					if (ae->rom_name) {
-						sprintf(TMP_filename,"%s%d.rom",ae->rom_name,i);
-					} else {
-						sprintf(TMP_filename,"%s%d.rom",ae->outputfilename,i);
+					if (i==0 || !ae->forceROMconcat) {
+						if (ae->rom_name) {
+							sprintf(TMP_filename,"%s%d.rom",ae->rom_name,i);
+						} else {
+							sprintf(TMP_filename,"%s%d.rom",ae->outputfilename,i);
+						}
+						FileRemoveIfExists(TMP_filename);
 					}
-					FileRemoveIfExists(TMP_filename);
 
 					offset=65536;
 					endoffset=0;
@@ -16931,14 +16938,19 @@ printf("output files\n");
 
 						FileWriteBinary(TMP_filename,(char *)(ae->mem[i]+offset),endoffset-offset);
 						if (endoffset-offset<16384) FileWriteBinary(TMP_filename,(char*)filler,16384-(endoffset-offset));
-						FileWriteBinaryClose(TMP_filename);
+						if (!ae->forceROMconcat) {
+							FileWriteBinaryClose(TMP_filename);
+						}
 					} else {
 						rasm_printf(ae,KVERBOSE"WriteROM bank %3d is empty\n",i);
-						//FileWriteBinary(TMP_filename,(char*)filler,16384);
-						//FileWriteBinaryClose(TMP_filename);
+						/* with flat output we must fill with zeroes empty banks */
+						if (ae->forceROMconcat) {
+							FileWriteBinary(TMP_filename,(char*)filler,16384);
+						}
 					}
-
-
+				}
+				if (ae->forceROMconcat) {
+					FileWriteBinaryClose(TMP_filename);
 				}
 
 				rasm_printf(ae,"Total %d rom%s (%dK)\n",maxrom+1,maxrom+1>1?"s":"",(maxrom+1)*16);
