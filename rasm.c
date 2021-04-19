@@ -11366,7 +11366,7 @@ void _DEFB(struct s_assenv *ae) {
 						ae->nop+=1;
 					} else {
 						/* charset conversion on the fly */
-						___output(ae,ae->charset[(unsigned int)ae->wl[ae->idx].w[i]]);
+						___output(ae,ae->charset[(unsigned int)(ae->wl[ae->idx].w[i]&0xFF)]);
 						ae->nop+=1;
 					}
 					i++;
@@ -15507,9 +15507,6 @@ void __SAVE(struct s_assenv *ae) {
 	struct s_save cursave={0};
 	int ko=1;
 
-
-
-
 	if (!ae->wl[ae->idx].t) {
 		/* nom de fichier entre quotes ou bien mot clef DSK */
 		if (!StringIsQuote(ae->wl[ae->idx+1].w)) {
@@ -19384,6 +19381,10 @@ printf("quote[%d]=%c\n",lw,c);
 printf("END\n");
 #endif
 
+	// fix error in previous instruction
+	if (nbword && !wordlist[nbword-1].t) {
+		wordlist[nbword-1].t=1;
+	}
 	curw.w="END";
 	curw.l=0;
 	curw.t=2;
