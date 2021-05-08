@@ -89,7 +89,7 @@ int MinMaxInt(int zeval, int zemin, int zemax)
 }
 
 /* (c) FSF */
-#ifdef __WATCOMC__
+#ifdef __WATCOMC__ || __BORLANDC__
 size_t strnlen (s, maxlen)
      register const char *s;
      size_t maxlen;
