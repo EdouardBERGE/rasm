@@ -872,7 +872,11 @@ FILE *last_id=NULL;
 #ifdef OS_WIN
 int sr;
 last_id=FileOpen(filename,"w");
+#ifdef _MSC_VER
+#if _MSC_VER<=1900
 sr=_setmode(_fileno(last_id), _O_BINARY );
+#endif
+#endif
 if (sr==-1) {
 logerr("FATAL: cannot set binary mode for writing");
 exit(ABORT_ERROR);
@@ -907,8 +911,12 @@ int FileWriteBinary(char *filename,char *data,int n)
 	if (data!=NULL)
 	{	 
 		#ifdef OS_WIN
-		int sr;
+		int sr=0;
+#ifdef _MSC_VER
+#if _MSC_VER<=1900
 		sr=_setmode(_fileno(last_id), _O_BINARY );
+#endif
+#endif
 		if (sr==-1) {
 			logerr("FATAL: cannot set binary mode for writing");
 			exit(ABORT_ERROR);
