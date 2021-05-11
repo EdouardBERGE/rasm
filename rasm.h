@@ -14,6 +14,7 @@ struct s_rasm_info {
         int nberror,maxerror;
         struct s_debug_symbol *symbol;
         int nbsymbol,maxsymbol;
+	int run,start;
 };
 
 
