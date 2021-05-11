@@ -1,4 +1,4 @@
-#define __FILENAME__ "minilib.h"
+﻿#define __FILENAME__ "minilib.h"
 
 #include<string.h>
 #include<stdlib.h>
@@ -41,11 +41,17 @@
 #define MemRealloc realloc
 #define MemMalloc malloc
 #define MemMove memmove
-#ifdef OS_WIN
+#if defined(__BORLANDC__)
+#define TxtStrDup strdup
+#elif defined(OS_WIN)
 #define TxtStrDup _strdup
 #else
 #define TxtStrDup strdup
 #endif
+
+#ifdef __BORLANDC__
+#define _setmode setmode
+#endif /* __BORLANDC__ */
 
 #define loginfo(...); {printf(__VA_ARGS__);printf("\n");}
 #define logdebug(...); {printf(__VA_ARGS__);printf("\n");}
@@ -89,7 +95,7 @@ int MinMaxInt(int zeval, int zemin, int zemax)
 }
 
 /* (c) FSF */
-#ifdef __WATCOMC__ || __BORLANDC__
+#if defined(__WATCOMC__) || defined(__BORLANDC__)
 size_t strnlen (s, maxlen)
      register const char *s;
      size_t maxlen;
@@ -101,6 +107,7 @@ size_t strnlen (s, maxlen)
     ;
   return n;
 }
+#define _strnlen strnlen
 #endif
 
 
@@ -872,11 +879,7 @@ FILE *last_id=NULL;
 #ifdef OS_WIN
 int sr;
 last_id=FileOpen(filename,"w");
-#ifdef _MSC_VER
-#if _MSC_VER<=1900
 sr=_setmode(_fileno(last_id), _O_BINARY );
-#endif
-#endif
 if (sr==-1) {
 logerr("FATAL: cannot set binary mode for writing");
 exit(ABORT_ERROR);
@@ -911,12 +914,8 @@ int FileWriteBinary(char *filename,char *data,int n)
 	if (data!=NULL)
 	{	 
 		#ifdef OS_WIN
-		int sr=0;
-#ifdef _MSC_VER
-#if _MSC_VER<=1900
+		int sr;
 		sr=_setmode(_fileno(last_id), _O_BINARY );
-#endif
-#endif
 		if (sr==-1) {
 			logerr("FATAL: cannot set binary mode for writing");
 			exit(ABORT_ERROR);
