@@ -12244,7 +12244,7 @@ void __BANK(struct s_assenv *ae) {
 
 void __BANKSET(struct s_assenv *ae) {
 	struct s_orgzone orgzone={0};
-	int ibank;
+	int ibank,i;
 
 	__internal_UpdateLZBlockIfAny(ae);
 
@@ -12270,13 +12270,21 @@ void __BANKSET(struct s_assenv *ae) {
 		}
 		/* control */
 		ibank=ae->activebank;
-		if (ae->bankused[ibank] || ae->bankused[ibank+1]|| ae->bankused[ibank+2]|| ae->bankused[ibank+3]) {
-			MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Cannot BANKSET because bank %d was already selected in single page mode\n",ibank);
-			ae->idx++;
-			return;
-		} else {	
-			ae->bankset[ae->activebank/4]=1; /* pas très heureux mais bon... */
-		}
+		if (!ae->bankset[ibank>>2]) {
+			if (ae->bankused[ibank] || ae->bankused[ibank+1]|| ae->bankused[ibank+2]|| ae->bankused[ibank+3]) {
+				MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Cannot BANKSET because bank %d was already selected in single page mode\n",ibank);
+				ae->idx++;
+				return;
+			} else {
+				/* in case of EMURAM, rebuild bankset with existing data (this is done only once) */
+				ae->bankset[ibank>>2]=1;
+				for (i=16384;i<32768;i++) {
+					ae->mem[ibank][i]=ae->mem[ibank+1][i];
+					ae->mem[ibank][i+16384]=ae->mem[ibank+2][i+16384];
+					ae->mem[ibank][i+32768]=ae->mem[ibank+3][i+32768];
+				}
+			}
+		} 
 		ae->idx++;
 	} else {
 		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"BANKSET directive need one integer parameter\n");
@@ -15677,49 +15685,51 @@ void __TIMESTAMP(struct s_assenv *ae) {
 				while (timestr[idx]=='Y') {idx++;cpt++;}
 				sprintf(LTMP,"%04d",local->tm_year+1900);
 				switch (cpt) {
-					case 2:	___output(ae,LTMP[2]);
-						___output(ae,LTMP[3]);
+					case 2:	//___output(ae,LTMP[2]);
+						___output(ae,ae->charset[(unsigned int)LTMP[2]]);
+						___output(ae,ae->charset[(unsigned int)LTMP[3]]);
 						break;
 					case 1:
-					case 4:	___output(ae,LTMP[0]);
-						___output(ae,LTMP[1]);
-						___output(ae,LTMP[2]);
-						___output(ae,LTMP[3]);
+					case 4:	//___output(ae,LTMP[0]);
+						___output(ae,ae->charset[(unsigned int)LTMP[0]]);
+						___output(ae,ae->charset[(unsigned int)LTMP[1]]);
+						___output(ae,ae->charset[(unsigned int)LTMP[2]]);
+						___output(ae,ae->charset[(unsigned int)LTMP[3]]);
 						break;
 				}
 				break;
 			case 'M':
 				while (timestr[idx]=='M') idx++;
 				sprintf(LTMP,"%02d",local->tm_mon+1);
-				___output(ae,LTMP[0]);
-				___output(ae,LTMP[1]);
+				___output(ae,ae->charset[(unsigned int)LTMP[0]]);
+				___output(ae,ae->charset[(unsigned int)LTMP[1]]);
 				break;
 			case 'D':
 				while (timestr[idx]=='D') idx++;
 				sprintf(LTMP,"%02d",local->tm_mday);
-				___output(ae,LTMP[0]);
-				___output(ae,LTMP[1]);
+				___output(ae,ae->charset[(unsigned int)LTMP[0]]);
+				___output(ae,ae->charset[(unsigned int)LTMP[1]]);
 				break;
 			case 'h':
 				while (timestr[idx]=='h') idx++;
 				sprintf(LTMP,"%02d",local->tm_hour);
-				___output(ae,LTMP[0]);
-				___output(ae,LTMP[1]);
+				___output(ae,ae->charset[(unsigned int)LTMP[0]]);
+				___output(ae,ae->charset[(unsigned int)LTMP[1]]);
 				break;
 			case 'm':
 				while (timestr[idx]=='m') idx++;
 				sprintf(LTMP,"%02d",local->tm_min);
-				___output(ae,LTMP[0]);
-				___output(ae,LTMP[1]);
+				___output(ae,ae->charset[(unsigned int)LTMP[0]]);
+				___output(ae,ae->charset[(unsigned int)LTMP[1]]);
 				break;
 			case 's':
 				while (timestr[idx]=='s') idx++;
 				sprintf(LTMP,"%02d",local->tm_sec);
-				___output(ae,LTMP[0]);
-				___output(ae,LTMP[1]);
+				___output(ae,ae->charset[(unsigned int)LTMP[0]]);
+				___output(ae,ae->charset[(unsigned int)LTMP[1]]);
 				break;
 			default:
-				if ((timestr[idx]=='\'' || timestr[idx]=='"') && !timestr[idx+1]) {} else ___output(ae,timestr[idx]);
+				if ((timestr[idx]=='\'' || timestr[idx]=='"') && !timestr[idx+1]) {} else ___output(ae,ae->charset[(unsigned int)timestr[idx]]);
 				idx++;
 				break;
 
@@ -17467,9 +17477,11 @@ printf("output files\n");
 							}
 						}
 					} else {
-						*dataout=MemMalloc(maxmem-minmem+1);
-						memcpy(*dataout,ae->mem[lastspaceid]+minmem,maxmem-minmem);
-						*lenout=maxmem-minmem;
+						if (dataout) {
+							*dataout=MemMalloc(maxmem-minmem+1);
+							memcpy(*dataout,ae->mem[lastspaceid]+minmem,maxmem-minmem);
+							*lenout=maxmem-minmem;
+						}
 					}
 				}
 			}
@@ -17767,9 +17779,9 @@ printf("output files\n");
 			DEBUG INFO
 		**********************************
 		*********************************/
-		if (debug) {
-			debug->run=run;
-			debug->start=minmem;
+		if (ae->retdebug) {
+			//ae->debug.run=ae->run;
+			ae->debug.start=minmem;
 		}
 
 	} else {
@@ -19490,6 +19502,35 @@ int RasmAssembleInfo(const char *datain, int lenin, unsigned char **dataout, int
 
 	ae=PreProcessing(NULL,1,datain,lenin,NULL);
 	ret=Assemble(ae,dataout,lenout,debug);
+	return ret;
+}
+
+int RasmAssembleInfoIntoRAM(const char *datain, int lenin, struct s_rasm_info **debug, unsigned char *emuram, int ramsize)
+{
+	static int cpt=0;
+	struct s_assenv *ae=NULL;
+	int ret;
+	int i,j,maxbank,ramidx,ramend;
+
+	if (datain==NULL && lenin==0) return cpt; else cpt++;
+
+	ae=PreProcessing(NULL,1,datain,lenin,NULL);
+
+	/* extension 4Mo = 256 slots + 4 slots 64K de RAM par défaut => 260 */
+	maxbank=ramsize>>14;
+	for (i=0;i<maxbank;i++) {
+		ramidx=i*16384;
+		for (j=0;j<16384;j++) {
+			ae->mem[i][j+16384*(i&3)]=emuram[ramidx++];
+		}
+	}
+	/* remaining bytes, if any */
+	ramidx=i*16384;
+	for (j=0;j<ramsize-ramidx;j++) {
+		ae->mem[i][j+16384*(i&3)]=emuram[ramidx++];
+	}
+
+	ret=Assemble(ae,NULL,NULL,debug);
 	return ret;
 }
 
