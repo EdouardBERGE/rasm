@@ -11723,6 +11723,7 @@ void __BUILDZX(struct s_assenv *ae) {
 		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"BUILDZX does not need a parameter\n");
 	}
 	if (!ae->forcesnapshot && !ae->forcetape && !ae->forcecpr && !ae->forceROM) {
+		ae->forcesnapshot=1;
 		ae->forcezx=1;
 	} else {
 		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Cannot select ZX output when already in Amstrad ROM/cartridge/snapshot/tape output\n");
@@ -12827,13 +12828,13 @@ void __RUN(struct s_assenv *ae) {
 	if (!ae->wl[ae->idx].t) {
 		ae->current_run_idx=ae->idx+1;
 		if (ae->forcezx) {
+			PushExpression(ae,ae->idx+1,E_EXPRESSION_ZXRUN); // delayed RUN value
+			ae->idx++;
 			if (!ae->wl[ae->idx].t) {
-				PushExpression(ae,ae->idx+1,E_EXPRESSION_ZXRUN); // delayed RUN value
-				PushExpression(ae,ae->idx+2,E_EXPRESSION_ZXSTACK); // delayed STACK value
-				ae->idx+=2;
-			} else {
+				PushExpression(ae,ae->idx+1,E_EXPRESSION_ZXSTACK); // delayed STACK value
 				ae->idx++;
-				MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"usage is RUN <adress>,<stack> (ZX mode)\n");
+			} else {
+				MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"usage is RUN <adress>,<stack> (ZX mode, you must set adress+stack)\n");
 			}
 		} else {
 			PushExpression(ae,ae->idx+1,E_EXPRESSION_RUN); // delayed RUN value
