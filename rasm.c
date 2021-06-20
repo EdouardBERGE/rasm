@@ -17781,7 +17781,7 @@ printf("output files\n");
 		**********************************
 		*********************************/
 		if (ae->retdebug) {
-			//ae->debug.run=ae->run;
+			ae->debug.run=ae->snapshot.registers.LPC+(ae->snapshot.registers.HPC<<8);
 			ae->debug.start=minmem;
 		}
 
