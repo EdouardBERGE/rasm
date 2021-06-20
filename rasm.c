@@ -813,23 +813,10 @@ struct s_rasmstruct {
 /*********************************
            D E B U G        
 *********************************/
-struct s_debug_error {
-        char *filename;
-        int line;
-        char *msg;
-        int lenmsg,lenfilename;
-};
-struct s_debug_symbol {
-        char *name;
-        int v;
-};
-struct s_rasm_info {
-        struct s_debug_error *error;
-        int nberror,maxerror;
-        struct s_debug_symbol *symbol;
-        int nbsymbol,maxsymbol;
-	int run,start;
-};
+
+#define INSIDE_RASM
+#include "rasm.h"
+
 
 /*******************************************
               P O K E R               
