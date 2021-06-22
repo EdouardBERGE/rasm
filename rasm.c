@@ -1,5 +1,5 @@
 #define PROGRAM_NAME      "RASM"
-#define PROGRAM_VERSION   "1.5 nightly"
+#define PROGRAM_VERSION   "1.5"
 #define PROGRAM_DATE      "xx/02/2021"
 #define PROGRAM_COPYRIGHT "© 2017 BERGE Edouard / roudoudou from Resistance"
 
@@ -537,6 +537,7 @@ struct s_repeat {
 	int maxim;
 	int repeat_counter;
 	char *repeatvar;
+	double varincrement;
 	int repeatcrc;
 };
 
@@ -903,6 +904,8 @@ struct s_assenv {
 	/* repeat */
 	struct s_repeat *repeat;
 	int ir,mr;
+	double repeat_start;
+	double repeat_increment;
 	/* while/wend */
 	struct s_whilewend *whilewend;
 	int iw,mw;
@@ -13514,17 +13517,32 @@ void __WEND(struct s_assenv *ae) {
 	}
 }
 
+void __STARTINGINDEX(struct s_assenv *ae) {
+	if (ae->wl[ae->idx].t==0) {
+		ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
+		ae->repeat_start=RoundComputeExpression(ae,ae->wl[ae->idx+1].w,0,0,0);
+		ae->idx++;
+		if (ae->wl[ae->idx].t==0) {
+			ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
+			ae->repeat_increment=RoundComputeExpression(ae,ae->wl[ae->idx+1].w,0,0,0);
+			ae->idx++;
+		}
+	} else {
+		ae->repeat_start=1;
+		ae->repeat_increment=1;
+	}
+}
+
 void __REPEAT(struct s_assenv *ae) {
 	struct s_repeat currepeat={0};
 	struct s_expr_dico *rvar;
 	int crc;
-
-
 	
 	if (ae->wl[ae->idx+1].t!=2) {
 		if (ae->wl[ae->idx].t==0) {
 			ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
 			currepeat.cpt=RoundComputeExpression(ae,ae->wl[ae->idx+1].w,0,0,0);
+
 			if (!currepeat.cpt) {
 				/* skip repeat block */
 				___internal_skip_loop_block(ae,E_LOOPSTYLE_REPEATN);
@@ -13535,24 +13553,38 @@ void __REPEAT(struct s_assenv *ae) {
 				return;
 			}
 			ae->idx++;
-			currepeat.start=ae->idx;
 			if (ae->wl[ae->idx].t==0) {
+				double vstart;
 				ae->idx++;
-				if (ae->wl[ae->idx].t==1) {
-					/* la variable peut exister -> OK */
-					crc=GetCRC(ae->wl[ae->idx].w);
-					if ((rvar=SearchDico(ae,ae->wl[ae->idx].w,crc))!=NULL) {
-						rvar->v=1;
-					} else {
-						/* mais ne peut être un label ou un alias */
-						ExpressionSetDicoVar(ae,ae->wl[ae->idx].w, 1,0);
+
+				// default
+				currepeat.varincrement=ae->repeat_increment;
+				vstart=ae->repeat_start;
+
+				/* additionnal options */
+				if (ae->wl[ae->idx].t==0) {
+					ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
+					vstart=RoundComputeExpression(ae,ae->wl[ae->idx+1].w,0,0,0);
+					if (ae->wl[ae->idx+1].t==0) {
+						ExpressionFastTranslate(ae,&ae->wl[ae->idx+2].w,0);
+						currepeat.varincrement=RoundComputeExpression(ae,ae->wl[ae->idx+2].w,0,0,0);
 					}
-					currepeat.repeatvar=ae->wl[ae->idx].w;
-					currepeat.repeatcrc=crc;
-				} else {
-					MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"extended syntax is REPEAT <n>,<var>\n");
 				}
+
+				/* la variable peut exister -> OK */
+				crc=GetCRC(ae->wl[ae->idx].w);
+				if ((rvar=SearchDico(ae,ae->wl[ae->idx].w,crc))!=NULL) {
+					rvar->v=vstart;
+				} else {
+					/* mais ne peut être un label ou un alias */
+					ExpressionSetDicoVar(ae,ae->wl[ae->idx].w,vstart,0);
+				}
+				currepeat.repeatvar=ae->wl[ae->idx].w;
+				currepeat.repeatcrc=crc;
+				// adjust
+				while (ae->wl[ae->idx].t==0) ae->idx++;
 			}
+			currepeat.start=ae->idx-1;
 		} else {
 			currepeat.start=ae->idx;
 			currepeat.cpt=-1;
@@ -13585,7 +13617,7 @@ void __REND(struct s_assenv *ae) {
 			ae->repeat[ae->ir-1].cpt--;
 			ae->repeat[ae->ir-1].repeat_counter++;
 			if ((rvar=SearchDico(ae,ae->repeat[ae->ir-1].repeatvar,ae->repeat[ae->ir-1].repeatcrc))!=NULL) {
-				rvar->v=ae->repeat[ae->ir-1].repeat_counter;
+				rvar->v+=ae->repeat[ae->ir-1].varincrement; // LEGACY rvar->v=ae->repeat[ae->ir-1].repeat_counter;
 			}
 			if (ae->repeat[ae->ir-1].cpt) {
 				ae->idx=ae->repeat[ae->ir-1].start;
@@ -15811,6 +15843,7 @@ struct s_asm_keyword instruction[]={
 {"INDR",0,_INDR},
 {"INIR",0,_INIR},
 {"REPEAT",0,__REPEAT},
+{"STARTINGINDEX",0,__STARTINGINDEX},
 {"REND",0,__REND},
 {"ENDREPEAT",0,__REND},
 {"ENDREP",0,__REND},
@@ -18234,6 +18267,9 @@ printf("-init\n");
 	/* standard stack */
 	ae->snapshot.registers.HSP=0xC0;
 
+	ae->repeat_start=1;
+	ae->repeat_increment=1;
+
 	/*
 		Winape		sprintf(symbol_line,"%s #%4X\n",ae->label[i].name,ae->label[i].ptr);
 		pasmo		sprintf(symbol_line,"%s EQU 0%4XH\n",ae->label[i].name,ae->label[i].ptr);
@@ -20181,6 +20217,10 @@ int RasmAssembleInfoParam(const char *datain, int lenin, unsigned char **dataout
 "ticker start,v44 : ld a,(ix+0) : ld h,(ix+0) : ld (ix+0),a : ld (ix+0),l : ld (ix+0),#12 : ticker stopzx,v44:"\
 "assert v44==gettick('ld a,(ix+0) : ld h,(ix+0) : ld (ix+0),a : ld (ix+0),l : ld (ix+0),#12')"
 
+#define AUTOTEST_REPEAT3 "y=0: repeat 0: y+=1: rend: assert y==0: y=0: repeat 1: y+=1: rend: assert y==1:"\
+	"y=0: repeat 5: y+=1: rend: assert y==5: y=1: repeat 5,x: assert y==x: y+=1: rend: y=2: repeat 5,x,2,2: assert x==y:"\
+	"y+=2: rend: startingindex 5: y=5: repeat 2,x: assert x==y: y+=1: rend: startingindex 5,5: y=10: repeat 3,x,10: assert x==y: "\
+	"y+=5: rend: startingindex: y=1: repeat 2,x: assert x==y: y+=1: rend: nop "
 
 #define AUTOTEST_SNASET "buildsna:bank 0:nop:"\
 	":snaset Z80_AF,0x1234 :snaset Z80_A,0x11 :snaset Z80_F,0x11 :snaset Z80_BC,0x11 :snaset Z80_B,0x11 :snaset Z80_C,0x11 :snaset Z80_DE,0x11 :snaset Z80_D,0x11"\
@@ -20973,6 +21013,11 @@ printf("testing SIZEOF struct fields OK\n");
 	if (!ret) {} else {printf("Autotest %03d ERROR (extended repeat)\n",cpt);exit(-1);}
 	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
 printf("testing REPEAT cases OK\n");
+
+	ret=RasmAssemble(AUTOTEST_REPEAT3,strlen(AUTOTEST_REPEAT3),&opcode,&opcodelen);
+	if (!ret) {} else {printf("Autotest %03d ERROR (repeat options + startingindex)\n",cpt);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing REPEAT+STARTINGINDEX cases OK\n");
 
 	ret=RasmAssemble(AUTOTEST_REPEATKO,strlen(AUTOTEST_REPEATKO),&opcode,&opcodelen);
 	if (ret) {} else {printf("Autotest %03d ERROR (repeat without end must return error)\n",cpt);exit(-1);}
