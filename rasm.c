@@ -15183,11 +15183,13 @@ printf("Hexbin -> surprise! we found the file!\n");
 			int dma_channel=AUDIOSAMPLE_DMAC;
 			int dma_int=0,dma_repeat=0;
 			int mypsgreg=0xA;
+			int triggeramp=0;
 #if TRACE_HEXBIN
 printf("Hexbin -> %s\n",ae->wl[ae->idx+2].w);
 #endif
 			if (!ae->wl[ae->idx+2].t) {
 				amplification=ComputeExpressionCore(ae,ae->wl[ae->idx+3].w,ae->codeadr,0);
+				triggeramp++;
 #if TRACE_HEXBIN
 printf("sample amplification=%.2lf\n",amplification);
 #endif
@@ -15199,6 +15201,7 @@ printf("sample amplification=%.2lf\n",amplification);
 				case '4':_AudioLoadSample(ae,ae->hexbin[hbinidx].data,ae->hexbin[hbinidx].datalen, AUDIOSAMPLE_SM4,amplification);break;
 				case 'A':/* DMA options */
 					if (!ae->wl[ae->idx+2].t) {
+						dma_args+=triggeramp;
 						while (!ae->wl[ae->idx+dma_args].t) {
 							dma_args++;
 							if (strcmp(ae->wl[ae->idx+dma_args].w,"DMA_INT")==0) {
