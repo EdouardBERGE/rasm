@@ -10134,9 +10134,13 @@ void _LD(struct s_assenv *ae) {
 					case CRC_IYL:case CRC_LY:case CRC_YL:___output(ae,0xFD);___output(ae,0x65);ae->nop+=2;ae->tick+=8;break;
 					case CRC_A:___output(ae,0xFD);___output(ae,0x67);ae->nop+=2;ae->tick+=8;break;
 					default:
-						___output(ae,0xFD);___output(ae,0x26);
-						PushExpression(ae,ae->idx+2,E_EXPRESSION_V8);
-						ae->nop+=3;ae->tick+=11;
+						if (strncmp(ae->wl[ae->idx+2].w,"(IX",3) && strncmp(ae->wl[ae->idx+2].w,"(IY",3)) {
+							___output(ae,0xFD);___output(ae,0x26);
+							PushExpression(ae,ae->idx+2,E_EXPRESSION_V8);
+							ae->nop+=3;ae->tick+=11;
+						} else {
+							MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"LD iyh,n/r only\n");
+						}
 				}
 				break;
 			case CRC_IYL:case CRC_LY:case CRC_YL:
@@ -10149,9 +10153,13 @@ void _LD(struct s_assenv *ae) {
 					case CRC_IYL:case CRC_LY:case CRC_YL:___output(ae,0xFD);___output(ae,0x6D);ae->nop+=2;ae->tick+=8;break;
 					case CRC_A:___output(ae,0xFD);___output(ae,0x6F);ae->nop+=2;ae->tick+=8;break;
 					default:
-						___output(ae,0xFD);___output(ae,0x2E);
-						PushExpression(ae,ae->idx+2,E_EXPRESSION_V8);
-						ae->nop+=3;ae->tick+=11;
+						if (strncmp(ae->wl[ae->idx+2].w,"(IX",3) && strncmp(ae->wl[ae->idx+2].w,"(IY",3)) {
+							___output(ae,0xFD);___output(ae,0x2E);
+							PushExpression(ae,ae->idx+2,E_EXPRESSION_V8);
+							ae->nop+=3;ae->tick+=11;
+						} else {
+							MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"LD iyl,n/r only\n");
+						}
 				}
 				break;
 			case CRC_IXH:case CRC_HX:case CRC_XH:
@@ -10164,9 +10172,13 @@ void _LD(struct s_assenv *ae) {
 					case CRC_IXL:case CRC_LX:case CRC_XL:___output(ae,0xDD);___output(ae,0x65);ae->nop+=2;ae->tick+=8;break;
 					case CRC_A:___output(ae,0xDD);___output(ae,0x67);ae->nop+=2;ae->tick+=8;break;
 					default:
-						___output(ae,0xDD);___output(ae,0x26);
-						PushExpression(ae,ae->idx+2,E_EXPRESSION_V8);
-						ae->nop+=3;ae->tick+=11;
+						if (strncmp(ae->wl[ae->idx+2].w,"(IX",3) && strncmp(ae->wl[ae->idx+2].w,"(IY",3)) {
+							___output(ae,0xDD);___output(ae,0x26);
+							PushExpression(ae,ae->idx+2,E_EXPRESSION_V8);
+							ae->nop+=3;ae->tick+=11;
+						} else {
+							MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"LD ixh,n/r only\n");
+						}
 				}
 				break;
 			case CRC_IXL:case CRC_LX:case CRC_XL:
@@ -10179,9 +10191,13 @@ void _LD(struct s_assenv *ae) {
 					case CRC_IXL:case CRC_LX:case CRC_XL:___output(ae,0xDD);___output(ae,0x6D);ae->nop+=2;ae->tick+=8;break;
 					case CRC_A:___output(ae,0xDD);___output(ae,0x6F);ae->nop+=2;ae->tick+=8;break;
 					default:
-						___output(ae,0xDD);___output(ae,0x2E);
-						PushExpression(ae,ae->idx+2,E_EXPRESSION_V8);
-						ae->nop+=3;ae->tick+=11;
+						if (strncmp(ae->wl[ae->idx+2].w,"(IX",3) && strncmp(ae->wl[ae->idx+2].w,"(IY",3)) {
+							___output(ae,0xDD);___output(ae,0x2E);
+							PushExpression(ae,ae->idx+2,E_EXPRESSION_V8);
+							ae->nop+=3;ae->tick+=11;
+						} else {
+							MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"LD ixl,n/r only\n");
+						}
 				}
 				break;
 			case CRC_H:
@@ -10249,9 +10265,13 @@ void _LD(struct s_assenv *ae) {
 					case CRC_A:___output(ae,0x77);ae->nop+=2;ae->tick+=7;break;
 					default:
 					/* expression */
-					___output(ae,0x36);
-					PushExpression(ae,ae->idx+2,E_EXPRESSION_V8);
-					ae->nop+=3;ae->tick+=10;
+					if (!StringIsMem(ae->wl[ae->idx+2].w)) {
+						___output(ae,0x36);
+						PushExpression(ae,ae->idx+2,E_EXPRESSION_V8);
+						ae->nop+=3;ae->tick+=10;
+					} else {
+						MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"LD (HL),n/r only\n");
+					}
 				}
 				break;
 			case CRC_MBC:
@@ -10381,15 +10401,19 @@ void _LD(struct s_assenv *ae) {
 					case CRC_DE:___output(ae,0xDD);___output(ae,0x62);
 						    ___output(ae,0xDD);___output(ae,0x6B);ae->nop+=4;ae->tick+=16;break;
 					default:
-				if (StringIsMem(ae->wl[ae->idx+2].w)) {
-					___output(ae,0xDD);___output(ae,0x2A);
-					PushExpression(ae,ae->idx+2,E_EXPRESSION_IV16);
-					ae->nop+=6;ae->tick+=20;
-				} else {
-					___output(ae,0xDD);___output(ae,0x21);
-					PushExpression(ae,ae->idx+2,E_EXPRESSION_IV16);
-					ae->nop+=4;ae->tick+=14;
-				}
+						if (strncmp(ae->wl[ae->idx+2].w,"(IX",3) && strncmp(ae->wl[ae->idx+2].w,"(IY",3)) {
+							if (StringIsMem(ae->wl[ae->idx+2].w)) {
+								___output(ae,0xDD);___output(ae,0x2A);
+								PushExpression(ae,ae->idx+2,E_EXPRESSION_IV16);
+								ae->nop+=6;ae->tick+=20;
+							} else {
+								___output(ae,0xDD);___output(ae,0x21);
+								PushExpression(ae,ae->idx+2,E_EXPRESSION_IV16);
+								ae->nop+=4;ae->tick+=14;
+							}
+						} else {
+							MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"LD IX,(nn)/BC/DE/nn only\n");
+						}
 				}
 				break;
 			case CRC_IY:
@@ -10400,15 +10424,19 @@ void _LD(struct s_assenv *ae) {
 					case CRC_DE:___output(ae,0xFD);___output(ae,0x62);
 						    ___output(ae,0xFD);___output(ae,0x6B);ae->nop+=4;ae->tick+=16;break;
 					default:
-				if (StringIsMem(ae->wl[ae->idx+2].w)) {
-					___output(ae,0xFD);___output(ae,0x2A);
-					PushExpression(ae,ae->idx+2,E_EXPRESSION_IV16);
-					ae->nop+=6;ae->tick+=20;
-				} else {
-					___output(ae,0xFD);___output(ae,0x21);
-					PushExpression(ae,ae->idx+2,E_EXPRESSION_IV16);
-					ae->nop+=4;ae->tick+=14;
-				}
+						if (strncmp(ae->wl[ae->idx+2].w,"(IX",3) && strncmp(ae->wl[ae->idx+2].w,"(IY",3)) {
+							if (StringIsMem(ae->wl[ae->idx+2].w)) {
+								___output(ae,0xFD);___output(ae,0x2A);
+								PushExpression(ae,ae->idx+2,E_EXPRESSION_IV16);
+								ae->nop+=6;ae->tick+=20;
+							} else {
+								___output(ae,0xFD);___output(ae,0x21);
+								PushExpression(ae,ae->idx+2,E_EXPRESSION_IV16);
+								ae->nop+=4;ae->tick+=14;
+							}
+						} else {
+							MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"LD IY,(nn)/BC/DE/nn only\n");
+						}
 				}
 				break;
 			case CRC_SP:
@@ -10417,14 +10445,18 @@ void _LD(struct s_assenv *ae) {
 					case CRC_IX:___output(ae,0xDD);___output(ae,0xF9);ae->nop+=3;ae->tick+=10;break;
 					case CRC_IY:___output(ae,0xFD);___output(ae,0xF9);ae->nop+=3;ae->tick+=10;break;
 					default:
-						if (StringIsMem(ae->wl[ae->idx+2].w)) {
-							___output(ae,0xED);___output(ae,0x7B);
-							PushExpression(ae,ae->idx+2,E_EXPRESSION_IV16);
-							ae->nop+=6;ae->tick+=20;
+						if (strncmp(ae->wl[ae->idx+2].w,"(IX",3) && strncmp(ae->wl[ae->idx+2].w,"(IY",3)) {
+							if (StringIsMem(ae->wl[ae->idx+2].w)) {
+								___output(ae,0xED);___output(ae,0x7B);
+								PushExpression(ae,ae->idx+2,E_EXPRESSION_IV16);
+								ae->nop+=6;ae->tick+=20;
+							} else {
+								___output(ae,0x31);
+								PushExpression(ae,ae->idx+2,E_EXPRESSION_V16);
+								ae->nop+=3;ae->tick+=10;
+							}
 						} else {
-							___output(ae,0x31);
-							PushExpression(ae,ae->idx+2,E_EXPRESSION_V16);
-							ae->nop+=3;ae->tick+=10;
+							MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"LD SP,(nn)/HL/IX/IY only\n");
 						}
 				}
 				break;
@@ -10442,10 +10474,15 @@ void _LD(struct s_assenv *ae) {
 						case CRC_HL:___output(ae,0xDD);___output(ae,0x74);PushExpression(ae,ae->idx+1,E_EXPRESSION_IV81);___output(ae,0xDD);___output(ae,0x75);PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);ae->nop+=10;ae->tick+=38;break;
 						case CRC_DE:___output(ae,0xDD);___output(ae,0x72);PushExpression(ae,ae->idx+1,E_EXPRESSION_IV81);___output(ae,0xDD);___output(ae,0x73);PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);ae->nop+=10;ae->tick+=38;break;
 						case CRC_BC:___output(ae,0xDD);___output(ae,0x70);PushExpression(ae,ae->idx+1,E_EXPRESSION_IV81);___output(ae,0xDD);___output(ae,0x71);PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);ae->nop+=10;ae->tick+=38;break;
-						default:___output(ae,0xDD);___output(ae,0x36);
-							PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
-							PushExpression(ae,ae->idx+2,E_EXPRESSION_3V8);
-							ae->nop+=6;ae->tick+=23;
+						default:
+							if (!StringIsMem(ae->wl[ae->idx+2].w)) {
+								___output(ae,0xDD);___output(ae,0x36);
+								PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
+								PushExpression(ae,ae->idx+2,E_EXPRESSION_3V8);
+								ae->nop+=6;ae->tick+=23;
+							} else {
+								MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"LD (IX+n),n/r only\n");
+							}
 					}
 				} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0) {
 					switch (GetCRC(ae->wl[ae->idx+2].w)) {
@@ -10459,10 +10496,15 @@ void _LD(struct s_assenv *ae) {
 						case CRC_HL:___output(ae,0xFD);___output(ae,0x74);PushExpression(ae,ae->idx+1,E_EXPRESSION_IV81);___output(ae,0xFD);___output(ae,0x75);PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);ae->nop+=10;ae->tick+=38;break;
 						case CRC_DE:___output(ae,0xFD);___output(ae,0x72);PushExpression(ae,ae->idx+1,E_EXPRESSION_IV81);___output(ae,0xFD);___output(ae,0x73);PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);ae->nop+=10;ae->tick+=38;break;
 						case CRC_BC:___output(ae,0xFD);___output(ae,0x70);PushExpression(ae,ae->idx+1,E_EXPRESSION_IV81);___output(ae,0xFD);___output(ae,0x71);PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);ae->nop+=10;ae->tick+=38;break;
-						default:___output(ae,0xFD);___output(ae,0x36);
-							PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
-							PushExpression(ae,ae->idx+2,E_EXPRESSION_3V8);
-							ae->nop+=6;ae->tick+=23;
+						default:
+							if (!StringIsMem(ae->wl[ae->idx+2].w)) {
+							    ___output(ae,0xFD);___output(ae,0x36);
+								PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
+								PushExpression(ae,ae->idx+2,E_EXPRESSION_3V8);
+								ae->nop+=6;ae->tick+=23;
+							} else {
+								MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"LD (IX+n),n/r only\n");
+							}
 					}
 				} else if (StringIsMem(ae->wl[ae->idx+1].w)) {
 					switch (GetCRC(ae->wl[ae->idx+2].w)) {
@@ -15183,16 +15225,18 @@ printf("Hexbin -> surprise! we found the file!\n");
 			int dma_channel=AUDIOSAMPLE_DMAC;
 			int dma_int=0,dma_repeat=0;
 			int mypsgreg=0xA;
-			int triggeramp=0;
 #if TRACE_HEXBIN
 printf("Hexbin -> %s\n",ae->wl[ae->idx+2].w);
 #endif
-			if (!ae->wl[ae->idx+2].t) {
-				amplification=ComputeExpressionCore(ae,ae->wl[ae->idx+3].w,ae->codeadr,0);
-				triggeramp++;
+			switch (ae->wl[ae->idx+2].w[2]) {
+				case 'P':case '2':case '4':
+				if (!ae->wl[ae->idx+2].t) {
+					amplification=ComputeExpressionCore(ae,ae->wl[ae->idx+3].w,ae->codeadr,0);
 #if TRACE_HEXBIN
-printf("sample amplification=%.2lf\n",amplification);
+	printf("sample amplification=%.2lf\n",amplification);
 #endif
+				}
+				default:break;
 			}
 
 			switch (ae->wl[ae->idx+2].w[2]) {
@@ -15201,7 +15245,6 @@ printf("sample amplification=%.2lf\n",amplification);
 				case '4':_AudioLoadSample(ae,ae->hexbin[hbinidx].data,ae->hexbin[hbinidx].datalen, AUDIOSAMPLE_SM4,amplification);break;
 				case 'A':/* DMA options */
 					if (!ae->wl[ae->idx+2].t) {
-						dma_args+=triggeramp;
 						while (!ae->wl[ae->idx+dma_args].t) {
 							dma_args++;
 							if (strcmp(ae->wl[ae->idx+dma_args].w,"DMA_INT")==0) {
@@ -17036,21 +17079,24 @@ printf("output files\n");
 					int bankset;
 					int noflood=0;
 
-					if (ae->snapshot.version==2 && ae->snapshot.CPCType>2) {
-						if (!ae->nowarning) {
-							rasm_printf(ae,KWARNING"[%s:%d] Warning: V2 snapshot cannot select a Plus model (forced to 6128)\n",GetCurrentFile(ae),ae->wl[ae->idx].l);
-							if (ae->erronwarn) MaxError(ae);
+					if (!ae->flux) {
+						if (ae->snapshot.version==2 && ae->snapshot.CPCType>2) {
+							if (!ae->nowarning) {
+								rasm_printf(ae,KWARNING"[%s:%d] Warning: V2 snapshot cannot select a Plus model (forced to 6128)\n",GetCurrentFile(ae),ae->wl[ae->idx].l);
+								if (ae->erronwarn) MaxError(ae);
+							}
+							ae->snapshot.CPCType=2; /* 6128 */
 						}
-						ae->snapshot.CPCType=2; /* 6128 */
+						
+						if (ae->snapshot_name) {
+							sprintf(TMP_filename,"%s",ae->snapshot_name);
+						} else {
+							sprintf(TMP_filename,"%s.sna",ae->outputfilename);
+						}
+						FileRemoveIfExists(TMP_filename);
 					}
-					
-					if (ae->snapshot_name) {
-						sprintf(TMP_filename,"%s",ae->snapshot_name);
-					} else {
-						sprintf(TMP_filename,"%s.sna",ae->outputfilename);
-					}
-					FileRemoveIfExists(TMP_filename);
-				
+			
+					// we use part of SNAPSHOT code for emulator in-place output	
 					maxrom=-1;	
 					for (i=0;i<ae->io;i++) {
 						if (ae->orgzone[i].ibank<BANK_MAX_NUMBER && ae->orgzone[i].ibank>maxrom && ae->orgzone[i].memstart!=ae->orgzone[i].memend) {
@@ -17058,7 +17104,6 @@ printf("output files\n");
 						}
 					}
 
-	//printf("maxrom=%d\n",maxrom);
 					/* construction du SNA */
 					if (ae->snapshot.version==2) {
 						if (maxrom>=4) {
@@ -17074,7 +17119,7 @@ printf("output files\n");
 						rasm_printf(ae,KIO"Write snapshot v%d file %s\n",ae->snapshot.version,TMP_filename);
 						
 						/* header */
-						FileWriteBinary(TMP_filename,(char *)&ae->snapshot,0x100);
+						if (!ae->flux) FileWriteBinary(TMP_filename,(char *)&ae->snapshot,0x100);
 						/* write all memory crunched */
 						for (i=0;i<=maxrom;i+=4) {
 							bankset=i>>2;
@@ -17097,10 +17142,12 @@ printf("output files\n");
 									}
 									if (endoffset-offset>16384) {
 										rasm_printf(ae,KERROR"\nBANK is too big!!!\n");
-										FileWriteBinaryClose(TMP_filename);
-										FileRemoveIfExists(TMP_filename);
-										FreeAssenv(ae);
-										exit(ABORT_ERROR);
+										if (!ae->flux) {
+											FileWriteBinaryClose(TMP_filename);
+											FileRemoveIfExists(TMP_filename);
+											FreeAssenv(ae);
+											exit(ABORT_ERROR);
+										} //@@TODO renvoyer erreur quand meme?
 									}
 									/* banks are gathered in the 64K block */
 									if (offset>0xC000) {
@@ -17119,10 +17166,12 @@ printf("output files\n");
 										else if (!noflood) {rasm_printf(ae,KVERBOSE"[...]\n");noflood=1;}
 										if (endoffset-offset>16384) {
 											rasm_printf(ae,KERROR"\nRAM block is too big!!!\n");
-											FileWriteBinaryClose(TMP_filename);
-											FileRemoveIfExists(TMP_filename);
-											FreeAssenv(ae);
-											exit(ABORT_ERROR);
+											if (!ae->flux) {
+												FileWriteBinaryClose(TMP_filename);
+												FileRemoveIfExists(TMP_filename);
+												FreeAssenv(ae);
+												exit(ABORT_ERROR);
+											} // @@TODO aussi
 										}
 										if (lm) {
 											if (i<4 || i+4>maxrom) rasm_printf(ae,KVERBOSE" (%-*.*s)\n",lm,lm,ae->wl[ae->iwnamebank[i+k]].w+1);
@@ -17138,7 +17187,7 @@ printf("output files\n");
 							
 							if (ae->snapshot.version==2) {
 								/* snapshot v2 */
-								FileWriteBinary(TMP_filename,(char*)&packed,65536);
+								if (!ae->flux) FileWriteBinary(TMP_filename,(char*)&packed,65536);
 								if (bankset) {
 									/* v2 snapshot is 128K maximum */
 									maxrom=7;
@@ -17157,14 +17206,16 @@ printf("output files\n");
 									MakeError(ae,"(core)",0,"internal error during snapshot write, please report (%d)\n",bankset);
 								}
 								
-								FileWriteBinary(TMP_filename,ChunkName,4);
-								if (rlebank!=NULL) {
-									FileWriteBinary(TMP_filename,(char*)&ChunkSize,4);
-									FileWriteBinary(TMP_filename,(char*)rlebank,ChunkSize);
-									MemFree(rlebank);
-								} else {
-									ChunkSize=65536;
-									FileWriteBinary(TMP_filename,(char*)&packed,ChunkSize);
+								if (!ae->flux) {
+									FileWriteBinary(TMP_filename,ChunkName,4);
+									if (rlebank!=NULL) {
+										FileWriteBinary(TMP_filename,(char*)&ChunkSize,4);
+										FileWriteBinary(TMP_filename,(char*)rlebank,ChunkSize);
+										MemFree(rlebank);
+									} else {
+										ChunkSize=65536;
+										FileWriteBinary(TMP_filename,(char*)&packed,ChunkSize);
+									}
 								}
 							}
 						}
@@ -17172,7 +17223,7 @@ printf("output files\n");
 						/**************************************************************
 								snapshot additional chunks in v3+ only
 						**************************************************************/
-						if (ae->snapshot.version>=3) {
+						if (!ae->flux && ae->snapshot.version>=3) {
 							/* export breakpoint */
 							if (ae->export_snabrk) {
 								/* BRKS chunk for Winape emulator (unofficial) 
@@ -17804,7 +17855,11 @@ printf("output files\n");
 		**********************************
 		*********************************/
 		if (ae->retdebug) {
-			ae->debug.run=ae->snapshot.registers.LPC+(ae->snapshot.registers.HPC<<8);
+			if (ae->rundefined) {
+				ae->debug.run=ae->snapshot.registers.LPC+(ae->snapshot.registers.HPC<<8);
+			} else {
+				ae->debug.run=-1;
+			}
 			ae->debug.start=minmem;
 		}
 
@@ -19558,6 +19613,20 @@ int RasmAssembleInfoIntoRAM(const char *datain, int lenin, struct s_rasm_info **
 	}
 
 	ret=Assemble(ae,NULL,NULL,debug);
+
+	/* get back memory */
+	ramidx=0;
+	for (i=0;i<maxbank;i+=4) {
+		if (ae->bankset[i>>2]) {
+			if (ramidx+65536>ramsize) ramend=65536; else ramend=ramsize-ramidx;
+			for (j=0;j<ramend;j++) {
+				emuram[ramidx++]=ae->mem[i][j];
+			}
+		} else {
+			/* unsupported now */
+		}
+	}
+
 	return ret;
 }
 
@@ -20252,6 +20321,8 @@ int RasmAssembleInfoParam(const char *datain, int lenin, unsigned char **dataout
 
 #define AUTOTEST_BANKPROX " buildcpr: bank 0: grouik: .tape1: nop: ld hl,{bank}.tape2: bank 1: ld hl,{bank}.tape2: defw {bank}.tape2: .tape2: nop: "
 
+#define AUTOTEST_INTORAM1 " buildsna : bankset 0 :  org #3FF8 : defb 'roudoudou in da house' "
+
 struct s_autotest_keyword {
 	char *keywordtest;
 	int result;
@@ -20273,8 +20344,8 @@ struct s_autotest_keyword autotest_keyword[]={
 	{"jp (ix+5)",1}, {"jp (ix-5)",1}, {"jp (iy-5)",1}, {"jp (iy+5)",1},
 
 	// new unsupported test cases
-	//{"jp ix+1",1},{"ld iy,(ix+1)",1},{"ld ix,(iy+1)",1},{"ld ix,(ix+2)",1},{"ld ixh,(ix+1)",1},{"ld sp,(ix+0)",1},
-	//{"ld (hl),(ix+0)",1},{"ld (iy+0),(iy+1)",1},{"ld (iy+0),(ix+1)",1},{"ld (ix+0),(iy+1)",1},{"ld (ix+0),(ix+1)",1},
+	{"jp (ix+1)",1},{"ld iy,(ix+1)",1},{"ld ix,(iy+1)",1},{"ld ix,(ix+2)",1},{"ld ixh,(ix+1)",1},{"ld sp,(ix+0)",1},
+	{"ld (hl),(ix+0)",1},{"ld (iy+0),(iy+1)",1},{"ld (iy+0),(ix+1)",1},{"ld (ix+0),(iy+1)",1},{"ld (ix+0),(ix+1)",1},
 
 	{"jp c,$",0},{"jp c,0",0},{"jp c,jp",1},   {"jp c,(hl)",1}, {"jp c,(ix)",1}, {"jp c,(iy)",1},{"jp c,(de)",1},{"jp c,a",1},
 	{"jp nc,$",0},{"jp nc,0",0},{"jp nc,jp",1},{"jp nc,(hl)",1},{"jp nc,(ix)",1},{"jp nc,(iy)",1},{"jp nc,(de)",1},{"jp nc,a",1},
@@ -20710,7 +20781,23 @@ printf("testing various opcode tests OK\n");
 	}
 	cpt++;
 printf("testing moar various opcode tests OK\n");
-	
+
+	{
+		char RAMEMU[65536*2];
+
+		for (i=0;i<65536*2;i++) RAMEMU[i]=0xDD;
+		ret=RasmAssembleInfoIntoRAM(AUTOTEST_INTORAM1,strlen(AUTOTEST_INTORAM1),&debug, RAMEMU,65536*2);
+		if (ret || RAMEMU[0]!=0xDD || RAMEMU[0x8000]!=0xDD || RAMEMU[0xC000]!=0xDD || memcmp(&RAMEMU[0x3FF8],"roudoudou",9)) {printf("Autotest %03d ERROR (Assemble into emulator RAM)\n",cpt);
+			RAMEMU[0x4020]=0;
+			printf("ret=%d R[0]=%02X R[0xC000]=%02X str=[%s]\n ",ret,RAMEMU[0],RAMEMU[0xC000],&RAMEMU[0x3FF8]);
+			
+			exit(-1);}
+		if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+		RasmFreeInfoStruct(debug);
+printf("testing assembling into external RAM OK\n");
+	}
+exit(0);
+
 	ret=RasmAssemble(AUTOTEST_ORG,strlen(AUTOTEST_ORG),&opcode,&opcodelen);
 	if (!ret && opcodelen==4 && opcode[1]==0x80 && opcode[2]==2 && opcode[3]==0x10) {} else {printf("Autotest %03d ERROR (ORG relocation)\n",cpt);exit(-1);}
 	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
