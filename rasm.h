@@ -15,6 +15,8 @@ struct s_rasm_info {
         struct s_debug_symbol *symbol;
         int nbsymbol,maxsymbol;
 	int run,start;
+	unsigned char *emuram;
+	int lenram;
 };
 
 #ifndef INSIDE_RASM
