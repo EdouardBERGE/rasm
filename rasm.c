@@ -1,6 +1,6 @@
 #define PROGRAM_NAME      "RASM"
 #define PROGRAM_VERSION   "1.5"
-#define PROGRAM_DATE      "xx/02/2021"
+#define PROGRAM_DATE      "xx/07/2021"
 #define PROGRAM_COPYRIGHT "© 2017 BERGE Edouard / roudoudou from Resistance"
 
 #define RASM_VERSION PROGRAM_NAME" v"PROGRAM_VERSION" (build "PROGRAM_DATE")"
@@ -17410,7 +17410,7 @@ printf("output files\n");
 							}
 						}
 
-						FileWriteBinaryClose(TMP_filename);
+						if (!ae->flux) FileWriteBinaryClose(TMP_filename);
 						maxrom=(maxrom>>2)*4+4;
 						rasm_printf(ae,KAYGREEN"Total %d bank%s (%dK)\n",maxrom,maxrom>1?"s":"",(maxrom)*16);
 					}
