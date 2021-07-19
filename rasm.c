@@ -15681,6 +15681,16 @@ void __MODULE(struct s_assenv *ae) {
 		ae->modulen=0;
 	}
 }
+void __ENDMODULE(struct s_assenv *ae) {
+	#undef FUNC
+	#define FUNC "__ENDMODULE"
+
+	if (!ae->wl[ae->idx].t && ae->wl[ae->idx+1].t==1) {
+		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"ENDMODULE does not need any parameter\n");
+	} else {
+		__MODULE(ae);
+	}
+}
 
 void __SUMMEM(struct s_assenv *ae) {
 	struct s_poker poker={0};
@@ -15972,6 +15982,7 @@ struct s_asm_keyword instruction[]={
 {"NOEXPORT",0,__NOEXPORT},
 {"ENOEXPORT",0,__ENOEXPORT},
 {"MODULE",0,__MODULE},
+{"ENDMODULE",0,__ENDMODULE},
 {"TIMESTAMP",0,__TIMESTAMP},
 {"SUMMEM",0,__SUMMEM},
 {"XORMEM",0,__XORMEM},
@@ -17938,6 +17949,30 @@ printf("-cleanup\n");
 		ok=0;
 	}
 
+	/*********************************************************************
+	 *
+	 * assembling into emulator memory
+	 *
+	 * ******************************************************************/
+	/* get back memory if requested */
+	if (ae->retdebug && ae->debug.emuram && ae->debug.lenram) {
+		int ramidx,ramend,maxbank;
+
+		maxbank=ae->debug.lenram>>14;
+		ramidx=0;
+		for (i=0;i<maxbank;i+=4) {
+			if (ae->bankset[i>>2]) {
+				if (ramidx+65536<=ae->debug.lenram) ramend=65536; else ramend=ae->debug.lenram-ramidx;
+				for (j=0;j<ramend;j++) {
+					ae->debug.emuram[ramidx++]=ae->mem[i][j];
+				}
+			} else {
+				printf("@@@ simple banking unsupported => todo\n");
+				/* unsupported now => @@TODO */
+			}
+		}
+	}
+
 	FreeAssenv(ae);
 #if TRACE_ASSEMBLE
 printf("end of assembling\n");
@@ -19592,7 +19627,7 @@ int RasmAssembleInfoIntoRAM(const char *datain, int lenin, struct s_rasm_info **
 	static int cpt=0;
 	struct s_assenv *ae=NULL;
 	int ret;
-	int i,j,maxbank,ramidx,ramend;
+	int i,j,maxbank,ramidx;
 
 	if (datain==NULL && lenin==0) return cpt; else cpt++;
 
@@ -19612,20 +19647,10 @@ int RasmAssembleInfoIntoRAM(const char *datain, int lenin, struct s_rasm_info **
 		ae->mem[i][j+16384*(i&3)]=emuram[ramidx++];
 	}
 
-	ret=Assemble(ae,NULL,NULL,debug);
+	ae->debug.emuram=emuram;
+	ae->debug.lenram=ramsize;
 
-	/* get back memory */
-	ramidx=0;
-	for (i=0;i<maxbank;i+=4) {
-		if (ae->bankset[i>>2]) {
-			if (ramidx+65536>ramsize) ramend=65536; else ramend=ramsize-ramidx;
-			for (j=0;j<ramend;j++) {
-				emuram[ramidx++]=ae->mem[i][j];
-			}
-		} else {
-			/* unsupported now */
-		}
-	}
+	ret=Assemble(ae,NULL,NULL,debug);
 
 	return ret;
 }
@@ -20148,6 +20173,9 @@ int RasmAssembleInfoParam(const char *datain, int lenin, unsigned char **dataout
 			"djnz .prox: deuxmacros (void): djnz .prox: assert .prox<apres "
 #define AUTOTEST_MODULE02 "unglobal: nop: .prox: nop: module un: deuxglobal: nop: .prox: nop: djnz .prox: nop: doublon: nop: module deux: troisglobal: nop: " \
 			" .prox: nop: djnz .prox: nop: doublon: nop: assert doublon>troisglobal: module: jr un_doublon: jr deux_doublon: jr un_deuxglobal.prox: jr deux_troisglobal.prox "
+
+#define AUTOTEST_MODULE03 "unglobal: nop: .prox: nop: module un: deuxglobal: nop: .prox: nop: djnz .prox: nop: doublon: nop: module deux: troisglobal: nop: " \
+			" .prox: nop: djnz .prox: nop: doublon: nop: assert doublon>troisglobal: endmodule: jr un_doublon: jr deux_doublon: jr un_deuxglobal.prox: jr deux_troisglobal.prox "
 
 #define AUTOTEST_GETNOP_LD "ticker start,testouille:"\
 			"ld a,1: ld a,b: ld b,a: ld a,i: ld i,a: ld a,r: ld r,a:"\
@@ -20783,7 +20811,7 @@ printf("testing various opcode tests OK\n");
 printf("testing moar various opcode tests OK\n");
 
 	{
-		char RAMEMU[65536*2];
+		unsigned char RAMEMU[65536*2];
 
 		for (i=0;i<65536*2;i++) RAMEMU[i]=0xDD;
 		ret=RasmAssembleInfoIntoRAM(AUTOTEST_INTORAM1,strlen(AUTOTEST_INTORAM1),&debug, RAMEMU,65536*2);
@@ -20796,7 +20824,6 @@ printf("testing moar various opcode tests OK\n");
 		RasmFreeInfoStruct(debug);
 printf("testing assembling into external RAM OK\n");
 	}
-exit(0);
 
 	ret=RasmAssemble(AUTOTEST_ORG,strlen(AUTOTEST_ORG),&opcode,&opcodelen);
 	if (!ret && opcodelen==4 && opcode[1]==0x80 && opcode[2]==2 && opcode[3]==0x10) {} else {printf("Autotest %03d ERROR (ORG relocation)\n",cpt);exit(-1);}
@@ -21077,6 +21104,11 @@ printf("testing modules + proximity OK\n");
 	if (!ret) {} else {printf("Autotest %03d ERROR (modules 2)\n",cpt);exit(-1);}
 	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
 printf("testing modules + proximity (bis) OK\n");
+
+	ret=RasmAssemble(AUTOTEST_MODULE03,strlen(AUTOTEST_MODULE03),&opcode,&opcodelen);
+	if (!ret) {} else {printf("Autotest %03d ERROR (modules 3)\n",cpt);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing modules + endmodule OK\n");
 
 	ret=RasmAssemble(AUTOTEST_PROXIM,strlen(AUTOTEST_PROXIM),&opcode,&opcodelen);
 	if (!ret && opcode[1]==3) {} else {printf("Autotest %03d ERROR (proximity labels)\n",cpt);exit(-1);}
