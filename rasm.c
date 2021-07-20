@@ -307,20 +307,20 @@ AUDIOSAMPLE_END
 ***********************************************************************/
 enum e_expression {
 	E_EXPRESSION_J8,     /* relative 8bits jump */
-	E_EXPRESSION_0V8,    /* 8 bits value to current adress */
-	E_EXPRESSION_V8,     /* 8 bits value to current adress+1 */
-	E_EXPRESSION_J16,    /* 16 bits value to current adress+1 */
-	E_EXPRESSION_J16C,   /* 16 bits value to current adress+1 */
-	E_EXPRESSION_V16,    /* 16 bits value to current adress+1 */
-	//E_EXPRESSION_V16C,   /* 16 bits value to current adress+1 */
-	E_EXPRESSION_0V16,   /* 16 bits value to current adress */
-	E_EXPRESSION_0V32,   /* 32 bits value to current adress */
-	E_EXPRESSION_0VR,    /* AMSDOS real value (5 bytes) to current adress */
-	E_EXPRESSION_0VRMike,/* Microsoft IEEE-754 real value (5 bytes) to current adress */
-	E_EXPRESSION_IV8,    /* 8 bits value to current adress+2 */
-	E_EXPRESSION_IV81,   /* 8 bits value+1 to current adress+2 */
-	E_EXPRESSION_3V8,    /* 8 bits value to current adress+3 used with LD (IX+n),n */
-	E_EXPRESSION_IV16,   /* 16 bits value to current adress+2 */
+	E_EXPRESSION_0V8,    /* 8 bits value to current address */
+	E_EXPRESSION_V8,     /* 8 bits value to current address+1 */
+	E_EXPRESSION_J16,    /* 16 bits value to current address+1 */
+	E_EXPRESSION_J16C,   /* 16 bits value to current address+1 */
+	E_EXPRESSION_V16,    /* 16 bits value to current address+1 */
+	//E_EXPRESSION_V16C,   /* 16 bits value to current address+1 */
+	E_EXPRESSION_0V16,   /* 16 bits value to current address */
+	E_EXPRESSION_0V32,   /* 32 bits value to current address */
+	E_EXPRESSION_0VR,    /* AMSDOS real value (5 bytes) to current address */
+	E_EXPRESSION_0VRMike,/* Microsoft IEEE-754 real value (5 bytes) to current address */
+	E_EXPRESSION_IV8,    /* 8 bits value to current address+2 */
+	E_EXPRESSION_IV81,   /* 8 bits value+1 to current address+2 */
+	E_EXPRESSION_3V8,    /* 8 bits value to current address+3 used with LD (IX+n),n */
+	E_EXPRESSION_IV16,   /* 16 bits value to current address+2 */
 	E_EXPRESSION_RST,    /* the offset of RST is translated to the opcode */
 	E_EXPRESSION_IM,     /* the interrupt mode is translated to the opcode */
 	E_EXPRESSION_RUN,    /* delayed RUN value */
@@ -371,7 +371,7 @@ struct s_label {
 	char *name;   /* is alloced for local repeat or struct OR generated global -> in this case iw=-1 */
 	int iw;       /* index of the word of label name */
 	int crc;      /* crc of the label name */
-	int ptr;      /* "physical" adress */
+	int ptr;      /* "physical" address */
 	int lz;       /* is the label in a crunched section (or after)? */
 	int iorgzone; /* org of label */
 	int ibank;    /* current CPR bank / always zero in classic mode */
@@ -663,7 +663,7 @@ struct s_snapshot_symbol {
 	unsigned char size;
 	unsigned char name[256];
 	unsigned char reserved[6];
-	unsigned char bigendian_adress[2];
+	unsigned char bigendian_address[2];
 };
 
 
@@ -8438,7 +8438,7 @@ void PopAllExpression(struct s_assenv *ae, int crunched_zone)
 			case E_EXPRESSION_RUN:
 				if (r<0 || r>65535) {
 					if (!ae->nowarning) {
-						rasm_printf(ae,KWARNING"[%s:%d] Warning: run adress truncated from %X to %X\n",GetExpFile(ae,i),ae->wl[ae->expression[i].iw].l,r,r&0xFFFF);
+						rasm_printf(ae,KWARNING"[%s:%d] Warning: run address truncated from %X to %X\n",GetExpFile(ae,i),ae->wl[ae->expression[i].iw].l,r,r&0xFFFF);
 						if (ae->erronwarn) MaxError(ae);
 					}
 				}
@@ -8448,7 +8448,7 @@ void PopAllExpression(struct s_assenv *ae, int crunched_zone)
 			case E_EXPRESSION_ZXRUN:
 				if (r<0 || r>65535) {
 					if (!ae->nowarning) {
-						rasm_printf(ae,KWARNING"[%s:%d] Warning: run adress truncated from %X to %X\n",GetExpFile(ae,i),ae->wl[ae->expression[i].iw].l,r,r&0xFFFF);
+						rasm_printf(ae,KWARNING"[%s:%d] Warning: run address truncated from %X to %X\n",GetExpFile(ae,i),ae->wl[ae->expression[i].iw].l,r,r&0xFFFF);
 						if (ae->erronwarn) MaxError(ae);
 					}
 				}
@@ -8457,7 +8457,7 @@ void PopAllExpression(struct s_assenv *ae, int crunched_zone)
 			case E_EXPRESSION_ZXSTACK:
 				if (r<0 || r>65535) {
 					if (!ae->nowarning) {
-						rasm_printf(ae,KWARNING"[%s:%d] Warning: stack adress truncated from %X to %X\n",GetExpFile(ae,i),ae->wl[ae->expression[i].iw].l,r,r&0xFFFF);
+						rasm_printf(ae,KWARNING"[%s:%d] Warning: stack address truncated from %X to %X\n",GetExpFile(ae,i),ae->wl[ae->expression[i].iw].l,r,r&0xFFFF);
 						if (ae->erronwarn) MaxError(ae);
 					}
 				}
@@ -9225,7 +9225,7 @@ void _JP(struct s_assenv *ae) {
 				MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Available flags for JP are C,NC,Z,NZ,PE,PO,P,M\n");
 		}
 		if (!strcmp(ae->wl[ae->idx+2].w,"(IX)") || !strcmp(ae->wl[ae->idx+2].w,"(IY)")) {
-			MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"conditionnal JP cannot use register adressing\n");
+			MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"conditionnal JP cannot use register addressing\n");
 		} else {
 			PushExpression(ae,ae->idx+2,E_EXPRESSION_J16);
 		}
@@ -12866,7 +12866,7 @@ void __RUN(struct s_assenv *ae) {
 				PushExpression(ae,ae->idx+1,E_EXPRESSION_ZXSTACK); // delayed STACK value
 				ae->idx++;
 			} else {
-				MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"usage is RUN <adress>,<stack> (ZX mode, you must set adress+stack)\n");
+				MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"usage is RUN <address>,<stack> (ZX mode, you must set address+stack)\n");
 			}
 		} else {
 			PushExpression(ae,ae->idx+1,E_EXPRESSION_RUN); // delayed RUN value
@@ -12886,11 +12886,11 @@ void __RUN(struct s_assenv *ae) {
 			}
 		}
 	} else {
-		if (ae->forcezx) MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"usage is RUN <adress>,<stack> (ZX mode)\n");
-		else MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"usage is RUN <adress>[,<ppi>]\n");
+		if (ae->forcezx) MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"usage is RUN <address>,<stack> (ZX mode)\n");
+		else MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"usage is RUN <address>[,<ppi>]\n");
 	}
 	if (ae->rundefined && !ae->nowarning) {
-		rasm_printf(ae,KWARNING"[%s:%d] Warning: run adress redefinition\n",GetCurrentFile(ae),ae->wl[ae->idx].l);
+		rasm_printf(ae,KWARNING"[%s:%d] Warning: run address redefinition\n",GetCurrentFile(ae),ae->wl[ae->idx].l);
 		if (ae->erronwarn) MaxError(ae);
 	}
 	ae->rundefined=1;
@@ -12906,7 +12906,7 @@ void __BREAKPOINT(struct s_assenv *ae) {
 		breakpoint.address=RoundComputeExpression(ae,ae->wl[ae->idx+1].w,ae->codeadr,0,0);
 		ObjectArrayAddDynamicValueConcat((void **)&ae->breakpoint,&ae->ibreakpoint,&ae->maxbreakpoint,&breakpoint,sizeof(struct s_breakpoint));
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is BREAKPOINT [adress]\n");
+		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is BREAKPOINT [address]\n");
 	}
 }
 
@@ -13411,7 +13411,7 @@ void __ALIGN(struct s_assenv *ae) {
 			aval=1;
 		}
 
-		/* touch codeadr only if adress is misaligned */
+		/* touch codeadr only if address is misaligned */
 		if (ae->codeadr%aval) {
 			if (ifill==-1) {
 				/* virtual ALIGN is moving outputadr the same value as codeadr move */
@@ -17239,7 +17239,7 @@ printf("output files\n");
 							if (ae->export_snabrk) {
 								/* BRKS chunk for Winape emulator (unofficial) 
 								
-								2 bytes - adress
+								2 bytes - address
 								1 byte  - 0=base 64K / 1=extended
 								2 bytes - condition (zeroed)
 								*/
@@ -17324,7 +17324,7 @@ printf("output files\n");
 								1 byte  - name size
 								n bytes - name (without 0 to end the string)
 								6 bytes - reserved for future use
-								2 bytes - shitty big endian adress for the symbol
+								2 bytes - shitty big endian address for the symbol
 								*/
 							
 								unsigned char *symbchunk=NULL;
@@ -17618,7 +17618,7 @@ printf("output files\n");
 			} else {
 				rasm_printf(ae,KIO"Write symbol file %s\n",TMP_filename);
 			}
-			
+
 			switch (ae->export_sym) {
 				case 5:
 					/* ZX export */
@@ -18273,7 +18273,7 @@ printf("paramz 1\n");
 			sep=strchr(param->symboldef[i],'=');
 			if (sep) {
 				*sep=0;
-				ExpressionSetDicoVar(ae,param->symboldef[i],atof(sep+1),1);
+				ExpressionSetDicoVar(ae,param->symboldef[i],atof(sep+1),0); // not external as default
 			}
 		}
 		if (param->msymb) {
