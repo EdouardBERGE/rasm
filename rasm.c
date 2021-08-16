@@ -86,10 +86,11 @@ cc rasm.c -O2 -lm -march=native -o rasm
 	#define TxtSplitWithChar _internal_TxtSplitWithChar
 #endif
 
+int MAX_OFFSET_ZX0=32640;
+
 #ifndef NO_3RD_PARTIES
 #define __FILENAME__ "3rd parties"
 /* 3rd parties compression */
-int MAX_OFFSET_ZX0=32640;
 #include"zx7.h"
 #include"lz4.h"
 #include"exomizer.h"
@@ -5976,8 +5977,8 @@ printf("final POP string=%X\n",ae->computectx->operatorstack[nboperatorstack+1].
 				case E_COMPUTE_OPERATION_SHL:if (paccu>1) accu[paccu-2]=((int)accu[paccu-2])<<((int)accu[paccu-1]);
 								if (((int)accu[paccu-1])>31 || ((int)accu[paccu-1])<-31) {
 									if (!ae->nowarning) {
-										rasm_printf(ae,KWARNING"Warning - shifting %d is architecture dependant, result forced to ZERO\n",(int)accu[paccu-1]);
-															if (ae->erronwarn) MaxError(ae);
+										rasm_printf(ae,KWARNING"[%s:%d] Warning - shifting %d is architecture dependant, result forced to ZERO\n",GetExpFile(ae,didx),GetExpLine(ae,didx),(int)accu[paccu-1]);
+										if (ae->erronwarn) MaxError(ae);
 									}
 									accu[paccu-2]=0;
 								}
@@ -5985,8 +5986,8 @@ printf("final POP string=%X\n",ae->computectx->operatorstack[nboperatorstack+1].
 				case E_COMPUTE_OPERATION_SHR:if (paccu>1) accu[paccu-2]=((int)accu[paccu-2])>>((int)accu[paccu-1]);
 								if (((int)accu[paccu-1])>31 || ((int)accu[paccu-1])<-31) {
 									if (!ae->nowarning) {
-										rasm_printf(ae,KWARNING"Warning - shifting %d is architecture dependant, result forced to ZERO\n",(int)accu[paccu-1]);
-															if (ae->erronwarn) MaxError(ae);
+										rasm_printf(ae,KWARNING"[%s:%d] Warning - shifting %d is architecture dependant, result forced to ZERO\n",GetExpFile(ae,didx),GetExpLine(ae,didx),(int)accu[paccu-1]);
+										if (ae->erronwarn) MaxError(ae);
 									}
 									accu[paccu-2]=0;
 								}
@@ -6165,8 +6166,8 @@ printf("final POP string=%X\n",ae->computectx->operatorstack[nboperatorstack+1].
 				case E_COMPUTE_OPERATION_SHL:if (paccu>1) accu[paccu-2]=((int)floor(accu[paccu-2]+0.5))<<((int)floor(accu[paccu-1]+0.5));
 								if (((int)accu[paccu-1])>31 || ((int)accu[paccu-1])<-31) {
 									if (!ae->nowarning) {
-										rasm_printf(ae,KWARNING"Warning - shifting %d is architecture dependant, result forced to ZERO\n",(int)accu[paccu-1]);
-															if (ae->erronwarn) MaxError(ae);
+										rasm_printf(ae,KWARNING"[%s:%d] Warning - shifting %d is architecture dependant, result forced to ZERO\n",GetExpFile(ae,didx),GetExpLine(ae,didx),(int)accu[paccu-1]);
+										if (ae->erronwarn) MaxError(ae);
 									}
 									accu[paccu-2]=0;
 								}
@@ -6174,8 +6175,8 @@ printf("final POP string=%X\n",ae->computectx->operatorstack[nboperatorstack+1].
 				case E_COMPUTE_OPERATION_SHR:if (paccu>1) accu[paccu-2]=((int)floor(accu[paccu-2]+0.5))>>((int)floor(accu[paccu-1]+0.5));
 								if (((int)accu[paccu-1])>31 || ((int)accu[paccu-1])<-31) {
 									if (!ae->nowarning) {
-										rasm_printf(ae,KWARNING"Warning - shifting %d is architecture dependant, result forced to ZERO\n",(int)accu[paccu-1]);
-															if (ae->erronwarn) MaxError(ae);
+										rasm_printf(ae,KWARNING"[%s:%d] Warning - shifting %d is architecture dependant, result forced to ZERO\n",GetExpFile(ae,didx),GetExpLine(ae,didx),(int)accu[paccu-1]);
+										if (ae->erronwarn) MaxError(ae);
 									}
 									accu[paccu-2]=0;
 								}
@@ -18198,6 +18199,7 @@ struct s_assenv *PreProcessing(char *filename, int flux, const char *datain, int
 	char opassign=0;
 	/* incbin bug */
 	int incstartL=0;
+	char *original_filename=NULL;
 
 
 
@@ -18454,20 +18456,42 @@ printf("nbbank=%d initialised\n",ae->nbbank);
 	}
 	/* si on est en ligne de commande ET que le fichier n'est pas trouvé */
 	if (param && param->filename && !FileExists(param->filename)) {
-		char *LTryExtension[]={".asm",".z80",".o",".s",".inc",".src",".dam",".mxm",".txt",
-					".ASM",".Z80",".O",".S",".INC",".SRC",".DAM",".MXM",".TXT","",NULL};
+		char *LTryExtension[]={".asm",".z80",".inc",".src",".dam",".mxm",".txt",
+					".ASM",".Z80",".INC",".SRC",".DAM",".MXM",".TXT",".o",".s",".O",".S","",NULL};
 
 		int iguess=1;
 #if TRACE_PREPRO
 		printf("TRY EXT\n");
 #endif
+		original_filename=TxtStrDup(param->filename);
 		l=strlen(param->filename);
 		param->filename=MemRealloc(param->filename,l+6);
-		/* si le nom du fichier termine par un . on n'ajoute que l'extension, sinon on l'ajoute avec le . */
-		if (param->filename[l-1]=='.') strcat(param->filename,"asm"); else strcat(param->filename,".asm");
+		/* add fake filetype without dot if not present but a dot */
+		if (param->filename[l-1]=='.') {
+			strcat(param->filename,"asm");
+		} else {
+			/* if no filetype at all and no dot, add it */
+			int eidx=l-1;
+			
+			while (eidx) {
+				if (param->filename[eidx]=='.') {
+					param->filename[eidx]=0;
+					break;
+				} else if (param->filename[eidx]=='/' || param->filename[eidx]=='\\') {
+					break;
+				} else {
+					eidx--;
+				}
+			}
+			strcat(param->filename,".asm");
+		}
 
 		while (!FileExists(param->filename) && LTryExtension[iguess]!=NULL) {
-			TxtReplace(param->filename,LTryExtension[iguess-1],LTryExtension[iguess],0); /* no realloc with this */
+			/* no realloc with this BECAUSE every replace is equal or smaller than the previous one */
+			TxtReplace(param->filename,LTryExtension[iguess-1],LTryExtension[iguess],0);
+#if TRACE_PREPRO
+		printf("TRY [%s]\n",param->filename);
+#endif
 			if (!FileExists(param->filename)) {
 				param->filename[l]=0;
 			}
@@ -18477,9 +18501,30 @@ printf("nbbank=%d initialised\n",ae->nbbank);
 	}
 
 	if (param && param->filename && !FileExists(param->filename)) {
-		rasm_printf(ae,"Cannot find file [%s]\n",param->filename);
-		exit(-1802);
+		char *filename_toread;
+		int fileok=0,ilookfile;
+#if TRACE_PREPRO
+		printf("TRY %d include path(s)\n",ae->ipath);
+#endif
+		/* search the very first file into include paths */
+		for (ilookfile=0;ilookfile<ae->ipath && !fileok;ilookfile++) {
+			filename_toread=MergePath(ae,ae->includepath[ilookfile],original_filename);
+#if TRACE_PREPRO
+		printf("TRY [%s]\n",filename_toread);
+#endif
+			if (FileExists(filename_toread)) {
+				fileok=1;
+			}
+		}
+		if (fileok) {
+			filename=TxtStrDup(filename_toread); // overwrite original filename
+		} else {
+			// we tried, we tried, but hey, nothing found!
+			rasm_printf(ae,"Cannot find file [%s]\n",param->filename);
+			exit(-1802);
+		}
 	}
+	if (original_filename) MemFree(original_filename);
 	
 	if (param) rasm_printf(ae,KAYGREEN"Pre-processing [%s]\n",param->filename);
 	for (nbinstruction=0;instruction[nbinstruction].mnemo[0];nbinstruction++);
@@ -20896,10 +20941,14 @@ printf("testing delayed RUN OK\n");
 printf("testing LZ segment relocation OK\n");
 
 #ifndef NOAPULTRA
+#ifndef NO_3RD_PARTIES
 	ret=RasmAssemble(AUTOTEST_MULTILZ,strlen(AUTOTEST_MULTILZ),&opcode,&opcodelen);
 	if (!ret && opcodelen==43 && opcode[3]==6 && opcode[11]==0x1F) {} else {printf("Autotest %03d ERROR (multi-LZ segment relocation with multiple BANK)\n",cpt);exit(-1);}
 	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
 printf("testing multi-LZ segment relocation with multiple banks OK\n");
+#else
+printf("*** multi-LZ segment test disabled as there is no APUltra support for this version ***\n");
+#endif
 #else
 printf("*** multi-LZ segment test disabled as there is no APUltra support for this version ***\n");
 #endif
@@ -20915,11 +20964,12 @@ printf("testing LZ segment + ORG relocation OK\n");
 	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
 printf("testing LZ segment + defered $ OK\n");
 	
+#ifndef NO_3RD_PARTIES
 	ret=RasmAssemble(AUTOTEST_LZ4,strlen(AUTOTEST_LZ4),&opcode,&opcodelen);
 	if (!ret && opcodelen==49 && opcode[0]==0x15 && opcode[4]==0x44 && opcode[0xB]==0xF0) {} else {printf("Autotest %03d ERROR (LZ4 segment)\n",cpt);MiniDump(opcode,opcodelen);exit(-1);}
 	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
 printf("testing LZ4 segment OK\n");
-	
+#endif	
 	ret=RasmAssemble(AUTOTEST_DEFS,strlen(AUTOTEST_DEFS),&opcode,&opcodelen);
 	if (!ret && opcodelen==256 && opcode[0]==0) {} else {printf("Autotest %03d ERROR (defs)\n",cpt);exit(-1);}
 	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
@@ -21414,6 +21464,7 @@ printf("testing INCBIN+offset OK\n");
 	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
 printf("testing INCBIN+size OK\n");
 
+#ifndef NO_3RD_PARTIES
 	ret=RasmAssemble(AUTOTEST_LZ4_A,strlen(AUTOTEST_LZ4_A),&opcode,&opcodelen);
 	if (!ret && opcodelen==544) {} else {printf("Autotest %03d ERROR (INCBIN + LZ4 segment)\n",cpt);MiniDump(opcode,opcodelen);exit(-1);}
 	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
@@ -21441,6 +21492,9 @@ printf("testing LZ4 variant+offset OK\n");
 	if (!ret && i==opcodelen) {} else {printf("Autotest %03d ERROR (LZ4+INCBIN+size)\n",cpt);MiniDump(opcode,opcodelen);exit(-1);}
 	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
 printf("testing LZ4 variant+size OK\n");
+#else
+printf("*** LZ4/LZEXO/LZX0/LZX7tests disabled as there is no 3rd parties support for this version ***\n");
+#endif
 
 	ret=RasmAssemble(AUTOTEST_LZ48_A,strlen(AUTOTEST_LZ48_A),&opcode,&opcodelen);
 	if (!ret && opcodelen==738) {} else {printf("Autotest %03d ERROR (INCBIN + LZ48 segment)\n",cpt);MiniDump(opcode,opcodelen);exit(-1);}
@@ -21498,7 +21552,7 @@ printf("testing LZ49 variant+offset OK\n");
 	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
 printf("testing LZ49 variant+size OK\n");
 
-
+#ifndef NO_3RD_PARTIES
 	ret=RasmAssemble(AUTOTEST_LZEXO_A,strlen(AUTOTEST_LZEXO_A),&opcode,&opcodelen);
 	if (!ret && opcodelen==335) {} else {printf("Autotest %03d ERROR (INCBIN + LZEXO segment)\n",cpt);MiniDump(opcode,opcodelen);exit(-1);}
 	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
@@ -21718,7 +21772,7 @@ printf("testing LZSA2 variant+offset OK\n");
 	if (!ret && i==opcodelen) {} else {printf("Autotest %03d ERROR (LZSA2+INCBIN+size)\n",cpt);MiniDump(opcode,opcodelen);exit(-1);}
 	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
 printf("testing LZSA2 variant+size OK\n");
-
+#endif
 #else
 printf("*** LZAPU and INCAPU   tests disabled as there is no APUltra support for this version ***\n");
 printf("*** LZSA1 and INCLZSA1 tests disabled as there is no LZSA v1 support for this version ***\n");
@@ -22335,11 +22389,15 @@ int ParseOptions(char **argv,int argc, struct s_parameter *param)
 					l=strlen(argv[i]);
 					curpath=MemMalloc(l); /* strlen(path)+2 */
 					strcpy(curpath,argv[i]+2);
+					
 #ifdef OS_WIN
 					if (argv[i][l-1]!='/' && argv[i][l-1]!='\\') strcat(curpath,"\\");
 #else
 					if (argv[i][l-1]!='/' && argv[i][l-1]!='\\') strcat(curpath,"/");
 #endif
+
+printf("curpath=[%s]\n",curpath);
+
 					FieldArrayAddDynamicValueConcat(&param->pathdef,&param->npath,&param->mpath,curpath);
 					MemFree(curpath);
 				} else {
@@ -22428,10 +22486,6 @@ int ParseOptions(char **argv,int argc, struct s_parameter *param)
 					break;
 				}	
 				Usage(1);
-				break;
-		case 'i':
-printf("@@@\n@@@ --> deprecated option, there is no need to use -i option to set input file <--\n@@@\n");
-				Usage(0);
 				break;
 			case 'o':
 				if (argv[i][2] && argv[i][3]) Usage(1);
