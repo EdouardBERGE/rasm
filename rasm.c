@@ -5456,7 +5456,7 @@ if (didx>0 && didx<ae->ie) {
 		strcat(dblvarbuffer,ae->module_separator);
 		strcat(dblvarbuffer,ae->computectx->varbuffer+minusptr+bank);
 
-		/* on essaie toujours de trouver le label du module courant */	
+		/* always try to find label from current module */	
 		curlabel=SearchLabel(ae,dblvarbuffer,GetCRC(dblvarbuffer));
 		MemFree(dblvarbuffer);
 	} else {
@@ -13799,15 +13799,24 @@ void __IFUSED(struct s_assenv *ae) {
 		if ((SearchDico(ae,ae->wl[ae->idx+1].w,crc))!=NULL) {
 			rexpr=1;
 		} else {
-			if ((SearchLabel(ae,ae->wl[ae->idx+1].w,crc))!=NULL) {
+			char *labelmodule=NULL;
+			// first look for module label!
+			if (ae->module) {
+				labelmodule=MemMalloc(ae->modulen+2+strlen(ae->wl[ae->idx+1].w));
+				strcpy(labelmodule,ae->module);
+				strcat(labelmodule,ae->module_separator);
+				strcat(labelmodule,ae->wl[ae->idx+1].w);
+			}
+			if (ae->module && (SearchLabel(ae,labelmodule,GetCRC(labelmodule)))!=NULL) {
+				rexpr=1;
+			} else if ((SearchLabel(ae,ae->wl[ae->idx+1].w,crc))!=NULL) {
+				rexpr=1;
+			} else if ((SearchAlias(ae,crc,ae->wl[ae->idx+1].w))!=-1) {
 				rexpr=1;
 			} else {
-				if ((SearchAlias(ae,crc,ae->wl[ae->idx+1].w))!=-1) {
-					rexpr=1;
-				} else {
-					rexpr=SearchUsed(ae,ae->wl[ae->idx+1].w,crc);
-				}
+				rexpr=SearchUsed(ae,ae->wl[ae->idx+1].w,crc);
 			}
+			if (labelmodule) MemFree(labelmodule);
 		}
 		ifthen.v=rexpr;
 		ifthen.filename=GetCurrentFile(ae);
@@ -13853,19 +13862,26 @@ void __IFDEF(struct s_assenv *ae) {
 		if ((SearchDico(ae,ae->wl[ae->idx+1].w,crc))!=NULL) {
 			rexpr=1;
 		} else {
-			if ((SearchLabel(ae,ae->wl[ae->idx+1].w,crc))!=NULL) {
-				rexpr=1;
-			} else {
-				if ((SearchAlias(ae,crc,ae->wl[ae->idx+1].w))!=-1) {
-					rexpr=1;
-				} else {
-					if (SearchMacro(ae,crc,ae->wl[ae->idx+1].w)>=0) {
-						rexpr=1;
-					} else {
-						rexpr=0;
-					}
-				}
+			char *labelmodule=NULL;
+			// first look for module label!
+			if (ae->module) {
+				labelmodule=MemMalloc(ae->modulen+2+strlen(ae->wl[ae->idx+1].w));
+				strcpy(labelmodule,ae->module);
+				strcat(labelmodule,ae->module_separator);
+				strcat(labelmodule,ae->wl[ae->idx+1].w);
 			}
+			if (labelmodule && (SearchLabel(ae,labelmodule,GetCRC(labelmodule)))!=NULL) {
+				rexpr=1;
+			} else if ((SearchLabel(ae,ae->wl[ae->idx+1].w,crc))!=NULL) {
+				rexpr=1;
+			} else if ((SearchAlias(ae,crc,ae->wl[ae->idx+1].w))!=-1) {
+					rexpr=1;
+			} else if (SearchMacro(ae,crc,ae->wl[ae->idx+1].w)>=0) {
+					rexpr=1;
+			} else {
+				rexpr=0;
+			}
+			if (labelmodule) MemFree(labelmodule);
 		}
 		ifthen.v=rexpr;
 		ifthen.filename=GetCurrentFile(ae);
@@ -13894,27 +13910,32 @@ void __IFDEF_light(struct s_assenv *ae) {
 void __IFNDEF(struct s_assenv *ae) {
 	struct s_ifthen ifthen={0};
 	int rexpr,crc;
-
-
 	
 	if (!ae->wl[ae->idx].t && ae->wl[ae->idx+1].t==1) {
 		crc=GetCRC(ae->wl[ae->idx+1].w);
 		if ((SearchDico(ae,ae->wl[ae->idx+1].w,crc))!=NULL) {
 			rexpr=0;
 		} else {
-			if ((SearchLabel(ae,ae->wl[ae->idx+1].w,crc))!=NULL) {
+			char *labelmodule=NULL;
+			// first look for module label!
+			if (ae->module) {
+				labelmodule=MemMalloc(ae->modulen+2+strlen(ae->wl[ae->idx+1].w));
+				strcpy(labelmodule,ae->module);
+				strcat(labelmodule,ae->module_separator);
+				strcat(labelmodule,ae->wl[ae->idx+1].w);
+			}
+			if (ae->module && (SearchLabel(ae,labelmodule,GetCRC(labelmodule)))!=NULL) {
+				rexpr=0;
+			} else if ((SearchLabel(ae,ae->wl[ae->idx+1].w,crc))!=NULL) {
+				rexpr=0;
+			} else if ((SearchAlias(ae,crc,ae->wl[ae->idx+1].w))!=-1) {
+					rexpr=0;
+			} else if (SearchMacro(ae,crc,ae->wl[ae->idx+1].w)>=0) {
 				rexpr=0;
 			} else {
-				if ((SearchAlias(ae,crc,ae->wl[ae->idx+1].w))!=-1) {
-					rexpr=0;
-				} else {
-					if (SearchMacro(ae,crc,ae->wl[ae->idx+1].w)>=0) {
-						rexpr=0;
-					} else {
-						rexpr=1;
-					}
-				}
+				rexpr=1;
 			}
+			if (labelmodule) MemFree(labelmodule);
 		}
 		ifthen.v=rexpr;
 		ifthen.filename=GetCurrentFile(ae);
@@ -20396,6 +20417,13 @@ int RasmAssembleInfoParam(const char *datain, int lenin, unsigned char **dataout
 
 #define AUTOTEST_INTORAM1 " buildsna : bankset 0 :  org #3FF8 : defb 'roudoudou in da house' "
 
+#define AUTOTEST_DEFMOD "nbt=0: module preums: label1 nop: label3: label4: ifdef label1:nbt+=1:endif: ifdef label3:nbt+=1:endif:"\
+"ifdef label4:nbt+=1:endif: ifndef label5:nbt+=1:endif: module deuze: label1 nop: label3: label5: ifdef label1:nbt+=1:endif:"\
+"ifdef label3:nbt+=1:endif: ifndef label4:nbt+=1:endif: ifdef label5:nbt+=1:endif: assert nbt==8:"\
+"module grouik: plop: ifused plop : glop=1 : endif:assert glop==1"
+
+
+
 struct s_autotest_keyword {
 	char *keywordtest;
 	int result;
@@ -21159,6 +21187,11 @@ printf("testing modules + proximity (bis) OK\n");
 	if (!ret) {} else {printf("Autotest %03d ERROR (modules 3)\n",cpt);exit(-1);}
 	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
 printf("testing modules + endmodule OK\n");
+
+	ret=RasmAssemble(AUTOTEST_DEFMOD,strlen(AUTOTEST_DEFMOD),&opcode,&opcodelen);
+	if (!ret) {} else {printf("Autotest %03d ERROR (modules & IFDEF)\n",cpt);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing modules + IFDEF OK\n");
 
 	ret=RasmAssemble(AUTOTEST_PROXIM,strlen(AUTOTEST_PROXIM),&opcode,&opcodelen);
 	if (!ret && opcode[1]==3) {} else {printf("Autotest %03d ERROR (proximity labels)\n",cpt);exit(-1);}
