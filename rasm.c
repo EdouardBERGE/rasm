@@ -95,20 +95,32 @@ int MAX_OFFSET_ZX0=32640;
 #include"lz4.h"
 #include"exomizer.h"
 
+void zx0_reverse(unsigned char *first, unsigned char *last) {
+    unsigned char c;
+
+    while (first < last) {
+        c = *first;
+        *first++ = *last;
+        *last-- = c;
+    }
+}
+
 typedef struct block_t {
     struct block_t *chain;
     struct block_t *ghost_chain;
     int bits;
     int index;
     int offset;
-    int length;
     int references;
 } BLOCK;
 
-BLOCK *allocate(int bits, int index, int offset, int length, BLOCK *chain);
+BLOCK *allocate(int bits, int index, int offset, BLOCK *chain);
+
 void assign(BLOCK **ptr, BLOCK *chain);
+
 BLOCK *zx0_optimize(unsigned char *input_data, int input_size, int skip, int offset_limit);
-unsigned char *zx0_compress(BLOCK *optimal, unsigned char *input_data, int input_size, int skip, int backwards_mode, int *output_size, int *delta);
+
+unsigned char *zx0_compress(BLOCK *optimal, unsigned char *input_data, int input_size, int skip, int backwards_mode, int invert_mode, int *output_size, int *delta);
 
 #endif
 
@@ -15453,7 +15465,7 @@ if (curhexbin->crunch) printf("CRUNCHED! (%d)\n",curhexbin->crunch);
 									int delta,slzlen;
 
 									if (outputidx>=1024 && MAX_OFFSET_ZX0>5000) rasm_printf(ae,KWARNING"ZX0 is crunching %.1fkb this may take a while, be patient...\n",outputidx/1024.0);
-									newdata=zx0_compress(zx0_optimize(outputdata, outputidx, 0, MAX_OFFSET_ZX0), outputdata, outputidx, 0, 0, &slzlen, &delta);
+									newdata=zx0_compress(zx0_optimize(outputdata, outputidx, 0, MAX_OFFSET_ZX0), outputdata, outputidx, 0, 0, 1, &slzlen, &delta);
 									outputidx=slzlen;
 									MemFree(outputdata);
 									outputdata=newdata;
@@ -15467,7 +15479,9 @@ if (curhexbin->crunch) printf("CRUNCHED! (%d)\n",curhexbin->crunch);
 									int delta,slzlen;
 
 									if (outputidx>=1024 && MAX_OFFSET_ZX0>5000) rasm_printf(ae,KWARNING"ZX0 is crunching %.1fkb this may take a while, be patient...\n",outputidx/1024.0);
-									newdata=zx0_compress(zx0_optimize(outputdata, outputidx, 0, MAX_OFFSET_ZX0), outputdata, outputidx, 0, 1, &slzlen, &delta);
+									zx0_reverse(outputdata,outputdata+outputidx-1);
+									newdata=zx0_compress(zx0_optimize(outputdata, outputidx, 0, MAX_OFFSET_ZX0), outputdata, outputidx, 0, 1, 0,&slzlen, &delta);
+        								zx0_reverse(newdata,newdata+slzlen-1);
 									outputidx=slzlen;
 									MemFree(outputdata);
 									outputdata=newdata;
@@ -16578,14 +16592,16 @@ printf("Crunch LZ[%d] (%d) %s\n",i,ae->lzsection[i].lzversion,ae->lzsection[i].l
 						case 70:
 							#ifndef NO_3RD_PARTIES
 							if (input_size>=1024 && MAX_OFFSET_ZX0>5000) rasm_printf(ae,KWARNING"ZX0 is crunching %.1fkb this may take a while, be patient...\n",input_size/1024.0);
-							lzdata=zx0_compress(zx0_optimize(input_data, input_size, 0, MAX_OFFSET_ZX0), input_data, input_size, 0, 0, &slzlen, &delta);
+							lzdata=zx0_compress(zx0_optimize(input_data, input_size, 0, MAX_OFFSET_ZX0), input_data, input_size, 0, 0, 1,&slzlen, &delta);
 							lzlen=slzlen;
 							#endif
 							break;
 						case 71:
 							#ifndef NO_3RD_PARTIES
 							if (input_size>=1024 && MAX_OFFSET_ZX0>5000) rasm_printf(ae,KWARNING"ZX0 is crunching %.1fkb this may take a while, be patient...\n",input_size/1024.0);
-							lzdata=zx0_compress(zx0_optimize(input_data, input_size, 0, MAX_OFFSET_ZX0), input_data, input_size, 0, 1, &slzlen, &delta);
+							zx0_reverse(input_data,input_data+input_size-1);
+							lzdata=zx0_compress(zx0_optimize(input_data, input_size, 0, MAX_OFFSET_ZX0), input_data, input_size, 0, 1, 0,&slzlen, &delta);
+       							zx0_reverse(lzdata,lzdata+slzlen-1);
 							lzlen=slzlen;
 							#endif
 							break;
