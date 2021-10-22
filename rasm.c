@@ -204,6 +204,7 @@ struct s_parameter {
 	int noampersand;
 	int cprinfo;
 	char module_separator;
+	int enforce_symbol_case;
 };
 
 
@@ -914,6 +915,8 @@ struct s_assenv {
 	int lastgloballabellen, lastglobalalloc;
 	char **globalstack; /* retrieve back global from previous scope */
 	int igs,mgs;
+	char *source_bigbuffer;
+	int source_bigbuffer_len;
 	/* repeat */
 	struct s_repeat *repeat;
 	int ir,mr;
@@ -1001,6 +1004,7 @@ struct s_assenv {
 	int stop;
 	int warn_unused;
 	int display_stats;
+	int enforce_symbol_case;
 	/* debug */
 	struct s_rasm_info debug;
 	struct s_rasm_info **retdebug;
@@ -1301,7 +1305,7 @@ unsigned char *_internal_readbinaryfile(char *filename, int *filelength)
         }
         return binary_data;
 }
-char **_internal_readtextfile(char *filename, char replacechar)
+char **_internal_readtextfile(struct s_assenv *ae,char *filename, char replacechar)
 {
         #undef FUNC
         #define FUNC "_internal_readtextfile"
@@ -1344,12 +1348,23 @@ char **_internal_readtextfile(char *filename, char replacechar)
         } else {
                 lines_buffer[nb_lines]=NULL;
         }
+
+	if (ae->enforce_symbol_case && replacechar==':') {
+		// realloc
+		ae->source_bigbuffer=MemRealloc(ae->source_bigbuffer,ae->source_bigbuffer_len+file_size+1);
+		// copy
+		memcpy(ae->source_bigbuffer+ae->source_bigbuffer_len,bigbuffer,file_size);
+		// next
+		ae->source_bigbuffer_len+=file_size;
+		// security terminator
+		ae->source_bigbuffer[ae->source_bigbuffer_len]=0;
+	}
         MemFree(bigbuffer);
         return lines_buffer;
 }
 
-#define FileReadLines(filename) _internal_readtextfile(filename,':')
-#define FileReadLinesRAW(filename) _internal_readtextfile(filename,0x0D)
+#define FileReadLines(ae,filename) _internal_readtextfile(ae,filename,':')
+#define FileReadLinesRAW(ae,filename) _internal_readtextfile(ae,filename,0x0D)
 #define FileReadContent(filename,filesize) _internal_readbinaryfile(filename,filesize)
 
 
@@ -2554,6 +2569,8 @@ void FreeAssenv(struct s_assenv *ae)
 	}
 	/*** end debug ***/
 
+	if (ae->source_bigbuffer_len) MemFree(ae->source_bigbuffer);
+
 	for (i=0;i<ae->nbbank;i++) {
 		MemFree(ae->mem[i]);
 	}
@@ -2705,7 +2722,7 @@ void MaxError(struct s_assenv *ae)
 	if (ae->extended_error && ae->wl) {
 		/* super dupper slow but anyway, there is an error... */
 		if (ae->wl[ae->idx].l) {
-			source_lines=FileReadLinesRAW(GetCurrentFile(ae));
+			source_lines=FileReadLinesRAW(ae,GetCurrentFile(ae));
 			zeline=0;
 			while (zeline<ae->wl[ae->idx].l-1 && source_lines[zeline]) zeline++;
 			if (zeline==ae->wl[ae->idx].l-1 && source_lines[zeline]) {
@@ -17657,6 +17674,50 @@ printf("output files\n");
 				rasm_printf(ae,KIO"Write symbol file %s\n",TMP_filename);
 			}
 
+			if (ae->enforce_symbol_case) {
+				char *casefound;
+				int caselen;
+				for (i=0;i<ae->il;i++) {
+					if (ae->label[i].autorise_export) {
+						if (!ae->label[i].name) {
+							// stristr => ae->wl[ae->label[i].iw].w
+							casefound=stristr(ae->source_bigbuffer,ae->wl[ae->label[i].iw].w);
+							if (casefound) {
+								caselen=strlen(ae->wl[ae->label[i].iw].w);
+								strncpy(ae->wl[ae->label[i].iw].w,casefound,caselen);
+							}
+						} else if (ae->export_local || !ae->label[i].local) {
+							int caseidx,casestart;
+							char casecharbackup;
+							int notlocal=1;
+
+							// trim digits in any case
+							caselen=strlen(ae->label[i].name);
+							caseidx=caselen-1;
+							while (ae->label[i].name[caseidx]>='0' && ae->label[i].name[caseidx]<='9') caseidx--;
+
+							// remove RWM pattern
+							if (ae->label[i].name[0]=='@') {
+								while (ae->label[i].name[caseidx]!='R' && caseidx) caseidx--; // we MUST found a 'R'
+								notlocal=0;
+							}
+
+							// stristr => ae->label[i].name
+							casecharbackup=ae->label[i].name[caseidx];
+							ae->label[i].name[caseidx]=0;
+							casefound=stristr(ae->source_bigbuffer,ae->label[i].name);
+							ae->label[i].name[caseidx]=casecharbackup;
+
+							//printf("[%s] => ",ae->label[i].name);
+							if (casefound) {
+								strncpy(ae->label[i].name,casefound,caseidx+notlocal);
+							}
+							//printf("[%s]\n",ae->label[i].name);
+						}
+					}
+				}
+			}
+
 			switch (ae->export_sym) {
 				case 5:
 					/* ZX export */
@@ -17823,7 +17884,7 @@ printf("output files\n");
 								sprintf(symbol_line,"%s #%X B%d\n",ae->wl[ae->label[i].iw].w,ae->label[i].ptr,ae->label[i].ibank>31?0:ae->label[i].ibank);
 								FileWriteLine(TMP_filename,symbol_line);
 							} else {
-								if (ae->export_local) {
+								if (ae->export_local || !ae->label[i].local) {
 									sprintf(symbol_line,"%s #%X B%d\n",ae->label[i].name,ae->label[i].ptr,ae->label[i].ibank>31?0:ae->label[i].ibank);
 									FileWriteLine(TMP_filename,symbol_line);
 								}
@@ -18305,6 +18366,7 @@ printf("paramz 1\n");
 		ae->checkmode=param->checkmode;
 		ae->noampersand=param->noampersand;
 		ae->module_separator[0]=param->module_separator;
+		ae->enforce_symbol_case=param->enforce_symbol_case;
 		if (param->rough) ae->maxam=0; else ae->maxam=1;
 		/* additional symbols */
 		for (i=0;i<param->nsymb;i++) {
@@ -18415,7 +18477,7 @@ printf("paramz\n");
 			rasm_printf(ae,"Label import from [%s]\n",param->labelfilename[j]);
 			ae->label_filename=param->labelfilename[j];
 			ae->label_line=1;
-			labelines=FileReadLines(param->labelfilename[j]);
+			labelines=FileReadLines(ae,param->labelfilename[j]);
 			i=0;
 			while (labelines[i]) {
 				/* upper case */
@@ -18596,7 +18658,7 @@ printf("-read/flux\n");
 #endif
 
 	if (!ae->flux) {
-		zelines=FileReadLines(filename);
+		zelines=FileReadLines(ae,filename);
 		FieldArrayAddDynamicValueConcat(&ae->filename,&ae->ifile,&ae->maxfile,filename);
 	} else {
 		int flux_nblines=0;
@@ -18633,7 +18695,7 @@ if (flux_nblines<50) printf("%02d[%s]\n",flux_nblines,zelines[flux_nblines]);
 		/* terminator */
 		zelines[flux_nblines]=NULL;
 
-		/* en mode flux on prend le repertoire courant en reference */
+		/* with embedded Rasm we set the current directory of the caller as reference */
 		FieldArrayAddDynamicValueConcat(&ae->filename,&ae->ifile,&ae->maxfile,CURRENT_DIR);
 	}	
 
@@ -18663,6 +18725,12 @@ printf("-comz/include\n");
 
 	waiting_quote=quote_type=0;
 
+	/************************************************************************************/
+	/************************************************************************************/
+	/* simplify case, carriage return and some tricky quotes ****************************/
+	/* also do all sources and binaries includes ****************************************/
+	/************************************************************************************/
+	/************************************************************************************/
 	l=idx=0;
 	while (l<ilisting) {
 
@@ -18848,7 +18916,7 @@ if (!idx) printf("[%s]\n",listing[l].listing);
 							#endif
 							
 							/* lecture */
-							listing_include=FileReadLines(filename_toread);
+							listing_include=FileReadLines(ae,filename_toread);
 							FieldArrayAddDynamicValueConcat(&ae->filename,&ae->ifile,&ae->maxfile,filename_toread);
 							/* virer les commentaires + pré-traitement */
 							EarlyPrepSrc(ae,listing_include,ae->filename[ae->ifile-1]);
@@ -22130,6 +22198,7 @@ void Usage(int help)
 		printf("-ss export symbols in the snapshot (SYMB chunk for ACE)\n");
 		printf("-sc <format> export symbols with source code convention\n");
 		printf("-sm export symbol in multiple files (one per bank)\n");
+		printf("-ec export symbols with original case\n");
 		printf("-l  <labelfile> import symbol file (winape,pasmo,rasm)\n");
 		printf("-eb export breakpoints\n");
 		printf("-wu warn for unused symbols (alias, var or label)\n");
@@ -22414,6 +22483,8 @@ int ParseOptions(char **argv,int argc, struct s_parameter *param)
 	} else if (strcmp(argv[i],"-dams")==0) {
 	} else if (strcmp(argv[i],"-void")==0) {
 		param->macrovoid=1;
+	} else if (strcmp(argv[i],"-ec")==0) {
+		param->enforce_symbol_case=1;
 	} else if (strcmp(argv[i],"-xr")==0) {
 		param->extended_error=1;
 	} else if (strcmp(argv[i],"-eo")==0) {
