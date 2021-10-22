@@ -21731,7 +21731,7 @@ printf("testing LZX0 variant+size OK\n");
 
 
 	ret=RasmAssemble(AUTOTEST_LZX0B_A,strlen(AUTOTEST_LZX0B_A),&opcode,&opcodelen);
-	if (!ret && opcodelen==384) {} else {printf("Autotest %03d ERROR (INCBIN + LZX0B segment)\n",cpt);MiniDump(opcode,opcodelen);exit(-1);}
+	if (!ret && opcodelen==386) {} else {printf("Autotest %03d ERROR (INCBIN + LZX0B segment)\n",cpt);MiniDump(opcode,opcodelen);exit(-1);}
 	i=opcodelen;
 	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
 printf("testing INCBIN + LZX0B segment OK\n");
