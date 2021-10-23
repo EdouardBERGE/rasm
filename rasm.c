@@ -197,12 +197,13 @@ struct s_parameter {
 	char *rom_name;
 	char *tape_name;
 	char *breakpoint_name;
+	char *cprinfo_name;
 	char **symboldef;
 	int nsymb,msymb;
 	char **pathdef;
 	int npath,mpath;
 	int noampersand;
-	int cprinfo;
+	int cprinfo,cprinfoexport;
 	char module_separator;
 	int enforce_symbol_case;
 };
@@ -859,7 +860,8 @@ struct s_assenv {
 	unsigned char **mem;
 	int iwnamebank[BANK_MAX_NUMBER];
 	int nbbank,maxbank;
-	int forcetape,forcezx,forcecpr,forceROM,forceROMconcat,bankmode,activebank,amsdos,forcesnapshot,packedbank,extendedCPR,xpr,cprinfo;
+	int forcetape,forcezx,forcecpr,forceROM,forceROMconcat,bankmode,activebank,amsdos,forcesnapshot,packedbank,extendedCPR,xpr,cprinfo,cprinfo_export;
+	char *cprinfo_filename;
 	struct s_snapshot snapshot;
 	struct s_zxsnapshot zxsnapshot;
 	int bankset[BANK_MAX_NUMBER>>2];   /* 64K selected flag */
@@ -16893,6 +16895,40 @@ printf("output files\n");
 	
 		if (ae->nbsave==0 || ae->forcecpr || ae->forcesnapshot || ae->forceROM || ae->forcetape) {
 			/*********************************************
+			              ROM LABEL EXPORT
+			*********************************************/
+			char cprinfo_filename[PATH_MAX];
+			char cprinfo_line[1024];
+
+			if (ae->cprinfo_export) {
+				for (i=maxrom=0;i<ae->io;i++) {
+					if (ae->orgzone[i].ibank<256 && ae->orgzone[i].ibank>maxrom) maxrom=ae->orgzone[i].ibank;
+				}
+				if (ae->cprinfo_filename) {
+					sprintf(cprinfo_filename,"%s",ae->cprinfo_filename);
+				} else {
+					sprintf(cprinfo_filename,"%s.rom_labels",ae->outputfilename);
+				}
+				FileRemoveIfExists(cprinfo_filename);
+				rasm_printf(ae,KIO"Write ROM label file %s\n",cprinfo_filename);
+
+				for (i=0;i<=maxrom && i<BANK_MAX_NUMBER;i++) {
+					int lm;
+					if (ae->iwnamebank[i]>0) {
+						lm=strlen(ae->wl[ae->iwnamebank[i]].w)-2;
+						if (lm) {
+							snprintf(cprinfo_line,sizeof(cprinfo_line),"%d: %-*.*s\n",i,lm,lm,ae->wl[ae->iwnamebank[i]].w+1);
+							FileWriteLine(cprinfo_filename,cprinfo_line);
+						}
+					} else {
+						sprintf(cprinfo_line,"%d:\n",i);
+						FileWriteLine(cprinfo_filename,cprinfo_line);
+					}
+				}
+				FileWriteLineClose(cprinfo_filename);
+			}
+
+			/*********************************************
 			**********************************************
 			               C A R T R I D G E
 			**********************************************
@@ -16901,7 +16937,7 @@ printf("output files\n");
 				char ChunkName[32];
 				int ChunkSize;
 				unsigned char chunk_endian;
-				
+			
 				if (ae->cartridge_name) {
 					sprintf(TMP_filename,"%s",ae->cartridge_name);
 				} else {
@@ -18351,6 +18387,8 @@ printf("paramz 1\n");
 		}
 		ae->xpr=param->xpr;
 		ae->cprinfo=param->cprinfo;
+		ae->cprinfo_export=param->cprinfoexport;
+		ae->cprinfo_filename=param->cprinfo_name;
 		ae->maxerr=param->maxerr;
 		ae->extended_error=param->extended_error;
 		ae->nowarning=param->nowarning;
@@ -22180,6 +22218,7 @@ void Usage(int help)
 		printf("-or <ROM filename(s)>    choose a radix filename for ROM output\n");
 		printf("-ob <binary filename>    choose a full filename for binary output\n");
 		printf("-oc <cartridge filename> choose a full filename for cartridge output\n");
+		printf("-ol <ROM label filename> choose a full filename for ROM label output\n");
 		printf("-oi <snapshot filename>  choose a full filename for snapshot output\n");
 		printf("-os <symbol filename>    choose a full filename for symbol output\n");
 		printf("-ot <tape filename>      choose a full filename for tape output\n");
@@ -22199,6 +22238,7 @@ void Usage(int help)
 		printf("-sc <format> export symbols with source code convention\n");
 		printf("-sm export symbol in multiple files (one per bank)\n");
 		printf("-ec export symbols with original case\n");
+		printf("-er export ROM labels\n");
 		printf("-l  <labelfile> import symbol file (winape,pasmo,rasm)\n");
 		printf("-eb export breakpoints\n");
 		printf("-wu warn for unused symbols (alias, var or label)\n");
@@ -22485,6 +22525,8 @@ int ParseOptions(char **argv,int argc, struct s_parameter *param)
 		param->macrovoid=1;
 	} else if (strcmp(argv[i],"-ec")==0) {
 		param->enforce_symbol_case=1;
+	} else if (strcmp(argv[i],"-er")==0) {
+		param->cprinfoexport=1;
 	} else if (strcmp(argv[i],"-xr")==0) {
 		param->extended_error=1;
 	} else if (strcmp(argv[i],"-eo")==0) {
@@ -22637,6 +22679,13 @@ printf("curpath=[%s]\n",curpath);
 					case 'i':
 						if (i+1<argc && param->snapshot_name==NULL) {
 							param->snapshot_name=argv[++i];
+							break;
+						}
+						Usage(1);
+						break;
+					case 'l':
+						if (i+1<argc && param->cprinfo_name==NULL) {
+							param->cprinfo_name=argv[++i];
 							break;
 						}
 						Usage(1);
