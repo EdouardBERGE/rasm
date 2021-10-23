@@ -1,5 +1,5 @@
 CC=gcc
-EXEC=rasm.exe
+EXEC=rasm
 
 CFLAGS=-lm -march=native -o $(EXEC) -w
 CFLAGS_OPT = $(CFLAGS) -O2
