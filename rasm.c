@@ -8281,6 +8281,10 @@ void PopAllSave(struct s_assenv *ae)
 			if (ae->save[is].amsdos) {
 				AmsdosHeader=MakeAMSDOSHeader(run,offset,offset+size,MakeAMSDOS_name(ae,filename));
 				FileWriteBinary(filename,(char *)AmsdosHeader,128);
+			} else if (ae->save[is].hobeta) {
+				// HOBETA header is 17 bytes long so i reuse Amsdos buffer and name cleaning
+				AmsdosHeader=MakeHobetaHeader(offset,offset+size,MakeAMSDOS_name(ae,filename));
+				FileWriteBinary(filename,(char *)AmsdosHeader,17);
 			}		
 			FileWriteBinary(filename,(char*)ae->mem[ae->save[is].ibank]+offset,size);
 			FileWriteBinaryClose(filename);
@@ -17638,10 +17642,13 @@ printf("output files\n");
 						/***************************************************************
 						*      F I L E    o u t p u t                                  *
 						***************************************************************/
-								rasm_printf(ae,KIO"Write binary file %s (%d byte%s)\n",TMP_filename,maxmem-minmem,maxmem-minmem>1?"s":"");
+								rasm_printf(ae,KIO"Write binary file %s (%d byte%s)",TMP_filename,maxmem-minmem,maxmem-minmem>1?"s":"");
 								if (ae->amsdos) {
 									AmsdosHeader=MakeAMSDOSHeader(minmem,minmem,maxmem,TMP_filename); //@@TODO
 									FileWriteBinary(TMP_filename,(char *)AmsdosHeader,128);
+									rasm_printf(ae," (automatic Amsdos header)\n");
+								} else {
+									rasm_printf(ae,"\n");
 								}
 								if (maxmem-minmem>0) {
 									FileWriteBinary(TMP_filename,(char*)ae->mem[lastspaceid]+minmem,maxmem-minmem);
