@@ -129,7 +129,7 @@ size_t strnlen (s, maxlen)
 char *stristr(const char *String, const char *Pattern)
 {
       char *pptr, *sptr, *start;
-      uint  slen, plen;
+      unsigned int  slen, plen;
 
       for (start = (char *)String,
            pptr  = (char *)Pattern,
