@@ -1,6 +1,6 @@
 #define PROGRAM_NAME      "RASM"
-#define PROGRAM_VERSION   "1.5"
-#define PROGRAM_DATE      "xx/07/2021"
+#define PROGRAM_VERSION   "1.6"
+#define PROGRAM_DATE      "xx/11/2021"
 #define PROGRAM_COPYRIGHT "© 2017 BERGE Edouard / roudoudou from Resistance"
 
 #define RASM_VERSION PROGRAM_NAME" v"PROGRAM_VERSION" (build "PROGRAM_DATE")"
@@ -16061,6 +16061,17 @@ int IsDirective(char *zeexpression)
 	return 0;
 }
 
+int SkipLabelPatern(char *label, int caseidx) {
+	// skip RWM pattern for macro
+	if (label[0]=='@') {
+		caseidx--;
+		while (label[caseidx]!='R') caseidx--; // we MUST found a 'R'
+	} else {
+		// or trim ending digits
+		while (caseidx && label[caseidx-1]>='0' && label[caseidx-1]<='9') caseidx--;
+	}
+	return caseidx;
+}
 
 int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s_rasm_info **debug)
 {
@@ -17732,30 +17743,50 @@ printf("output files\n");
 						} else if (ae->export_local || !ae->label[i].local) {
 							int caseidx,casestart;
 							char casecharbackup;
-							int notlocal=1;
 
-							// trim digits in any case
 							caselen=strlen(ae->label[i].name);
-							caseidx=caselen-1;
-							while (ae->label[i].name[caseidx]>='0' && ae->label[i].name[caseidx]<='9') caseidx--;
+							caseidx=SkipLabelPatern(ae->label[i].name,caselen);
 
-							// remove RWM pattern
-							if (ae->label[i].name[0]=='@') {
-								while (ae->label[i].name[caseidx]!='R' && caseidx) caseidx--; // we MUST found a 'R'
-								notlocal=0;
+							// is there any chance for proximity label?
+							if (strchr(ae->label[i].name,'.')!=NULL) {
+								char **splitlabel;
+								int isplit;
+
+								splitlabel=TxtSplitWithChar(ae->label[i].name,'.');
+
+								// reset label
+								strcpy(ae->label[i].name,"");
+								// process all parts the same way
+								for (isplit=0;splitlabel[isplit];isplit++) {
+									caseidx=SkipLabelPatern(splitlabel[isplit],strlen(splitlabel[isplit]));
+									casecharbackup=splitlabel[isplit][caseidx];
+									splitlabel[isplit][caseidx]=0;
+									casefound=stristr(ae->source_bigbuffer,splitlabel[isplit]);
+									splitlabel[isplit][caseidx]=casecharbackup;
+
+								//printf("n[%s] => ",splitlabel[isplit]);
+									if (casefound) {
+										strncpy(splitlabel[isplit],casefound,caseidx);
+									}
+								//printf("n[%s]\n",splitlabel[isplit]);
+									// once case is back, we need to push it on the full label
+									if (isplit) strcat(ae->label[i].name,".");
+									strcat(ae->label[i].name,splitlabel[isplit]);
+								//printf("n[%s]\n",ae->label[i].name);
+								}
+
+								//printf("[%s]\n",ae->label[i].name);
+								FreeFields(splitlabel);
+							} else {
+								casecharbackup=ae->label[i].name[caseidx];
+								ae->label[i].name[caseidx]=0;
+								casefound=stristr(ae->source_bigbuffer,ae->label[i].name);
+								ae->label[i].name[caseidx]=casecharbackup;
+
+								if (casefound) {
+									strncpy(ae->label[i].name,casefound,caseidx);
+								}
 							}
-
-							// stristr => ae->label[i].name
-							casecharbackup=ae->label[i].name[caseidx];
-							ae->label[i].name[caseidx]=0;
-							casefound=stristr(ae->source_bigbuffer,ae->label[i].name);
-							ae->label[i].name[caseidx]=casecharbackup;
-
-							//printf("[%s] => ",ae->label[i].name);
-							if (casefound) {
-								strncpy(ae->label[i].name,casefound,caseidx+notlocal);
-							}
-							//printf("[%s]\n",ae->label[i].name);
 						}
 					}
 				}
@@ -18308,6 +18339,7 @@ struct s_assenv *PreProcessing(char *filename, int flux, const char *datain, int
 	char **listing_include=NULL;
 	int i,j,l=0,idx=0,c=0,li,le;
 	char Automate[256]={0};
+	char AutomatePrepro[256]={0};
 	struct s_hexbin curhexbin;
 	char *newlistingline=NULL;
 	struct s_label curlabel={0};
@@ -18676,6 +18708,9 @@ printf("nbbank=%d initialised\n",ae->nbbank);
 	for (i=0;i<256;i++) { ae->fastmatch[i]=-1; }
 	for (i=0;i<nbinstruction;i++) { if (ae->fastmatch[(int)instruction[i].mnemo[0]]==-1) ae->fastmatch[(int)instruction[i].mnemo[0]]=i; } 
 	for (i=0;CharWord[i];i++) {Automate[((int)CharWord[i])&0xFF]=1;}
+	for (i=0;i<256;i++) {
+		if (((i>='A' && i<='Z') || (i>='0' && i<='9') || i=='@' || i=='_') && !quote_type) AutomatePrepro[i]=1; else AutomatePrepro[i]=0;
+	}
 	 /* separators */
 	Automate[' ']=2;
 	Automate[',']=2;
@@ -18788,15 +18823,30 @@ if (!idx) printf("[%s]\n",listing[l].listing);
 			l++;
 			idx=0;
 			continue;
-		} else if (c=='\\' && !waiting_quote) {
+		}
+		if (c=='\\' && !waiting_quote) {
 			idx++;
 			continue;
-		} else if (c==0x0D || c==0x0A) {
+		}
+		
+		if (c==0x0D || c==0x0A) {
 			listing[l].listing[idx-1]=':';
 			c=':';
-		} else if (c=='\'' && idx>2 && strncmp(&listing[l].listing[idx-3],"AF'",3)==0) {
-			/* rien */
-		} else if (c=='"' || c=='\'') {
+		} else if (c=='\'') {
+			// test this only if there is a single quote
+		       	if (idx>2 && strncmp(&listing[l].listing[idx-3],"AF'",3)==0) {
+				/* nothing */
+			} else {
+				if (!quote_type) {
+					quote_type=c;
+					lquote=l;
+				} else {
+					if (c==quote_type) {
+						quote_type=0;
+					}
+				}
+			}
+		} else if (c=='"') {
 			if (!quote_type) {
 				quote_type=c;
 				lquote=l;
@@ -19005,7 +19055,8 @@ if (!idx) printf("[%s]\n",listing[l].listing);
 			/* classic behaviour */
 
 			/* looking for include/incbin */
-			if (((c>='A' && c<='Z') || (c>='0' && c<='9') || c=='@' || c=='_')&& !quote_type) {
+			//if (((c>='A' && c<='Z') || (c>='0' && c<='9') || c=='@' || c=='_')&& !quote_type) {
+			if (AutomatePrepro[((int)c)&0xFF] && !quote_type) {
 				bval[ival++]=c;
 				StateMachineResizeBuffer(&bval,ival,&sval);
 				bval[ival]=0;
@@ -19309,15 +19360,28 @@ printf("c='%c' automate[c]=%d\n",c>31?c:'.',Automate[((int)c)&0xFF]);
 					exit(1);
 					break;
 				case 1:
-					if (c=='\'' && idx>2 && strncmp(&listing[l].listing[idx-3],"AF'",3)==0) {
-						w[lw++]=c;
-						StateMachineResizeBuffer(&w,lw,&mw);
-						w[lw]=0;
-						break;
-					} else if (c=='\'' || c=='"') {
+					if (c=='\'') {
+						if (idx>2 && strncmp(&listing[l].listing[idx-3],"AF'",3)==0) {
+							w[lw++]=c;
+							StateMachineResizeBuffer(&w,lw,&mw);
+							w[lw]=0;
+							break;
+						}
 						quote_type=c;
-						/* debut d'une quote, on finalise le mot -> POURQUOI DONC? */
-						//idx--;
+#if TRACE_PREPRO
+printf("quote\n");
+#endif
+						/* on finalise le mot si on est en début d'une nouvelle instruction ET que c'est un SAVE */
+						if (strcmp(w,"SAVE")==0) {
+							idx--;
+						} else {
+							w[lw++]=c;
+							StateMachineResizeBuffer(&w,lw,&mw);
+							w[lw]=0;
+							break;
+						}
+					} else if (c=='"') {
+						quote_type=c;
 #if TRACE_PREPRO
 printf("quote\n");
 #endif
@@ -20622,6 +20686,7 @@ struct s_autotest_keyword autotest_keyword[]={
 	{"ccf ccf",1},{"ccf 0",1},{"ccf (hl)",1},
 	{"out",1},{"out out",1},{"out (c)",1},{"out (c),xh",1},{"out 0",1},
 	{"out (c),hl",1},{"out (hl),c",1},{"out (c),(ix+0)",1},{"out (c),a,b",1},
+	{"v nop:v0 nop:x=0:v{x} nop",0},
 	{"outi 0",1},{"outi (hl)",1},
 	{"otir 0",1},{"otir (hl)",1},
 	{"otdr 0",1},{"otdr (hl)",1},
@@ -22244,7 +22309,7 @@ void Usage(int help)
 		printf("-ss export symbols in the snapshot (SYMB chunk for ACE)\n");
 		printf("-sc <format> export symbols with source code convention\n");
 		printf("-sm export symbol in multiple files (one per bank)\n");
-		printf("-ec export symbols with original case\n");
+		printf("-ec export labels with original case\n");
 		printf("-er export ROM labels\n");
 		printf("-l  <labelfile> import symbol file (winape,pasmo,rasm)\n");
 		printf("-eb export breakpoints\n");
