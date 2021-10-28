@@ -20686,7 +20686,7 @@ struct s_autotest_keyword autotest_keyword[]={
 	{"ccf ccf",1},{"ccf 0",1},{"ccf (hl)",1},
 	{"out",1},{"out out",1},{"out (c)",1},{"out (c),xh",1},{"out 0",1},
 	{"out (c),hl",1},{"out (hl),c",1},{"out (c),(ix+0)",1},{"out (c),a,b",1},
-	{"v nop:v0 nop:x=0:v{x} nop",0},
+	{"v nop:v0 nop:x=1:v{x} nop",0},
 	{"outi 0",1},{"outi (hl)",1},
 	{"otir 0",1},{"otir (hl)",1},
 	{"otdr 0",1},{"otdr (hl)",1},
