@@ -16061,18 +16061,6 @@ int IsDirective(char *zeexpression)
 	return 0;
 }
 
-int SkipLabelPatern(char *label, int caseidx) {
-	// skip RWM pattern for macro
-	if (label[0]=='@') {
-		caseidx--;
-		while (label[caseidx]!='R') caseidx--; // we MUST found a 'R'
-	} else {
-		// or trim ending digits
-		while (caseidx && label[caseidx-1]>='0' && label[caseidx-1]<='9') caseidx--;
-	}
-	return caseidx;
-}
-
 int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s_rasm_info **debug)
 {
 	#undef FUNC
@@ -16089,6 +16077,8 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 	unsigned char *input_data;
 	struct s_orgzone orgzone={0};
 	int iorgzone,ibank,offset,endoffset,morgzone,saveorgzone;
+	int AutomateCharStop[256];
+	int AutomateChar[256];
 	int il,jl,maxrom;
 	char *TMP_filename=NULL;
 	int minmem=65536,maxmem=0,lzmove;
@@ -16099,7 +16089,12 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 	int ok;
 
 
-
+	for (i=0;i<256;i++) {
+		if (i==0 || (i>='a' && i<='z') || (i>='A' && i<='Z')) AutomateCharStop[i]=1; else AutomateCharStop[i]=0;
+		if ((i>='a' && i<='z') || (i>='A' && i<='Z')) AutomateChar[i]=1; else AutomateChar[i]=0;
+	}
+	AutomateChar['@']=AutomateCharStop['@']=1;
+	AutomateChar['_']=AutomateCharStop['_']=1;
 
 	rasm_printf(ae,KAYGREEN"Assembling\n");
 #if TRACE_ASSEMBLE
@@ -17728,68 +17723,54 @@ printf("output files\n");
 				rasm_printf(ae,KIO"Write symbol file %s\n",TMP_filename);
 			}
 
+			/****************************
+			    case export hack
+			****************************/
 			if (ae->enforce_symbol_case) {
 				char *casefound;
-				int caselen;
+
 				for (i=0;i<ae->il;i++) {
 					if (ae->label[i].autorise_export) {
 						if (!ae->label[i].name) {
-							// stristr => ae->wl[ae->label[i].iw].w
-							casefound=stristr(ae->source_bigbuffer,ae->wl[ae->label[i].iw].w);
-							if (casefound) {
-								caselen=strlen(ae->wl[ae->label[i].iw].w);
-								strncpy(ae->wl[ae->label[i].iw].w,casefound,caselen);
+							if ((casefound=_internal_stristr(ae->source_bigbuffer,ae->wl[ae->label[i].iw].w))!=NULL) {
+								memcpy(ae->wl[ae->label[i].iw].w,casefound,strlen(ae->wl[ae->label[i].iw].w));
 							}
 						} else if (ae->export_local || !ae->label[i].local) {
-							int caseidx,casestart;
+							char splitlabel[256];
 							char casecharbackup;
+							char *bigbuffer;
+							int caseidx;
+							int istart,iend,ilen,isplit,icopy;
 
-							caselen=strlen(ae->label[i].name);
-							caseidx=SkipLabelPatern(ae->label[i].name,caselen);
+							bigbuffer=ae->source_bigbuffer;
+							ilen=strlen(ae->label[i].name);
+							iend=0;
+							do {
+								istart=iend;
+								while (!AutomateCharStop[ae->label[i].name[istart]]) istart++;
+								if (istart>=ilen) break;
 
-							// is there any chance for proximity label?
-							if (strchr(ae->label[i].name,'.')!=NULL) {
-								char **splitlabel;
-								int isplit;
+								iend=istart;
+								while (AutomateChar[ae->label[i].name[iend]]) iend++;
 
-								splitlabel=TxtSplitWithChar(ae->label[i].name,'.');
+								isplit=0;
+								icopy=istart;
+								while (icopy<iend && isplit<255) splitlabel[isplit++]=ae->label[i].name[icopy++];
+								splitlabel[isplit]=0;
 
-								// reset label
-								strcpy(ae->label[i].name,"");
-								// process all parts the same way
-								for (isplit=0;splitlabel[isplit];isplit++) {
-									caseidx=SkipLabelPatern(splitlabel[isplit],strlen(splitlabel[isplit]));
-									casecharbackup=splitlabel[isplit][caseidx];
-									splitlabel[isplit][caseidx]=0;
-									casefound=stristr(ae->source_bigbuffer,splitlabel[isplit]);
-									splitlabel[isplit][caseidx]=casecharbackup;
-
-								//printf("n[%s] => ",splitlabel[isplit]);
+								if (isplit>1) {
+									casefound=_internal_stristr(bigbuffer,splitlabel);
 									if (casefound) {
-										strncpy(splitlabel[isplit],casefound,caseidx);
+										memcpy(ae->label[i].name+istart,casefound,isplit);
+										// fast forward in source to increase match for next parts of label
+									//	bigbuffer=casefound;
 									}
-								//printf("n[%s]\n",splitlabel[isplit]);
-									// once case is back, we need to push it on the full label
-									if (isplit) strcat(ae->label[i].name,".");
-									strcat(ae->label[i].name,splitlabel[isplit]);
-								//printf("n[%s]\n",ae->label[i].name);
 								}
-
-								//printf("[%s]\n",ae->label[i].name);
-								FreeFields(splitlabel);
-							} else {
-								casecharbackup=ae->label[i].name[caseidx];
-								ae->label[i].name[caseidx]=0;
-								casefound=stristr(ae->source_bigbuffer,ae->label[i].name);
-								ae->label[i].name[caseidx]=casecharbackup;
-
-								if (casefound) {
-									strncpy(ae->label[i].name,casefound,caseidx);
-								}
-							}
+							} while (istart<ilen && iend<ilen);
 						}
 					}
 				}
+				//_internal_stristr(ae->source_bigbuffer,NULL);
 			}
 
 			switch (ae->export_sym) {
@@ -18179,9 +18160,13 @@ void EarlyPrepSrc(struct s_assenv *ae, char **listing, char *filename) {
 					listing[l][idx-1]=c=c-'a'+'A';
 				}
 
-				if (c=='\'' && idx>2 && strncmp(&listing[l][idx-3],"AF'",3)==0) {
-					/* il ne faut rien faire */
-				} else if (c=='"' || c=='\'') {
+				if (c=='\'') {
+				       if (idx>2 && strncmp(&listing[l][idx-3],"AF'",3)==0) {
+						/* il ne faut rien faire */
+					} else {
+						quote_type=c;
+					}
+				} else if (c=='"') {
 					quote_type=c;
 				} else if (c==';' || (c=='/' && listing[l][idx]=='/')) {
 					idx--;

@@ -123,54 +123,62 @@ size_t strnlen (s, maxlen)
 ** Modified for use with libcyrus by Ken Murchison 06/01/00.
 **
 ** from Debian package cyrus-imapd
+
+modified for Rasm as pattern is always upper case...
+
 */
 
-#ifndef stristr
-char *stristr(const char *String, const char *Pattern)
+char *_internal_stristr(const char *RealString, const char *Pattern)
 {
-      char *pptr, *sptr, *start;
+      char *pptr, *sptr, *start, *String;
       unsigned int  slen, plen;
+      static char* fastkey[65536]={0};
+      unsigned short int *fastidx=(unsigned short int*)Pattern;
 
-      for (start = (char *)String,
-           pptr  = (char *)Pattern,
-           slen  = strlen(String),
-           plen  = strlen(Pattern);
-
-           /* while string length not shorter than pattern length */
-
-           slen >= plen;
-
-           start++, slen--)
-      {
-            /* find start of pattern in string */
-            while (toupper(*start) != toupper(*Pattern))
-            {
-                  start++;
-                  slen--;
-
-                  /* if pattern longer than string */
-
-                  if (slen < plen)
-                        return(NULL);
-            }
-
-            sptr = start;
-            pptr = (char *)Pattern;
-
-            while (toupper(*sptr) == toupper(*pptr))
-            {
-                  sptr++;
-                  pptr++;
-
-                  /* if end of pattern then pattern was found */
-
-                  if ('\0' == *pptr)
-                        return (start);
-            }
-      }
-      return(NULL);
+#if 0
+if (Pattern==NULL) {
+	int i,cpt=0;
+	double zev=0;
+	for (i=0;i<65536;i++) if (fastkey[i]) {cpt++;zev+=fastkey[i]-RealString;}
+	printf("fastidx=%d totalskip=%.0lf\n",cpt,zev);
+	return NULL;
 }
 #endif
+
+      // we know that pattern is always 2 bytes or more
+      if (fastkey[*fastidx]) String=fastkey[*fastidx]; else String=(char*)RealString;
+
+      for (start = (char *)String, pptr  = (char *)Pattern, slen  = strlen(String), plen  = strlen(Pattern);
+	   /* while string length not shorter than pattern length */
+	   slen >= plen;
+	   start++, slen--) {
+	    /* find start of pattern in string */
+	    while (toupper(*start) != *Pattern) {
+		  start++;
+		  slen--;
+		  /* if pattern longer than string */
+		  if (slen < plen)
+			return NULL;
+	    }
+
+	    // because pattern is 2 or more...
+	    sptr = start+1;
+	    pptr = (char *)Pattern+1;
+
+	    fastidx=(unsigned short int*)start;
+	    fastkey[*fastidx]=start; // dynamic index building
+
+	    while (toupper(*sptr) == *pptr) {
+		  sptr++;
+		  pptr++;
+
+		  if ('\0' == *pptr) {
+			  return start;
+		}
+	    }
+      }
+      return NULL;
+}
 
 char *TxtStrDupLen(char *str, int *len)
 {
