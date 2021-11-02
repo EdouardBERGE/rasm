@@ -877,6 +877,8 @@ struct s_assenv {
 	int label_line;
 	char **filename;
 	int ifile,maxfile;
+	char **rawfile; // case export
+	int *rawlen;    // case export
 	int nberr,flux;
 	int fastmatch[256];
 	unsigned char charset[256];
@@ -1352,16 +1354,10 @@ char **_internal_readtextfile(struct s_assenv *ae,char *filename, char replacech
         }
 
 	if (ae->enforce_symbol_case && replacechar==':') {
-		// realloc
-		ae->source_bigbuffer=MemRealloc(ae->source_bigbuffer,ae->source_bigbuffer_len+file_size+1);
-		// copy
-		memcpy(ae->source_bigbuffer+ae->source_bigbuffer_len,bigbuffer,file_size);
-		// next
-		ae->source_bigbuffer_len+=file_size;
-		// security terminator
-		ae->source_bigbuffer[ae->source_bigbuffer_len]=0;
+		ae->source_bigbuffer=bigbuffer;
+		ae->source_bigbuffer_len=file_size;
 	}
-        MemFree(bigbuffer);
+        //MemFree(bigbuffer);
         return lines_buffer;
 }
 
@@ -2571,7 +2567,11 @@ void FreeAssenv(struct s_assenv *ae)
 	}
 	/*** end debug ***/
 
-	if (ae->source_bigbuffer_len) MemFree(ae->source_bigbuffer);
+	if (ae->enforce_symbol_case) {
+		for (i=0;i<ae->ifile;i++) {
+			if (ae->rawlen[i]) MemFree(ae->rawfile[i]);
+		}
+	}
 
 	for (i=0;i<ae->nbbank;i++) {
 		MemFree(ae->mem[i]);
@@ -14453,6 +14453,8 @@ printf("EVOL 119 - tableau! %d elem(s)\n",nbelem);
 				/* create label for global struct ptr */
 				curlabel.iw=-1;
 				curlabel.ptr=ae->codeadr;
+				curlabel.fileidx=ae->wl[ae->idx+2].ifile;
+
 				if (!ae->getstruct) {
 					if (ae->wl[ae->idx+2].w[0]=='@') curlabel.name=MakeLocalLabel(ae,ae->wl[ae->idx+2].w,NULL); else curlabel.name=TxtStrDup(ae->wl[ae->idx+2].w);
 					curlabel.crc=GetCRC(curlabel.name);
@@ -14611,6 +14613,7 @@ void __ENDSTRUCT(struct s_assenv *ae) {
 			curlabel.crc=ae->rasmstruct[ae->irasmstruct-1].crc;
 			curlabel.iw=-1;
 			curlabel.ptr=ae->rasmstruct[ae->irasmstruct-1].size;
+			//curlabel.fileidx wont be used
 			PushLabelLight(ae,&curlabel);
 			
 			/* compute size for each field */
@@ -17732,17 +17735,15 @@ printf("output files\n");
 				for (i=0;i<ae->il;i++) {
 					if (ae->label[i].autorise_export) {
 						if (!ae->label[i].name) {
-							if ((casefound=_internal_stristr(ae->source_bigbuffer,ae->wl[ae->label[i].iw].w))!=NULL) {
+							if ((casefound=_internal_stristr(ae->rawfile[ae->label[i].fileidx],ae->rawlen[ae->label[i].fileidx],ae->wl[ae->label[i].iw].w))!=NULL) {
 								memcpy(ae->wl[ae->label[i].iw].w,casefound,strlen(ae->wl[ae->label[i].iw].w));
 							}
 						} else if (ae->export_local || !ae->label[i].local) {
 							char splitlabel[256];
 							char casecharbackup;
-							char *bigbuffer;
 							int caseidx;
 							int istart,iend,ilen,isplit,icopy;
 
-							bigbuffer=ae->source_bigbuffer;
 							ilen=strlen(ae->label[i].name);
 							iend=0;
 							do {
@@ -17759,11 +17760,9 @@ printf("output files\n");
 								splitlabel[isplit]=0;
 
 								if (isplit>1) {
-									casefound=_internal_stristr(bigbuffer,splitlabel);
+									casefound=_internal_stristr(ae->rawfile[ae->label[i].fileidx],ae->rawlen[ae->label[i].fileidx],splitlabel);
 									if (casefound) {
 										memcpy(ae->label[i].name+istart,casefound,isplit);
-										// fast forward in source to increase match for next parts of label
-									//	bigbuffer=casefound;
 									}
 								}
 							} while (istart<ilen && iend<ilen);
@@ -18540,6 +18539,17 @@ printf("paramz\n");
 			ae->label_filename=param->labelfilename[j];
 			ae->label_line=1;
 			labelines=FileReadLines(ae,param->labelfilename[j]);
+	
+			curlabel.fileidx=ae->ifile;
+			FieldArrayAddDynamicValueConcat(&ae->filename,&ae->ifile,&ae->maxfile,filename); // besoin de la casse
+
+			if (ae->enforce_symbol_case) {
+				ae->rawfile=MemRealloc(ae->rawfile,sizeof(char **)*ae->ifile);
+				ae->rawlen=MemRealloc(ae->rawlen,sizeof(int)*ae->ifile);
+				ae->rawfile[ae->ifile-1]=ae->source_bigbuffer;
+				ae->rawlen[ae->ifile-1]=ae->source_bigbuffer_len;
+			}
+
 			i=0;
 			while (labelines[i]) {
 				/* upper case */
@@ -18725,6 +18735,12 @@ printf("-read/flux\n");
 	if (!ae->flux) {
 		zelines=FileReadLines(ae,filename);
 		FieldArrayAddDynamicValueConcat(&ae->filename,&ae->ifile,&ae->maxfile,filename);
+		if (ae->enforce_symbol_case) {
+			ae->rawfile=MemRealloc(ae->rawfile,sizeof(char **)*ae->ifile);
+			ae->rawlen=MemRealloc(ae->rawlen,sizeof(int)*ae->ifile);
+			ae->rawfile[ae->ifile-1]=ae->source_bigbuffer;
+			ae->rawlen[ae->ifile-1]=ae->source_bigbuffer_len;
+		}
 	} else {
 		int flux_nblines=0;
 		int flux_curpos;
@@ -18998,6 +19014,12 @@ if (!idx) printf("[%s]\n",listing[l].listing);
 							/* lecture */
 							listing_include=FileReadLines(ae,filename_toread);
 							FieldArrayAddDynamicValueConcat(&ae->filename,&ae->ifile,&ae->maxfile,filename_toread);
+							if (ae->enforce_symbol_case) {
+								ae->rawfile=MemRealloc(ae->rawfile,sizeof(char **)*ae->ifile);
+								ae->rawlen=MemRealloc(ae->rawlen,sizeof(int)*ae->ifile);
+								ae->rawfile[ae->ifile-1]=ae->source_bigbuffer;
+								ae->rawlen[ae->ifile-1]=ae->source_bigbuffer_len;
+							}
 							/* virer les commentaires + pré-traitement */
 							EarlyPrepSrc(ae,listing_include,ae->filename[ae->ifile-1]);
 
