@@ -17,8 +17,6 @@
 #define TRACE_EDSK 0
 #define TRACE_LABEL 0
 
-
-
 /***
 Rasm (roudoudou assembler) Z80 assembler
 
@@ -7253,7 +7251,6 @@ void PushExpression(struct s_assenv *ae,int iw,enum e_expression zetype)
 						break;
 				}
 			}
-
 			if (ae->ir || ae->iw || ae->imacro) {
 				curexp.reference=TxtStrDup(ae->wl[iw].w);
 				ExpressionFastTranslate(ae,&curexp.reference,1);
@@ -8419,7 +8416,6 @@ void PopAllExpression(struct s_assenv *ae, int crunched_zone)
 				}
 			}
 		}
-
 		v=ComputeExpressionCore(ae,expr,ae->expression[i].ptr,i);
 		r=(long)floor(v+ae->rough);
 		switch (ae->expression[i].zetype) {
@@ -17827,7 +17823,14 @@ printf("output files\n");
 						}
 					}
 				}
-				//_internal_stristr(ae->source_bigbuffer,NULL);
+				// translate alias only if there are exported
+				if (ae->export_equ) {
+					for (i=0;i<ae->ialias;i++) {
+						if ((casefound=_internal_stristr(ae->rawfile[ae->wl[ae->alias[i].iw].ifile],ae->rawlen[ae->wl[ae->alias[i].iw].ifile],ae->alias[i].alias))!=NULL) {
+							memcpy(ae->alias[i].alias,casefound,strlen(ae->alias[i].alias));
+						}
+					}
+				}
 			}
 
 			switch (ae->export_sym) {
