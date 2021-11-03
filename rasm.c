@@ -17731,6 +17731,7 @@ printf("output files\n");
 			****************************/
 			if (ae->enforce_symbol_case) {
 				char *casefound;
+				int ilocal=0;
 
 				for (i=0;i<ae->il;i++) {
 					if (ae->label[i].autorise_export) {
@@ -17745,6 +17746,13 @@ printf("output files\n");
 							int istart,iend,ilen,isplit,icopy;
 
 							ilen=strlen(ae->label[i].name);
+
+							if (ae->label[i].name[0]=='@') {
+								// remove radix
+								while (ae->label[i].name[ilen]!='R') ilen--;
+								ae->label[i].name[ilen]=0;
+							}
+
 							iend=0;
 							do {
 								istart=iend;
@@ -17766,6 +17774,12 @@ printf("output files\n");
 									}
 								}
 							} while (istart<ilen && iend<ilen);
+
+							if (ae->label[i].name[0]=='@') {
+								// put simplified radix back
+								ae->label[i].name[ilen]='_';
+								sprintf(ae->label[i].name+ilen+1,"%x",ilocal++);
+							}
 						}
 					}
 				}
