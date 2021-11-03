@@ -3241,6 +3241,42 @@ void ExportDicoTreeRecurse(struct s_crcdico_tree *lt, char *zefile, char *zeform
 		}
 	}
 }
+void ExportDicoTreeRecurseCase(struct s_assenv *ae,struct s_crcdico_tree *lt, char *zefile, char *zeformat)
+{
+	#undef FUNC
+	#define FUNC "ExportDicoTreeRecurseCase"
+
+	char symbol_line[512];
+	char symbol_name[512];
+	int i;
+
+	for (i=0;i<256;i++) {
+		if (lt->radix[i]) {
+			ExportDicoTreeRecurseCase(ae,lt->radix[i],zefile,zeformat);
+		}
+	}
+	if (lt->mdico) {
+		for (i=0;i<lt->ndico;i++) {
+			if (strcmp(lt->dico[i].name,"IX") && strcmp(lt->dico[i].name,"IY") && strcmp(lt->dico[i].name,"PI") && strcmp(lt->dico[i].name,"ASSEMBLER_RASM") && lt->dico[i].autorise_export) {
+				// case search
+				char *casefound;
+				int namelen;
+
+				if ((casefound=_internal_stristr(ae->rawfile[ae->wl[lt->dico[i].iw].ifile],ae->rawlen[ae->wl[lt->dico[i].iw].ifile],lt->dico[i].name))!=NULL) {
+					namelen=strlen(lt->dico[i].name);
+					if (namelen>511) namelen=511;
+					memcpy(symbol_name,casefound,namelen);
+					symbol_name[namelen]=0;
+					snprintf(symbol_line,sizeof(symbol_line)-1,zeformat,symbol_name,(int)floor(lt->dico[i].v+0.5));
+				} else {
+					snprintf(symbol_line,sizeof(symbol_line)-1,zeformat,lt->dico[i].name,(int)floor(lt->dico[i].v+0.5));
+				}
+				symbol_line[sizeof(symbol_line)-1]=0xD;
+				FileWriteLine(zefile,symbol_line);
+			}
+		}
+	}
+}
 void ExportDicoTree(struct s_assenv *ae, char *zefile, char *zeformat)
 {
 	#undef FUNC
@@ -3248,9 +3284,17 @@ void ExportDicoTree(struct s_assenv *ae, char *zefile, char *zeformat)
 
 	int i;
 
-	for (i=0;i<256;i++) {
-		if (ae->dicotree.radix[i]) {
-			ExportDicoTreeRecurse(ae->dicotree.radix[i],zefile,zeformat);
+	if (!ae->enforce_symbol_case) {
+		for (i=0;i<256;i++) {
+			if (ae->dicotree.radix[i]) {
+				ExportDicoTreeRecurse(ae->dicotree.radix[i],zefile,zeformat);
+			}
+		}
+	} else {
+		for (i=0;i<256;i++) {
+			if (ae->dicotree.radix[i]) {
+				ExportDicoTreeRecurseCase(ae,ae->dicotree.radix[i],zefile,zeformat);
+			}
 		}
 	}
 }
