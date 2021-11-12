@@ -15103,7 +15103,7 @@ void __HEXBIN(struct s_assenv *ae) {
 	float amplification=1.0;
 	int deload=0;
 	int vtiles=0,remap=0,revert=0;
-	int itiles=0,tilex=0;
+	int itiles=0,tilex=0,gtiles=0;
 	struct s_hexbin *curhexbin;
 	unsigned char *newdata=NULL;
 	int fileok=0,incwav=0;
@@ -15159,6 +15159,21 @@ printf(" -> REMAP loading\n");
 					offset=size=0; // full file
 					ae->idx+=2;
 
+				} else if (strcmp("GTILES",ae->wl[ae->idx+2].w)==0) {
+					/*** entrelace les tiles, besoin de hauteur et largeur de la tile ***/
+					if (!ae->wl[ae->idx+2].t) {
+						ExpressionFastTranslate(ae,&ae->wl[ae->idx+3].w,1);
+						tilex=RoundComputeExpressionCore(ae,ae->wl[ae->idx+3].w,ae->codeadr,0);
+						gtiles=1;
+					} else {
+						MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"usage is INCBIN'file',GTILES,width\n");
+						tilex=0;
+					}
+#if TRACE_HEXBIN
+printf(" -> GTILES loading\n");
+#endif
+					offset=size=0; // full file
+					ae->idx+=2;
 				} else if (strcmp("ITILES",ae->wl[ae->idx+2].w)==0) {
 					/*** entrelace les tiles, besoin de hauteur et largeur de la tile ***/
 					if (!ae->wl[ae->idx+2].t) {
@@ -15448,24 +15463,41 @@ printf("output fictif pour réorganiser les données\n");
 							while (p>=0) {
 								outputdata[outputidx++]=ae->hexbin[hbinidx].data[p--];
 							}
-						} else if (itiles) {
+						} else if (itiles || gtiles) {
 							/* tiles data reordering */
 							int tx,it;
 
 							if (size % (tilex*8)) {
-								MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"INCBIN ITILES cannot reorder tiles %d bytewidth with file of size %d\n",tilex,size);
+								MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"INCBIN ITILES/GTILES cannot reorder tiles %d bytewidth with file of size %d\n",tilex,size);
 							} else {
-								it=0;
-								while (it<size) {
-									for (tx=0;tx<tilex;tx++)    outputdata[outputidx++]=ae->hexbin[hbinidx].data[it+tx+0*tilex];
-									for (tx=tilex-1;tx>=0;tx--) outputdata[outputidx++]=ae->hexbin[hbinidx].data[it+tx+1*tilex];
-									for (tx=0;tx<tilex;tx++)    outputdata[outputidx++]=ae->hexbin[hbinidx].data[it+tx+3*tilex];
-									for (tx=tilex-1;tx>=0;tx--) outputdata[outputidx++]=ae->hexbin[hbinidx].data[it+tx+2*tilex];
-									for (tx=0;tx<tilex;tx++)    outputdata[outputidx++]=ae->hexbin[hbinidx].data[it+tx+6*tilex];
-									for (tx=tilex-1;tx>=0;tx--) outputdata[outputidx++]=ae->hexbin[hbinidx].data[it+tx+7*tilex];
-									for (tx=0;tx<tilex;tx++)    outputdata[outputidx++]=ae->hexbin[hbinidx].data[it+tx+5*tilex];
-									for (tx=tilex-1;tx>=0;tx--) outputdata[outputidx++]=ae->hexbin[hbinidx].data[it+tx+4*tilex];
-									it+=tilex*8;
+								if (itiles) {
+									/* zigzag with regular gray coding */
+									it=0;
+									while (it<size) {
+										for (tx=0;tx<tilex;tx++)    outputdata[outputidx++]=ae->hexbin[hbinidx].data[it+tx+0*tilex];
+										for (tx=tilex-1;tx>=0;tx--) outputdata[outputidx++]=ae->hexbin[hbinidx].data[it+tx+1*tilex];
+										for (tx=0;tx<tilex;tx++)    outputdata[outputidx++]=ae->hexbin[hbinidx].data[it+tx+3*tilex];
+										for (tx=tilex-1;tx>=0;tx--) outputdata[outputidx++]=ae->hexbin[hbinidx].data[it+tx+2*tilex];
+										for (tx=0;tx<tilex;tx++)    outputdata[outputidx++]=ae->hexbin[hbinidx].data[it+tx+6*tilex];
+										for (tx=tilex-1;tx>=0;tx--) outputdata[outputidx++]=ae->hexbin[hbinidx].data[it+tx+7*tilex];
+										for (tx=0;tx<tilex;tx++)    outputdata[outputidx++]=ae->hexbin[hbinidx].data[it+tx+5*tilex];
+										for (tx=tilex-1;tx>=0;tx--) outputdata[outputidx++]=ae->hexbin[hbinidx].data[it+tx+4*tilex];
+										it+=tilex*8;
+									}
+								} else {
+									/* only reorder lines with regular gray coding */
+									it=0;
+									while (it<size) {
+										for (tx=0;tx<tilex;tx++)    outputdata[outputidx++]=ae->hexbin[hbinidx].data[it+tx+0*tilex];
+										for (tx=0;tx<tilex;tx++)    outputdata[outputidx++]=ae->hexbin[hbinidx].data[it+tx+1*tilex];
+										for (tx=0;tx<tilex;tx++)    outputdata[outputidx++]=ae->hexbin[hbinidx].data[it+tx+3*tilex];
+										for (tx=0;tx<tilex;tx++)    outputdata[outputidx++]=ae->hexbin[hbinidx].data[it+tx+2*tilex];
+										for (tx=0;tx<tilex;tx++)    outputdata[outputidx++]=ae->hexbin[hbinidx].data[it+tx+6*tilex];
+										for (tx=0;tx<tilex;tx++)    outputdata[outputidx++]=ae->hexbin[hbinidx].data[it+tx+7*tilex];
+										for (tx=0;tx<tilex;tx++)    outputdata[outputidx++]=ae->hexbin[hbinidx].data[it+tx+5*tilex];
+										for (tx=0;tx<tilex;tx++)    outputdata[outputidx++]=ae->hexbin[hbinidx].data[it+tx+4*tilex];
+										it+=tilex*8;
+									}
 								}
 							}
 						} else if (remap) {
@@ -20683,6 +20715,10 @@ int RasmAssembleInfoParam(const char *datain, int lenin, unsigned char **dataout
 "ifdef label3:nbt+=1:endif: ifndef label4:nbt+=1:endif: ifdef label5:nbt+=1:endif: assert nbt==8:"\
 "module grouik: plop: ifused plop : glop=1 : endif:assert glop==1"
 
+#define AUTOTEST_GTILES    "incbin 'autotest_include.raw',GTILES,4"
+#define AUTOTEST_ITILES    "incbin 'autotest_include.raw',ITILES,4"
+#define AUTOTEST_GTILES_KO "incbin 'autotest_include.raw',GTILES,5"
+#define AUTOTEST_ITILES_KO "incbin 'autotest_include.raw',ITILES,5"
 
 
 struct s_autotest_keyword {
@@ -21659,6 +21695,42 @@ printf("testing enhanced PUSH/POP OK\n");
 	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
 	RasmFreeInfoStruct(debug);
 printf("testing gate array color conversion OK\n");
+
+	FileRemoveIfExists("autotest_include.raw");
+	opcode=MemMalloc(256);
+	for (i=0;i<256;i++) opcode[i]=i;
+	FileWriteBinary("autotest_include.raw",(char *)opcode,256);
+	FileWriteBinaryClose("autotest_include.raw");
+	MemFree(opcode);opcode=NULL;
+
+	ret=RasmAssembleInfo(AUTOTEST_GTILES,strlen(AUTOTEST_GTILES),&opcode,&opcodelen,&debug);
+	if (!ret && opcodelen==256 && opcode[0]==0 && opcode[3]==3 && opcode[4]==4 && opcode[8]==12 && opcode[12]==8 && opcode[16]==24 && opcode[20]==28 && opcode[24]==20 && opcode[28]==16) {} // minimal check
+	else {printf("Autotest %03d ERROR (INCBIN GTILES import)\n",cpt);MiniDump(opcode,opcodelen);for (i=0;i<debug->nberror;i++) printf("%d -> %s\n",i,debug->error[i].msg);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+	RasmFreeInfoStruct(debug);
+printf("testing gray coding tile import OK\n");
+
+	ret=RasmAssembleInfo(AUTOTEST_ITILES,strlen(AUTOTEST_ITILES),&opcode,&opcodelen,&debug);
+	if (!ret && opcodelen==256 && opcode[0]==0 && opcode[3]==3 && opcode[4]==7 && opcode[8]==12 && opcode[12]==11 && opcode[16]==24 && opcode[20]==31 && opcode[24]==20 && opcode[28]==19) {} // minimal check
+	else {printf("Autotest %03d ERROR (INCBIN ITILES import)\n",cpt);MiniDump(opcode,opcodelen);for (i=0;i<debug->nberror;i++) printf("%d -> %s\n",i,debug->error[i].msg);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+	RasmFreeInfoStruct(debug);
+printf("testing zigzag gray coding tile import OK\n");
+
+	ret=RasmAssembleInfo(AUTOTEST_GTILES_KO,strlen(AUTOTEST_GTILES_KO),&opcode,&opcodelen,&debug);
+	if (ret) {} // must be error
+	else {printf("Autotest %03d ERROR (INCBIN GTILES import check)\n",cpt);MiniDump(opcode,opcodelen);for (i=0;i<debug->nberror;i++) printf("%d -> %s\n",i,debug->error[i].msg);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+	RasmFreeInfoStruct(debug);
+printf("testing gray coding tile size check error OK\n");
+
+	ret=RasmAssembleInfo(AUTOTEST_ITILES_KO,strlen(AUTOTEST_ITILES_KO),&opcode,&opcodelen,&debug);
+	if (ret) {} // must be error
+	else {printf("Autotest %03d ERROR (INCBIN ITILES import check)\n",cpt);MiniDump(opcode,opcodelen);for (i=0;i<debug->nberror;i++) printf("%d -> %s\n",i,debug->error[i].msg);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+	RasmFreeInfoStruct(debug);
+printf("testing zigzag gray coding tile size check error OK\n");
+
 
 /************************** segfault test **********************/
 	ret=RasmAssembleInfo(AUTOTEST_ACCENT,strlen(AUTOTEST_ACCENT),&opcode,&opcodelen,&debug);
