@@ -266,7 +266,8 @@ E_COMPUTE_OPERATION_HARD2SOFT=47,
 E_COMPUTE_OPERATION_GETNOP=48,
 E_COMPUTE_OPERATION_GETTICK=49,
 E_COMPUTE_OPERATION_DURATION=50,
-E_COMPUTE_OPERATION_END=51
+E_COMPUTE_OPERATION_FILESIZE=51,
+E_COMPUTE_OPERATION_END=52
 };
 
 struct s_compute_element {
@@ -400,7 +401,7 @@ struct s_alias {
 	char *alias;
 	char *translation;
 	int crc,len,autorise_export;
-	int iw;
+	int iw,lz;
 	int used;
 	/* v1.5 */
 	int ptr;
@@ -1068,6 +1069,7 @@ struct s_math_keyword math_keyword[]={
 {"GETNOP",0,E_COMPUTE_OPERATION_GETNOP},
 {"GETTICK",0,E_COMPUTE_OPERATION_GETTICK},
 {"DURATION",0,E_COMPUTE_OPERATION_DURATION},
+{"FILESIZE",0,E_COMPUTE_OPERATION_FILESIZE},
 {"",0,-1}
 };
 
@@ -4818,6 +4820,24 @@ int __DURATION(struct s_assenv *ae,char *opcode, int didx)
 	if (!ae->forcezx) return __GETNOP(ae,opcode,didx);
 	return __GETTICK(ae,opcode,didx);
 }
+int __FILESIZE(struct s_assenv *ae,char *zefile, int didx)
+{
+	#undef FUNC
+	#define FUNC "__DURATION"
+
+	FILE *f;
+	int zesize;
+
+	f=fopen(zefile,"rb");
+	if (!f) {
+		MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"cannot retrieve filesize of [%s] file\n",zefile);
+		return 0;
+	}
+	fseek(f,0,SEEK_END);
+	zesize=ftell(f);
+	fclose(f);
+	return zesize;
+}
 
 int __Soft2HardInk(struct s_assenv *ae,int soft, int didx) {
 	switch (soft) {
@@ -5871,6 +5891,7 @@ printf("stage 2 | page=%d | ptr=%X ibank=%d\n",page,curlabel->ptr,curlabel->iban
 			case E_COMPUTE_OPERATION_GETNOP:printf("getnop ");break;
 			case E_COMPUTE_OPERATION_GETTICK:printf("gettick ");break;
 			case E_COMPUTE_OPERATION_DURATION:printf("duration ");break;
+			case E_COMPUTE_OPERATION_FILESIZE:printf("filesize ");break;
 			default:printf("bug\n");break;
 		}
 		
@@ -5997,6 +6018,7 @@ printf("operator string=%X\n",ae->computectx->operatorstack[o2].string);
 			case E_COMPUTE_OPERATION_GETNOP:
 			case E_COMPUTE_OPERATION_GETTICK:
 			case E_COMPUTE_OPERATION_DURATION:
+			case E_COMPUTE_OPERATION_FILESIZE:
 #if DEBUG_STACK
 printf("ajout de la fonction\n");
 #endif
@@ -6165,6 +6187,25 @@ printf("final POP string=%X\n",ae->computectx->operatorstack[nboperatorstack+1].
 											MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"DURATION function needs a proper string\n");
 										} else {
 											MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"DURATION internal error (wrong string index)\n");
+										}
+									}
+								} else {
+									MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"DURATION is empty\n");
+								}
+							       break;
+				case E_COMPUTE_OPERATION_FILESIZE:if (paccu>0) {
+								      int integeridx;
+								      integeridx=floor(accu[paccu-1]);
+
+								      if (integeridx>=0 && integeridx<nbcomputestack && computestack[integeridx].string) {
+									      accu[paccu-1]=__FILESIZE(ae,computestack[integeridx].string,didx);
+									      MemFree(computestack[integeridx].string);
+									      computestack[integeridx].string=NULL;
+								      } else {
+									      if (integeridx>=0 && integeridx<nbcomputestack) {
+											MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"FILESIZE function needs a proper string\n");
+										} else {
+											MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"FILESIZE internal error (wrong string index)\n");
 										}
 									}
 								} else {
@@ -6360,6 +6401,25 @@ printf("final POP string=%X\n",ae->computectx->operatorstack[nboperatorstack+1].
 									MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"DURATION is empty\n");
 								}
 							       break;
+				case E_COMPUTE_OPERATION_FILESIZE:if (paccu>0) {
+								      int integeridx;
+								      integeridx=floor(accu[paccu-1]);
+
+								      if (integeridx>=0 && integeridx<nbcomputestack && computestack[integeridx].string) {
+									      accu[paccu-1]=__FILESIZE(ae,computestack[integeridx].string,didx);
+									      MemFree(computestack[integeridx].string);
+									      computestack[integeridx].string=NULL;
+								      } else {
+									      if (integeridx>=0 && integeridx<nbcomputestack) {
+											MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"FILESIZE function needs a proper string\n");
+										} else {
+											MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"FILESIZE internal error (wrong string index)\n");
+										}
+									}
+								} else {
+									MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"DURATION is empty\n");
+								}
+							       break;
 
 				default:MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"invalid computing state! (%d)\n",computestack[i].operator);paccu=0;
 			}
@@ -6464,6 +6524,7 @@ printf("MakeAlias (2) EXPR=[%s EQU %s]\n",expr,ptr_exp2);
 			}
 			curalias.crc=GetCRC(curalias.alias);
 			curalias.ptr=ae->codeadr;
+			curalias.lz=ae->ilz;
 
 			if ((ialias=SearchAlias(ae,curalias.crc,curalias.alias))>=0) {
 				MakeError(ae,GetCurrentFile(ae),GetExpLine(ae,0),"Duplicate alias [%s]\n",expr);
@@ -6478,7 +6539,7 @@ printf("MakeAlias (2) EXPR=[%s EQU %s]\n",expr,ptr_exp2);
 printf("MakeAlias (3) EXPR=[%s EQU %s]\n",expr,ptr_exp2);
 printf("alias translation [%s] -> ",curalias.translation);fflush(stdout);
 #endif
-				ExpressionFastTranslate(ae,&curalias.translation,2); // FAST type 2
+				ExpressionFastTranslate(ae,&curalias.translation,2); // FAST type 2 replace at least $ value
 #if TRACE_COMPUTE_EXPRESSION
 printf("%s\n",curalias.translation);
 #endif
@@ -16655,18 +16716,25 @@ printf("crunch if any %d blocks\n",ae->ilz);
 	***************************************************/
 	if (!ae->stop || !ae->nberr) {
 
+		/* all EQU values are computed in order to be STATIC values until the end 
+		 * at this point, there is a lot of expressions (in or outside lz sections)
+		 * to be computed.
+		*/
 		for (i=0;i<ae->ialias;i++) {
 			char alias_value[128];
-			float v;
-			ae->idx=ae->alias[i].iw; // expression core hack
-			v=ComputeExpressionCore(ae,ae->alias[i].translation,ae->alias[i].ptr,0);
-			sprintf(alias_value,"%.8lf",v);
-			MemFree(ae->alias[i].translation);
-			ae->alias[i].translation=TxtStrDup(alias_value);
+			double v;
+			// compute EQU defined in crunched sections
+			if (!ae->alias[i].lz) {
+				ae->idx=ae->alias[i].iw; // expression core hack
+				v=ComputeExpressionCore(ae,ae->alias[i].translation,ae->alias[i].ptr,0);
+				sprintf(alias_value,"%.8lf",v);
+				MemFree(ae->alias[i].translation);
+				ae->alias[i].translation=TxtStrDup(alias_value);
+			}
 		}
 
 		for (i=0;i<ae->ilz;i++) {
-			/* on dépile les symboles dans l'ordre mais on ne reloge pas sur les zones intermédiaires ou post-crunched */	
+			/* on dépile les symboles dans l'ordre mais on ne reloge pas sur les zones intermédiaires ou post-crunched */
 			if (ae->lzsection[i].lzversion!=0) {
 #if TRACE_ASSEMBLE
 printf("Crunch LZ[%d] (%d) %s\n",i,ae->lzsection[i].lzversion,ae->lzsection[i].lzversion==8?"mizou":"");
