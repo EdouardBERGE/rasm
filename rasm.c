@@ -8917,10 +8917,12 @@ unsigned char *EncodeSnapshotRLE(unsigned char *memin, int *lenout) {
 		}
 	}
 	if (lenout) *lenout=idx;
-	if (idx<65536) return memout;
-	
-	MemFree(memout);
-	return NULL;
+        if (idx<65536) return memout;
+        
+        MemFree(memout);
+	*lenout=65536; // means cannot pack
+        return NULL;
+
 }
 
 
@@ -17463,12 +17465,12 @@ printf("output files\n");
 								
 								if (!ae->flux) {
 									FileWriteBinary(TMP_filename,ChunkName,4);
+									FileWriteBinary(TMP_filename,(char*)&ChunkSize,4);
 									if (rlebank!=NULL) {
-										FileWriteBinary(TMP_filename,(char*)&ChunkSize,4);
 										FileWriteBinary(TMP_filename,(char*)rlebank,ChunkSize);
 										MemFree(rlebank);
 									} else {
-										ChunkSize=65536;
+										// write unpacked data
 										FileWriteBinary(TMP_filename,(char*)&packed,ChunkSize);
 									}
 								}
