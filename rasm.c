@@ -2146,20 +2146,14 @@ unsigned char *__internal_MakeRosoftREAL(struct s_assenv *ae, double v, int iexp
 	int mesbits[32];
 	int ibit=0,exp=0;
 	// v2
-	char doubletext[128];
 	unsigned long mantissa;
 	unsigned long deci;
 	unsigned long mask;
-	double superv;
-	int hassign;
-	char *dotptr;
 
 	memset(rc,0,sizeof(rc));
 
 	// decimal hack
-	sprintf(doubletext,"%.16lf",v);
-	if ((dotptr=strchr(doubletext,'.'))!=NULL) *dotptr=0;
-	deci=labs(atol(doubletext));
+	deci=labs(v);
 #if TRACE_MAKEAMSDOSREAL
 printf("AmstradREAL decimal part is %s\n",doubletext);
 #endif
@@ -2274,24 +2268,16 @@ unsigned char *__internal_MakeAmsdosREAL(struct s_assenv *ae, double v, int iexp
 	static unsigned char rc[5];
 	int mesbits[32]={0}; // must be reseted!
 	int j,ib,ibb;
-	int fracmax=0;
-	double frac;
 	int ibit=0,exp=0;
 	// v2
-	char doubletext[128];
 	unsigned long mantissa;
 	unsigned long deci;
 	unsigned long mask;
-	double superv;
-	int hassign;
-	char *dotptr;
 
 	memset(rc,0,sizeof(rc));
 
 	// decimal hack
-	sprintf(doubletext,"%.16lf",v);
-	if ((dotptr=strchr(doubletext,'.'))!=NULL) *dotptr=0;
-	deci=labs(atol(doubletext));
+	deci=labs(v);
 #if TRACE_MAKEAMSDOSREAL
 printf("AmstradREAL decimal part is %s\n",doubletext);
 #endif
@@ -20478,7 +20464,7 @@ int RasmAssembleInfoParam(const char *datain, int lenin, unsigned char **dataout
 
 #define AUTOTEST_MAXERROR	"repeat 20:aglapi:rend:nop"
 
-#define AUTOTEST_REAL	"defr 0,0.5,-0.5,1.23456,43.375,3.141592653468"
+#define AUTOTEST_REAL	"defr 0,0.5,-0.5,43.375,3.14159265,-0.25,0.9994433,0.9994434,-0.9994433,-0.9994434,0.1234567,1.2345678"
 
 #define AUTOTEST_ENHANCED_LD	"ld h,(ix+11): ld l,(ix+10): ld h,(iy+21): ld l,(iy+20): ld b,(ix+11): ld c,(ix+10):" \
 			"ld b,(iy+21): ld c,(iy+20): ld d,(ix+11): ld e,(ix+10): ld d,(iy+21): ld e,(iy+20): ld hl,(ix+10): " \
@@ -20992,6 +20978,9 @@ void RasmAutotest(void)
 	int opcodelen,ret;
 	int cpt=0,chk,i,j,k,idx,sko=0;
 	char *tmpstr3,**tmpsplit;
+	unsigned char RealDump[60]={00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x80,0x00,0x00,0x00,0x80,0x80,0x00,0x00,0x80,
+		0x2d,0x86,0x9e,0xda,0x0f,0x49,0x82,0x00,0x00,0x00,0x80,0x7f,0x20,0x84,0xdb,0x7f,0x80,0xcd,0x85,0xdb,0x7f,
+		0x80,0x20,0x84,0xdb,0xff,0x80,0xcd,0x85,0xdb,0xff,0x80,0xc8,0xdd,0xd6,0x7c,0x7d,0x53,0x51,0x06,0x1e,0x81};
 
 #ifdef RDD
 	printf("\n%d bytes\n",_static_library_memory_used);
@@ -21617,6 +21606,11 @@ printf("testing operator assignment + repeat OK\n");
 	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
 printf("testing operator assignment + repeat + spacing OK\n");
 	
+	ret=RasmAssemble(AUTOTEST_REAL,strlen(AUTOTEST_REAL),&opcode,&opcodelen);
+	if (!ret && opcodelen==60 && memcmp(RealDump,opcode,60)==0) {} else {printf("Autotest %03d ERROR (DEFR conversion to REAL)\n",cpt);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing Amstrad REAL OK\n");
+
 	ret=RasmAssemble(AUTOTEST_FORMULA1,strlen(AUTOTEST_FORMULA1),&opcode,&opcodelen);
 	if (!ret) {} else {printf("Autotest %03d ERROR (formula case 1)\n",cpt);exit(-1);}
 	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
