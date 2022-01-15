@@ -2324,7 +2324,6 @@ printf("32 bits mantissa is %lu\n",mantissa);
 		/* handling zero special case */
 		if (v==0.0) {
 			exp=-128;
-			ibit=0;
 		} else {
 			mantissa=(v*4294967296.0+0.5); // as v is ALWAYS <1.0 we never reach the 32 bits maximum
 			mask=0x80000000;
@@ -2336,7 +2335,7 @@ printf("32 bits mantissa for fraction is %lu\n",mantissa);
 				mask=mask/2;
 				exp--;
 			}
-			while (mask && ibit<32) {
+			while (mask) {
 				mesbits[ibit]=!!(mantissa & mask);
 				ibit++;
 				mask=mask/2;
