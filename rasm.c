@@ -2141,108 +2141,80 @@ unsigned char *__internal_MakeRosoftREAL(struct s_assenv *ae, double v, int iexp
 	
 	static unsigned char orc[5]={0};
 	unsigned char rc[5]={0};
-	
-	int j,ib,ibb,exp=0;
-	unsigned int deci;
+	int j,ib,ibb;
 	int fracmax=0;
-	double frac;
 	int mesbits[32];
-	int ibit=0;
-	unsigned int mask;
+	int ibit=0,exp=0;
+	// v2
+	char doubletext[128];
+	unsigned long mantissa;
+	unsigned long deci;
+	unsigned long mask;
+	double superv;
+	int hassign;
+	char *dotptr;
 
 	memset(rc,0,sizeof(rc));
 
-	deci=fabs(floor(v));
-	frac=fabs(v)-deci;
-
+	// decimal hack
+	sprintf(doubletext,"%.16lf",v);
+	if ((dotptr=strchr(doubletext,'.'))!=NULL) *dotptr=0;
+	deci=labs(atol(doubletext));
+#if TRACE_MAKEAMSDOSREAL
+printf("AmstradREAL decimal part is %s\n",doubletext);
+#endif
+	/*******************************************************************
+			     values >= 1.0
+	*******************************************************************/
 	if (deci) {
 		mask=0x80000000;
-		while (!(deci & mask)) mask=mask>>1;
+		// find first significant bit of decimal part in order to get exponent value
+		while (!(deci & mask)) mask=mask/2;
 		while (mask) {
-			mesbits[ibit]=!!(deci & mask);
+			exp++;
+			mask=mask/2;
+		}
+		mantissa=(v/pow(2.0,exp)*4294967296.0+0.5); // 32 bits unsigned is the maximum value allowed
 #if TRACE_MAKEAMSDOSREAL
-printf("%d",mesbits[ibit]);
+printf("decimal part has %d bits\n",exp);
+printf("32 bits mantissa is %lu\n",mantissa);
 #endif
+		mask=0x80000000;
+		while (mask) {
+			mesbits[ibit]=!!(mantissa & mask);
 			ibit++;
 			mask=mask/2;
 		}
-#if TRACE_MAKEAMSDOSREAL
-printf("\nexposant positif: %d\n",ibit);
-#endif
-		exp=ibit;
-#if TRACE_MAKEAMSDOSREAL
-printf(".");
-#endif
-		while (ibit<32 && frac!=0) {
-			frac=frac*2.0;
-			if (frac>=1.0) {
-				mesbits[ibit++]=1;
-#if TRACE_MAKEAMSDOSREAL
-printf("1");
-#endif
-				frac-=1.0;
-			} else {
-				mesbits[ibit++]=0;
-#if TRACE_MAKEAMSDOSREAL
-printf("0");
-#endif
-			}
-			fracmax++;
-		}
 	} else {
-#if TRACE_MAKEAMSDOSREAL
-printf("\nexposant negatif a definir:\n");
-printf("x.");
-#endif
-		
-		/* handling zero */
-		if (frac==0.0) {
-#if TRACE_MAKEAMSDOSREAL
-printf("\ncas special ZERO:\n");
-#endif
-			exp=0;
+		/*******************************************************************
+		                     negative exponent or zero
+		*******************************************************************/
+		/* handling zero special case */
+		if (v==0.0) {
+			exp=-128;
 			ibit=0;
 		} else {
-			/* looking for first significant bit */
-			while (1) {
-				frac=frac*2.0;
-				if (frac>=1.0) {
-					mesbits[ibit++]=1;
+			mantissa=(v*4294967296.0+0.5); // as v is ALWAYS <1.0 we never reach the 32 bits maximum
+			mask=0x80000000;
 #if TRACE_MAKEAMSDOSREAL
-printf("1");
+printf("32 bits mantissa for fraction is %lu\n",mantissa);
 #endif
-					frac-=1.0;
-					break; /* first significant bit found, now looking for limit */
-				} else {
-#if TRACE_MAKEAMSDOSREAL
-printf("o");
-#endif
-				}
-				fracmax++;
+			// find first significant bit of fraction part
+			while (!(mantissa & mask)) {
+				mask=mask/2;
 				exp--;
 			}
-			while (ibit<32 && frac!=0) {
-				frac=frac*2.0;
-				if (frac>=1.0) {
-					mesbits[ibit++]=1;
-#if TRACE_MAKEAMSDOSREAL
-printf("1");
-#endif
-					frac-=1.0;
-				} else {
-					mesbits[ibit++]=0;
-#if TRACE_MAKEAMSDOSREAL
-printf("0");
-#endif
-				}
-				fracmax++;
+			while (mask && ibit<32) {
+				mesbits[ibit]=!!(mantissa & mask);
+				ibit++;
+				mask=mask/2;
 			}
 		}
+#if TRACE_MAKEAMSDOSREAL
+printf("\n%d bits used for mantissa\n",ibit);
+#endif
 	}
 
-#if TRACE_MAKEAMSDOSREAL
-printf("\n%d bits utilises en mantisse\n",ibit);
-#endif
 	/* pack bits */
 	ib=3;ibb=0x80;
 	for (j=0;j<ibit;j++) {
@@ -2254,15 +2226,11 @@ printf("\n%d bits utilises en mantisse\n",ibit);
 		}
 	}
 	/* exponent */
-	if (exp==0 && ibit==0) {
-		/* special zero */
-	} else {
-		exp+=128;
-		if (exp<0 || exp>255) {
-			if (iexpression) MakeError(ae,GetExpFile(ae,iexpression),ae->wl[ae->expression[iexpression].iw].l,"Exponent overflow\n");
-			else MakeError(ae,GetExpFile(ae,0),ae->wl[ae->idx].l,"Exponent overflow\n");
-			exp=128;
-		}
+	exp+=128;
+	if (exp<0 || exp>255) {
+		if (iexpression) MakeError(ae,GetExpFile(ae,iexpression),ae->wl[ae->expression[iexpression].iw].l,"Exponent overflow\n");
+		else MakeError(ae,GetExpFile(ae,0),ae->wl[ae->idx].l,"Exponent overflow\n");
+		exp=128;
 	}
 	rc[4]=exp;
 
@@ -2273,17 +2241,17 @@ printf("\n%d bits utilises en mantisse\n",ibit);
 		rc[3]|=0x80;
 	}
 
-#if TRACE_MAKEAMSDOSREAL
-	for (j=0;j<5;j++) printf("%02X ",rc[j]);
-	printf("\n");
-#endif
-
 	/* switch byte order */
 	orc[0]=rc[4];
 	orc[1]=rc[3];
 	orc[2]=rc[2];
 	orc[3]=rc[1];
 	orc[4]=rc[0];
+
+#if TRACE_MAKEAMSDOSREAL
+	for (j=0;j<5;j++) printf("%02X ",orc[j]);
+	printf("\n");
+#endif
 
 	return orc;
 }
@@ -2304,106 +2272,81 @@ unsigned char *__internal_MakeAmsdosREAL(struct s_assenv *ae, double v, int iexp
 	#define FUNC "__internal_MakeAmsdosREAL"
 	
 	static unsigned char rc[5];
-
-	
-	int j,ib,ibb,exp=0;
-	unsigned int deci;
+	int mesbits[32]={0}; // must be reseted!
+	int j,ib,ibb;
 	int fracmax=0;
 	double frac;
-	int mesbits[32];
-	int ibit=0;
-	unsigned int mask;
+	int ibit=0,exp=0;
+	// v2
+	char doubletext[128];
+	unsigned long mantissa;
+	unsigned long deci;
+	unsigned long mask;
+	double superv;
+	int hassign;
+	char *dotptr;
 
 	memset(rc,0,sizeof(rc));
 
-	deci=fabs(floor(v));
-	frac=fabs(v)-deci;
-
+	// decimal hack
+	sprintf(doubletext,"%.16lf",v);
+	if ((dotptr=strchr(doubletext,'.'))!=NULL) *dotptr=0;
+	deci=labs(atol(doubletext));
+#if TRACE_MAKEAMSDOSREAL
+printf("AmstradREAL decimal part is %s\n",doubletext);
+#endif
+	/*******************************************************************
+			     values >= 1.0
+	*******************************************************************/
 	if (deci) {
 		mask=0x80000000;
+		// find first significant bit of decimal part in order to get exponent value
 		while (!(deci & mask)) mask=mask/2;
 		while (mask) {
-			mesbits[ibit]=!!(deci & mask);
+			exp++;
+			mask=mask/2;
+		}
+		mantissa=(v/pow(2.0,exp)*4294967296.0+0.5); // 32 bits unsigned is the maximum value allowed
 #if TRACE_MAKEAMSDOSREAL
-printf("%d",mesbits[ibit]);
+printf("decimal part has %d bits\n",exp);
+printf("32 bits mantissa is %lu\n",mantissa);
 #endif
+		mask=0x80000000;
+		while (mask) {
+			mesbits[ibit]=!!(mantissa & mask);
 			ibit++;
 			mask=mask/2;
 		}
-#if TRACE_MAKEAMSDOSREAL
-printf("\nexposant positif: %d\n",ibit);
-#endif
-		exp=ibit;
-#if TRACE_MAKEAMSDOSREAL
-printf(".");
-#endif
-		while (ibit<32 && frac!=0) {
-			frac=frac*2;
-			if (frac>=1.0) {
-				mesbits[ibit++]=1;
-#if TRACE_MAKEAMSDOSREAL
-printf("1");
-#endif
-				frac-=1.0;
-			} else {
-				mesbits[ibit++]=0;
-#if TRACE_MAKEAMSDOSREAL
-printf("0");
-#endif
-			}
-			fracmax++;
-		}
 	} else {
-#if TRACE_MAKEAMSDOSREAL
-printf("\nexposant negatif a definir:\n");
-printf("x.");
-#endif
-		
-		/* handling zero */
-		if (frac==0.0) {
-			exp=0;
+		/*******************************************************************
+		                     negative exponent or zero
+		*******************************************************************/
+		/* handling zero special case */
+		if (v==0.0) {
+			exp=-128;
 			ibit=0;
 		} else {
-			/* looking for first significant bit */
-			while (1) {
-				frac=frac*2;
-				if (frac>=1.0) {
-					mesbits[ibit++]=1;
+			mantissa=(v*4294967296.0+0.5); // as v is ALWAYS <1.0 we never reach the 32 bits maximum
+			mask=0x80000000;
 #if TRACE_MAKEAMSDOSREAL
-printf("1");
+printf("32 bits mantissa for fraction is %lu\n",mantissa);
 #endif
-					frac-=1.0;
-					break; /* first significant bit found, now looking for limit */
-				} else {
-#if TRACE_MAKEAMSDOSREAL
-printf("o");
-#endif
-				}
-				fracmax++;
+			// find first significant bit of fraction part
+			while (!(mantissa & mask)) {
+				mask=mask/2;
 				exp--;
 			}
-			while (ibit<32 && frac!=0) {
-				frac=frac*2;
-				if (frac>=1.0) {
-					mesbits[ibit++]=1;
-#if TRACE_MAKEAMSDOSREAL
-printf("1");
-#endif
-					frac-=1.0;
-				} else {
-					mesbits[ibit++]=0;
-#if TRACE_MAKEAMSDOSREAL
-printf("0");
-#endif
-				}
-				fracmax++;
+			while (mask && ibit<32) {
+				mesbits[ibit]=!!(mantissa & mask);
+				ibit++;
+				mask=mask/2;
 			}
 		}
+#if TRACE_MAKEAMSDOSREAL
+printf("\n%d bits used for mantissa\n",ibit);
+#endif
 	}
 
-#if TRACE_MAKEAMSDOSREAL
-printf("\n%d bits utilises en mantisse\n",ibit);
-#endif
 	/* pack bits */
 	ib=3;ibb=0x80;
 	for (j=0;j<ibit;j++) {
@@ -2423,7 +2366,7 @@ printf("\n%d bits utilises en mantisse\n",ibit);
 	}
 	rc[4]=exp;
 
-	/* REAL sign */
+	/* REAL sign replace the most significant implied bit */
 	if (v>=0) {
 		rc[3]&=0x7F;
 	} else {
@@ -2432,7 +2375,7 @@ printf("\n%d bits utilises en mantisse\n",ibit);
 
 #if TRACE_MAKEAMSDOSREAL
 	for (j=0;j<5;j++) printf("%02X ",rc[j]);
-	printf("\n");
+	printf("\n------------------\n");
 #endif
 
 	return rc;
