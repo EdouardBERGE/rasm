@@ -2306,7 +2306,7 @@ printf("AmstradREAL decimal part is %s\n",doubletext);
 			exp++;
 			mask=mask/2;
 		}
-		mantissa=(v/pow(2.0,exp)*4294967296.0+0.5); // 32 bits unsigned is the maximum value allowed
+		mantissa=(fabs(v)/pow(2.0,exp)*4294967296.0+0.5); // 32 bits unsigned is the maximum value allowed
 #if TRACE_MAKEAMSDOSREAL
 printf("decimal part has %d bits\n",exp);
 printf("32 bits mantissa is %lu\n",mantissa);
@@ -2325,7 +2325,7 @@ printf("32 bits mantissa is %lu\n",mantissa);
 		if (v==0.0) {
 			exp=-128;
 		} else {
-			mantissa=(v*4294967296.0+0.5); // as v is ALWAYS <1.0 we never reach the 32 bits maximum
+			mantissa=(fabs(v)*4294967296.0+0.5); // as v is ALWAYS <1.0 we never reach the 32 bits maximum
 			mask=0x80000000;
 #if TRACE_MAKEAMSDOSREAL
 printf("32 bits mantissa for fraction is %lu\n",mantissa);
@@ -20478,7 +20478,7 @@ int RasmAssembleInfoParam(const char *datain, int lenin, unsigned char **dataout
 
 #define AUTOTEST_MAXERROR	"repeat 20:aglapi:rend:nop"
 
-//#define AUTOTEST_REAL	"defr 0,0.5,-0.5 : float 0,0.5,-0.5"
+#define AUTOTEST_REAL	"defr 0,0.5,-0.5,1.23456,43.375,3.141592653468"
 
 #define AUTOTEST_ENHANCED_LD	"ld h,(ix+11): ld l,(ix+10): ld h,(iy+21): ld l,(iy+20): ld b,(ix+11): ld c,(ix+10):" \
 			"ld b,(iy+21): ld c,(iy+20): ld d,(ix+11): ld e,(ix+10): ld d,(iy+21): ld e,(iy+20): ld hl,(ix+10): " \
