@@ -2198,6 +2198,10 @@ printf("32 bits mantissa for fraction is %lu\n",mantissa);
 				mask=mask/2;
 				exp--;
 			}
+
+			mantissa=(fabs(v)*pow(2.0,-exp)*4294967296.0+0.5); // as v is ALWAYS <1.0 we never reach the 32 bits maximum
+			mask=0x80000000;
+
 			while (mask && ibit<32) {
 				mesbits[ibit]=!!(mantissa & mask);
 				ibit++;
@@ -2321,6 +2325,10 @@ printf("32 bits mantissa for fraction is %lu\n",mantissa);
 				mask=mask/2;
 				exp--;
 			}
+
+			mantissa=(fabs(v)*pow(2.0,-exp)*4294967296.0+0.5); // as v is ALWAYS <1.0 we never reach the 32 bits maximum
+			mask=0x80000000;
+
 			while (mask) {
 				mesbits[ibit]=!!(mantissa & mask);
 				ibit++;
