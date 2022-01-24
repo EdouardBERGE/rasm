@@ -2149,11 +2149,14 @@ unsigned char *__internal_MakeRosoftREAL(struct s_assenv *ae, double v, int iexp
 	unsigned long mantissa;
 	unsigned long deci;
 	unsigned long mask;
+	int isneg;
+
+	if (v<0.0) {isneg=1;v=-v;} else isneg=0;
 
 	memset(rc,0,sizeof(rc));
 
 	// decimal hack
-	deci=labs(v);
+	deci=v;
 #if TRACE_MAKEAMSDOSREAL
 printf("AmstradREAL decimal part is %s\n",doubletext);
 #endif
@@ -2168,7 +2171,7 @@ printf("AmstradREAL decimal part is %s\n",doubletext);
 			exp++;
 			mask=mask/2;
 		}
-		mantissa=(v/pow(2.0,exp)*4294967296.0+0.5); // 32 bits unsigned is the maximum value allowed
+		mantissa=v*pow(2.0,32-exp)+0.5; // 32 bits unsigned is the maximum value allowed
 #if TRACE_MAKEAMSDOSREAL
 printf("decimal part has %d bits\n",exp);
 printf("32 bits mantissa is %lu\n",mantissa);
@@ -2199,7 +2202,7 @@ printf("32 bits mantissa for fraction is %lu\n",mantissa);
 				exp--;
 			}
 
-			mantissa=(fabs(v)*pow(2.0,-exp)*4294967296.0+0.5); // as v is ALWAYS <1.0 we never reach the 32 bits maximum
+			mantissa=(v*pow(2.0,32-exp)+0.5); // as v is ALWAYS <1.0 we never reach the 32 bits maximum
 			mask=0x80000000;
 
 			while (mask && ibit<32) {
@@ -2233,7 +2236,7 @@ printf("\n%d bits used for mantissa\n",ibit);
 	rc[4]=exp;
 
 	/* Microsoft REAL sign */
-	if (v>=0) {
+	if (!isneg) {
 		rc[3]&=0x7F;
 	} else {
 		rc[3]|=0x80;
@@ -2277,11 +2280,14 @@ unsigned char *__internal_MakeAmsdosREAL(struct s_assenv *ae, double v, int iexp
 	unsigned long mantissa;
 	unsigned long deci;
 	unsigned long mask;
+	int isneg;
 
 	memset(rc,0,sizeof(rc));
 
+	if (v<0.0) {isneg=1;v=-v;} else isneg=0;
+
 	// decimal hack
-	deci=labs(v);
+	deci=v;
 #if TRACE_MAKEAMSDOSREAL
 printf("AmstradREAL decimal part is %s\n",doubletext);
 #endif
@@ -2296,7 +2302,7 @@ printf("AmstradREAL decimal part is %s\n",doubletext);
 			exp++;
 			mask=mask/2;
 		}
-		mantissa=(fabs(v)/pow(2.0,exp)*4294967296.0+0.5); // 32 bits unsigned is the maximum value allowed
+		mantissa=v*pow(2.0,32-exp)+0.5; // 32 bits unsigned is the maximum value allowed
 #if TRACE_MAKEAMSDOSREAL
 printf("decimal part has %d bits\n",exp);
 printf("32 bits mantissa is %lu\n",mantissa);
@@ -2315,7 +2321,7 @@ printf("32 bits mantissa is %lu\n",mantissa);
 		if (v==0.0) {
 			exp=-128;
 		} else {
-			mantissa=(fabs(v)*4294967296.0+0.5); // as v is ALWAYS <1.0 we never reach the 32 bits maximum
+			mantissa=(v*4294967296.0+0.5); // as v is ALWAYS <1.0 we never reach the 32 bits maximum
 			mask=0x80000000;
 #if TRACE_MAKEAMSDOSREAL
 printf("32 bits mantissa for fraction is %lu\n",mantissa);
@@ -2326,7 +2332,7 @@ printf("32 bits mantissa for fraction is %lu\n",mantissa);
 				exp--;
 			}
 
-			mantissa=(fabs(v)*pow(2.0,-exp)*4294967296.0+0.5); // as v is ALWAYS <1.0 we never reach the 32 bits maximum
+			mantissa=(v*pow(2.0,32-exp)+0.5); // as v is ALWAYS <1.0 we never reach the 32 bits maximum
 			mask=0x80000000;
 
 			while (mask) {
@@ -2360,7 +2366,7 @@ printf("\n%d bits used for mantissa\n",ibit);
 	rc[4]=exp;
 
 	/* REAL sign replace the most significant implied bit */
-	if (v>=0) {
+	if (!isneg) {
 		rc[3]&=0x7F;
 	} else {
 		rc[3]|=0x80;
