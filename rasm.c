@@ -20478,7 +20478,7 @@ int RasmAssembleInfoParam(const char *datain, int lenin, unsigned char **dataout
 
 #define AUTOTEST_MAXERROR	"repeat 20:aglapi:rend:nop"
 
-#define AUTOTEST_REAL	"defr 0,0.5,-0.5,43.375,3.14159265,-0.25,0.9994433,0.9994434,-0.9994433,-0.9994434,0.1234567,1.2345678"
+#define AUTOTEST_REAL	"defr 0,0.5,-0.5,43.375,3.14159265,-0.25,0.9994433,0.9994434,-0.9994433,-0.9994434,0.1234567,1.2345678,0.00007"
 
 #define AUTOTEST_ENHANCED_LD	"ld h,(ix+11): ld l,(ix+10): ld h,(iy+21): ld l,(iy+20): ld b,(ix+11): ld c,(ix+10):" \
 			"ld b,(iy+21): ld c,(iy+20): ld d,(ix+11): ld e,(ix+10): ld d,(iy+21): ld e,(iy+20): ld hl,(ix+10): " \
@@ -20992,9 +20992,10 @@ void RasmAutotest(void)
 	int opcodelen,ret;
 	int cpt=0,chk,i,j,k,idx,sko=0;
 	char *tmpstr3,**tmpsplit;
-	unsigned char RealDump[60]={00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x80,0x00,0x00,0x00,0x80,0x80,0x00,0x00,0x80,
+	unsigned char RealDump[65]={00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x80,0x00,0x00,0x00,0x80,0x80,0x00,0x00,0x80,
 		0x2d,0x86,0x9e,0xda,0x0f,0x49,0x82,0x00,0x00,0x00,0x80,0x7f,0x20,0x84,0xdb,0x7f,0x80,0xcd,0x85,0xdb,0x7f,
-		0x80,0x20,0x84,0xdb,0xff,0x80,0xcd,0x85,0xdb,0xff,0x80,0xc8,0xdd,0xd6,0x7c,0x7d,0x53,0x51,0x06,0x1e,0x81};
+		0x80,0x20,0x84,0xdb,0xff,0x80,0xcd,0x85,0xdb,0xff,0x80,0xc8,0xdd,0xd6,0x7c,0x7d,0x53,0x51,0x06,0x1e,0x81,
+		0xBE,0xF6,0xCC,0x12,0x73};
 
 #ifdef RDD
 	printf("\n%d bytes\n",_static_library_memory_used);
@@ -21621,7 +21622,7 @@ printf("testing operator assignment + repeat OK\n");
 printf("testing operator assignment + repeat + spacing OK\n");
 	
 	ret=RasmAssemble(AUTOTEST_REAL,strlen(AUTOTEST_REAL),&opcode,&opcodelen);
-	if (!ret && opcodelen==60 && memcmp(RealDump,opcode,60)==0) {} else {printf("Autotest %03d ERROR (DEFR conversion to REAL)\n",cpt);exit(-1);}
+	if (!ret && opcodelen==sizeof(RealDump) && memcmp(RealDump,opcode,sizeof(RealDump))==0) {} else {printf("Autotest %03d ERROR (DEFR conversion to REAL)\n",cpt);exit(-1);}
 	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
 printf("testing Amstrad REAL OK\n");
 
