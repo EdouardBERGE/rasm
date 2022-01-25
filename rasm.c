@@ -2172,6 +2172,7 @@ printf("AmstradREAL decimal part is %s\n",doubletext);
 			mask=mask/2;
 		}
 		mantissa=v*pow(2.0,32-exp)+0.5; // 32 bits unsigned is the maximum value allowed
+		if (mantissa & 0xFF00000000L) mantissa=0xFFFFFFFF;
 #if TRACE_MAKEAMSDOSREAL
 printf("decimal part has %d bits\n",exp);
 printf("32 bits mantissa is %lu\n",mantissa);
@@ -2192,6 +2193,7 @@ printf("32 bits mantissa is %lu\n",mantissa);
 			ibit=0;
 		} else {
 			mantissa=(v*4294967296.0+0.5); // as v is ALWAYS <1.0 we never reach the 32 bits maximum
+			if (mantissa & 0xFF00000000L) mantissa=0xFFFFFFFF;
 			mask=0x80000000;
 #if TRACE_MAKEAMSDOSREAL
 printf("32 bits mantissa for fraction is %lu\n",mantissa);
@@ -2203,6 +2205,7 @@ printf("32 bits mantissa for fraction is %lu\n",mantissa);
 			}
 
 			mantissa=(v*pow(2.0,32-exp)+0.5); // as v is ALWAYS <1.0 we never reach the 32 bits maximum
+			if (mantissa & 0xFF00000000L) mantissa=0xFFFFFFFF;
 			mask=0x80000000;
 
 			while (mask && ibit<32) {
@@ -2303,6 +2306,7 @@ printf("AmstradREAL decimal part is %s\n",doubletext);
 			mask=mask/2;
 		}
 		mantissa=v*pow(2.0,32-exp)+0.5; // 32 bits unsigned is the maximum value allowed
+		if (mantissa & 0xFF00000000L) mantissa=0xFFFFFFFF;
 #if TRACE_MAKEAMSDOSREAL
 printf("decimal part has %d bits\n",exp);
 printf("32 bits mantissa is %lu\n",mantissa);
@@ -2322,6 +2326,7 @@ printf("32 bits mantissa is %lu\n",mantissa);
 			exp=-128;
 		} else {
 			mantissa=(v*4294967296.0+0.5); // as v is ALWAYS <1.0 we never reach the 32 bits maximum
+			if (mantissa & 0xFF00000000L) mantissa=0xFFFFFFFF;
 			mask=0x80000000;
 #if TRACE_MAKEAMSDOSREAL
 printf("32 bits mantissa for fraction is %lu\n",mantissa);
@@ -2333,6 +2338,7 @@ printf("32 bits mantissa for fraction is %lu\n",mantissa);
 			}
 
 			mantissa=(v*pow(2.0,32-exp)+0.5); // as v is ALWAYS <1.0 we never reach the 32 bits maximum
+			if (mantissa & 0xFF00000000L) mantissa=0xFFFFFFFF;
 			mask=0x80000000;
 
 			while (mask) {
