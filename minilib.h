@@ -3,7 +3,14 @@
 #include<string.h>
 #include<stdlib.h>
 #include<stddef.h>
+#ifdef _MSC_VER
+#if _MSC_VER>1500
 #include<stdint.h>
+#endif
+#else
+#include<stdint.h>
+#endif
+
 #include<stdarg.h>
 #include<stdio.h>
 #include<errno.h>
