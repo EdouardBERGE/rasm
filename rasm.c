@@ -863,6 +863,7 @@ struct s_assenv {
 	char *cprinfo_filename;
 	struct s_snapshot snapshot;
 	struct s_zxsnapshot zxsnapshot;
+	int snapRAMsize;
 	int bankset[BANK_MAX_NUMBER>>2];   /* 64K selected flag */
 	int bankused[BANK_MAX_NUMBER]; /* 16K selected flag */
 	int bankgate[BANK_MAX_NUMBER+1];
@@ -11874,6 +11875,172 @@ void __BUILDROM(struct s_assenv *ae) {
 		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Cannot select ROM output when already in ZX/cartridge/snapshot/tape output\n");
 	}
 }
+
+
+void __SNAPINIT(struct s_assenv *ae) {
+	unsigned char *dataout;
+	unsigned char *snapdata;
+	int src,idx,rep,i,srcmax;
+	int chunksize;
+	int version,size;
+	int snapsize;
+	int slot;
+	// integration
+	char *newfilename=NULL;
+	int fileok=0;
+
+	if (!ae->forcecpr && !ae->forcetape && !ae->forcezx && !ae->forceROM) {
+		// automatic BUILDSNA
+		ae->forcesnapshot=1;
+	} else {
+		// not an error, we may only want to extract data
+		rasm_printf(ae,KWARNING"[%s:%d] What's the point to use SNAPINIT when using ZX/ROM/cartridge/tape output?\n",GetCurrentFile(ae),ae->wl[ae->idx].l);
+		if (ae->erronwarn) MaxError(ae);
+	}
+
+	if (!ae->wl[ae->idx].t) {
+		if (!StringIsQuote(ae->wl[ae->idx+1].w)) {
+			MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"SNAPINIT needs a snapshot filename to proceed\n");
+			return;
+		} else {
+			newfilename=TxtStrDup(ae->wl[ae->idx+1].w+1); // skip first quote
+			newfilename[strlen(newfilename)-1]=0; // remove last quote
+		}
+	} else {
+		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"SNAPINIT needs a snapshot filename to proceed\n");
+		return;
+	}
+
+	/* Where is the file to load? */
+	if (!FileExists(newfilename)) {
+		int ilookfile;
+		char *filename_toread;
+
+		/* on cherche dans les include */
+		for (ilookfile=0;ilookfile<ae->ipath && !fileok;ilookfile++) {
+			filename_toread=MergePath(ae,ae->includepath[ilookfile],newfilename);
+			if (FileExists(filename_toread)) {
+				fileok=1;
+				MemFree(newfilename);
+				newfilename=TxtStrDup(filename_toread); // Merge renvoie un static
+			}
+		}
+	} else {
+		fileok=1;
+	}
+
+	if (fileok) {
+		snapsize=FileGetSize(newfilename);
+		snapdata=MemMalloc(snapsize);
+		if (FileReadBinary(newfilename,(char*)snapdata,snapsize)!=snapsize) {
+			MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"read error on file [%s]\n",newfilename);
+			MemFree(newfilename);
+			MemFree(snapdata);
+			return;
+		}
+		FileReadBinaryClose(newfilename);
+
+		if (snapsize<0x100) {
+			MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"file [%s] seems too small to be a snapshot\n",newfilename);
+		} else if (snapdata[0]!='M' || snapdata[1]!='V' || snapdata[2]!=' ' || snapdata[3]!='-' || snapdata[4]!=' ' || snapdata[5]!='S' || snapdata[6]!='N' || snapdata[7]!='A') {
+			MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"file [%s] invalid snapshot header\n",newfilename);
+		} else {
+		}
+	} else {
+		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"file [%s] not found!\n",newfilename);
+		return;
+	}
+
+	// data extraction
+	size=snapdata[0x6B]*1024;
+	src=0x100;
+	switch (snapdata[0x6B]) {
+		default:
+		case 0:
+			if (snapdata[16]<3) {
+				MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"file [%s] empty snapshot v2\n",newfilename);
+				snapsize=0;
+			}
+			break;
+		case 64:
+			if (snapsize==size+0x100) {
+				memcpy(ae->mem[0],snapdata+0x100,65536);
+				src+=65536;
+				ae->snapRAMsize=4;
+			} else {
+				MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"file [%s] snapshot v2 inconsistency (supposed to be 64k)\n",newfilename);
+				snapsize=0;
+			}
+			break;
+		case 128:
+			if (snapsize==size+0x100) {
+				memcpy(ae->mem[0],snapdata+0x100,65536);
+				memcpy(ae->mem[4],snapdata+0x100+65536,65536);
+				src+=65536*2;
+				ae->snapRAMsize=8;
+			} else {
+				MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"file [%s] snapshot v2 inconsistency (supposed to be 128k)\n",newfilename);
+				snapsize=0;
+			}
+			break;
+	}
+
+	// raw copy of header for output (check for v2 or v3 ?)
+	memcpy(&ae->snapshot,snapdata,0x100);
+	if (ae->snapshot.version<2) {
+		rasm_printf(ae,KWARNING"[%s:%d] early version of snapshot, upgrading to V2, you may need to use SNASET to get a proper snapshot\n",GetCurrentFile(ae),ae->wl[ae->idx].l);
+		ae->snapshot.version=2;
+	}
+
+	while (src+8<snapsize) {
+		chunksize=snapdata[src+4]+snapdata[src+5]*256+snapdata[src+6]*65536+snapdata[src+7]*65536*256;
+		if (snapdata[src+0]=='M' && snapdata[src+1]=='E' && snapdata[src+2]=='M') {
+			// v3 snapshot has chunk MEM%d ou MX%02X en RLE + chunksize + data
+			slot=snapdata[src+3]-'0';
+			idx=0;
+			src+=8;
+			srcmax=src+chunksize;
+			if (srcmax>snapsize) {
+				MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"file [%s] invalid chunk in snapshot (overrun) chunksize=%d\n",newfilename,chunksize);
+				break;
+			}
+
+			dataout=ae->mem[slot*4];
+
+			if (slot*4+4>ae->snapRAMsize) ae->snapRAMsize=slot*4+4;
+
+			while (idx<65536 && src<srcmax) {
+				if (snapdata[src]==0xE5) {
+					src++;
+					for (i=0;i<snapdata[src] && idx<65536;i++) {
+						dataout[idx++]=snapdata[src+1];
+					}
+					src+=2;
+				} else {
+					dataout[idx++]=snapdata[src++];
+				}
+			}
+			if (src!=srcmax) {
+				MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"file [%s] invalid chunk in snapshot (overrun)\n",newfilename);
+				break;
+			}
+		} else {
+			// skip non memory chunk
+			src+=8+chunksize;
+		}
+	}
+	// replicate bankset in memory to be ok with bankset rebuilding
+	memcpy(ae->mem[1],ae->mem[0],65536);
+	memcpy(ae->mem[2],ae->mem[0],65536);
+	memcpy(ae->mem[3],ae->mem[0],65536);
+	memcpy(ae->mem[5],ae->mem[4],65536);
+	memcpy(ae->mem[6],ae->mem[4],65536);
+	memcpy(ae->mem[7],ae->mem[4],65536);
+	MemFree(newfilename);
+	MemFree(snapdata);
+}
+
+
 void __BUILDSNA(struct s_assenv *ae) {
 	if (!ae->wl[ae->idx].t) {
 		if (strcmp(ae->wl[ae->idx+1].w,"V2")==0) {
@@ -14354,9 +14521,17 @@ void __ORG(struct s_assenv *ae) {
 	if (ae->wl[ae->idx+1].t!=2) {
 		ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
 		ae->codeadr=RoundComputeExpression(ae,ae->wl[ae->idx+1].w,ae->outputadr,0,0);
+		if (ae->codeadr<0 || ae->codeadr>0xFFFF) {
+			ae->codeadr=0;
+			MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"[%s:%d] cannot ORG outside memory!\n");
+		}
 		if (!ae->wl[ae->idx+1].t && ae->wl[ae->idx+2].t!=2) {
 			ExpressionFastTranslate(ae,&ae->wl[ae->idx+2].w,0);
 			ae->outputadr=RoundComputeExpression(ae,ae->wl[ae->idx+2].w,ae->outputadr,0,0);
+			if (ae->outputadr<0 || ae->outputadr>0xFFFF) {
+				ae->outputadr=0;
+				MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"[%s:%d] cannot ORG outside memory!\n");
+			}
 			ae->idx+=2;
 		} else {
 			ae->outputadr=ae->codeadr;
@@ -15331,6 +15506,7 @@ printf("Hexbin -> surprise! we found the file!\n");
 				curhexbin->data=MemMalloc(curhexbin->datalen*1.3+10);
 				if (FileReadBinary(newfilename,(char*)curhexbin->data,curhexbin->datalen)!=curhexbin->datalen) {
 					MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"read error on file [%s]\n",newfilename);
+					MemFree(curhexbin->data);
 					MemFree(newfilename);
 					return;
 				}
@@ -16108,6 +16284,7 @@ struct s_asm_keyword instruction[]={
 {"LZ49",0,__LZ49},
 {"LZCLOSE",0,__LZCLOSE},
 {"SNASET",0,__SNASET},
+{"SNAPINIT",0,__SNAPINIT},
 {"BUILDZX",0,__BUILDZX},
 {"BUILDOBJ",0,__BUILDOBJ},
 {"BUILDCPR",0,__BUILDCPR},
@@ -17316,7 +17493,13 @@ printf("output files\n");
 						} else if (maxrom>=0) {
 							ae->snapshot.dumpsize[0]=64;
 						}
+					} else {
+						ae->snapshot.dumpsize[0]=0;
 					}
+
+					// enforce snapshot input size (if any) even we do not write everywhere in memory
+					if (ae->snapRAMsize-1>maxrom) maxrom=ae->snapRAMsize-1;
+
 					if (maxrom==-1) {
 						rasm_printf(ae,KWARNING"Warning: No byte were written in snapshot memory\n");
 						if (ae->erronwarn) MaxError(ae);
@@ -23040,5 +23223,3 @@ printf("checking memory\n");
 }
 
 #endif
-
-
