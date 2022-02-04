@@ -19716,28 +19716,30 @@ printf("c='%c' automate[c]=%d\n",c>31?c:'.',Automate[((int)c)&0xFF]);
 							w[lw]=0;
 							break;
 						}
-						quote_type=c;
 #if TRACE_PREPRO
 printf("quote\n");
 #endif
 						/* on finalise le mot si on est en début d'une nouvelle instruction ET que c'est un SAVE */
 						if (strcmp(w,"SAVE")==0) {
+							// on ne break pas pour passer dans le case 2 (separator)
 							idx--;
 						} else {
+							quote_type=c;
 							w[lw++]=c;
 							StateMachineResizeBuffer(&w,lw,&mw);
 							w[lw]=0;
 							break;
 						}
 					} else if (c=='"') {
-						quote_type=c;
 #if TRACE_PREPRO
 printf("quote\n");
 #endif
 						/* on finalise le mot si on est en début d'une nouvelle instruction ET que c'est un SAVE */
 						if (strcmp(w,"SAVE")==0) {
+							// on ne break pas pour passer dans le case 2 (separator)
 							idx--;
 						} else {
+							quote_type=c;
 							w[lw++]=c;
 							StateMachineResizeBuffer(&w,lw,&mw);
 							w[lw]=0;
@@ -20107,12 +20109,18 @@ printf("mot precedent=[%s] t=%d\n",wordlist[nbword-1].w,wordlist[nbword-1].t);
 			}
 		} else {
 #if TRACE_PREPRO
-printf("quote start\n");
+printf("quote start with %c\n",c);
 #endif
 			/* quoted string always starts with a single or a double quote */
 			w[lw++]=c;
 			StateMachineResizeBuffer(&w,lw,&mw);
+			if (c=='\\') {
+				escape_code=1;
+			} else if (c==quote_type) {
+				quote_type=0;
+			}
 
+			if (quote_type) // should not happend but...
 			do {
 				c=listing[l].listing[idx++];
 				if (!c) {
