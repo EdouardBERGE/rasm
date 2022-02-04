@@ -839,7 +839,15 @@ struct s_rasmstruct {
 enum e_poker {
 E_POKER_XOR8=0,
 E_POKER_SUM8=1,
+E_POKER_CIPHER001=2,
 E_POKER_END
+};
+
+char *strpoker[]={
+	"XORMEM",
+	"SUMMEM",
+	"CIPHER001",
+	NULL
 };
 
 struct s_poker {
@@ -6703,7 +6711,7 @@ void ExpressionFastTranslate(struct s_assenv *ae, char **ptr_expr, int fullrepla
 					return;
 				}
 			} else if (expr[idx+1] && expr[idx+2]==c) {
-					sprintf(tmpuchar,"#%02X",ae->charset[(int)expr[idx+1]]);
+					sprintf(tmpuchar,"#%02X",ae->charset[((unsigned int)expr[idx+1])&0xFF]);
 					memcpy(expr+idx,tmpuchar,3);
 					idx+=2;
 			} else {
@@ -11365,9 +11373,9 @@ void _STR(struct s_assenv *ae) {
 					} else {
 						/* charset conversion on the fly */
 						if (ae->wl[ae->idx].w[i+1]!=tquote) {
-							___output(ae,ae->charset[(unsigned int)ae->wl[ae->idx].w[i]]);
+							___output(ae,ae->charset[((unsigned int)ae->wl[ae->idx].w[i])&0xFF]);
 						} else {
-							___output(ae,ae->charset[(unsigned int)ae->wl[ae->idx].w[i]]|0x80);
+							___output(ae,ae->charset[((unsigned int)ae->wl[ae->idx].w[i]|0x80)&0xFF]);
 						}
 					}
 
@@ -11532,7 +11540,7 @@ void _DEFB_struct(struct s_assenv *ae) {
 						}						
 					} else {
 						/* charset conversion on the fly */
-						___output(ae,ae->charset[(int)ae->wl[ae->idx].w[i]]);
+						___output(ae,ae->charset[(unsigned int)ae->wl[ae->idx].w[i]&0xFF]);
 						ae->nop+=1;
 					}
 					i++;
@@ -11632,7 +11640,7 @@ void _DEFB_as80(struct s_assenv *ae) {
 				while (ae->wl[ae->idx].w[i] && ae->wl[ae->idx].w[i]!=tquote) {
 					if (ae->wl[ae->idx].w[i]=='\\') i++;
 					/* charset conversion on the fly */
-					___output(ae,ae->charset[(int)ae->wl[ae->idx].w[i]]);
+					___output(ae,ae->charset[(unsigned int)ae->wl[ae->idx].w[i]&0xFF]);
 					ae->nop+=1;
 					ae->codeadr--;modadr++;
 					i++;
@@ -12703,7 +12711,7 @@ void __CHARSET(struct s_assenv *ae) {
 				i=1;
 				while (ae->wl[ae->idx+1].w[i] && ae->wl[ae->idx+1].w[i]!=tquote) {
 					if (ae->wl[ae->idx+1].w[i]=='\\') i++;
-					ae->charset[(int)ae->wl[ae->idx+1].w[i]]=(unsigned char)v++;
+					ae->charset[(unsigned int)ae->wl[ae->idx+1].w[i]&0xFF]=(unsigned char)v++;
 					i++;
 				}
 			} else {
@@ -16055,6 +16063,27 @@ void __XORMEM(struct s_assenv *ae) {
 	}
 }
 
+void __CIPHERMEM(struct s_assenv *ae) {
+	struct s_poker poker={0};
+
+	if (!ae->wl[ae->idx].t && !ae->wl[ae->idx+1].t && ae->wl[ae->idx+2].t==1) {
+		/* cipher memory */
+		if (!ae->nocode) {
+			poker.method=E_POKER_CIPHER001;
+			poker.istart=ae->idx+1;
+			poker.iend=ae->idx+2;
+			ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,1);
+			ExpressionFastTranslate(ae,&ae->wl[ae->idx+2].w,1);
+			poker.outputadr=ae->outputadr;
+			poker.ibank=ae->activebank;
+			ObjectArrayAddDynamicValueConcat((void**)&ae->poker,&ae->nbpoker,&ae->maxpoker,&poker,sizeof(poker));
+		}
+		___output(ae,0);
+	} else {
+		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"usage is CIPHERMEM start,end[,method] => this is beta!\n");
+	}
+}
+
 void __TIMESTAMP(struct s_assenv *ae) {
 	char Ltimestamp[32];
 	char LTMP[64];
@@ -16126,7 +16155,7 @@ void __TIMESTAMP(struct s_assenv *ae) {
 				___output(ae,ae->charset[(unsigned int)LTMP[1]]);
 				break;
 			default:
-				if ((timestr[idx]=='\'' || timestr[idx]=='"') && !timestr[idx+1]) {} else ___output(ae,ae->charset[(unsigned int)timestr[idx]]);
+				if ((timestr[idx]=='\'' || timestr[idx]=='"') && !timestr[idx+1]) {} else ___output(ae,ae->charset[(unsigned int)timestr[idx]&0xFF]);
 				idx++;
 				break;
 
@@ -16308,6 +16337,7 @@ struct s_asm_keyword instruction[]={
 {"TIMESTAMP",0,__TIMESTAMP},
 {"SUMMEM",0,__SUMMEM},
 {"XORMEM",0,__XORMEM},
+{"CIPHERMEM",0,__CIPHERMEM},
 {"EXTERNAL",0,__EXTERNAL},
 {"PROCEDURE",0,__PROCEDURE},
 {"",0,NULL}
@@ -17127,6 +17157,18 @@ printf("include %d other ORG for the memove size=%d\n",morgzone-iorgzone,lzmove)
 				}
 				ae->mem[ae->poker[i].ibank][ae->poker[i].outputadr]=sumval;
 				break;
+			case E_POKER_CIPHER001:
+				ae->idx=ae->poker[i].istart; /* exp hack */
+				ExpressionFastTranslate(ae,&ae->wl[ae->idx].w,0);
+				istart=RoundComputeExpression(ae,ae->wl[ae->idx].w,0,0,0);
+				ae->idx=ae->poker[i].iend; /* exp hack */
+				ExpressionFastTranslate(ae,&ae->wl[ae->idx].w,0);
+				iend=RoundComputeExpression(ae,ae->wl[ae->idx].w,0,0,0);
+				xorval=ae->mem[ae->poker[i].ibank][istart];
+				for (j=istart+1;j<iend;j++) {
+					ae->mem[ae->poker[i].ibank][j]=xorval=ae->mem[ae->poker[i].ibank][j]^xorval;
+				}
+				break;
 			default:printf("warning remover\n");break;
 		}
 
@@ -17134,7 +17176,9 @@ printf("include %d other ORG for the memove size=%d\n",morgzone-iorgzone,lzmove)
 			if (ae->poker[i].ibank==ae->poker[j].ibank) {
 				if (ae->poker[j].outputadr>=istart && ae->poker[j].outputadr<iend) {
 					if (!ae->nowarning) {
-						rasm_printf(ae,KWARNING"[%s:%d] Warning: %s result is inside another %s calculation",GetCurrentFile(ae),ae->wl[ae->idx].l,ae->poker[i].method==E_POKER_SUM8?"SUMMEM":"XORMEM",ae->poker[j].method==E_POKER_SUM8?"SUMMEM":"XORMEM");
+						rasm_printf(ae,KWARNING"[%s:%d] Warning: %s poker result is inside another %s poker calculation",GetCurrentFile(ae),ae->wl[ae->idx].l,
+							ae->poker[i].method<E_POKER_END?strpoker[ae->poker[i].method]:"???",
+							ae->poker[j].method<E_POKER_END?strpoker[ae->poker[j].method]:"???");
 						ae->idx=ae->poker[j].istart;
 						rasm_printf(ae,KWARNING"[%s:%d]\n",GetCurrentFile(ae),ae->wl[ae->idx].l);
 						if (ae->erronwarn) MaxError(ae);
