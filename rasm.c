@@ -176,6 +176,8 @@ struct s_parameter {
 	int export_brk;
 	int nowarning;
 	int erronwarn;
+	int utf8enable;
+	int freequote;
 	int checkmode;
 	int dependencies;
 	int maxerr;
@@ -890,7 +892,7 @@ struct s_assenv {
 	int nberr,flux;
 	int fastmatch[256];
 	unsigned char charset[256];
-	int maxerr,extended_error,nowarning,erronwarn;
+	int maxerr,extended_error,nowarning,erronwarn,utf8enable,freequote;
 	/* ORG tracking */
 	int codeadr,outputadr,nocode;
 	int codeadrbackup,outputadrbackup;
@@ -18754,6 +18756,8 @@ printf("paramz 1\n");
 		ae->extended_error=param->extended_error;
 		ae->nowarning=param->nowarning;
 		ae->erronwarn=param->erronwarn;
+		ae->utf8enable=param->utf8enable;
+		ae->freequote=param->freequote;
 		ae->breakpoint_name=param->breakpoint_name;
 		ae->symbol_name=param->symbol_name;
 		ae->binary_name=param->binary_name;
@@ -20102,21 +20106,89 @@ printf("mot precedent=[%s] t=%d\n",wordlist[nbword-1].w,wordlist[nbword-1].t);
 					exit(-1);
 			}
 		} else {
-			/* lecture inconditionnelle de la quote */
 #if TRACE_PREPRO
-printf("quote[%d]=%c\n",lw,c);
+printf("quote start\n");
 #endif
+			/* quoted string always starts with a single or a double quote */
 			w[lw++]=c;
 			StateMachineResizeBuffer(&w,lw,&mw);
-			w[lw]=0;
-			if (!escape_code) {
-				if (c=='\\') escape_code=1;
-				if (lw>1 && c==quote_type) {
-					quote_type=0;
+
+			do {
+				c=listing[l].listing[idx++];
+				if (!c) {
+					MakeError(ae,ae->filename[listing[l].ifile],listing[l].iline,"Quoted string must be on a single line!\n");
+					idx=0;
+					l++;
+					lw=0; // to avoid side effects
+					quote_type=0; // leave anyway
+				} else {
+					w[lw++]=c;
+					StateMachineResizeBuffer(&w,lw,&mw);
+
+					// string is stored with quotes
+					if (!escape_code) {
+						if (c=='\\') {
+							escape_code=1;
+						} else if (c==quote_type) {
+							quote_type=0;
+						}
+					} else {
+						// if previous char is an escape char, do not take care about ending quote
+						escape_code=0;
+					}
 				}
-			} else {
-				escape_code=0;
+			} while (quote_type);
+			// EOL for new word!
+			w[lw]=0;
+
+			if (ae->utf8enable) {
+				int utidx;
+				for (utidx=0;w[utidx];utidx++) {
+					if ((unsigned char)w[utidx]>126) {
+						switch ((unsigned char)w[utidx]) {
+							case 0xC2:
+								if ((unsigned char)w[utidx+1]==0xBF) w[utidx]=174; else // ¿
+								if ((unsigned char)w[utidx+1]==0xA1) w[utidx]=175; else // ¡
+									MakeError(ae,ae->filename[listing[l].ifile],listing[l].iline,"Unsupported UTF8 char for quoted string\n");
+								break;
+							case 0xC3:
+								if ((unsigned char)w[utidx+1]==0xB9) w[utidx]=124; else // ù
+								if ((unsigned char)w[utidx+1]==0xA9) w[utidx]=123; else // é
+								if ((unsigned char)w[utidx+1]==0xA8) w[utidx]=125; else // è
+								if ((unsigned char)w[utidx+1]==0xA0) w[utidx]=64; else  // à
+								if ((unsigned char)w[utidx+1]==0x91) w[utidx]=161; else // Ñ
+								if ((unsigned char)w[utidx+1]==0xB1) w[utidx]=171; else // ñ
+								if ((unsigned char)w[utidx+1]==0xA7) {                  // ç
+									w[utidx]=92;
+									w[utidx+1]=92;
+								} else
+									MakeError(ae,ae->filename[listing[l].ifile],listing[l].iline,"Unsupported UTF8 char for quoted string\n");
+								break;
+							default:
+								MakeError(ae,ae->filename[listing[l].ifile],listing[l].iline,"Unsupported UTF8 char for quoted string\n");
+						}
+						// shift string bytes except for \ char
+						if (w[utidx+1] && w[utidx+1]!=92) {
+							int utshift;
+							utshift=utidx+1; do { w[utshift]=w[utshift+1]; utshift++; } while (w[utshift]);
+						}
+					}
+				}
+			} else if (!ae->freequote) {
+				// control special chars except in freequote mode
+				int utidx;
+				for (utidx=0;w[utidx];utidx++) {
+					if ((w[utidx]>=32 && w[utidx]<127) || w[utidx]=='\t') {
+						// is ok
+					} else {
+						MakeError(ae,ae->filename[listing[l].ifile],listing[l].iline,"Invalid char for quoted string\n");
+					}
+				}
 			}
+
+#if TRACE_PREPRO
+printf("quote end w=%s\n",w);
+#endif
 		}
 	}
 
@@ -22722,6 +22794,8 @@ void Usage(int help)
 		printf("-pasmo PASMO behaviour mimic\n");
 		printf("-amper use ampersand for hex values\n");
 		printf("-msep <separator> set separator for modules\n");
+		printf("-utf8 convert symbols from french or spanish keyboard inside quotes\n");
+		printf("-fq   do not bother with special chars inside quotes\n");
 		printf("MISCELLANEOUS:\n");
 		printf("-quick          enable fast mode for ZX0 crunching\n");
 		printf("-cprquiet       do not display ROM detailed informations\n");
@@ -22970,6 +23044,10 @@ int ParseOptions(char **argv,int argc, struct s_parameter *param)
 		if (i+1<argc) {
 			param->module_separator=argv[++i][0];
 		} else Usage(1);
+	} else if (strcmp(argv[i],"-fq")==0) {
+		param->freequote=1;
+	} else if (strcmp(argv[i],"-utf8")==0) {
+		param->utf8enable=1;
 	} else if (strcmp(argv[i],"-twe")==0) {
 		param->erronwarn=1;
 	} else if (strcmp(argv[i],"-pasmo")==0) {
