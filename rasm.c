@@ -11902,10 +11902,6 @@ void __SNAPINIT(struct s_assenv *ae) {
 	if (!ae->forcecpr && !ae->forcetape && !ae->forcezx && !ae->forceROM) {
 		// automatic BUILDSNA
 		ae->forcesnapshot=1;
-	} else {
-		// not an error, we may only want to extract data
-		rasm_printf(ae,KWARNING"[%s:%d] What's the point to use SNAPINIT when using ZX/ROM/cartridge/tape output?\n",GetCurrentFile(ae),ae->wl[ae->idx].l);
-		if (ae->erronwarn) MaxError(ae);
 	}
 
 	if (!ae->wl[ae->idx].t) {
