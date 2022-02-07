@@ -1,7 +1,7 @@
 CC=gcc
 EXEC=rasm
 
-CFLAGS=-lm -march=native -o $(EXEC) -w
+CFLAGS=-lm -mcpu=native -o $(EXEC) -w
 CFLAGS_OPT = $(CFLAGS) -O2
 CFLAGS_DBG = $(CFLAGS) -g -pthread -DRDD
 
@@ -39,7 +39,7 @@ ZX0_OBJ =$(SRC_ZX0DIR)/optimize.o
 ZX0_OBJ+=$(SRC_ZX0DIR)/compress.o
 ZX0_OBJ+=$(SRC_ZX0DIR)/memory.o
 
-.PHONY: prod debug clean
+.PHONY: prod debug install clean
 
 default: prod
 
@@ -94,6 +94,8 @@ prod:
 	$(CC) rasm.c $(CFLAGS_OPT) $(APU_OBJ) $(LZSA_OBJ) $(ZX0_OBJ)
 	strip $(EXEC)
 
-clean:
-	rm -rf *.o
+install:
+	install rasm /usr/local/bin
 
+clean:
+	rm -f $(APU_OBJ) $(LZSA_OBJ) $(ZX0_OBJ) apultra-master/src/apultra.o lzsa-master/src/shrink_streaming.o lzsa-master/src/expand_streaming.o
