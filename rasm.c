@@ -18891,7 +18891,7 @@ printf("paramz\n");
 			i=0;
 			while (labelines[i]) {
 				/* upper case */
-				for (j=0;labelines[i][j];j++) labelines[i][j]=toupper(labelines[i][j]);
+				for (int k=0;labelines[i][k];k++) labelines[i][k]=toupper(labelines[i][k]);
 
 				if ((labelsep1=strstr(labelines[i],": EQU 0"))!=NULL) {
 					/* sjasm */
