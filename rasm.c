@@ -842,6 +842,7 @@ enum e_poker {
 E_POKER_XOR8=0,
 E_POKER_SUM8=1,
 E_POKER_CIPHER001=2,
+E_POKER_CIPHER002=3,
 E_POKER_END
 };
 
@@ -849,6 +850,7 @@ char *strpoker[]={
 	"XORMEM",
 	"SUMMEM",
 	"CIPHER001",
+	"CIPHER002",
 	NULL
 };
 
@@ -16064,10 +16066,14 @@ void __XORMEM(struct s_assenv *ae) {
 void __CIPHERMEM(struct s_assenv *ae) {
 	struct s_poker poker={0};
 
-	if (!ae->wl[ae->idx].t && !ae->wl[ae->idx+1].t && ae->wl[ae->idx+2].t==1) {
+	if (!ae->wl[ae->idx].t && !ae->wl[ae->idx+1].t) {
 		/* cipher memory */
 		if (!ae->nocode) {
-			poker.method=E_POKER_CIPHER001;
+			if (!ae->wl[ae->idx+2].t) {
+				poker.method=E_POKER_CIPHER002; //@@TODO
+			} else {
+				poker.method=E_POKER_CIPHER001;
+			}
 			poker.istart=ae->idx+1;
 			poker.iend=ae->idx+2;
 			ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,1);
@@ -16076,7 +16082,6 @@ void __CIPHERMEM(struct s_assenv *ae) {
 			poker.ibank=ae->activebank;
 			ObjectArrayAddDynamicValueConcat((void**)&ae->poker,&ae->nbpoker,&ae->maxpoker,&poker,sizeof(poker));
 		}
-		___output(ae,0);
 	} else {
 		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"usage is CIPHERMEM start,end[,method] => this is beta!\n");
 	}
@@ -17156,14 +17161,22 @@ printf("include %d other ORG for the memove size=%d\n",morgzone-iorgzone,lzmove)
 				ae->mem[ae->poker[i].ibank][ae->poker[i].outputadr]=sumval;
 				break;
 			case E_POKER_CIPHER001:
+			case E_POKER_CIPHER002:
 				ae->idx=ae->poker[i].istart; /* exp hack */
 				ExpressionFastTranslate(ae,&ae->wl[ae->idx].w,0);
 				istart=RoundComputeExpression(ae,ae->wl[ae->idx].w,0,0,0);
 				ae->idx=ae->poker[i].iend; /* exp hack */
 				ExpressionFastTranslate(ae,&ae->wl[ae->idx].w,0);
 				iend=RoundComputeExpression(ae,ae->wl[ae->idx].w,0,0,0);
-				xorval=ae->mem[ae->poker[i].ibank][istart];
-				for (j=istart+1;j<iend;j++) {
+				if (ae->poker[i].method==E_POKER_CIPHER001) {
+					xorval=ae->mem[ae->poker[i].ibank][istart];
+					istart++;
+				} else if (ae->poker[i].method==E_POKER_CIPHER002) {
+					xorval=istart&0xFF; // xor start value depends on memory location!
+				}
+printf("cipher memory in %04X xorval=%02X\n",istart,xorval);
+				for (j=istart;j<iend;j++) {
+printf("byte %02X ^ %02X => %02X\n",ae->mem[ae->poker[i].ibank][j],xorval,ae->mem[ae->poker[i].ibank][j]^xorval);
 					ae->mem[ae->poker[i].ibank][j]=xorval=ae->mem[ae->poker[i].ibank][j]^xorval;
 				}
 				break;
