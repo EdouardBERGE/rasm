@@ -843,6 +843,7 @@ E_POKER_XOR8=0,
 E_POKER_SUM8=1,
 E_POKER_CIPHER001=2,
 E_POKER_CIPHER002=3,
+E_POKER_CIPHER003=4,
 E_POKER_END
 };
 
@@ -851,6 +852,7 @@ char *strpoker[]={
 	"SUMMEM",
 	"CIPHER001",
 	"CIPHER002",
+	"CIPHER003",
 	NULL
 };
 
@@ -13602,7 +13604,7 @@ void __FAIL(struct s_assenv *ae) {
 }
 
 void __CONFINE(struct s_assenv *ae) {
-	int aval,ifill=0,warning=0;
+	int aval,ifill=0,warning=0,enforce=0;
 
 	if (ae->io) {
 		ae->orgzone[ae->io-1].memend=ae->outputadr; // mandatory but why???
@@ -13612,7 +13614,9 @@ void __CONFINE(struct s_assenv *ae) {
 		aval=RoundComputeExpression(ae,ae->wl[ae->idx+1].w,ae->codeadr,0,0)-1;
 		ae->idx++;
 		while (!ae->wl[ae->idx].t) {
-			if (strcmp(ae->wl[ae->idx+1].w,"WARNING")==0) {
+			if (strcmp(ae->wl[ae->idx+1].w,"ENFORCE")==0) {
+				warning=1;
+			} else if (strcmp(ae->wl[ae->idx+1].w,"WARNING")==0) {
 				warning=1;
 			} else /* confine with fill ? */ {
 				ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
@@ -13630,11 +13634,11 @@ void __CONFINE(struct s_assenv *ae) {
 		}
 		/* touch codeadr only if needed */
 		if (((ae->codeadr+aval)&0xFF00)!=(ae->codeadr&0xFF00)) {
-			if (!ae->nowarning) {
+			if (!ae->nowarning || warning || enforce) {
 				rasm_printf(ae,KWARNING"[%s:%d] Warning: confinement overflows %d byte%s, loss of %d byte%s\n",GetCurrentFile(ae),ae->wl[ae->idx].l,
 						((ae->codeadr+aval)&0xFF)+1,(((ae->codeadr+aval)&0xFF)+1)>1?"s":"",
 						aval-((ae->codeadr+aval)&0xFF)-1,aval-((ae->codeadr+aval)&0xFF)-1>1?"s":"");
-				if (ae->erronwarn) MaxError(ae);
+				if (ae->erronwarn || enforce) MaxError(ae);
 			}
 			/* physical ALIGN fill bytes */
 			while ((ae->codeadr&0xFF)!=0) {
@@ -16065,12 +16069,21 @@ void __XORMEM(struct s_assenv *ae) {
 
 void __CIPHERMEM(struct s_assenv *ae) {
 	struct s_poker poker={0};
+	int ciphermode;
 
 	if (!ae->wl[ae->idx].t && !ae->wl[ae->idx+1].t) {
 		/* cipher memory */
 		if (!ae->nocode) {
 			if (!ae->wl[ae->idx+2].t) {
-				poker.method=E_POKER_CIPHER002; //@@TODO
+				ExpressionFastTranslate(ae,&ae->wl[ae->idx+3].w,1);
+				ciphermode=RoundComputeExpression(ae,ae->wl[ae->idx+3].w,ae->outputadr,0,0);
+				switch (ciphermode) {
+					default:
+					case 0:
+					case 1:poker.method=E_POKER_CIPHER001;break;
+					case 2:poker.method=E_POKER_CIPHER002;break;
+					case 3:poker.method=E_POKER_CIPHER003;break;
+				}
 			} else {
 				poker.method=E_POKER_CIPHER001;
 			}
@@ -17132,15 +17145,17 @@ printf("include %d other ORG for the memove size=%d\n",morgzone-iorgzone,lzmove)
 		int istart=-1,iend=-1;
 		unsigned char xorval,sumval;
 
+		/* start/end */
+		ae->idx=ae->poker[i].istart; /* exp hack */
+		ExpressionFastTranslate(ae,&ae->wl[ae->idx].w,0);
+		istart=RoundComputeExpression(ae,ae->wl[ae->idx].w,0,0,0);
+		ae->idx=ae->poker[i].iend; /* exp hack */
+		ExpressionFastTranslate(ae,&ae->wl[ae->idx].w,0);
+		iend=RoundComputeExpression(ae,ae->wl[ae->idx].w,0,0,0);
+
 		switch (ae->poker[i].method) {
 			case E_POKER_XOR8:
 				xorval=0;
-				ae->idx=ae->poker[i].istart; /* exp hack */
-				ExpressionFastTranslate(ae,&ae->wl[ae->idx].w,0);
-				istart=RoundComputeExpression(ae,ae->wl[ae->idx].w,0,0,0);
-				ae->idx=ae->poker[i].iend; /* exp hack */
-				ExpressionFastTranslate(ae,&ae->wl[ae->idx].w,0);
-				iend=RoundComputeExpression(ae,ae->wl[ae->idx].w,0,0,0);
 				for (j=istart;j<iend;j++) {
 					xorval=xorval^ae->mem[ae->poker[i].ibank][j];
 				}
@@ -17149,12 +17164,6 @@ printf("include %d other ORG for the memove size=%d\n",morgzone-iorgzone,lzmove)
 				break;
 			case E_POKER_SUM8:
 				sumval=0;
-				ae->idx=ae->poker[i].istart; /* exp hack */
-				ExpressionFastTranslate(ae,&ae->wl[ae->idx].w,0);
-				istart=RoundComputeExpression(ae,ae->wl[ae->idx].w,0,0,0);
-				ae->idx=ae->poker[i].iend; /* exp hack */
-				ExpressionFastTranslate(ae,&ae->wl[ae->idx].w,0);
-				iend=RoundComputeExpression(ae,ae->wl[ae->idx].w,0,0,0);
 				for (j=istart;j<iend;j++) {
 					sumval+=ae->mem[ae->poker[i].ibank][j];
 				}
@@ -17162,12 +17171,6 @@ printf("include %d other ORG for the memove size=%d\n",morgzone-iorgzone,lzmove)
 				break;
 			case E_POKER_CIPHER001:
 			case E_POKER_CIPHER002:
-				ae->idx=ae->poker[i].istart; /* exp hack */
-				ExpressionFastTranslate(ae,&ae->wl[ae->idx].w,0);
-				istart=RoundComputeExpression(ae,ae->wl[ae->idx].w,0,0,0);
-				ae->idx=ae->poker[i].iend; /* exp hack */
-				ExpressionFastTranslate(ae,&ae->wl[ae->idx].w,0);
-				iend=RoundComputeExpression(ae,ae->wl[ae->idx].w,0,0,0);
 				if (ae->poker[i].method==E_POKER_CIPHER001) {
 					xorval=ae->mem[ae->poker[i].ibank][istart];
 					istart++;
@@ -17178,6 +17181,14 @@ printf("cipher memory in %04X xorval=%02X\n",istart,xorval);
 				for (j=istart;j<iend;j++) {
 printf("byte %02X ^ %02X => %02X\n",ae->mem[ae->poker[i].ibank][j],xorval,ae->mem[ae->poker[i].ibank][j]^xorval);
 					ae->mem[ae->poker[i].ibank][j]=xorval=ae->mem[ae->poker[i].ibank][j]^xorval;
+				}
+				break;
+			case E_POKER_CIPHER003:
+printf("cipher3 memory in %04X\n",istart);
+				for (j=istart;j<iend;j++) {
+					xorval=j&0xFF;
+printf("byte %02X ^ %02X => %02X\n",ae->mem[ae->poker[i].ibank][j],xorval,ae->mem[ae->poker[i].ibank][j]^xorval);
+					ae->mem[ae->poker[i].ibank][j]=ae->mem[ae->poker[i].ibank][j]^xorval;
 				}
 				break;
 			default:printf("warning remover\n");break;
