@@ -17177,17 +17177,13 @@ printf("include %d other ORG for the memove size=%d\n",morgzone-iorgzone,lzmove)
 				} else if (ae->poker[i].method==E_POKER_CIPHER002) {
 					xorval=istart&0xFF; // xor start value depends on memory location!
 				}
-printf("cipher memory in %04X xorval=%02X\n",istart,xorval);
 				for (j=istart;j<iend;j++) {
-printf("byte %02X ^ %02X => %02X\n",ae->mem[ae->poker[i].ibank][j],xorval,ae->mem[ae->poker[i].ibank][j]^xorval);
 					ae->mem[ae->poker[i].ibank][j]=xorval=ae->mem[ae->poker[i].ibank][j]^xorval;
 				}
 				break;
 			case E_POKER_CIPHER003:
-printf("cipher3 memory in %04X\n",istart);
 				for (j=istart;j<iend;j++) {
 					xorval=j&0xFF;
-printf("byte %02X ^ %02X => %02X\n",ae->mem[ae->poker[i].ibank][j],xorval,ae->mem[ae->poker[i].ibank][j]^xorval);
 					ae->mem[ae->poker[i].ibank][j]=ae->mem[ae->poker[i].ibank][j]^xorval;
 				}
 				break;
