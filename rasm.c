@@ -1,5 +1,5 @@
 #define PROGRAM_NAME      "RASM"
-#define PROGRAM_VERSION   "1.6"
+#define PROGRAM_VERSION   "1.7a"
 #define PROGRAM_DATE      "xx/11/2021"
 #define PROGRAM_COPYRIGHT "© 2017 BERGE Edouard / roudoudou from Resistance"
 
@@ -844,15 +844,17 @@ E_POKER_SUM8=1,
 E_POKER_CIPHER001=2,
 E_POKER_CIPHER002=3,
 E_POKER_CIPHER003=4,
+E_POKER_CIPHER004=5,
 E_POKER_END
 };
 
 char *strpoker[]={
 	"XORMEM",
 	"SUMMEM",
-	"CIPHER001",
-	"CIPHER002",
-	"CIPHER003",
+	"CIPHER001 running XOR initialised with first value",
+	"CIPHER002 running XOR initialised with memory location",
+	"CIPHER003 XOR with LSB of memory location",
+	"CIPHER004 XOR with key looping",
 	NULL
 };
 
@@ -861,6 +863,8 @@ struct s_poker {
 	int istart,iend;
 	int outputadr;
 	int ibank;
+	int istring;
+	int ipoker;
 };
 
 /*******************************************
@@ -16038,6 +16042,7 @@ void __SUMMEM(struct s_assenv *ae) {
 			ExpressionFastTranslate(ae,&ae->wl[ae->idx+2].w,1);
 			poker.outputadr=ae->outputadr;
 			poker.ibank=ae->activebank;
+			poker.ipoker=ae->idx;
 			ObjectArrayAddDynamicValueConcat((void**)&ae->poker,&ae->nbpoker,&ae->maxpoker,&poker,sizeof(poker));
 		}
 		___output(ae,0);
@@ -16059,6 +16064,7 @@ void __XORMEM(struct s_assenv *ae) {
 			ExpressionFastTranslate(ae,&ae->wl[ae->idx+2].w,1);
 			poker.outputadr=ae->outputadr;
 			poker.ibank=ae->activebank;
+			poker.ipoker=ae->idx;
 			ObjectArrayAddDynamicValueConcat((void**)&ae->poker,&ae->nbpoker,&ae->maxpoker,&poker,sizeof(poker));
 		}
 		___output(ae,0);
@@ -16082,7 +16088,30 @@ void __CIPHERMEM(struct s_assenv *ae) {
 					case 0:
 					case 1:poker.method=E_POKER_CIPHER001;break;
 					case 2:poker.method=E_POKER_CIPHER002;break;
-					case 3:poker.method=E_POKER_CIPHER003;break;
+					case 3:poker.method=E_POKER_CIPHER003; break;
+					case 4:poker.method=E_POKER_CIPHER004;
+						if (!ae->wl[ae->idx+3].t) {
+							poker.istring=ae->idx+4;
+						} else {
+							MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"usage is CIPHERMEM start,end,4,'keystring'\n");
+						}
+						break;
+				}
+				switch (ciphermode) {
+					default:
+					case 0:
+					case 1:
+					case 2:
+					case 3:
+						if (!ae->wl[ae->idx+3].t) {
+							rasm_printf(ae,KWARNING"[%s:%d] Warning: keystring parameter will be ignored\n",GetCurrentFile(ae),ae->wl[ae->idx].l);
+							if (ae->erronwarn) MaxError(ae);
+						}
+					case 4:
+						break;
+				}
+				if (!ae->wl[ae->idx+3].t && !ae->wl[ae->idx+4].t) {
+					MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Too many parameters! Usage is CIPHERMEM start,end[,method[,'keystring']]\n");
 				}
 			} else {
 				poker.method=E_POKER_CIPHER001;
@@ -16093,10 +16122,11 @@ void __CIPHERMEM(struct s_assenv *ae) {
 			ExpressionFastTranslate(ae,&ae->wl[ae->idx+2].w,1);
 			poker.outputadr=ae->outputadr;
 			poker.ibank=ae->activebank;
+			poker.ipoker=ae->idx;
 			ObjectArrayAddDynamicValueConcat((void**)&ae->poker,&ae->nbpoker,&ae->maxpoker,&poker,sizeof(poker));
 		}
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"usage is CIPHERMEM start,end[,method] => this is beta!\n");
+		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"usage is CIPHERMEM start,end[,method[,'keystring']]\n");
 	}
 }
 
@@ -17185,6 +17215,24 @@ printf("include %d other ORG for the memove size=%d\n",morgzone-iorgzone,lzmove)
 				for (j=istart;j<iend;j++) {
 					xorval=j&0xFF;
 					ae->mem[ae->poker[i].ibank][j]=ae->mem[ae->poker[i].ibank][j]^xorval;
+				}
+				break;
+			case E_POKER_CIPHER004:
+				{
+				char *zekey;
+				int zelen,ikey=0;
+				zekey=TxtStrDup(ae->wl[ae->poker[i].istring].w+1);
+				zelen=strlen(zekey)-1;
+				if (zelen>1) {
+					zekey[zelen]=0;
+					for (j=istart;j<iend;j++) {
+						xorval=zekey[ikey++];if (ikey>=zelen) ikey=0;
+						ae->mem[ae->poker[i].ibank][j]=ae->mem[ae->poker[i].ibank][j]^xorval;
+					}
+				} else {
+					MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"CIPHER needs a string of one char or more to run properly\n");
+				}
+				if (zekey) MemFree(zekey);
 				}
 				break;
 			default:printf("warning remover\n");break;
