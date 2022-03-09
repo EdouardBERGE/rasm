@@ -269,7 +269,8 @@ E_COMPUTE_OPERATION_GETNOP=48,
 E_COMPUTE_OPERATION_GETTICK=49,
 E_COMPUTE_OPERATION_DURATION=50,
 E_COMPUTE_OPERATION_FILESIZE=51,
-E_COMPUTE_OPERATION_END=52
+E_COMPUTE_OPERATION_GETSIZE=52,
+E_COMPUTE_OPERATION_END=53
 };
 
 struct s_compute_element {
@@ -1089,6 +1090,7 @@ struct s_math_keyword math_keyword[]={
 {"GETTICK",0,E_COMPUTE_OPERATION_GETTICK},
 {"DURATION",0,E_COMPUTE_OPERATION_DURATION},
 {"FILESIZE",0,E_COMPUTE_OPERATION_FILESIZE},
+{"GETSIZE",0,E_COMPUTE_OPERATION_GETSIZE},
 {"",0,-1}
 };
 
@@ -4101,11 +4103,6 @@ int __GETNOP(struct s_assenv *ae,char *oplist, int didx)
 
 			/* ADC/SBC/SUB/XOR/AND/OR */
 			case CRC_ADC:
-				if (zearg) {
-					/* simplify deprecated notation */
-					TxtReplace(zearg,"A,","",0);
-					if (strcmp(zearg,"IX,BC")==0 || strcmp(zearg,"IX,DE")==0 ||strcmp(zearg,"IX,IX")==0 ||strcmp(zearg,"IX,SP")==0) {tick+=5;break;}
-				}
 			case CRC_SBC:
 				if (zearg) {
 					/* simplify deprecated notation */
@@ -4306,7 +4303,8 @@ int __GETNOP(struct s_assenv *ae,char *oplist, int didx)
 									tick+=2;
 									break;
 								default:
-									MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported LD %s,%s for GETNOP, see documentation\n",listarg[0],listarg[1]);
+									tick+=3;
+									break;
 							}
 							break;
 						default:
@@ -4729,7 +4727,8 @@ int __GETTICK(struct s_assenv *ae,char *oplist, int didx)
 									tick+=7;
 									break;
 								default:
-									MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported LD %s,%s for GETTICK, see documentation\n",listarg[0],listarg[1]);
+									tick+=10;
+									break;
 							}
 							break;
 						default:
@@ -4774,6 +4773,399 @@ int __GETTICK(struct s_assenv *ae,char *oplist, int didx)
 	MemFree(opref);
 	if (opcode) MemFree(opcode);
 	return tick;
+}
+int __GETSIZE(struct s_assenv *ae,char *oplist, int didx)
+{
+	#undef FUNC
+	#define FUNC "__GETSIZE"
+
+	int idx=0,crc,osize=0;
+	char **opcode=NULL;
+	char *opref;
+
+	/* upper case */
+	while (oplist[idx]) {
+		oplist[idx]=toupper(oplist[idx]);
+		idx++;
+	}
+	/* duplicata */
+	opref=TxtStrDup(oplist);
+	/* clean-up */
+	TxtReplace(opref,"\t"," ",0);
+	TxtReplace(opref,"  "," ",1);
+	TxtReplace(opref,": ",":",1);
+	/* simplify extended registers to XL or IX */
+	TxtReplace(opref,"IY","IX",0);
+	TxtReplace(opref,"IXL","XL",0);
+	TxtReplace(opref,"IXH","XL",0);
+	TxtReplace(opref,"LX","XL",0);
+	TxtReplace(opref,"HX","XL",0);
+	TxtReplace(opref,"LY","XL",0);
+	TxtReplace(opref,"HY","XL",0);
+	TxtReplace(opref,"YL","XL",0);
+	TxtReplace(opref,"XH","XL",0);
+	TxtReplace(opref,"YH","XL",0);
+
+	/* count opcodes */
+	opcode=TxtSplitWithChar(opref,':');
+
+	idx=0;
+	while (opcode[idx]) {
+		char *zeopcode,*terminator,*zearg=NULL;
+		char **listarg;
+
+		zeopcode=opcode[idx];
+		/* trim */
+		while (*zeopcode==' ') zeopcode++;
+		terminator=zeopcode;
+		while (*terminator!=0 && *terminator!=' ') terminator++;
+		if (*terminator) {
+			zearg=terminator+1;
+			*terminator=0;
+			/* no space in args */
+			TxtReplace(zearg," ","",1);
+		}
+		if (!zeopcode[0]) {idx++;continue;}
+		crc=GetCRC(zeopcode);
+
+		/*************************************
+		* very simple and simplified parsing *
+		*************************************/
+		switch (crc) {
+			case CRC_RLA:
+			case CRC_RLCA:
+			case CRC_RRCA:
+			case CRC_RRA:
+			case CRC_NOP:
+			case CRC_CCF:
+			case CRC_DAA:
+			case CRC_SCF:
+			case CRC_CPL:
+			case CRC_EXX:
+			case CRC_EI:
+			case CRC_RST:
+			case CRC_RET:
+			case CRC_DI:osize+=1;break;
+
+			case CRC_OUT:
+			case CRC_IN:
+			case CRC_LDD:
+			case CRC_LDI:
+			case CRC_LDIR:
+			case CRC_LDDR:
+			case CRC_CPDR:
+			case CRC_CPIR:
+			case CRC_CPD:
+			case CRC_CPI:
+			case CRC_RETN:
+			case CRC_RETI:
+			case CRC_OUTI:
+			case CRC_OUTD:
+			case CRC_INIR:
+			case CRC_INDR:
+			case CRC_OTIR:
+			case CRC_OTDR:
+			case CRC_IND:
+			case CRC_INI:
+			case CRC_RLD:
+			case CRC_RRD:
+			case CRC_IM:
+			case CRC_DJNZ:
+			case CRC_JR:
+			case CRC_NEG:osize+=2;break;
+
+
+			case CRC_EX:
+				if (zearg) {
+					if (strstr(zearg,"AF") || strstr(zearg,"DE")) osize+=1; else
+					if (strstr(zearg,"(SP)") && strstr(zearg,"HL")) osize+=1; else
+					if (strstr(zearg,"(SP)") && strstr(zearg,"IX")) osize+=2;
+				} else {
+					MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported opcode [%s] for GETSIZE, see documentation about this directive\n",opcode[idx]);
+				}
+				break;
+
+			case CRC_PUSH:
+				if (zearg) {
+					if (strcmp(zearg,"IX")==0) osize+=2; else osize+=1;
+				} else {
+					MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported opcode [%s] for GETSIZE, see documentation about this directive\n",opcode[idx]);
+				}
+				break;
+
+			case CRC_POP:
+				if (zearg) {
+					if (strcmp(zearg,"IX")==0) osize+=2; else osize+=1;
+				} else {
+					MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported opcode [%s] for GETSIZE, see documentation about this directive\n",opcode[idx]);
+				}
+				break;
+
+			case CRC_SLA:
+			case CRC_SLL:
+			case CRC_SRA:
+			case CRC_SRL:
+			case CRC_RL:
+			case CRC_RLC:
+			case CRC_RR:
+			case CRC_RRC:
+				if (zearg) {
+					if (strstr(zearg,"(HL)")) osize+=2; else
+					if (strstr(zearg,"(IX")) osize+=4; else
+						osize+=2;
+				} else {
+					MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported opcode [%s] for GETSIZE, see documentation about this directive\n",opcode[idx]);
+				}
+				break;
+
+
+			case CRC_ADD:
+			     if (zearg) {
+					/* simplify deprecated notation */
+					TxtReplace(zearg,"A,","",0);
+					if (strcmp(zearg,"IX,")==0 || strcmp(zearg,"XL")==0) osize+=2; else
+					if (strstr(zearg,"(IX")) osize+=3; else
+					if (strstr(zearg,"HL") || (*zearg>='A' && *zearg<='E') || *zearg=='H' || *zearg=='L') osize+=1; else osize+=2;
+				} else {
+					MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported opcode [%s] for GETSIZE, see documentation about this directive\n",opcode[idx]);
+				}
+				break;
+
+			/* ADC/SBC/SUB/XOR/AND/OR */
+			case CRC_ADC:
+			case CRC_SBC:
+				if (zearg) {
+					/* simplify deprecated notation */
+					TxtReplace(zearg,"A,","",0);
+					if (strcmp(zearg,"HL,BC")==0 || strcmp(zearg,"HL,DE")==0 || strcmp(zearg,"HL,HL")==0 || strcmp(zearg,"HL,SP")==0) {osize+=2;break;}
+				}
+			case CRC_SUB:
+				/* simplify deprecated notation */
+				TxtReplace(zearg,"A,","",0);
+			case CRC_XOR:
+			case CRC_AND:
+			case CRC_OR:
+			case CRC_CP:
+			     if (zearg) {
+					if (strstr(zearg,"(IX")) osize+=3; else
+					if (strcmp(zearg,"XL")==0) osize+=2; else
+					if ((*zearg>='A' && *zearg<='E') || *zearg=='H' || *zearg=='L') osize+=1; else osize+=2;
+				} else {
+					MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported opcode [%s] for GETSIZE, see documentation about this directive\n",opcode[idx]);
+				}
+				break;
+
+			/* BIT/RES/SET */
+			case CRC_BIT:
+				if (strstr(zearg,"(IX")) osize+=4; else osize+=3;
+				break;
+			case CRC_RES:
+			case CRC_SET:
+				if (strstr(zearg,"(IX")) osize+=5; else osize+=4;
+				break;
+			case CRC_DEC:
+			case CRC_INC:
+				if (strcmp(zearg,"(HL)")==0 || strcmp(zearg,"SP")==0 || strcmp(zearg,"BC")==0
+				     || strcmp(zearg,"DE")==0 || strcmp(zearg,"HL")==0)
+					     osize+=1;
+				else if (strcmp(zearg,"IX")==0 || strcmp(zearg,"XL")==0)
+						osize+=2;
+				else if (strncmp(zearg,"(IX",3)==0)
+						osize+=3;
+				else osize++;
+				break;
+			case CRC_JP:
+				// JP is supposed to loop!
+				if (zearg) {
+					if (strcmp(zearg,"IX")==0)
+						osize+=2;
+					else if (strcmp(zearg,"HL")==0)
+						osize+=1;
+					else osize+=3;
+				} else osize+=3;
+				break;
+
+			case CRC_LD:
+				/* big cake! */
+				if (zearg && strchr(zearg,',')) {
+					int crc1,crc2;
+
+					/* split args */
+					listarg=TxtSplitWithChar(zearg,',');
+					crc1=GetCRC(listarg[0]);
+					crc2=GetCRC(listarg[1]);
+
+					switch (crc1) {
+						case CRC_I:
+						case CRC_R:
+							switch (crc2) {
+								case CRC_A:
+									osize+=2;
+									break;
+								default:
+									MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported LD %s,%s for GETSIZE, see documentation\n",listarg[0],listarg[1]);
+							}
+							break;
+						case CRC_A:
+						case CRC_B:
+						case CRC_C:
+						case CRC_D:
+						case CRC_E:
+						case CRC_H:
+						case CRC_L:
+							switch (crc2) {
+								// heading +1
+								case CRC_MBC:
+								case CRC_MDE:
+									if (crc1!=CRC_A) {
+										MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported LD %s,%s for GETSIZE, see documentation\n",listarg[0],listarg[1]);
+										break;
+									}
+								case CRC_A:
+								case CRC_B:
+								case CRC_C:
+								case CRC_D:
+								case CRC_E:
+								case CRC_H:
+								case CRC_L:
+								case CRC_MHL:
+									osize++;
+									break;
+								case CRC_I:
+								case CRC_R:
+									if (crc1==CRC_A) osize+=2; else
+									MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported LD %s,%s for GETSIZE, see documentation\n",listarg[0],listarg[1]);
+									break;
+								case CRC_XL:
+									osize+=2;
+									break;
+								default:
+									/* MIX + memory + value */
+									if (strncmp(listarg[1],"(IX",3)==0) {
+										osize+=4;
+									} else if (listarg[1][0]=='(' && listarg[1][strlen(listarg[1])-1]==')') {
+										/* absolute memory address */
+										if (crc1==CRC_A) {
+											osize+=3;
+										} else {
+											MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported LD %s,%s for GETSIZE, see documentation\n",listarg[0],listarg[1]);
+										}
+									} else {
+										/* numeric value as default */
+										osize+=2;
+									}
+							}
+							break;
+
+						case CRC_XL:
+							switch (crc2) {
+								case CRC_A:
+								case CRC_B:
+								case CRC_C:
+								case CRC_D:
+								case CRC_E:
+								case CRC_H:
+								case CRC_L://legal???
+								case CRC_XL:
+									osize+=2;
+									break;
+								default:
+									/* value */
+									osize+=3;
+							}
+							break;
+
+						case CRC_BC:
+						case CRC_DE:
+							/* memory / value */
+							if (listarg[1][0]=='(' && listarg[1][strlen(listarg[1])-1]==')') osize+=4; else osize+=3;
+							break;
+						case CRC_HL:
+							/* memory / value */
+							osize+=3;
+							break;
+						case CRC_SP:
+							if (crc2==CRC_HL) {
+								osize+=1;
+							} else if (crc2==CRC_IX) {
+								/* IX */
+								osize+=2;
+							} else if (listarg[1][0]=='(' && listarg[1][strlen(listarg[1])-1]==')') {
+								/* memory */
+								osize+=4;
+							} else osize+=3; /* value */
+							break;
+						case CRC_IX:
+							/* memory / value */
+							osize+=4;
+							break;
+
+						case CRC_MBC:
+						case CRC_MDE:
+							if (crc2==CRC_A) {
+								osize+=1;
+							} else {
+								MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported LD %s,%s for GETSIZE, see documentation\n",listarg[0],listarg[1]);
+							}
+							break;
+						case CRC_MHL:
+							switch (crc2) {
+								case CRC_A:
+								case CRC_B:
+								case CRC_C:
+								case CRC_D:
+								case CRC_E:
+								case CRC_H:
+								case CRC_L:
+									osize+=1;
+									break;
+								default:
+									osize+=2; /* value */
+									break;
+							}
+							break;
+						default:
+							if (strncmp(listarg[0],"(IX",3)==0) {
+								/* MIX */
+								switch (crc2) {
+									case CRC_A:
+									case CRC_B:
+									case CRC_C:
+									case CRC_D:
+									case CRC_E:
+									case CRC_H:
+									case CRC_L:osize+=3;break;
+									default:osize+=4; /* value */
+								}
+							} else if (listarg[0][0]=='(' && listarg[0][strlen(listarg[0])-1]==')') {
+								/* memory */
+								switch (crc2) {
+									case CRC_A:
+									case CRC_HL:osize+=3;break;
+									case CRC_BC:
+									case CRC_DE:
+									case CRC_SP:
+									case CRC_IX:osize+=4;break;
+									default:
+										MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported LD %s,%s for GETSIZE, see documentation\n",listarg[0],listarg[1]);
+								}
+							} else {
+								MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported LD %s,%s for GETSIZE, see documentation\n",listarg[0],listarg[1]);
+							}
+					}
+				} else {
+					MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported opcode LD for GETSIZE, need 2 arguments [%s]\n",zearg);
+				}
+				break;
+
+			default: 
+				MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported opcode [%s] for GETSIZE, see documentation about this directive\n",opcode[idx]);
+		}
+		idx++;
+	}
+	MemFree(opref);
+	if (opcode) MemFree(opcode);
+	return osize;
 }
 /*
 	default returned value of Duration is NOP
@@ -5859,6 +6251,7 @@ printf("stage 2 | page=%d | ptr=%X ibank=%d\n",page,curlabel->ptr,curlabel->iban
 			case E_COMPUTE_OPERATION_GETTICK:printf("gettick ");break;
 			case E_COMPUTE_OPERATION_DURATION:printf("duration ");break;
 			case E_COMPUTE_OPERATION_FILESIZE:printf("filesize ");break;
+			case E_COMPUTE_OPERATION_GETSIZE:printf("getsize ");break;
 			default:printf("bug\n");break;
 		}
 		
@@ -5986,6 +6379,7 @@ printf("operator string=%X\n",ae->computectx->operatorstack[o2].string);
 			case E_COMPUTE_OPERATION_GETTICK:
 			case E_COMPUTE_OPERATION_DURATION:
 			case E_COMPUTE_OPERATION_FILESIZE:
+			case E_COMPUTE_OPERATION_GETSIZE:
 #if DEBUG_STACK
 printf("ajout de la fonction\n");
 #endif
@@ -6179,6 +6573,27 @@ printf("final POP string=%X\n",ae->computectx->operatorstack[nboperatorstack+1].
 									MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"DURATION is empty\n");
 								}
 							       break;
+							       /* CC GETNOP */
+				case E_COMPUTE_OPERATION_GETSIZE:if (paccu>0) {
+								      int integeridx;
+								      integeridx=floor(accu[paccu-1]);
+
+								      if (integeridx>=0 && integeridx<nbcomputestack && computestack[integeridx].string) {
+									      accu[paccu-1]=__GETSIZE(ae,computestack[integeridx].string,didx);
+									      MemFree(computestack[integeridx].string);
+									      computestack[integeridx].string=NULL;
+								      } else {
+									      if (integeridx>=0 && integeridx<nbcomputestack) {
+											MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"GETSIZE function needs a proper string\n");
+										} else {
+											MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"GETSIZE internal error (wrong string index)\n");
+										}
+									}
+								} else {
+									MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"GETTICK is empty\n");
+								}
+							       break;
+							       /* CC GETNOP */
 				default:MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"invalid computing state! (%d)\n",computestack[i].operator);paccu=0;
 			}
 			if (!paccu) {
@@ -6387,7 +6802,27 @@ printf("final POP string=%X\n",ae->computectx->operatorstack[nboperatorstack+1].
 									MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"DURATION is empty\n");
 								}
 							       break;
+							       /* CC GETNOP */
+				case E_COMPUTE_OPERATION_GETSIZE:if (paccu>0) {
+								      int integeridx;
+								      integeridx=floor(accu[paccu-1]);
 
+								      if (integeridx>=0 && integeridx<nbcomputestack && computestack[integeridx].string) {
+									      accu[paccu-1]=__GETSIZE(ae,computestack[integeridx].string,didx);
+									      MemFree(computestack[integeridx].string);
+									      computestack[integeridx].string=NULL;
+								      } else {
+									      if (integeridx>=0 && integeridx<nbcomputestack) {
+											MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"GETSIZE function needs a proper string\n");
+										} else {
+											MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"GETSIZE internal error (wrong string index)\n");
+										}
+									}
+								} else {
+									MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"GETTICK is empty\n");
+								}
+							       break;
+							       /* CC GETNOP */
 				default:MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"invalid computing state! (%d)\n",computestack[i].operator);paccu=0;
 			}
 			if (!paccu) {
@@ -11977,7 +12412,7 @@ void __SNAPINIT(struct s_assenv *ae) {
 			}
 			break;
 		case 64:
-			if (snapsize==size+0x100) {
+			if (snapsize>=size+0x100) {
 				memcpy(ae->mem[0],snapdata+0x100,65536);
 				src+=65536;
 				ae->snapRAMsize=4;
@@ -11987,7 +12422,7 @@ void __SNAPINIT(struct s_assenv *ae) {
 			}
 			break;
 		case 128:
-			if (snapsize==size+0x100) {
+			if (snapsize>=size+0x100) {
 				memcpy(ae->mem[0],snapdata+0x100,65536);
 				memcpy(ae->mem[4],snapdata+0x100+65536,65536);
 				src+=65536*2;
