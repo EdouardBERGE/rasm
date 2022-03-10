@@ -3863,6 +3863,7 @@ char *TranslateTag(struct s_assenv *ae, char *varbuffer, int *touched, int enabl
 	return varbuffer;
 }
 
+#define CRC_HALT	0xD7D1BFA1
 #define CRC_NOP		0xE1830165
 #define CRC_LDI		0xE18B3F51
 #define CRC_LDD		0xE18B3F4C
@@ -3916,6 +3917,7 @@ char *TranslateTag(struct s_assenv *ae, char *varbuffer, int *touched, int enabl
 #define CRC_PUSH	0x97A1EDB8
 #define CRC_POP		0xE1BB1967
 
+#define CRC_CALL	0x826B994
 #define CRC_JR		0x4BD52314
 #define CRC_JP		0x4BD52312
 #define CRC_DJNZ	0x37CD7BAE
@@ -4149,15 +4151,17 @@ int __GETNOP(struct s_assenv *ae,char *oplist, int didx)
 			case CRC_JP:
 				// JP is supposed to loop!
 				if (zearg) {
-					if (strcmp(zearg,"(IX)")==0)
+					if (strstr(zearg,"IX"))
 						tick+=2;
-					else if (strcmp(zearg,"(HL)")==0)
+					else if (strstr(zearg,"HL"))
 						tick+=1;
 					else tick+=3;
 				} else tick+=3;
 				break;
 			case CRC_DJNZ:
 				// DJNZ is supposed to loop!
+			case CRC_CALL:
+				// CALL is supposed to skip!
 			case CRC_JR:
 				// JR is supposed to loop!
 				tick+=3;
@@ -4571,9 +4575,9 @@ int __GETTICK(struct s_assenv *ae,char *oplist, int didx)
 			case CRC_JP:
 				// JP is supposed to loop!
 				if (zearg) {
-					if (strcmp(zearg,"(IX)")==0)
+					if (strstr(zearg,"IX"))
 						tick+=8;
-					else if (strcmp(zearg,"(HL)")==0)
+					else if (strstr(zearg,"HL"))
 						tick+=4;
 					else tick+=10;
 				} else tick+=10;
@@ -4581,6 +4585,10 @@ int __GETTICK(struct s_assenv *ae,char *oplist, int didx)
 			case CRC_DJNZ:
 				// DJNZ is supposed to loop!
 				tick+=13;
+				break;
+			case CRC_CALL:
+				// CALL is supposed to skip!
+				tick+=10;
 				break;
 			case CRC_JR:
 				// JR is supposed to loop!
@@ -4832,6 +4840,7 @@ int __GETSIZE(struct s_assenv *ae,char *oplist, int didx)
 		* very simple and simplified parsing *
 		*************************************/
 		switch (crc) {
+			case CRC_HALT:
 			case CRC_RLA:
 			case CRC_RLCA:
 			case CRC_RRCA:
@@ -4874,6 +4883,7 @@ int __GETSIZE(struct s_assenv *ae,char *oplist, int didx)
 			case CRC_JR:
 			case CRC_NEG:osize+=2;break;
 
+			case CRC_CALL:osize+=3;break;
 
 			case CRC_EX:
 				if (zearg) {
@@ -4949,7 +4959,7 @@ int __GETSIZE(struct s_assenv *ae,char *oplist, int didx)
 			     if (zearg) {
 					if (strstr(zearg,"(IX")) osize+=3; else
 					if (strcmp(zearg,"XL")==0) osize+=2; else
-					if ((*zearg>='A' && *zearg<='E') || *zearg=='H' || *zearg=='L') osize+=1; else osize+=2;
+					if (strcmp(zearg,"(HL)")==0 || (*zearg>='A' && *zearg<='E') || *zearg=='H' || *zearg=='L') osize+=1; else osize+=2;
 				} else {
 					MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported opcode [%s] for GETSIZE, see documentation about this directive\n",opcode[idx]);
 				}
@@ -4957,11 +4967,9 @@ int __GETSIZE(struct s_assenv *ae,char *oplist, int didx)
 
 			/* BIT/RES/SET */
 			case CRC_BIT:
-				if (strstr(zearg,"(IX")) osize+=4; else osize+=3;
-				break;
 			case CRC_RES:
 			case CRC_SET:
-				if (strstr(zearg,"(IX")) osize+=5; else osize+=4;
+				if (strstr(zearg,"(IX")) osize+=4; else osize+=2;
 				break;
 			case CRC_DEC:
 			case CRC_INC:
@@ -4977,9 +4985,9 @@ int __GETSIZE(struct s_assenv *ae,char *oplist, int didx)
 			case CRC_JP:
 				// JP is supposed to loop!
 				if (zearg) {
-					if (strcmp(zearg,"IX")==0)
+					if (strstr(zearg,"IX"))
 						osize+=2;
-					else if (strcmp(zearg,"HL")==0)
+					else if (strstr(zearg,"HL"))
 						osize+=1;
 					else osize+=3;
 				} else osize+=3;
@@ -5042,7 +5050,7 @@ int __GETSIZE(struct s_assenv *ae,char *oplist, int didx)
 								default:
 									/* MIX + memory + value */
 									if (strncmp(listarg[1],"(IX",3)==0) {
-										osize+=4;
+										osize+=3;
 									} else if (listarg[1][0]=='(' && listarg[1][strlen(listarg[1])-1]==')') {
 										/* absolute memory address */
 										if (crc1==CRC_A) {
@@ -21500,6 +21508,413 @@ int RasmAssembleInfoParam(const char *datain, int lenin, unsigned char **dataout
 "ticker start,v44 : ld a,(ix+0) : ld h,(ix+0) : ld (ix+0),a : ld (ix+0),l : ld (ix+0),#12 : ticker stopzx,v44:"\
 "assert v44==gettick('ld a,(ix+0) : ld h,(ix+0) : ld (ix+0),a : ld (ix+0),l : ld (ix+0),#12')"
 
+#define AUTOTEST_GETSIZE "bank:push de:assert $==getsize('push de'):bank:sub #12:assert $==getsize('sub #12'):bank:rst #10:assert $==getsize('rst #10'):" \
+"bank:ret c:assert $==getsize('ret c'):bank:exx:assert $==getsize('exx'):bank:jp c,#1234:assert $==getsize('jp c,#1234')" \
+":bank:in a,(#12):assert $==getsize('in a,(#12)'):bank:call c,#1234:assert $==getsize('call c,#1234'):bank:nop:assert $==getsize('nop')" \
+":bank:sbc #12:assert $==getsize('sbc #12'):bank:rst #18:assert $==getsize('rst #18'):bank:ret po:assert $==getsize('ret po')" \
+":bank:pop hl:assert $==getsize('pop hl'):bank:jp po,#1234:assert $==getsize('jp po,#1234'):bank:ex (sp),hl:assert $==getsize('ex (sp),hl')" \
+":bank:call po,#1234:assert $==getsize('call po,#1234'):bank:push hl:assert $==getsize('push hl'):bank:and #12:assert $==getsize('and #12')" \
+":bank:rst #20:assert $==getsize('rst #20'):bank:ret pe:assert $==getsize('ret pe'):bank:jp (hl):assert $==getsize('jp (hl)')" \
+":bank:jp pe,#1234:assert $==getsize('jp pe,#1234'):bank:ex de,hl:assert $==getsize('ex de,hl'):bank:call pe,#1234:assert $==getsize('call pe,#1234')" \
+":bank:nop:assert $==getsize('nop'):bank:xor #12:assert $==getsize('xor #12'):bank:rst #28:assert $==getsize('rst #28')" \
+":bank:ret p:assert $==getsize('ret p'):bank:pop af:assert $==getsize('pop af'):bank:jp p,#1234:assert $==getsize('jp p,#1234')" \
+":bank:di:assert $==getsize('di'):bank:call p,#1234:assert $==getsize('call p,#1234'):bank:push af:assert $==getsize('push af')" \
+":bank:or #12:assert $==getsize('or #12'):bank:rst #30:assert $==getsize('rst #30'):bank:ret m:assert $==getsize('ret m')" \
+":bank:ld sp,hl:assert $==getsize('ld sp,hl'):bank:jp m,#1234:assert $==getsize('jp m,#1234'):bank:ei:assert $==getsize('ei')" \
+":bank:call m,#1234:assert $==getsize('call m,#1234'):bank:nop:assert $==getsize('nop'):bank:cp #12:assert $==getsize('cp #12')" \
+":bank:rst #38:assert $==getsize('rst #38'):bank:in b,(c):assert $==getsize('in b,(c)'):bank:out (c),b:assert $==getsize('out (c),b')" \
+":bank:sbc hl,bc:assert $==getsize('sbc hl,bc'):bank:ld (#1234),bc:assert $==getsize('ld (#1234),bc'):bank:neg:assert $==getsize('neg')" \
+":bank:retn:assert $==getsize('retn'):bank:im 0:assert $==getsize('im 0'):bank:ld i,a:assert $==getsize('ld i,a')" \
+":bank:in c,(c):assert $==getsize('in c,(c)'):bank:out (c),c:assert $==getsize('out (c),c'):bank:adc hl,bc:assert $==getsize('adc hl,bc')" \
+":bank:ld bc,(#1234):assert $==getsize('ld bc,(#1234)'):bank:reti:assert $==getsize('reti'):bank:ld r,a:assert $==getsize('ld r,a')" \
+":bank:in d,(c):assert $==getsize('in d,(c)'):bank:out (c),d:assert $==getsize('out (c),d'):bank:sbc hl,de:assert $==getsize('sbc hl,de')" \
+":bank:ld (#1234),de:assert $==getsize('ld (#1234),de'):bank:retn:assert $==getsize('retn'):bank:im 1:assert $==getsize('im 1')" \
+":bank:ld a,i:assert $==getsize('ld a,i'):bank:in e,(c):assert $==getsize('in e,(c)'):bank:out (c),e:assert $==getsize('out (c),e')" \
+":bank:adc hl,de:assert $==getsize('adc hl,de'):bank:ld de,(#1234):assert $==getsize('ld de,(#1234)'):bank:im 2:assert $==getsize('im 2')" \
+":bank:ld a,r:assert $==getsize('ld a,r'):bank:in h,(c):assert $==getsize('in h,(c)'):bank:out (c),h:assert $==getsize('out (c),h')" \
+":bank:sbc hl,hl:assert $==getsize('sbc hl,hl'):bank:rrd:assert $==getsize('rrd'):bank:in l,(c):assert $==getsize('in l,(c)')" \
+":bank:out (c),l:assert $==getsize('out (c),l'):bank:adc hl,hl:assert $==getsize('adc hl,hl'):bank:rld:assert $==getsize('rld')" \
+":bank:in 0,(c):assert $==getsize('in 0,(c)'):bank:out (c),0:assert $==getsize('out (c),0'):bank:sbc hl,sp:assert $==getsize('sbc hl,sp')" \
+":bank:ld (#1234),sp:assert $==getsize('ld (#1234),sp'):bank:in a,(c):assert $==getsize('in a,(c)'):bank:out (c),a:assert $==getsize('out (c),a')" \
+":bank:adc hl,sp:assert $==getsize('adc hl,sp'):bank:ld sp,(#1234):assert $==getsize('ld sp,(#1234)'):bank:ldi:assert $==getsize('ldi')" \
+":bank:cpi:assert $==getsize('cpi'):bank:ini:assert $==getsize('ini'):bank:outi:assert $==getsize('outi')" \
+":bank:ldd:assert $==getsize('ldd'):bank:cpd:assert $==getsize('cpd'):bank:ind:assert $==getsize('ind')" \
+":bank:outd:assert $==getsize('outd'):bank:ldir:assert $==getsize('ldir'):bank:cpir:assert $==getsize('cpir')" \
+":bank:inir:assert $==getsize('inir'):bank:otir:assert $==getsize('otir'):bank:lddr:assert $==getsize('lddr')" \
+":bank:cpdr:assert $==getsize('cpdr'):bank:indr:assert $==getsize('indr'):bank:otdr:assert $==getsize('otdr')" \
+":bank:rlc b:assert $==getsize('rlc b'):bank:rlc c:assert $==getsize('rlc c'):bank:rlc d:assert $==getsize('rlc d')" \
+":bank:rlc e:assert $==getsize('rlc e'):bank:rlc h:assert $==getsize('rlc h'):bank:rlc l:assert $==getsize('rlc l')" \
+":bank:rlc (hl):assert $==getsize('rlc (hl)'):bank:rlc a:assert $==getsize('rlc a'):bank:rrc b:assert $==getsize('rrc b')" \
+":bank:rrc c:assert $==getsize('rrc c'):bank:rrc d:assert $==getsize('rrc d'):bank:rrc e:assert $==getsize('rrc e')" \
+":bank:rrc h:assert $==getsize('rrc h'):bank:rrc l:assert $==getsize('rrc l'):bank:rrc (hl):assert $==getsize('rrc (hl)')" \
+":bank:rrc a:assert $==getsize('rrc a'):bank:rl b:assert $==getsize('rl b'):bank:rl c:assert $==getsize('rl c')" \
+":bank:rl d:assert $==getsize('rl d'):bank:rl e:assert $==getsize('rl e'):bank:rl h:assert $==getsize('rl h')" \
+":bank:rl l:assert $==getsize('rl l'):bank:rl (hl):assert $==getsize('rl (hl)'):bank:rl a:assert $==getsize('rl a')" \
+":bank:rr b:assert $==getsize('rr b'):bank:rr c:assert $==getsize('rr c'):bank:rr d:assert $==getsize('rr d')" \
+":bank:rr e:assert $==getsize('rr e'):bank:rr h:assert $==getsize('rr h'):bank:rr l:assert $==getsize('rr l')" \
+":bank:rr (hl):assert $==getsize('rr (hl)'):bank:rr a:assert $==getsize('rr a'):bank:sla b:assert $==getsize('sla b')" \
+":bank:sla c:assert $==getsize('sla c'):bank:sla d:assert $==getsize('sla d'):bank:sla e:assert $==getsize('sla e')" \
+":bank:sla h:assert $==getsize('sla h'):bank:sla l:assert $==getsize('sla l'):bank:sla (hl):assert $==getsize('sla (hl)')" \
+":bank:sla a:assert $==getsize('sla a'):bank:sra b:assert $==getsize('sra b'):bank:sra c:assert $==getsize('sra c')" \
+":bank:sra d:assert $==getsize('sra d'):bank:sra e:assert $==getsize('sra e'):bank:sra h:assert $==getsize('sra h')" \
+":bank:sra l:assert $==getsize('sra l'):bank:sra (hl):assert $==getsize('sra (hl)'):bank:sra a:assert $==getsize('sra a')" \
+":bank:sll b:assert $==getsize('sll b'):bank:sll c:assert $==getsize('sll c'):bank:sll d:assert $==getsize('sll d')" \
+":bank:sll e:assert $==getsize('sll e'):bank:sll h:assert $==getsize('sll h'):bank:sll l:assert $==getsize('sll l')" \
+":bank:sll (hl):assert $==getsize('sll (hl)'):bank:sll a:assert $==getsize('sll a'):bank:srl b:assert $==getsize('srl b')" \
+":bank:srl c:assert $==getsize('srl c'):bank:srl d:assert $==getsize('srl d'):bank:srl e:assert $==getsize('srl e')" \
+":bank:srl h:assert $==getsize('srl h'):bank:srl l:assert $==getsize('srl l'):bank:srl (hl):assert $==getsize('srl (hl)')" \
+":bank:srl a:assert $==getsize('srl a'):bank:bit 0,b:assert $==getsize('bit 0,b'):bank:bit 0,c:assert $==getsize('bit 0,c')" \
+":bank:bit 0,d:assert $==getsize('bit 0,d'):bank:bit 0,e:assert $==getsize('bit 0,e'):bank:bit 0,h:assert $==getsize('bit 0,h')" \
+":bank:bit 0,l:assert $==getsize('bit 0,l'):bank:bit 0,(hl):assert $==getsize('bit 0,(hl)'):bank:bit 0,a:assert $==getsize('bit 0,a')" \
+":bank:bit 1,b:assert $==getsize('bit 1,b'):bank:bit 1,c:assert $==getsize('bit 1,c'):bank:bit 1,d:assert $==getsize('bit 1,d')" \
+":bank:bit 1,e:assert $==getsize('bit 1,e'):bank:bit 1,h:assert $==getsize('bit 1,h'):bank:bit 1,l:assert $==getsize('bit 1,l')" \
+":bank:bit 1,(hl):assert $==getsize('bit 1,(hl)'):bank:bit 1,a:assert $==getsize('bit 1,a'):bank:bit 2,b:assert $==getsize('bit 2,b')" \
+":bank:bit 2,c:assert $==getsize('bit 2,c'):bank:bit 2,d:assert $==getsize('bit 2,d'):bank:bit 2,e:assert $==getsize('bit 2,e')" \
+":bank:bit 2,h:assert $==getsize('bit 2,h'):bank:bit 2,l:assert $==getsize('bit 2,l'):bank:bit 2,(hl):assert $==getsize('bit 2,(hl)')" \
+":bank:bit 2,a:assert $==getsize('bit 2,a'):bank:bit 3,b:assert $==getsize('bit 3,b'):bank:bit 3,c:assert $==getsize('bit 3,c')" \
+":bank:bit 3,d:assert $==getsize('bit 3,d'):bank:bit 3,e:assert $==getsize('bit 3,e'):bank:bit 3,h:assert $==getsize('bit 3,h')" \
+":bank:bit 3,l:assert $==getsize('bit 3,l'):bank:bit 3,(hl):assert $==getsize('bit 3,(hl)'):bank:bit 3,a:assert $==getsize('bit 3,a')" \
+":bank:bit 4,b:assert $==getsize('bit 4,b'):bank:bit 4,c:assert $==getsize('bit 4,c'):bank:bit 4,d:assert $==getsize('bit 4,d')" \
+":bank:bit 4,e:assert $==getsize('bit 4,e'):bank:bit 4,h:assert $==getsize('bit 4,h'):bank:bit 4,l:assert $==getsize('bit 4,l')" \
+":bank:bit 4,(hl):assert $==getsize('bit 4,(hl)'):bank:bit 4,a:assert $==getsize('bit 4,a'):bank:bit 5,b:assert $==getsize('bit 5,b')" \
+":bank:bit 5,c:assert $==getsize('bit 5,c'):bank:bit 5,d:assert $==getsize('bit 5,d'):bank:bit 5,e:assert $==getsize('bit 5,e')" \
+":bank:bit 5,h:assert $==getsize('bit 5,h'):bank:bit 5,l:assert $==getsize('bit 5,l'):bank:bit 5,(hl):assert $==getsize('bit 5,(hl)')" \
+":bank:bit 5,a:assert $==getsize('bit 5,a'):bank:bit 6,b:assert $==getsize('bit 6,b'):bank:bit 6,c:assert $==getsize('bit 6,c')" \
+":bank:bit 6,d:assert $==getsize('bit 6,d'):bank:bit 6,e:assert $==getsize('bit 6,e'):bank:bit 6,h:assert $==getsize('bit 6,h')" \
+":bank:bit 6,l:assert $==getsize('bit 6,l'):bank:bit 6,(hl):assert $==getsize('bit 6,(hl)'):bank:bit 6,a:assert $==getsize('bit 6,a')" \
+":bank:bit 7,b:assert $==getsize('bit 7,b'):bank:bit 7,c:assert $==getsize('bit 7,c'):bank:bit 7,d:assert $==getsize('bit 7,d')" \
+":bank:bit 7,e:assert $==getsize('bit 7,e'):bank:bit 7,h:assert $==getsize('bit 7,h'):bank:bit 7,l:assert $==getsize('bit 7,l')" \
+":bank:bit 7,(hl):assert $==getsize('bit 7,(hl)'):bank:bit 7,a:assert $==getsize('bit 7,a'):bank:res 0,b:assert $==getsize('res 0,b')" \
+":bank:res 0,c:assert $==getsize('res 0,c'):bank:res 0,d:assert $==getsize('res 0,d'):bank:res 0,e:assert $==getsize('res 0,e')" \
+":bank:res 0,h:assert $==getsize('res 0,h'):bank:res 0,l:assert $==getsize('res 0,l'):bank:res 0,(hl):assert $==getsize('res 0,(hl)')" \
+":bank:res 0,a:assert $==getsize('res 0,a'):bank:res 1,b:assert $==getsize('res 1,b'):bank:res 1,c:assert $==getsize('res 1,c')" \
+":bank:res 1,d:assert $==getsize('res 1,d'):bank:res 1,e:assert $==getsize('res 1,e'):bank:res 1,h:assert $==getsize('res 1,h')" \
+":bank:res 1,l:assert $==getsize('res 1,l'):bank:res 1,(hl):assert $==getsize('res 1,(hl)'):bank:res 1,a:assert $==getsize('res 1,a')" \
+":bank:res 2,b:assert $==getsize('res 2,b'):bank:res 2,c:assert $==getsize('res 2,c'):bank:res 2,d:assert $==getsize('res 2,d')" \
+":bank:res 2,e:assert $==getsize('res 2,e'):bank:res 2,h:assert $==getsize('res 2,h'):bank:res 2,l:assert $==getsize('res 2,l')" \
+":bank:res 2,(hl):assert $==getsize('res 2,(hl)'):bank:res 2,a:assert $==getsize('res 2,a'):bank:res 3,b:assert $==getsize('res 3,b')" \
+":bank:res 3,c:assert $==getsize('res 3,c'):bank:res 3,d:assert $==getsize('res 3,d'):bank:res 3,e:assert $==getsize('res 3,e')" \
+":bank:res 3,h:assert $==getsize('res 3,h'):bank:res 3,l:assert $==getsize('res 3,l'):bank:res 3,(hl):assert $==getsize('res 3,(hl)')" \
+":bank:res 3,a:assert $==getsize('res 3,a'):bank:res 4,b:assert $==getsize('res 4,b'):bank:res 4,c:assert $==getsize('res 4,c')" \
+":bank:res 4,d:assert $==getsize('res 4,d'):bank:res 4,e:assert $==getsize('res 4,e'):bank:res 4,h:assert $==getsize('res 4,h')" \
+":bank:res 4,l:assert $==getsize('res 4,l'):bank:res 4,(hl):assert $==getsize('res 4,(hl)'):bank:res 4,a:assert $==getsize('res 4,a')" \
+":bank:res 5,b:assert $==getsize('res 5,b'):bank:res 5,c:assert $==getsize('res 5,c'):bank:res 5,d:assert $==getsize('res 5,d')" \
+":bank:res 5,e:assert $==getsize('res 5,e'):bank:res 5,h:assert $==getsize('res 5,h'):bank:res 5,l:assert $==getsize('res 5,l')" \
+":bank:res 5,(hl):assert $==getsize('res 5,(hl)'):bank:res 5,a:assert $==getsize('res 5,a'):bank:res 6,b:assert $==getsize('res 6,b')" \
+":bank:res 6,c:assert $==getsize('res 6,c'):bank:res 6,d:assert $==getsize('res 6,d'):bank:res 6,e:assert $==getsize('res 6,e')" \
+":bank:res 6,h:assert $==getsize('res 6,h'):bank:res 6,l:assert $==getsize('res 6,l'):bank:res 6,(hl):assert $==getsize('res 6,(hl)')" \
+":bank:res 6,a:assert $==getsize('res 6,a'):bank:res 7,b:assert $==getsize('res 7,b'):bank:res 7,c:assert $==getsize('res 7,c')" \
+":bank:res 7,d:assert $==getsize('res 7,d'):bank:res 7,e:assert $==getsize('res 7,e'):bank:res 7,h:assert $==getsize('res 7,h')" \
+":bank:res 7,l:assert $==getsize('res 7,l'):bank:res 7,(hl):assert $==getsize('res 7,(hl)'):bank:res 7,a:assert $==getsize('res 7,a')" \
+":bank:set 0,b:assert $==getsize('set 0,b'):bank:set 0,c:assert $==getsize('set 0,c'):bank:set 0,d:assert $==getsize('set 0,d')" \
+":bank:set 0,e:assert $==getsize('set 0,e'):bank:set 0,h:assert $==getsize('set 0,h'):bank:set 0,l:assert $==getsize('set 0,l')" \
+":bank:set 0,(hl):assert $==getsize('set 0,(hl)'):bank:set 0,a:assert $==getsize('set 0,a'):bank:set 1,b:assert $==getsize('set 1,b')" \
+":bank:set 1,c:assert $==getsize('set 1,c'):bank:set 1,d:assert $==getsize('set 1,d'):bank:set 1,e:assert $==getsize('set 1,e')" \
+":bank:set 1,h:assert $==getsize('set 1,h'):bank:set 1,l:assert $==getsize('set 1,l'):bank:set 1,(hl):assert $==getsize('set 1,(hl)')" \
+":bank:set 1,a:assert $==getsize('set 1,a'):bank:set 2,b:assert $==getsize('set 2,b'):bank:set 2,c:assert $==getsize('set 2,c')" \
+":bank:set 2,d:assert $==getsize('set 2,d'):bank:set 2,e:assert $==getsize('set 2,e'):bank:set 2,h:assert $==getsize('set 2,h')" \
+":bank:set 2,l:assert $==getsize('set 2,l'):bank:set 2,(hl):assert $==getsize('set 2,(hl)'):bank:set 2,a:assert $==getsize('set 2,a')" \
+":bank:set 3,b:assert $==getsize('set 3,b'):bank:set 3,c:assert $==getsize('set 3,c'):bank:set 3,d:assert $==getsize('set 3,d')" \
+":bank:set 3,e:assert $==getsize('set 3,e'):bank:set 3,h:assert $==getsize('set 3,h'):bank:set 3,l:assert $==getsize('set 3,l')" \
+":bank:set 3,(hl):assert $==getsize('set 3,(hl)'):bank:set 3,a:assert $==getsize('set 3,a'):bank:set 4,b:assert $==getsize('set 4,b')" \
+":bank:set 4,c:assert $==getsize('set 4,c'):bank:set 4,d:assert $==getsize('set 4,d'):bank:set 4,e:assert $==getsize('set 4,e')" \
+":bank:set 4,h:assert $==getsize('set 4,h'):bank:set 4,l:assert $==getsize('set 4,l'):bank:set 4,(hl):assert $==getsize('set 4,(hl)')" \
+":bank:set 4,a:assert $==getsize('set 4,a'):bank:set 5,b:assert $==getsize('set 5,b'):bank:set 5,c:assert $==getsize('set 5,c')" \
+":bank:set 5,d:assert $==getsize('set 5,d'):bank:set 5,e:assert $==getsize('set 5,e'):bank:set 5,h:assert $==getsize('set 5,h')" \
+":bank:set 5,l:assert $==getsize('set 5,l'):bank:set 5,(hl):assert $==getsize('set 5,(hl)'):bank:set 5,a:assert $==getsize('set 5,a')" \
+":bank:set 6,b:assert $==getsize('set 6,b'):bank:set 6,c:assert $==getsize('set 6,c'):bank:set 6,d:assert $==getsize('set 6,d')" \
+":bank:set 6,e:assert $==getsize('set 6,e'):bank:set 6,h:assert $==getsize('set 6,h'):bank:set 6,l:assert $==getsize('set 6,l')" \
+":bank:set 6,(hl):assert $==getsize('set 6,(hl)'):bank:set 6,a:assert $==getsize('set 6,a'):bank:set 7,b:assert $==getsize('set 7,b')" \
+":bank:set 7,c:assert $==getsize('set 7,c'):bank:set 7,d:assert $==getsize('set 7,d'):bank:set 7,e:assert $==getsize('set 7,e')" \
+":bank:set 7,h:assert $==getsize('set 7,h'):bank:set 7,l:assert $==getsize('set 7,l'):bank:set 7,(hl):assert $==getsize('set 7,(hl)')" \
+":bank:set 7,a:assert $==getsize('set 7,a'):bank:add ix,bc:assert $==getsize('add ix,bc'):bank:add ix,de:assert $==getsize('add ix,de')" \
+":bank:ld ix,#1234:assert $==getsize('ld ix,#1234'):bank:ld (#1234),ix:assert $==getsize('ld (#1234),ix'):bank:inc ix:assert $==getsize('inc ix')" \
+":bank:inc xh:assert $==getsize('inc xh'):bank:dec xh:assert $==getsize('dec xh'):bank:ld xh,#12:assert $==getsize('ld xh,#12')" \
+":bank:add ix,ix:assert $==getsize('add ix,ix'):bank:ld ix,(#1234):assert $==getsize('ld ix,(#1234)'):bank:dec ix:assert $==getsize('dec ix')" \
+":bank:inc xl:assert $==getsize('inc xl'):bank:dec xl:assert $==getsize('dec xl'):bank:ld xl,#12:assert $==getsize('ld xl,#12')" \
+":bank:inc (ix+#12):assert $==getsize('inc (ix+#12)'):bank:dec (ix+#12):assert $==getsize('dec (ix+#12)'):bank:ld (ix+#12),#34:assert $==getsize('ld (ix+#12),#34')" \
+":bank:add ix,sp:assert $==getsize('add ix,sp'):bank:ld b,xh:assert $==getsize('ld b,xh'):bank:ld b,xl:assert $==getsize('ld b,xl')" \
+":bank:ld b,(ix+#12):assert $==getsize('ld b,(ix+#12)'):bank:ld c,xh:assert $==getsize('ld c,xh'):bank:ld c,xl:assert $==getsize('ld c,xl')" \
+":bank:ld c,(ix+#12):assert $==getsize('ld c,(ix+#12)'):bank:ld d,xh:assert $==getsize('ld d,xh'):bank:ld d,xl:assert $==getsize('ld d,xl')" \
+":bank:ld d,(ix+#12):assert $==getsize('ld d,(ix+#12)'):bank:ld e,xh:assert $==getsize('ld e,xh'):bank:ld e,xl:assert $==getsize('ld e,xl')" \
+":bank:ld e,(ix+#12):assert $==getsize('ld e,(ix+#12)'):bank:ld xh,b:assert $==getsize('ld xh,b'):bank:ld xh,c:assert $==getsize('ld xh,c')" \
+":bank:ld xh,d:assert $==getsize('ld xh,d'):bank:ld xh,e:assert $==getsize('ld xh,e'):bank:ld xh,xh:assert $==getsize('ld xh,xh')" \
+":bank:ld xh,xl:assert $==getsize('ld xh,xl'):bank:ld h,(ix+#12):assert $==getsize('ld h,(ix+#12)'):bank:ld xh,a:assert $==getsize('ld xh,a')" \
+":bank:ld xl,b:assert $==getsize('ld xl,b'):bank:ld xl,c:assert $==getsize('ld xl,c'):bank:ld xl,d:assert $==getsize('ld xl,d')" \
+":bank:ld xl,e:assert $==getsize('ld xl,e'):bank:ld xl,xh:assert $==getsize('ld xl,xh'):bank:ld xl,xl:assert $==getsize('ld xl,xl')" \
+":bank:ld l,(ix+#12):assert $==getsize('ld l,(ix+#12)'):bank:ld xl,a:assert $==getsize('ld xl,a'):bank:ld (ix+#12),b:assert $==getsize('ld (ix+#12),b')" \
+":bank:ld (ix+#12),c:assert $==getsize('ld (ix+#12),c'):bank:ld (ix+#12),d:assert $==getsize('ld (ix+#12),d'):bank:ld (ix+#12),e:assert $==getsize('ld (ix+#12),e')" \
+":bank:ld (ix+#12),h:assert $==getsize('ld (ix+#12),h'):bank:ld (ix+#12),l:assert $==getsize('ld (ix+#12),l'):bank:ld (ix+#12),a:assert $==getsize('ld (ix+#12),a')" \
+":bank:ld a,xh:assert $==getsize('ld a,xh'):bank:ld a,xl:assert $==getsize('ld a,xl'):bank:ld a,(ix+#12):assert $==getsize('ld a,(ix+#12)')" \
+":bank:add xh:assert $==getsize('add xh'):bank:add xl:assert $==getsize('add xl'):bank:add (ix+#12):assert $==getsize('add (ix+#12)')" \
+":bank:adc xh:assert $==getsize('adc xh'):bank:adc xl:assert $==getsize('adc xl'):bank:adc (ix+#12):assert $==getsize('adc (ix+#12)')" \
+":bank:sub xh:assert $==getsize('sub xh'):bank:sub xl:assert $==getsize('sub xl'):bank:sub (ix+#12):assert $==getsize('sub (ix+#12)')" \
+":bank:sbc xh:assert $==getsize('sbc xh'):bank:sbc xl:assert $==getsize('sbc xl'):bank:sbc (ix+#12):assert $==getsize('sbc (ix+#12)')" \
+":bank:and xh:assert $==getsize('and xh'):bank:and xl:assert $==getsize('and xl'):bank:and (ix+#12):assert $==getsize('and (ix+#12)')" \
+":bank:xor xh:assert $==getsize('xor xh'):bank:xor xl:assert $==getsize('xor xl'):bank:xor (ix+#12):assert $==getsize('xor (ix+#12)')" \
+":bank:or xh:assert $==getsize('or xh'):bank:or xl:assert $==getsize('or xl'):bank:or (ix+#12):assert $==getsize('or (ix+#12)')" \
+":bank:cp xh:assert $==getsize('cp xh'):bank:cp xl:assert $==getsize('cp xl'):bank:cp (ix+#12):assert $==getsize('cp (ix+#12)')" \
+":bank:pop ix:assert $==getsize('pop ix'):bank:ex (sp),ix:assert $==getsize('ex (sp),ix'):bank:push ix:assert $==getsize('push ix')" \
+":bank:jp (ix):assert $==getsize('jp (ix)'):bank:ld sp,ix:assert $==getsize('ld sp,ix'):bank:rlc (ix+#12),b:assert $==getsize('rlc (ix+#12),b')" \
+":bank:rlc (ix+#12),c:assert $==getsize('rlc (ix+#12),c'):bank:rlc (ix+#12),d:assert $==getsize('rlc (ix+#12),d'):bank:rlc (ix+#12),e:assert $==getsize('rlc (ix+#12),e')" \
+":bank:rlc (ix+#12),h:assert $==getsize('rlc (ix+#12),h'):bank:rlc (ix+#12),l:assert $==getsize('rlc (ix+#12),l'):bank:rlc (ix+#12):assert $==getsize('rlc (ix+#12)')" \
+":bank:rlc (ix+#12),a:assert $==getsize('rlc (ix+#12),a'):bank:rrc (ix+#12),b:assert $==getsize('rrc (ix+#12),b'):bank:rrc (ix+#12),c:assert $==getsize('rrc (ix+#12),c')" \
+":bank:rrc (ix+#12),d:assert $==getsize('rrc (ix+#12),d'):bank:rrc (ix+#12),e:assert $==getsize('rrc (ix+#12),e'):bank:rrc (ix+#12),h:assert $==getsize('rrc (ix+#12),h')" \
+":bank:rrc (ix+#12),l:assert $==getsize('rrc (ix+#12),l'):bank:rrc (ix+#12):assert $==getsize('rrc (ix+#12)'):bank:rrc (ix+#12),a:assert $==getsize('rrc (ix+#12),a')" \
+":bank:rl (ix+#12),b:assert $==getsize('rl (ix+#12),b'):bank:rl (ix+#12),c:assert $==getsize('rl (ix+#12),c'):bank:rl (ix+#12),d:assert $==getsize('rl (ix+#12),d')" \
+":bank:rl (ix+#12),e:assert $==getsize('rl (ix+#12),e'):bank:rl (ix+#12),h:assert $==getsize('rl (ix+#12),h'):bank:rl (ix+#12),l:assert $==getsize('rl (ix+#12),l')" \
+":bank:rl (ix+#12):assert $==getsize('rl (ix+#12)'):bank:rl (ix+#12),a:assert $==getsize('rl (ix+#12),a'):bank:rr (ix+#12),b:assert $==getsize('rr (ix+#12),b')" \
+":bank:rr (ix+#12),c:assert $==getsize('rr (ix+#12),c'):bank:rr (ix+#12),d:assert $==getsize('rr (ix+#12),d'):bank:rr (ix+#12),e:assert $==getsize('rr (ix+#12),e')" \
+":bank:rr (ix+#12),h:assert $==getsize('rr (ix+#12),h'):bank:rr (ix+#12),l:assert $==getsize('rr (ix+#12),l'):bank:rr (ix+#12):assert $==getsize('rr (ix+#12)')" \
+":bank:rr (ix+#12),a:assert $==getsize('rr (ix+#12),a'):bank:sla (ix+#12),b:assert $==getsize('sla (ix+#12),b'):bank:sla (ix+#12),c:assert $==getsize('sla (ix+#12),c')" \
+":bank:sla (ix+#12),d:assert $==getsize('sla (ix+#12),d'):bank:sla (ix+#12),e:assert $==getsize('sla (ix+#12),e'):bank:sla (ix+#12),h:assert $==getsize('sla (ix+#12),h')" \
+":bank:sla (ix+#12),l:assert $==getsize('sla (ix+#12),l'):bank:sla (ix+#12):assert $==getsize('sla (ix+#12)'):bank:sla (ix+#12),a:assert $==getsize('sla (ix+#12),a')" \
+":bank:sra (ix+#12),b:assert $==getsize('sra (ix+#12),b'):bank:sra (ix+#12),c:assert $==getsize('sra (ix+#12),c'):bank:sra (ix+#12),d:assert $==getsize('sra (ix+#12),d')" \
+":bank:sra (ix+#12),e:assert $==getsize('sra (ix+#12),e'):bank:sra (ix+#12),h:assert $==getsize('sra (ix+#12),h'):bank:sra (ix+#12),l:assert $==getsize('sra (ix+#12),l')" \
+":bank:sra (ix+#12):assert $==getsize('sra (ix+#12)'):bank:sra (ix+#12),a:assert $==getsize('sra (ix+#12),a'):bank:sll (ix+#12),b:assert $==getsize('sll (ix+#12),b')" \
+":bank:sll (ix+#12),c:assert $==getsize('sll (ix+#12),c'):bank:sll (ix+#12),d:assert $==getsize('sll (ix+#12),d'):bank:sll (ix+#12),e:assert $==getsize('sll (ix+#12),e')" \
+":bank:sll (ix+#12),h:assert $==getsize('sll (ix+#12),h'):bank:sll (ix+#12),l:assert $==getsize('sll (ix+#12),l'):bank:sll (ix+#12):assert $==getsize('sll (ix+#12)')" \
+":bank:sll (ix+#12),a:assert $==getsize('sll (ix+#12),a'):bank:srl (ix+#12),b:assert $==getsize('srl (ix+#12),b'):bank:srl (ix+#12),c:assert $==getsize('srl (ix+#12),c')" \
+":bank:srl (ix+#12),d:assert $==getsize('srl (ix+#12),d'):bank:srl (ix+#12),e:assert $==getsize('srl (ix+#12),e'):bank:srl (ix+#12),h:assert $==getsize('srl (ix+#12),h')" \
+":bank:srl (ix+#12),l:assert $==getsize('srl (ix+#12),l'):bank:srl (ix+#12):assert $==getsize('srl (ix+#12)'):bank:srl (ix+#12),a:assert $==getsize('srl (ix+#12),a')" \
+":bank:bit 0,(ix+#12):assert $==getsize('bit 0,(ix+#12)'):bank:bit 1,(ix+#12):assert $==getsize('bit 1,(ix+#12)'):bank:bit 2,(ix+#12):assert $==getsize('bit 2,(ix+#12)')" \
+":bank:bit 3,(ix+#12):assert $==getsize('bit 3,(ix+#12)'):bank:bit 4,(ix+#12):assert $==getsize('bit 4,(ix+#12)'):bank:bit 5,(ix+#12):assert $==getsize('bit 5,(ix+#12)')" \
+":bank:bit 6,(ix+#12):assert $==getsize('bit 6,(ix+#12)'):bank:bit 7,(ix+#12):assert $==getsize('bit 7,(ix+#12)'):bank:bit 0,(ix+#12),d:assert $==getsize('bit 0,(ix+#12),d')" \
+":bank:bit 1,(ix+#12),b:assert $==getsize('bit 1,(ix+#12),b'):bank:bit 2,(ix+#12),c:assert $==getsize('bit 2,(ix+#12),c'):bank:bit 3,(ix+#12),d:assert $==getsize('bit 3,(ix+#12),d')" \
+":bank:bit 4,(ix+#12),e:assert $==getsize('bit 4,(ix+#12),e'):bank:bit 5,(ix+#12),h:assert $==getsize('bit 5,(ix+#12),h'):bank:bit 6,(ix+#12),l:assert $==getsize('bit 6,(ix+#12),l')" \
+":bank:bit 7,(ix+#12),a:assert $==getsize('bit 7,(ix+#12),a'):bank:res 0,(ix+#12),b:assert $==getsize('res 0,(ix+#12),b'):bank:res 0,(ix+#12),c:assert $==getsize('res 0,(ix+#12),c')" \
+":bank:res 0,(ix+#12),d:assert $==getsize('res 0,(ix+#12),d'):bank:res 0,(ix+#12),e:assert $==getsize('res 0,(ix+#12),e'):bank:res 0,(ix+#12),h:assert $==getsize('res 0,(ix+#12),h')" \
+":bank:res 0,(ix+#12),l:assert $==getsize('res 0,(ix+#12),l'):bank:res 0,(ix+#12):assert $==getsize('res 0,(ix+#12)'):bank:res 0,(ix+#12),a:assert $==getsize('res 0,(ix+#12),a')" \
+":bank:res 1,(ix+#12),b:assert $==getsize('res 1,(ix+#12),b'):bank:res 1,(ix+#12),c:assert $==getsize('res 1,(ix+#12),c'):bank:res 1,(ix+#12),d:assert $==getsize('res 1,(ix+#12),d')" \
+":bank:res 1,(ix+#12),e:assert $==getsize('res 1,(ix+#12),e'):bank:res 1,(ix+#12),h:assert $==getsize('res 1,(ix+#12),h'):bank:res 1,(ix+#12),l:assert $==getsize('res 1,(ix+#12),l')" \
+":bank:res 1,(ix+#12):assert $==getsize('res 1,(ix+#12)'):bank:res 1,(ix+#12),a:assert $==getsize('res 1,(ix+#12),a'):bank:res 2,(ix+#12),b:assert $==getsize('res 2,(ix+#12),b')" \
+":bank:res 2,(ix+#12),c:assert $==getsize('res 2,(ix+#12),c'):bank:res 2,(ix+#12),d:assert $==getsize('res 2,(ix+#12),d'):bank:res 2,(ix+#12),e:assert $==getsize('res 2,(ix+#12),e')" \
+":bank:res 2,(ix+#12),h:assert $==getsize('res 2,(ix+#12),h'):bank:res 2,(ix+#12),l:assert $==getsize('res 2,(ix+#12),l'):bank:res 2,(ix+#12):assert $==getsize('res 2,(ix+#12)')" \
+":bank:res 2,(ix+#12),a:assert $==getsize('res 2,(ix+#12),a'):bank:res 3,(ix+#12),b:assert $==getsize('res 3,(ix+#12),b'):bank:res 3,(ix+#12),c:assert $==getsize('res 3,(ix+#12),c')" \
+":bank:res 3,(ix+#12),d:assert $==getsize('res 3,(ix+#12),d'):bank:res 3,(ix+#12),e:assert $==getsize('res 3,(ix+#12),e'):bank:res 3,(ix+#12),h:assert $==getsize('res 3,(ix+#12),h')" \
+":bank:res 3,(ix+#12),l:assert $==getsize('res 3,(ix+#12),l'):bank:res 3,(ix+#12):assert $==getsize('res 3,(ix+#12)'):bank:res 3,(ix+#12),a:assert $==getsize('res 3,(ix+#12),a')" \
+":bank:res 4,(ix+#12),b:assert $==getsize('res 4,(ix+#12),b'):bank:res 4,(ix+#12),c:assert $==getsize('res 4,(ix+#12),c'):bank:res 4,(ix+#12),d:assert $==getsize('res 4,(ix+#12),d')" \
+":bank:res 4,(ix+#12),e:assert $==getsize('res 4,(ix+#12),e'):bank:res 4,(ix+#12),h:assert $==getsize('res 4,(ix+#12),h'):bank:res 4,(ix+#12),l:assert $==getsize('res 4,(ix+#12),l')" \
+":bank:res 4,(ix+#12):assert $==getsize('res 4,(ix+#12)'):bank:res 4,(ix+#12),a:assert $==getsize('res 4,(ix+#12),a'):bank:res 5,(ix+#12),b:assert $==getsize('res 5,(ix+#12),b')" \
+":bank:res 5,(ix+#12),c:assert $==getsize('res 5,(ix+#12),c'):bank:res 5,(ix+#12),d:assert $==getsize('res 5,(ix+#12),d'):bank:res 5,(ix+#12),e:assert $==getsize('res 5,(ix+#12),e')" \
+":bank:res 5,(ix+#12),h:assert $==getsize('res 5,(ix+#12),h'):bank:res 5,(ix+#12),l:assert $==getsize('res 5,(ix+#12),l'):bank:res 5,(ix+#12):assert $==getsize('res 5,(ix+#12)')" \
+":bank:res 5,(ix+#12),a:assert $==getsize('res 5,(ix+#12),a'):bank:res 6,(ix+#12),b:assert $==getsize('res 6,(ix+#12),b'):bank:res 6,(ix+#12),c:assert $==getsize('res 6,(ix+#12),c')" \
+":bank:res 6,(ix+#12),d:assert $==getsize('res 6,(ix+#12),d'):bank:res 6,(ix+#12),e:assert $==getsize('res 6,(ix+#12),e'):bank:res 6,(ix+#12),h:assert $==getsize('res 6,(ix+#12),h')" \
+":bank:res 6,(ix+#12),l:assert $==getsize('res 6,(ix+#12),l'):bank:res 6,(ix+#12):assert $==getsize('res 6,(ix+#12)'):bank:res 6,(ix+#12),a:assert $==getsize('res 6,(ix+#12),a')" \
+":bank:res 7,(ix+#12),b:assert $==getsize('res 7,(ix+#12),b'):bank:res 7,(ix+#12),c:assert $==getsize('res 7,(ix+#12),c'):bank:res 7,(ix+#12),d:assert $==getsize('res 7,(ix+#12),d')" \
+":bank:res 7,(ix+#12),e:assert $==getsize('res 7,(ix+#12),e'):bank:res 7,(ix+#12),h:assert $==getsize('res 7,(ix+#12),h'):bank:res 7,(ix+#12),l:assert $==getsize('res 7,(ix+#12),l')" \
+":bank:res 7,(ix+#12):assert $==getsize('res 7,(ix+#12)'):bank:res 7,(ix+#12),a:assert $==getsize('res 7,(ix+#12),a'):bank:set 0,(ix+#12),b:assert $==getsize('set 0,(ix+#12),b')" \
+":bank:set 0,(ix+#12),c:assert $==getsize('set 0,(ix+#12),c'):bank:set 0,(ix+#12),d:assert $==getsize('set 0,(ix+#12),d'):bank:set 0,(ix+#12),e:assert $==getsize('set 0,(ix+#12),e')" \
+":bank:set 0,(ix+#12),h:assert $==getsize('set 0,(ix+#12),h'):bank:set 0,(ix+#12),l:assert $==getsize('set 0,(ix+#12),l'):bank:set 0,(ix+#12):assert $==getsize('set 0,(ix+#12)')" \
+":bank:set 0,(ix+#12),a:assert $==getsize('set 0,(ix+#12),a'):bank:set 1,(ix+#12),b:assert $==getsize('set 1,(ix+#12),b'):bank:set 1,(ix+#12),c:assert $==getsize('set 1,(ix+#12),c')" \
+":bank:set 1,(ix+#12),d:assert $==getsize('set 1,(ix+#12),d'):bank:set 1,(ix+#12),e:assert $==getsize('set 1,(ix+#12),e'):bank:set 1,(ix+#12),h:assert $==getsize('set 1,(ix+#12),h')" \
+":bank:set 1,(ix+#12),l:assert $==getsize('set 1,(ix+#12),l'):bank:set 1,(ix+#12):assert $==getsize('set 1,(ix+#12)'):bank:set 1,(ix+#12),a:assert $==getsize('set 1,(ix+#12),a')" \
+":bank:set 2,(ix+#12),b:assert $==getsize('set 2,(ix+#12),b'):bank:set 2,(ix+#12),c:assert $==getsize('set 2,(ix+#12),c'):bank:set 2,(ix+#12),d:assert $==getsize('set 2,(ix+#12),d')" \
+":bank:set 2,(ix+#12),e:assert $==getsize('set 2,(ix+#12),e'):bank:set 2,(ix+#12),h:assert $==getsize('set 2,(ix+#12),h'):bank:set 2,(ix+#12),l:assert $==getsize('set 2,(ix+#12),l')" \
+":bank:set 2,(ix+#12):assert $==getsize('set 2,(ix+#12)'):bank:set 2,(ix+#12),a:assert $==getsize('set 2,(ix+#12),a'):bank:set 3,(ix+#12),b:assert $==getsize('set 3,(ix+#12),b')" \
+":bank:set 3,(ix+#12),c:assert $==getsize('set 3,(ix+#12),c'):bank:set 3,(ix+#12),d:assert $==getsize('set 3,(ix+#12),d'):bank:set 3,(ix+#12),e:assert $==getsize('set 3,(ix+#12),e')" \
+":bank:set 3,(ix+#12),h:assert $==getsize('set 3,(ix+#12),h'):bank:set 3,(ix+#12),l:assert $==getsize('set 3,(ix+#12),l'):bank:set 3,(ix+#12):assert $==getsize('set 3,(ix+#12)')" \
+":bank:set 3,(ix+#12),a:assert $==getsize('set 3,(ix+#12),a'):bank:set 4,(ix+#12),b:assert $==getsize('set 4,(ix+#12),b'):bank:set 4,(ix+#12),c:assert $==getsize('set 4,(ix+#12),c')" \
+":bank:set 4,(ix+#12),d:assert $==getsize('set 4,(ix+#12),d'):bank:set 4,(ix+#12),e:assert $==getsize('set 4,(ix+#12),e'):bank:set 4,(ix+#12),h:assert $==getsize('set 4,(ix+#12),h')" \
+":bank:set 4,(ix+#12),l:assert $==getsize('set 4,(ix+#12),l'):bank:set 4,(ix+#12):assert $==getsize('set 4,(ix+#12)'):bank:set 4,(ix+#12),a:assert $==getsize('set 4,(ix+#12),a')" \
+":bank:set 5,(ix+#12),b:assert $==getsize('set 5,(ix+#12),b'):bank:set 5,(ix+#12),c:assert $==getsize('set 5,(ix+#12),c'):bank:set 5,(ix+#12),d:assert $==getsize('set 5,(ix+#12),d')" \
+":bank:set 5,(ix+#12),e:assert $==getsize('set 5,(ix+#12),e'):bank:set 5,(ix+#12),h:assert $==getsize('set 5,(ix+#12),h'):bank:set 5,(ix+#12),l:assert $==getsize('set 5,(ix+#12),l')" \
+":bank:set 5,(ix+#12):assert $==getsize('set 5,(ix+#12)'):bank:set 5,(ix+#12),a:assert $==getsize('set 5,(ix+#12),a'):bank:set 6,(ix+#12),b:assert $==getsize('set 6,(ix+#12),b')" \
+":bank:set 6,(ix+#12),c:assert $==getsize('set 6,(ix+#12),c'):bank:set 6,(ix+#12),d:assert $==getsize('set 6,(ix+#12),d'):bank:set 6,(ix+#12),e:assert $==getsize('set 6,(ix+#12),e')" \
+":bank:set 6,(ix+#12),h:assert $==getsize('set 6,(ix+#12),h'):bank:set 6,(ix+#12),l:assert $==getsize('set 6,(ix+#12),l'):bank:set 6,(ix+#12):assert $==getsize('set 6,(ix+#12)')" \
+":bank:set 6,(ix+#12),a:assert $==getsize('set 6,(ix+#12),a'):bank:set 7,(ix+#12),b:assert $==getsize('set 7,(ix+#12),b'):bank:set 7,(ix+#12),c:assert $==getsize('set 7,(ix+#12),c')" \
+":bank:set 7,(ix+#12),d:assert $==getsize('set 7,(ix+#12),d'):bank:set 7,(ix+#12),e:assert $==getsize('set 7,(ix+#12),e'):bank:set 7,(ix+#12),h:assert $==getsize('set 7,(ix+#12),h')" \
+":bank:set 7,(ix+#12),l:assert $==getsize('set 7,(ix+#12),l'):bank:set 7,(ix+#12):assert $==getsize('set 7,(ix+#12)'):bank:set 7,(ix+#12),a:assert $==getsize('set 7,(ix+#12),a')" \
+":bank:add iy,bc:assert $==getsize('add iy,bc'):bank:add iy,de:assert $==getsize('add iy,de'):bank:ld iy,#1234:assert $==getsize('ld iy,#1234')" \
+":bank:ld (#1234),iy:assert $==getsize('ld (#1234),iy'):bank:inc iy:assert $==getsize('inc iy'):bank:inc yh:assert $==getsize('inc yh')" \
+":bank:dec yh:assert $==getsize('dec yh'):bank:ld yh,#12:assert $==getsize('ld yh,#12'):bank:add iy,iy:assert $==getsize('add iy,iy')" \
+":bank:ld iy,(#1234):assert $==getsize('ld iy,(#1234)'):bank:dec iy:assert $==getsize('dec iy'):bank:inc yl:assert $==getsize('inc yl')" \
+":bank:dec yl:assert $==getsize('dec yl'):bank:ld yl,#12:assert $==getsize('ld yl,#12'):bank:inc (iy+#12):assert $==getsize('inc (iy+#12)')" \
+":bank:dec (iy+#12):assert $==getsize('dec (iy+#12)'):bank:ld (iy+#12),#34:assert $==getsize('ld (iy+#12),#34'):bank:add iy,sp:assert $==getsize('add iy,sp')" \
+":bank:ld b,yh:assert $==getsize('ld b,yh'):bank:ld b,yl:assert $==getsize('ld b,yl'):bank:ld b,(iy+#12):assert $==getsize('ld b,(iy+#12)')" \
+":bank:ld c,yh:assert $==getsize('ld c,yh'):bank:ld c,yl:assert $==getsize('ld c,yl'):bank:ld c,(iy+#12):assert $==getsize('ld c,(iy+#12)')" \
+":bank:ld d,yh:assert $==getsize('ld d,yh'):bank:ld d,yl:assert $==getsize('ld d,yl'):bank:ld d,(iy+#12):assert $==getsize('ld d,(iy+#12)')" \
+":bank:ld e,yh:assert $==getsize('ld e,yh'):bank:ld e,yl:assert $==getsize('ld e,yl'):bank:ld e,(iy+#12):assert $==getsize('ld e,(iy+#12)')" \
+":bank:ld yh,b:assert $==getsize('ld yh,b'):bank:ld yh,c:assert $==getsize('ld yh,c'):bank:ld yh,d:assert $==getsize('ld yh,d')" \
+":bank:ld yh,e:assert $==getsize('ld yh,e'):bank:ld yh,yh:assert $==getsize('ld yh,yh'):bank:ld yh,yl:assert $==getsize('ld yh,yl')" \
+":bank:ld h,(iy+#12):assert $==getsize('ld h,(iy+#12)'):bank:ld yh,a:assert $==getsize('ld yh,a'):bank:ld yl,b:assert $==getsize('ld yl,b')" \
+":bank:ld yl,c:assert $==getsize('ld yl,c'):bank:ld yl,d:assert $==getsize('ld yl,d'):bank:ld yl,e:assert $==getsize('ld yl,e')" \
+":bank:ld yl,yh:assert $==getsize('ld yl,yh'):bank:ld yl,yl:assert $==getsize('ld yl,yl'):bank:ld l,(iy+#12):assert $==getsize('ld l,(iy+#12)')" \
+":bank:ld yl,a:assert $==getsize('ld yl,a'):bank:ld (iy+#12),b:assert $==getsize('ld (iy+#12),b'):bank:ld (iy+#12),c:assert $==getsize('ld (iy+#12),c')" \
+":bank:ld (iy+#12),d:assert $==getsize('ld (iy+#12),d'):bank:ld (iy+#12),e:assert $==getsize('ld (iy+#12),e'):bank:ld (iy+#12),h:assert $==getsize('ld (iy+#12),h')" \
+":bank:ld (iy+#12),l:assert $==getsize('ld (iy+#12),l'):bank:ld (iy+#12),a:assert $==getsize('ld (iy+#12),a'):bank:ld a,yh:assert $==getsize('ld a,yh')" \
+":bank:ld a,yl:assert $==getsize('ld a,yl'):bank:ld a,(iy+#12):assert $==getsize('ld a,(iy+#12)'):bank:add yh:assert $==getsize('add yh')" \
+":bank:add yl:assert $==getsize('add yl'):bank:add (iy+#12):assert $==getsize('add (iy+#12)'):bank:adc yh:assert $==getsize('adc yh')" \
+":bank:adc yl:assert $==getsize('adc yl'):bank:adc (iy+#12):assert $==getsize('adc (iy+#12)'):bank:sub yh:assert $==getsize('sub yh')" \
+":bank:sub yl:assert $==getsize('sub yl'):bank:sub (iy+#12):assert $==getsize('sub (iy+#12)'):bank:sbc yh:assert $==getsize('sbc yh')" \
+":bank:sbc yl:assert $==getsize('sbc yl'):bank:sbc (iy+#12):assert $==getsize('sbc (iy+#12)'):bank:and yh:assert $==getsize('and yh')" \
+":bank:and yl:assert $==getsize('and yl'):bank:and (iy+#12):assert $==getsize('and (iy+#12)'):bank:xor yh:assert $==getsize('xor yh')" \
+":bank:xor yl:assert $==getsize('xor yl'):bank:xor (iy+#12):assert $==getsize('xor (iy+#12)'):bank:or yh:assert $==getsize('or yh')" \
+":bank:or yl:assert $==getsize('or yl'):bank:or (iy+#12):assert $==getsize('or (iy+#12)'):bank:cp yh:assert $==getsize('cp yh')" \
+":bank:cp yl:assert $==getsize('cp yl'):bank:cp (iy+#12):assert $==getsize('cp (iy+#12)'):bank:pop iy:assert $==getsize('pop iy')" \
+":bank:ex (sp),iy:assert $==getsize('ex (sp),iy'):bank:push iy:assert $==getsize('push iy'):bank:jp (iy):assert $==getsize('jp (iy)')" \
+":bank:ld sp,iy:assert $==getsize('ld sp,iy'):bank:rlc (iy+#12),b:assert $==getsize('rlc (iy+#12),b'):bank:rlc (iy+#12),c:assert $==getsize('rlc (iy+#12),c')" \
+":bank:rlc (iy+#12),d:assert $==getsize('rlc (iy+#12),d'):bank:rlc (iy+#12),e:assert $==getsize('rlc (iy+#12),e'):bank:rlc (iy+#12),h:assert $==getsize('rlc (iy+#12),h')" \
+":bank:rlc (iy+#12),l:assert $==getsize('rlc (iy+#12),l'):bank:rlc (iy+#12):assert $==getsize('rlc (iy+#12)'):bank:rlc (iy+#12),a:assert $==getsize('rlc (iy+#12),a')" \
+":bank:rrc (iy+#12),b:assert $==getsize('rrc (iy+#12),b'):bank:rrc (iy+#12),c:assert $==getsize('rrc (iy+#12),c'):bank:rrc (iy+#12),d:assert $==getsize('rrc (iy+#12),d')" \
+":bank:rrc (iy+#12),e:assert $==getsize('rrc (iy+#12),e'):bank:rrc (iy+#12),h:assert $==getsize('rrc (iy+#12),h'):bank:rrc (iy+#12),l:assert $==getsize('rrc (iy+#12),l')" \
+":bank:rrc (iy+#12):assert $==getsize('rrc (iy+#12)'):bank:rrc (iy+#12),a:assert $==getsize('rrc (iy+#12),a'):bank:rl (iy+#12),b:assert $==getsize('rl (iy+#12),b')" \
+":bank:rl (iy+#12),c:assert $==getsize('rl (iy+#12),c'):bank:rl (iy+#12),d:assert $==getsize('rl (iy+#12),d'):bank:rl (iy+#12),e:assert $==getsize('rl (iy+#12),e')" \
+":bank:rl (iy+#12),h:assert $==getsize('rl (iy+#12),h'):bank:rl (iy+#12),l:assert $==getsize('rl (iy+#12),l'):bank:rl (iy+#12):assert $==getsize('rl (iy+#12)')" \
+":bank:rl (iy+#12),a:assert $==getsize('rl (iy+#12),a'):bank:rr (iy+#12),b:assert $==getsize('rr (iy+#12),b'):bank:rr (iy+#12),c:assert $==getsize('rr (iy+#12),c')" \
+":bank:rr (iy+#12),d:assert $==getsize('rr (iy+#12),d'):bank:rr (iy+#12),e:assert $==getsize('rr (iy+#12),e'):bank:rr (iy+#12),h:assert $==getsize('rr (iy+#12),h')" \
+":bank:rr (iy+#12),l:assert $==getsize('rr (iy+#12),l'):bank:rr (iy+#12):assert $==getsize('rr (iy+#12)'):bank:rr (iy+#12),a:assert $==getsize('rr (iy+#12),a')" \
+":bank:sla (iy+#12),b:assert $==getsize('sla (iy+#12),b'):bank:sla (iy+#12),c:assert $==getsize('sla (iy+#12),c'):bank:sla (iy+#12),d:assert $==getsize('sla (iy+#12),d')" \
+":bank:sla (iy+#12),e:assert $==getsize('sla (iy+#12),e'):bank:sla (iy+#12),h:assert $==getsize('sla (iy+#12),h'):bank:sla (iy+#12),l:assert $==getsize('sla (iy+#12),l')" \
+":bank:sla (iy+#12):assert $==getsize('sla (iy+#12)'):bank:sla (iy+#12),a:assert $==getsize('sla (iy+#12),a'):bank:sra (iy+#12),b:assert $==getsize('sra (iy+#12),b')" \
+":bank:sra (iy+#12),c:assert $==getsize('sra (iy+#12),c'):bank:sra (iy+#12),d:assert $==getsize('sra (iy+#12),d'):bank:sra (iy+#12),e:assert $==getsize('sra (iy+#12),e')" \
+":bank:sra (iy+#12),h:assert $==getsize('sra (iy+#12),h'):bank:sra (iy+#12),l:assert $==getsize('sra (iy+#12),l'):bank:sra (iy+#12):assert $==getsize('sra (iy+#12)')" \
+":bank:sra (iy+#12),a:assert $==getsize('sra (iy+#12),a'):bank:sll (iy+#12),b:assert $==getsize('sll (iy+#12),b'):bank:sll (iy+#12),c:assert $==getsize('sll (iy+#12),c')" \
+":bank:sll (iy+#12),d:assert $==getsize('sll (iy+#12),d'):bank:sll (iy+#12),e:assert $==getsize('sll (iy+#12),e'):bank:sll (iy+#12),h:assert $==getsize('sll (iy+#12),h')" \
+":bank:sll (iy+#12),l:assert $==getsize('sll (iy+#12),l'):bank:sll (iy+#12):assert $==getsize('sll (iy+#12)'):bank:sll (iy+#12),a:assert $==getsize('sll (iy+#12),a')" \
+":bank:srl (iy+#12),b:assert $==getsize('srl (iy+#12),b'):bank:srl (iy+#12),c:assert $==getsize('srl (iy+#12),c'):bank:srl (iy+#12),d:assert $==getsize('srl (iy+#12),d')" \
+":bank:srl (iy+#12),e:assert $==getsize('srl (iy+#12),e'):bank:srl (iy+#12),h:assert $==getsize('srl (iy+#12),h'):bank:srl (iy+#12),l:assert $==getsize('srl (iy+#12),l')" \
+":bank:srl (iy+#12):assert $==getsize('srl (iy+#12)'):bank:srl (iy+#12),a:assert $==getsize('srl (iy+#12),a'):bank:bit 0,(iy+#12):assert $==getsize('bit 0,(iy+#12)')" \
+":bank:bit 1,(iy+#12):assert $==getsize('bit 1,(iy+#12)'):bank:bit 2,(iy+#12):assert $==getsize('bit 2,(iy+#12)'):bank:bit 3,(iy+#12):assert $==getsize('bit 3,(iy+#12)')" \
+":bank:bit 4,(iy+#12):assert $==getsize('bit 4,(iy+#12)'):bank:bit 5,(iy+#12):assert $==getsize('bit 5,(iy+#12)'):bank:bit 6,(iy+#12):assert $==getsize('bit 6,(iy+#12)')" \
+":bank:bit 7,(iy+#12):assert $==getsize('bit 7,(iy+#12)'):bank:res 0,(iy+#12),b:assert $==getsize('res 0,(iy+#12),b'):bank:res 0,(iy+#12),c:assert $==getsize('res 0,(iy+#12),c')" \
+":bank:res 0,(iy+#12),d:assert $==getsize('res 0,(iy+#12),d'):bank:res 0,(iy+#12),e:assert $==getsize('res 0,(iy+#12),e'):bank:res 0,(iy+#12),h:assert $==getsize('res 0,(iy+#12),h')" \
+":bank:res 0,(iy+#12),l:assert $==getsize('res 0,(iy+#12),l'):bank:res 0,(iy+#12):assert $==getsize('res 0,(iy+#12)'):bank:res 0,(iy+#12),a:assert $==getsize('res 0,(iy+#12),a')" \
+":bank:res 1,(iy+#12),b:assert $==getsize('res 1,(iy+#12),b'):bank:res 1,(iy+#12),c:assert $==getsize('res 1,(iy+#12),c'):bank:res 1,(iy+#12),d:assert $==getsize('res 1,(iy+#12),d')" \
+":bank:res 1,(iy+#12),e:assert $==getsize('res 1,(iy+#12),e'):bank:res 1,(iy+#12),h:assert $==getsize('res 1,(iy+#12),h'):bank:res 1,(iy+#12),l:assert $==getsize('res 1,(iy+#12),l')" \
+":bank:res 1,(iy+#12):assert $==getsize('res 1,(iy+#12)'):bank:res 1,(iy+#12),a:assert $==getsize('res 1,(iy+#12),a'):bank:res 2,(iy+#12),b:assert $==getsize('res 2,(iy+#12),b')" \
+":bank:res 2,(iy+#12),c:assert $==getsize('res 2,(iy+#12),c'):bank:res 2,(iy+#12),d:assert $==getsize('res 2,(iy+#12),d'):bank:res 2,(iy+#12),e:assert $==getsize('res 2,(iy+#12),e')" \
+":bank:res 2,(iy+#12),h:assert $==getsize('res 2,(iy+#12),h'):bank:res 2,(iy+#12),l:assert $==getsize('res 2,(iy+#12),l'):bank:res 2,(iy+#12):assert $==getsize('res 2,(iy+#12)')" \
+":bank:res 2,(iy+#12),a:assert $==getsize('res 2,(iy+#12),a'):bank:res 3,(iy+#12),b:assert $==getsize('res 3,(iy+#12),b'):bank:res 3,(iy+#12),c:assert $==getsize('res 3,(iy+#12),c')" \
+":bank:res 3,(iy+#12),d:assert $==getsize('res 3,(iy+#12),d'):bank:res 3,(iy+#12),e:assert $==getsize('res 3,(iy+#12),e'):bank:res 3,(iy+#12),h:assert $==getsize('res 3,(iy+#12),h')" \
+":bank:res 3,(iy+#12),l:assert $==getsize('res 3,(iy+#12),l'):bank:res 3,(iy+#12):assert $==getsize('res 3,(iy+#12)'):bank:res 3,(iy+#12),a:assert $==getsize('res 3,(iy+#12),a')" \
+":bank:res 4,(iy+#12),b:assert $==getsize('res 4,(iy+#12),b'):bank:res 4,(iy+#12),c:assert $==getsize('res 4,(iy+#12),c'):bank:res 4,(iy+#12),d:assert $==getsize('res 4,(iy+#12),d')" \
+":bank:res 4,(iy+#12),e:assert $==getsize('res 4,(iy+#12),e'):bank:res 4,(iy+#12),h:assert $==getsize('res 4,(iy+#12),h'):bank:res 4,(iy+#12),l:assert $==getsize('res 4,(iy+#12),l')" \
+":bank:res 4,(iy+#12):assert $==getsize('res 4,(iy+#12)'):bank:res 4,(iy+#12),a:assert $==getsize('res 4,(iy+#12),a'):bank:res 5,(iy+#12),b:assert $==getsize('res 5,(iy+#12),b')" \
+":bank:res 5,(iy+#12),c:assert $==getsize('res 5,(iy+#12),c'):bank:res 5,(iy+#12),d:assert $==getsize('res 5,(iy+#12),d'):bank:res 5,(iy+#12),e:assert $==getsize('res 5,(iy+#12),e')" \
+":bank:res 5,(iy+#12),h:assert $==getsize('res 5,(iy+#12),h'):bank:res 5,(iy+#12),l:assert $==getsize('res 5,(iy+#12),l'):bank:res 5,(iy+#12):assert $==getsize('res 5,(iy+#12)')" \
+":bank:res 5,(iy+#12),a:assert $==getsize('res 5,(iy+#12),a'):bank:res 6,(iy+#12),b:assert $==getsize('res 6,(iy+#12),b'):bank:res 6,(iy+#12),c:assert $==getsize('res 6,(iy+#12),c')" \
+":bank:res 6,(iy+#12),d:assert $==getsize('res 6,(iy+#12),d'):bank:res 6,(iy+#12),e:assert $==getsize('res 6,(iy+#12),e'):bank:res 6,(iy+#12),h:assert $==getsize('res 6,(iy+#12),h')" \
+":bank:res 6,(iy+#12),l:assert $==getsize('res 6,(iy+#12),l'):bank:res 6,(iy+#12):assert $==getsize('res 6,(iy+#12)'):bank:res 6,(iy+#12),a:assert $==getsize('res 6,(iy+#12),a')" \
+":bank:res 7,(iy+#12),b:assert $==getsize('res 7,(iy+#12),b'):bank:res 7,(iy+#12),c:assert $==getsize('res 7,(iy+#12),c'):bank:res 7,(iy+#12),d:assert $==getsize('res 7,(iy+#12),d')" \
+":bank:res 7,(iy+#12),e:assert $==getsize('res 7,(iy+#12),e'):bank:res 7,(iy+#12),h:assert $==getsize('res 7,(iy+#12),h'):bank:res 7,(iy+#12),l:assert $==getsize('res 7,(iy+#12),l')" \
+":bank:res 7,(iy+#12):assert $==getsize('res 7,(iy+#12)'):bank:res 7,(iy+#12),a:assert $==getsize('res 7,(iy+#12),a'):bank:set 0,(iy+#12),b:assert $==getsize('set 0,(iy+#12),b')" \
+":bank:set 0,(iy+#12),c:assert $==getsize('set 0,(iy+#12),c'):bank:set 0,(iy+#12),d:assert $==getsize('set 0,(iy+#12),d'):bank:set 0,(iy+#12),e:assert $==getsize('set 0,(iy+#12),e')" \
+":bank:set 0,(iy+#12),h:assert $==getsize('set 0,(iy+#12),h'):bank:set 0,(iy+#12),l:assert $==getsize('set 0,(iy+#12),l'):bank:set 0,(iy+#12):assert $==getsize('set 0,(iy+#12)')" \
+":bank:set 1,(iy+#12),d:assert $==getsize('set 1,(iy+#12),d'):bank:set 1,(iy+#12),e:assert $==getsize('set 1,(iy+#12),e'):bank:set 1,(iy+#12),h:assert $==getsize('set 1,(iy+#12),h')" \
+":bank:set 1,(iy+#12),l:assert $==getsize('set 1,(iy+#12),l'):bank:set 1,(iy+#12):assert $==getsize('set 1,(iy+#12)'):bank:set 1,(iy+#12),a:assert $==getsize('set 1,(iy+#12),a')" \
+":bank:set 2,(iy+#12),b:assert $==getsize('set 2,(iy+#12),b'):bank:set 2,(iy+#12),c:assert $==getsize('set 2,(iy+#12),c'):bank:set 2,(iy+#12),d:assert $==getsize('set 2,(iy+#12),d')" \
+":bank:set 2,(iy+#12),e:assert $==getsize('set 2,(iy+#12),e'):bank:set 2,(iy+#12),h:assert $==getsize('set 2,(iy+#12),h'):bank:set 2,(iy+#12),l:assert $==getsize('set 2,(iy+#12),l')" \
+":bank:set 2,(iy+#12):assert $==getsize('set 2,(iy+#12)'):bank:set 2,(iy+#12),a:assert $==getsize('set 2,(iy+#12),a'):bank:set 3,(iy+#12),b:assert $==getsize('set 3,(iy+#12),b')" \
+":bank:set 3,(iy+#12),c:assert $==getsize('set 3,(iy+#12),c'):bank:set 3,(iy+#12),d:assert $==getsize('set 3,(iy+#12),d'):bank:set 3,(iy+#12),e:assert $==getsize('set 3,(iy+#12),e')" \
+":bank:set 3,(iy+#12),h:assert $==getsize('set 3,(iy+#12),h'):bank:set 3,(iy+#12),l:assert $==getsize('set 3,(iy+#12),l'):bank:set 3,(iy+#12):assert $==getsize('set 3,(iy+#12)')" \
+":bank:set 3,(iy+#12),a:assert $==getsize('set 3,(iy+#12),a'):bank:set 4,(iy+#12),b:assert $==getsize('set 4,(iy+#12),b'):bank:set 4,(iy+#12),c:assert $==getsize('set 4,(iy+#12),c')" \
+":bank:set 4,(iy+#12),d:assert $==getsize('set 4,(iy+#12),d'):bank:set 4,(iy+#12),e:assert $==getsize('set 4,(iy+#12),e'):bank:set 4,(iy+#12),h:assert $==getsize('set 4,(iy+#12),h')" \
+":bank:set 4,(iy+#12),l:assert $==getsize('set 4,(iy+#12),l'):bank:set 4,(iy+#12):assert $==getsize('set 4,(iy+#12)'):bank:set 4,(iy+#12),a:assert $==getsize('set 4,(iy+#12),a')" \
+":bank:set 5,(iy+#12),b:assert $==getsize('set 5,(iy+#12),b'):bank:set 5,(iy+#12),c:assert $==getsize('set 5,(iy+#12),c'):bank:set 5,(iy+#12),d:assert $==getsize('set 5,(iy+#12),d')" \
+":bank:set 5,(iy+#12),e:assert $==getsize('set 5,(iy+#12),e'):bank:set 5,(iy+#12),h:assert $==getsize('set 5,(iy+#12),h'):bank:set 5,(iy+#12),l:assert $==getsize('set 5,(iy+#12),l')" \
+":bank:set 5,(iy+#12):assert $==getsize('set 5,(iy+#12)'):bank:set 5,(iy+#12),a:assert $==getsize('set 5,(iy+#12),a'):bank:set 6,(ix+#12),c:assert $==getsize('set 6,(ix+#12),c')" \
+":bank:set 6,(ix+#12),d:assert $==getsize('set 6,(ix+#12),d'):bank:set 6,(ix+#12),e:assert $==getsize('set 6,(ix+#12),e'):bank:set 6,(ix+#12),h:assert $==getsize('set 6,(ix+#12),h')" \
+":bank:set 6,(ix+#12),l:assert $==getsize('set 6,(ix+#12),l'):bank:set 6,(ix+#12):assert $==getsize('set 6,(ix+#12)'):bank:set 6,(ix+#12),a:assert $==getsize('set 6,(ix+#12),a')" \
+":bank:set 7,(ix+#12),b:assert $==getsize('set 7,(ix+#12),b'):bank:set 7,(ix+#12),c:assert $==getsize('set 7,(ix+#12),c'):bank:set 7,(ix+#12),d:assert $==getsize('set 7,(ix+#12),d')" \
+":bank:set 7,(ix+#12),e:assert $==getsize('set 7,(ix+#12),e'):bank:set 7,(ix+#12),h:assert $==getsize('set 7,(ix+#12),h'):bank:set 7,(ix+#12),l:assert $==getsize('set 7,(ix+#12),l')" \
+":bank:set 7,(ix+#12):assert $==getsize('set 7,(ix+#12)'):bank:set 7,(ix+#12),a:assert $==getsize('set 7,(ix+#12),a'):bank:add iy,bc:assert $==getsize('add iy,bc')" \
+":bank:add iy,de:assert $==getsize('add iy,de'):bank:ld iy,#1234:assert $==getsize('ld iy,#1234'):bank:ld (#1234),iy:assert $==getsize('ld (#1234),iy')" \
+":bank:inc iy:assert $==getsize('inc iy'):bank:inc yh:assert $==getsize('inc yh'):bank:dec yh:assert $==getsize('dec yh')" \
+":bank:ld yh,#12:assert $==getsize('ld yh,#12'):bank:add iy,iy:assert $==getsize('add iy,iy'):bank:ld iy,(#1234):assert $==getsize('ld iy,(#1234)')" \
+":bank:dec iy:assert $==getsize('dec iy'):bank:inc yl:assert $==getsize('inc yl'):bank:dec yl:assert $==getsize('dec yl')" \
+":bank:ld yl,#12:assert $==getsize('ld yl,#12'):bank:inc (iy+#12):assert $==getsize('inc (iy+#12)'):bank:dec (iy+#12):assert $==getsize('dec (iy+#12)')" \
+":bank:ld (iy+#12),#34:assert $==getsize('ld (iy+#12),#34'):bank:add iy,sp:assert $==getsize('add iy,sp'):bank:ld b,yh:assert $==getsize('ld b,yh')" \
+":bank:ld b,yl:assert $==getsize('ld b,yl'):bank:ld b,(iy+#12):assert $==getsize('ld b,(iy+#12)'):bank:ld c,yh:assert $==getsize('ld c,yh')" \
+":bank:ld c,yl:assert $==getsize('ld c,yl'):bank:ld c,(iy+#12):assert $==getsize('ld c,(iy+#12)'):bank:ld d,yh:assert $==getsize('ld d,yh')" \
+":bank:ld d,yl:assert $==getsize('ld d,yl'):bank:ld d,(iy+#12):assert $==getsize('ld d,(iy+#12)'):bank:ld e,yh:assert $==getsize('ld e,yh')" \
+":bank:ld e,yl:assert $==getsize('ld e,yl'):bank:ld e,(iy+#12):assert $==getsize('ld e,(iy+#12)'):bank:ld yh,b:assert $==getsize('ld yh,b')" \
+":bank:ld yh,c:assert $==getsize('ld yh,c'):bank:ld yh,d:assert $==getsize('ld yh,d'):bank:ld yh,e:assert $==getsize('ld yh,e')" \
+":bank:ld yh,yh:assert $==getsize('ld yh,yh'):bank:ld yh,yl:assert $==getsize('ld yh,yl'):bank:ld h,(iy+#12):assert $==getsize('ld h,(iy+#12)')" \
+":bank:ld yh,a:assert $==getsize('ld yh,a'):bank:ld yl,b:assert $==getsize('ld yl,b'):bank:ld yl,c:assert $==getsize('ld yl,c')" \
+":bank:ld yl,d:assert $==getsize('ld yl,d'):bank:ld yl,e:assert $==getsize('ld yl,e'):bank:ld yl,yh:assert $==getsize('ld yl,yh')" \
+":bank:ld yl,yl:assert $==getsize('ld yl,yl'):bank:ld l,(iy+#12):assert $==getsize('ld l,(iy+#12)'):bank:ld yl,a:assert $==getsize('ld yl,a')" \
+":bank:ld (iy+#12),b:assert $==getsize('ld (iy+#12),b'):bank:ld (iy+#12),c:assert $==getsize('ld (iy+#12),c'):bank:ld (iy+#12),d:assert $==getsize('ld (iy+#12),d')" \
+":bank:ld (iy+#12),e:assert $==getsize('ld (iy+#12),e'):bank:ld (iy+#12),h:assert $==getsize('ld (iy+#12),h'):bank:ld (iy+#12),l:assert $==getsize('ld (iy+#12),l')" \
+":bank:ld (iy+#12),a:assert $==getsize('ld (iy+#12),a'):bank:ld a,yh:assert $==getsize('ld a,yh'):bank:ld a,yl:assert $==getsize('ld a,yl')" \
+":bank:ld a,(iy+#12):assert $==getsize('ld a,(iy+#12)'):bank:add yh:assert $==getsize('add yh'):bank:add yl:assert $==getsize('add yl')" \
+":bank:add (iy+#12):assert $==getsize('add (iy+#12)'):bank:adc yh:assert $==getsize('adc yh'):bank:adc yl:assert $==getsize('adc yl')" \
+":bank:adc (iy+#12):assert $==getsize('adc (iy+#12)'):bank:sub yh:assert $==getsize('sub yh'):bank:sub yl:assert $==getsize('sub yl')" \
+":bank:sub (iy+#12):assert $==getsize('sub (iy+#12)'):bank:sbc yh:assert $==getsize('sbc yh'):bank:sbc yl:assert $==getsize('sbc yl')" \
+":bank:sbc (iy+#12):assert $==getsize('sbc (iy+#12)'):bank:and yh:assert $==getsize('and yh'):bank:and yl:assert $==getsize('and yl')" \
+":bank:and (iy+#12):assert $==getsize('and (iy+#12)'):bank:xor yh:assert $==getsize('xor yh'):bank:xor yl:assert $==getsize('xor yl')" \
+":bank:xor (iy+#12):assert $==getsize('xor (iy+#12)'):bank:or yh:assert $==getsize('or yh'):bank:or yl:assert $==getsize('or yl')" \
+":bank:or (iy+#12):assert $==getsize('or (iy+#12)'):bank:cp yh:assert $==getsize('cp yh'):bank:cp yl:assert $==getsize('cp yl')" \
+":bank:cp (iy+#12):assert $==getsize('cp (iy+#12)'):bank:pop iy:assert $==getsize('pop iy'):bank:ex (sp),iy:assert $==getsize('ex (sp),iy')" \
+":bank:push iy:assert $==getsize('push iy'):bank:jp (iy):assert $==getsize('jp (iy)'):bank:ld sp,iy:assert $==getsize('ld sp,iy')" \
+":bank:rlc (iy+#12),b:assert $==getsize('rlc (iy+#12),b'):bank:rlc (iy+#12),c:assert $==getsize('rlc (iy+#12),c'):bank:rlc (iy+#12),d:assert $==getsize('rlc (iy+#12),d')" \
+":bank:rlc (iy+#12),e:assert $==getsize('rlc (iy+#12),e'):bank:rlc (iy+#12),h:assert $==getsize('rlc (iy+#12),h'):bank:rlc (iy+#12),l:assert $==getsize('rlc (iy+#12),l')" \
+":bank:rlc (iy+#12):assert $==getsize('rlc (iy+#12)'):bank:rlc (iy+#12),a:assert $==getsize('rlc (iy+#12),a'):bank:rrc (iy+#12),b:assert $==getsize('rrc (iy+#12),b')" \
+":bank:rrc (iy+#12),c:assert $==getsize('rrc (iy+#12),c'):bank:rrc (iy+#12),d:assert $==getsize('rrc (iy+#12),d'):bank:rrc (iy+#12),e:assert $==getsize('rrc (iy+#12),e')" \
+":bank:rrc (iy+#12),h:assert $==getsize('rrc (iy+#12),h'):bank:rrc (iy+#12),l:assert $==getsize('rrc (iy+#12),l'):bank:rrc (iy+#12):assert $==getsize('rrc (iy+#12)')" \
+":bank:rrc (iy+#12),a:assert $==getsize('rrc (iy+#12),a'):bank:rl (iy+#12),b:assert $==getsize('rl (iy+#12),b'):bank:rl (iy+#12),c:assert $==getsize('rl (iy+#12),c')" \
+":bank:rl (iy+#12),d:assert $==getsize('rl (iy+#12),d'):bank:rl (iy+#12),e:assert $==getsize('rl (iy+#12),e'):bank:rl (iy+#12),h:assert $==getsize('rl (iy+#12),h')" \
+":bank:rl (iy+#12),l:assert $==getsize('rl (iy+#12),l'):bank:rl (iy+#12):assert $==getsize('rl (iy+#12)'):bank:rl (iy+#12),a:assert $==getsize('rl (iy+#12),a')" \
+":bank:rr (iy+#12),b:assert $==getsize('rr (iy+#12),b'):bank:rr (iy+#12),c:assert $==getsize('rr (iy+#12),c'):bank:rr (iy+#12),d:assert $==getsize('rr (iy+#12),d')" \
+":bank:rr (iy+#12),e:assert $==getsize('rr (iy+#12),e'):bank:rr (iy+#12),h:assert $==getsize('rr (iy+#12),h'):bank:rr (iy+#12),l:assert $==getsize('rr (iy+#12),l')" \
+":bank:rr (iy+#12):assert $==getsize('rr (iy+#12)'):bank:rr (iy+#12),a:assert $==getsize('rr (iy+#12),a'):bank:sla (iy+#12),b:assert $==getsize('sla (iy+#12),b')" \
+":bank:sla (iy+#12),c:assert $==getsize('sla (iy+#12),c'):bank:sla (iy+#12),d:assert $==getsize('sla (iy+#12),d'):bank:sla (iy+#12),e:assert $==getsize('sla (iy+#12),e')" \
+":bank:sla (iy+#12),h:assert $==getsize('sla (iy+#12),h'):bank:sla (iy+#12),l:assert $==getsize('sla (iy+#12),l'):bank:sla (iy+#12):assert $==getsize('sla (iy+#12)')" \
+":bank:sla (iy+#12),a:assert $==getsize('sla (iy+#12),a'):bank:sra (iy+#12),b:assert $==getsize('sra (iy+#12),b'):bank:sra (iy+#12),c:assert $==getsize('sra (iy+#12),c')" \
+":bank:sra (iy+#12),d:assert $==getsize('sra (iy+#12),d'):bank:sra (iy+#12),e:assert $==getsize('sra (iy+#12),e'):bank:sra (iy+#12),h:assert $==getsize('sra (iy+#12),h')" \
+":bank:sra (iy+#12),l:assert $==getsize('sra (iy+#12),l'):bank:sra (iy+#12):assert $==getsize('sra (iy+#12)'):bank:sra (iy+#12),a:assert $==getsize('sra (iy+#12),a')" \
+":bank:sll (iy+#12),b:assert $==getsize('sll (iy+#12),b'):bank:sll (iy+#12),c:assert $==getsize('sll (iy+#12),c'):bank:sll (iy+#12),d:assert $==getsize('sll (iy+#12),d')" \
+":bank:sll (iy+#12),e:assert $==getsize('sll (iy+#12),e'):bank:sll (iy+#12),h:assert $==getsize('sll (iy+#12),h'):bank:sll (iy+#12),l:assert $==getsize('sll (iy+#12),l')" \
+":bank:sll (iy+#12):assert $==getsize('sll (iy+#12)'):bank:sll (iy+#12),a:assert $==getsize('sll (iy+#12),a'):bank:srl (iy+#12),b:assert $==getsize('srl (iy+#12),b')" \
+":bank:srl (iy+#12),c:assert $==getsize('srl (iy+#12),c'):bank:srl (iy+#12),d:assert $==getsize('srl (iy+#12),d'):bank:srl (iy+#12),e:assert $==getsize('srl (iy+#12),e')" \
+":bank:srl (iy+#12),h:assert $==getsize('srl (iy+#12),h'):bank:srl (iy+#12),l:assert $==getsize('srl (iy+#12),l'):bank:srl (iy+#12):assert $==getsize('srl (iy+#12)')" \
+":bank:srl (iy+#12),a:assert $==getsize('srl (iy+#12),a'):bank:bit 0,(iy+#12):assert $==getsize('bit 0,(iy+#12)'):bank:bit 1,(iy+#12):assert $==getsize('bit 1,(iy+#12)')" \
+":bank:bit 2,(iy+#12):assert $==getsize('bit 2,(iy+#12)'):bank:bit 3,(iy+#12):assert $==getsize('bit 3,(iy+#12)'):bank:bit 4,(iy+#12):assert $==getsize('bit 4,(iy+#12)')" \
+":bank:bit 5,(iy+#12):assert $==getsize('bit 5,(iy+#12)'):bank:bit 6,(iy+#12):assert $==getsize('bit 6,(iy+#12)'):bank:bit 7,(iy+#12):assert $==getsize('bit 7,(iy+#12)')" \
+":bank:res 0,(iy+#12),b:assert $==getsize('res 0,(iy+#12),b'):bank:res 0,(iy+#12),c:assert $==getsize('res 0,(iy+#12),c'):bank:res 0,(iy+#12),d:assert $==getsize('res 0,(iy+#12),d')" \
+":bank:res 0,(iy+#12),e:assert $==getsize('res 0,(iy+#12),e'):bank:res 0,(iy+#12),h:assert $==getsize('res 0,(iy+#12),h'):bank:res 0,(iy+#12),l:assert $==getsize('res 0,(iy+#12),l')" \
+":bank:res 0,(iy+#12):assert $==getsize('res 0,(iy+#12)'):bank:res 0,(iy+#12),a:assert $==getsize('res 0,(iy+#12),a'):bank:res 1,(iy+#12),b:assert $==getsize('res 1,(iy+#12),b')" \
+":bank:res 1,(iy+#12),c:assert $==getsize('res 1,(iy+#12),c'):bank:res 1,(iy+#12),d:assert $==getsize('res 1,(iy+#12),d'):bank:res 1,(iy+#12),e:assert $==getsize('res 1,(iy+#12),e')" \
+":bank:res 1,(iy+#12),h:assert $==getsize('res 1,(iy+#12),h'):bank:res 1,(iy+#12),l:assert $==getsize('res 1,(iy+#12),l'):bank:res 1,(iy+#12):assert $==getsize('res 1,(iy+#12)')" \
+":bank:res 1,(iy+#12),a:assert $==getsize('res 1,(iy+#12),a'):bank:res 2,(iy+#12),b:assert $==getsize('res 2,(iy+#12),b'):bank:res 2,(iy+#12),c:assert $==getsize('res 2,(iy+#12),c')" \
+":bank:res 2,(iy+#12),d:assert $==getsize('res 2,(iy+#12),d'):bank:res 2,(iy+#12),e:assert $==getsize('res 2,(iy+#12),e'):bank:res 2,(iy+#12),h:assert $==getsize('res 2,(iy+#12),h')" \
+":bank:res 2,(iy+#12),l:assert $==getsize('res 2,(iy+#12),l'):bank:res 2,(iy+#12):assert $==getsize('res 2,(iy+#12)'):bank:res 2,(iy+#12),a:assert $==getsize('res 2,(iy+#12),a')" \
+":bank:res 3,(iy+#12),b:assert $==getsize('res 3,(iy+#12),b'):bank:res 3,(iy+#12),c:assert $==getsize('res 3,(iy+#12),c'):bank:res 3,(iy+#12),d:assert $==getsize('res 3,(iy+#12),d')" \
+":bank:res 3,(iy+#12),e:assert $==getsize('res 3,(iy+#12),e'):bank:res 3,(iy+#12),h:assert $==getsize('res 3,(iy+#12),h'):bank:res 3,(iy+#12),l:assert $==getsize('res 3,(iy+#12),l')" \
+":bank:res 3,(iy+#12):assert $==getsize('res 3,(iy+#12)'):bank:res 3,(iy+#12),a:assert $==getsize('res 3,(iy+#12),a'):bank:res 4,(iy+#12),b:assert $==getsize('res 4,(iy+#12),b')" \
+":bank:res 4,(iy+#12),c:assert $==getsize('res 4,(iy+#12),c'):bank:res 4,(iy+#12),d:assert $==getsize('res 4,(iy+#12),d'):bank:res 4,(iy+#12),e:assert $==getsize('res 4,(iy+#12),e')" \
+":bank:res 4,(iy+#12),h:assert $==getsize('res 4,(iy+#12),h'):bank:res 4,(iy+#12),l:assert $==getsize('res 4,(iy+#12),l'):bank:res 4,(iy+#12):assert $==getsize('res 4,(iy+#12)')" \
+":bank:res 4,(iy+#12),a:assert $==getsize('res 4,(iy+#12),a'):bank:res 5,(iy+#12),b:assert $==getsize('res 5,(iy+#12),b'):bank:res 5,(iy+#12),c:assert $==getsize('res 5,(iy+#12),c')" \
+":bank:res 5,(iy+#12),d:assert $==getsize('res 5,(iy+#12),d'):bank:res 5,(iy+#12),e:assert $==getsize('res 5,(iy+#12),e'):bank:res 5,(iy+#12),h:assert $==getsize('res 5,(iy+#12),h')" \
+":bank:res 5,(iy+#12),l:assert $==getsize('res 5,(iy+#12),l'):bank:res 5,(iy+#12):assert $==getsize('res 5,(iy+#12)'):bank:res 5,(iy+#12),a:assert $==getsize('res 5,(iy+#12),a')" \
+":bank:res 6,(iy+#12),b:assert $==getsize('res 6,(iy+#12),b'):bank:res 6,(iy+#12),c:assert $==getsize('res 6,(iy+#12),c'):bank:res 6,(iy+#12),d:assert $==getsize('res 6,(iy+#12),d')" \
+":bank:res 6,(iy+#12),e:assert $==getsize('res 6,(iy+#12),e'):bank:res 6,(iy+#12),h:assert $==getsize('res 6,(iy+#12),h'):bank:res 6,(iy+#12),l:assert $==getsize('res 6,(iy+#12),l')" \
+":bank:res 6,(iy+#12):assert $==getsize('res 6,(iy+#12)'):bank:res 6,(iy+#12),a:assert $==getsize('res 6,(iy+#12),a'):bank:res 7,(iy+#12),b:assert $==getsize('res 7,(iy+#12),b')" \
+":bank:res 7,(iy+#12),c:assert $==getsize('res 7,(iy+#12),c'):bank:res 7,(iy+#12),d:assert $==getsize('res 7,(iy+#12),d'):bank:res 7,(iy+#12),e:assert $==getsize('res 7,(iy+#12),e')" \
+":bank:res 7,(iy+#12),h:assert $==getsize('res 7,(iy+#12),h'):bank:res 7,(iy+#12),l:assert $==getsize('res 7,(iy+#12),l'):bank:res 7,(iy+#12):assert $==getsize('res 7,(iy+#12)')" \
+":bank:res 7,(iy+#12),a:assert $==getsize('res 7,(iy+#12),a'):bank:set 0,(iy+#12),b:assert $==getsize('set 0,(iy+#12),b'):bank:set 0,(iy+#12),c:assert $==getsize('set 0,(iy+#12),c')" \
+":bank:set 0,(iy+#12),d:assert $==getsize('set 0,(iy+#12),d'):bank:set 0,(iy+#12),e:assert $==getsize('set 0,(iy+#12),e'):bank:set 0,(iy+#12),h:assert $==getsize('set 0,(iy+#12),h')" \
+":bank:set 0,(iy+#12),l:assert $==getsize('set 0,(iy+#12),l'):bank:set 0,(iy+#12):assert $==getsize('set 0,(iy+#12)'):bank:set 0,(iy+#12),a:assert $==getsize('set 0,(iy+#12),a')" \
+":bank:set 1,(iy+#12),b:assert $==getsize('set 1,(iy+#12),b'):bank:set 1,(iy+#12),c:assert $==getsize('set 1,(iy+#12),c'):bank:set 1,(iy+#12),d:assert $==getsize('set 1,(iy+#12),d')" \
+":bank:set 1,(iy+#12),e:assert $==getsize('set 1,(iy+#12),e'):bank:set 1,(iy+#12),h:assert $==getsize('set 1,(iy+#12),h'):bank:set 1,(iy+#12),l:assert $==getsize('set 1,(iy+#12),l')" \
+":bank:set 1,(iy+#12):assert $==getsize('set 1,(iy+#12)'):bank:set 1,(iy+#12),a:assert $==getsize('set 1,(iy+#12),a'):bank:set 2,(iy+#12),b:assert $==getsize('set 2,(iy+#12),b')" \
+":bank:set 2,(iy+#12),c:assert $==getsize('set 2,(iy+#12),c'):bank:set 2,(iy+#12),d:assert $==getsize('set 2,(iy+#12),d'):bank:set 2,(iy+#12),e:assert $==getsize('set 2,(iy+#12),e')" \
+":bank:set 2,(iy+#12),h:assert $==getsize('set 2,(iy+#12),h'):bank:set 2,(iy+#12),l:assert $==getsize('set 2,(iy+#12),l'):bank:set 2,(iy+#12):assert $==getsize('set 2,(iy+#12)')" \
+":bank:set 2,(iy+#12),a:assert $==getsize('set 2,(iy+#12),a'):bank:set 3,(iy+#12),b:assert $==getsize('set 3,(iy+#12),b'):bank:set 3,(iy+#12),c:assert $==getsize('set 3,(iy+#12),c')" \
+":bank:set 3,(iy+#12),d:assert $==getsize('set 3,(iy+#12),d'):bank:set 3,(iy+#12),e:assert $==getsize('set 3,(iy+#12),e'):bank:set 3,(iy+#12),h:assert $==getsize('set 3,(iy+#12),h')" \
+":bank:set 3,(iy+#12),l:assert $==getsize('set 3,(iy+#12),l'):bank:set 3,(iy+#12):assert $==getsize('set 3,(iy+#12)'):bank:set 3,(iy+#12),a:assert $==getsize('set 3,(iy+#12),a')" \
+":bank:set 4,(iy+#12),b:assert $==getsize('set 4,(iy+#12),b'):bank:set 4,(iy+#12),c:assert $==getsize('set 4,(iy+#12),c'):bank:set 4,(iy+#12),d:assert $==getsize('set 4,(iy+#12),d')" \
+":bank:set 4,(iy+#12),e:assert $==getsize('set 4,(iy+#12),e'):bank:set 4,(iy+#12),h:assert $==getsize('set 4,(iy+#12),h'):bank:set 4,(iy+#12),l:assert $==getsize('set 4,(iy+#12),l')" \
+":bank:set 4,(iy+#12):assert $==getsize('set 4,(iy+#12)'):bank:set 4,(iy+#12),a:assert $==getsize('set 4,(iy+#12),a'):bank:set 5,(iy+#12),b:assert $==getsize('set 5,(iy+#12),b')" \
+":bank:set 5,(iy+#12),c:assert $==getsize('set 5,(iy+#12),c'):bank:set 5,(iy+#12),d:assert $==getsize('set 5,(iy+#12),d'):bank:set 5,(iy+#12),e:assert $==getsize('set 5,(iy+#12),e')" \
+":bank:set 5,(iy+#12),h:assert $==getsize('set 5,(iy+#12),h'):bank:set 5,(iy+#12),l:assert $==getsize('set 5,(iy+#12),l'):bank:set 5,(iy+#12):assert $==getsize('set 5,(iy+#12)')" \
+":bank:set 5,(iy+#12),a:assert $==getsize('set 5,(iy+#12),a'):bank:set 6,(iy+#12),b:assert $==getsize('set 6,(iy+#12),b'):bank:set 6,(iy+#12),c:assert $==getsize('set 6,(iy+#12),c')" \
+":bank:set 6,(iy+#12),d:assert $==getsize('set 6,(iy+#12),d'):bank:set 6,(iy+#12),e:assert $==getsize('set 6,(iy+#12),e'):bank:set 6,(iy+#12),h:assert $==getsize('set 6,(iy+#12),h')" \
+":bank:set 6,(iy+#12),l:assert $==getsize('set 6,(iy+#12),l'):bank:set 6,(iy+#12):assert $==getsize('set 6,(iy+#12)'):bank:set 6,(iy+#12),a:assert $==getsize('set 6,(iy+#12),a')" \
+":bank:set 7,(iy+#12),b:assert $==getsize('set 7,(iy+#12),b'):bank:set 7,(iy+#12),c:assert $==getsize('set 7,(iy+#12),c'):bank:set 7,(iy+#12),d:assert $==getsize('set 7,(iy+#12),d')" \
+":bank:set 7,(iy+#12),e:assert $==getsize('set 7,(iy+#12),e'):bank:set 7,(iy+#12),h:assert $==getsize('set 7,(iy+#12),h'):bank:set 7,(iy+#12),l:assert $==getsize('set 7,(iy+#12),l')" \
+":bank:set 7,(iy+#12):assert $==getsize('set 7,(iy+#12)'):bank:set 7,(iy+#12),a:assert $==getsize('set 7,(iy+#12),a'):bank:set 7,(iy+#12),a:assert $==getsize('set 7,(iy+#12),a')"
+
 #define AUTOTEST_REPEAT3 "y=0: repeat 0: y+=1: rend: assert y==0: y=0: repeat 1: y+=1: rend: assert y==1:"\
 	"y=0: repeat 5: y+=1: rend: assert y==5: y=1: repeat 5,x: assert y==x: y+=1: rend: y=2: repeat 5,x,2,2: assert x==y:"\
 	"y+=2: rend: startingindex 5: y=5: repeat 2,x: assert x==y: y+=1: rend: startingindex 5,5: y=10: repeat 3,x,10: assert x==y: "\
@@ -22457,6 +22872,12 @@ printf("testing code skip OK\n");
 	if (!ret) {} else {printf("Autotest %03d ERROR (formula case 2 function+multiple parenthesis)\n",cpt);exit(-1);}
 	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
 printf("testing formula functions + multiple parenthesis OK\n");
+
+	ret=RasmAssembleInfo(AUTOTEST_GETSIZE,strlen(AUTOTEST_GETSIZE),&opcode,&opcodelen,&debug);
+	if (!ret) {} else {printf("Autotest %03d ERROR (math function GETSIZE)\n",cpt);for (i=0;i<debug->nberror;i++) printf("%d -> %s\n",i,debug->error[i].msg);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+	RasmFreeInfoStruct(debug);
+printf("testing GETSIZE integrity on ALL opcodes OK\n");
 
 	ret=RasmAssemble(AUTOTEST_GETNOP_LD,strlen(AUTOTEST_GETNOP_LD),&opcode,&opcodelen);
 	if (!ret) {} else {printf("Autotest %03d ERROR (math function GETNOP with multiple LD syncronised with TICKER)\n",cpt);exit(-1);}
