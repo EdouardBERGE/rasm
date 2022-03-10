@@ -532,6 +532,7 @@ struct s_save {
 	int ioffset;
 	int isize;
 	int iw,irun;
+	char *filename;
 	int amsdos,hobeta;
 	int tape,dsk,face,iwdskname;
 };
@@ -2558,6 +2559,11 @@ void FreeAssenv(struct s_assenv *ae)
 			if (ae->expression[i].module) MemFree(ae->expression[i].module);
 		}
 		MemFree(ae->expression);
+	}
+	if (ae->nbsave) {
+		for (i=0;i<ae->nbsave;i++) {
+			if (ae->save[i].filename) MemFree(ae->save[i].filename);
+		}
 	}
 	if (ae->mh) {
 		for (i=0;i<ae->ih;i++) {
@@ -8721,11 +8727,13 @@ void PopAllSave(struct s_assenv *ae)
 	
 	for (is=0;is<ae->nbsave;is++) {
 		/* avoid quotes */
-		filename=ae->wl[ae->save[is].iw].w;
-		filename[strlen(filename)-1]=0;
-		filename=TxtStrDup(filename+1);
-		/* translate tags! */
-		filename=TranslateTag(ae,filename,&touched,1,E_TAGOPTION_REMOVESPACE);
+		if (!ae->save[is].iw) filename=ae->save[is].filename; else {
+			filename=ae->wl[ae->save[is].iw].w;
+			filename[strlen(filename)-1]=0;
+			filename=TxtStrDup(filename+1);
+			/* crappy POST translate tags! => deprecated!
+			filename=TranslateTag(ae,filename,&touched,1,E_TAGOPTION_REMOVESPACE); */
+		}
 
 #if TRACE_EDSK
 	printf("woff=[%s](%d) wsize=[%s](%d)\n",ae->wl[ae->save[is].ioffset].w,ae->save[is].ioffset,ae->wl[ae->save[is].isize].w,ae->save[is].isize);
@@ -16360,7 +16368,8 @@ void __SAVE(struct s_assenv *ae) {
 	#define FUNC "__SAVE"
 
 	struct s_save cursave={0};
-	int ko=1;
+	int ko=1,touched,lm;
+	char *filename;
 
 	if (!ae->wl[ae->idx].t) {
 		/* nom de fichier entre quotes ou bien mot clef DSK */
@@ -16369,13 +16378,21 @@ void __SAVE(struct s_assenv *ae) {
 			ko=0;
 		} else {
 			if (!ae->wl[ae->idx+1].t) {
+				filename=TxtStrDup(ae->wl[ae->idx+1].w);
+				/* need to upper case tags */
+				for (lm=touched=0;filename[lm];lm++) {
+					if (filename[lm]=='{') touched++; else if (filename[lm]=='}') touched--; else if (touched) filename[lm]=toupper(filename[lm]);
+				}
+				filename=TranslateTag(ae,filename,&touched,1,E_TAGOPTION_REMOVESPACE);
+				if (!touched) MemFree(filename);
+
 				if (!ae->wl[ae->idx+2].t && ae->wl[ae->idx+3].t!=2) {
 					cursave.ibank=ae->activebank;
 					cursave.ioffset=ae->idx+2;
 					ExpressionFastTranslate(ae,&ae->wl[ae->idx+2].w,1); // si on utilise des variables ça évite la grouille post traitement...
 					cursave.isize=ae->idx+3;
 					ExpressionFastTranslate(ae,&ae->wl[ae->idx+3].w,1); // idem
-					cursave.iw=ae->idx+1;
+					if (!touched) cursave.iw=ae->idx+1; else cursave.filename=filename;
 					cursave.irun=ae->current_run_idx;
 					if (!ae->wl[ae->idx+3].t) {
 						if (strcmp(ae->wl[ae->idx+4].w,"TAPE")==0) {
