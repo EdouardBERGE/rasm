@@ -18197,18 +18197,13 @@ printf("output files\n");
 								/* add labels and local labels to breakpoint pool (if any) */
 								for (i=0;i<ae->il;i++) {
 									if (!ae->label[i].name) {
-										if (strstr(ae->wl[ae->label[i].iw].w,".BRK")!=NULL) {
-											breakpoint.address=ae->label[i].ptr;
-											if (ae->label[i].ibank>3) breakpoint.bank=1; else breakpoint.bank=0;
-											ObjectArrayAddDynamicValueConcat((void **)&ae->breakpoint,&ae->ibreakpoint,&ae->maxbreakpoint,&breakpoint,sizeof(struct s_breakpoint));
-										}
-										if (strncmp(ae->wl[ae->label[i].iw].w,"BRK",3)==0) {
+										if (strncmp(ae->wl[ae->label[i].iw].w,"BRK",3)==0 || strncmp(ae->wl[ae->label[i].iw].w,"@BRK",4)==0 || strstr(ae->wl[ae->label[i].iw].w,".BRK")!=NULL) {
 											breakpoint.address=ae->label[i].ptr;
 											if (ae->label[i].ibank>3) breakpoint.bank=1; else breakpoint.bank=0;
 											ObjectArrayAddDynamicValueConcat((void **)&ae->breakpoint,&ae->ibreakpoint,&ae->maxbreakpoint,&breakpoint,sizeof(struct s_breakpoint));
 										}
 									} else {
-										if (strncmp(ae->label[i].name,"@BRK",4)==0 || strstr(ae->label[i].name,".BRK")) {
+										if (strncmp(ae->label[i].name,"BRK",3)==0 || strncmp(ae->label[i].name,"@BRK",4)==0 || strstr(ae->label[i].name,".BRK")) {
 											breakpoint.address=ae->label[i].ptr;
 											if (ae->label[i].ibank>3) breakpoint.bank=1; else breakpoint.bank=0;
 											ObjectArrayAddDynamicValueConcat((void **)&ae->breakpoint,&ae->ibreakpoint,&ae->maxbreakpoint,&breakpoint,sizeof(struct s_breakpoint));								
@@ -18847,13 +18842,13 @@ printf("output files\n");
 			/* add labels and local labels to breakpoint pool (if any) */
 			for (i=0;i<ae->il;i++) {
 				if (!ae->label[i].name) {
-					if (strncmp(ae->wl[ae->label[i].iw].w,"BRK",3)==0) {
+					if (strncmp(ae->wl[ae->label[i].iw].w,"BRK",3)==0 || strncmp(ae->wl[ae->label[i].iw].w,"@BRK",4)==0 || strstr(ae->wl[ae->label[i].iw].w,".BRK")) {
 						breakpoint.address=ae->label[i].ptr;
 						if (ae->label[i].ibank>3) breakpoint.bank=1; else breakpoint.bank=0;
 						ObjectArrayAddDynamicValueConcat((void **)&ae->breakpoint,&ae->ibreakpoint,&ae->maxbreakpoint,&breakpoint,sizeof(struct s_breakpoint));
 					}
 				} else {
-					if (strncmp(ae->label[i].name,"@BRK",4)==0) {
+					if (strncmp(ae->label[i].name,"BRK",3)==0 || strncmp(ae->label[i].name,"@BRK",4)==0 || strstr(ae->label[i].name,".BRK")) {
 						breakpoint.address=ae->label[i].ptr;
 						if (ae->label[i].ibank>3) breakpoint.bank=1; else breakpoint.bank=0;
 						ObjectArrayAddDynamicValueConcat((void **)&ae->breakpoint,&ae->ibreakpoint,&ae->maxbreakpoint,&breakpoint,sizeof(struct s_breakpoint));								
