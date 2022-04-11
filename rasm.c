@@ -17402,7 +17402,7 @@ printf("crunch if any %d blocks\n",ae->ilz);
 			char alias_value[128];
 			double v;
 			// compute EQU defined in crunched sections
-			if (!ae->alias[i].lz) {
+			if (ae->alias[i].lz>=0) {
 				ae->idx=ae->alias[i].iw; // expression core hack
 				v=ComputeExpressionCore(ae,ae->alias[i].translation,ae->alias[i].ptr,0);
 				sprintf(alias_value,"%.8lf",v);
