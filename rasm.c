@@ -5341,7 +5341,7 @@ double ComputeExpressionCore(struct s_assenv *ae,char *original_zeexpression,int
 
 
 #if TRACE_COMPUTE_EXPRESSION
-	printf("expression=[%s]\n",zeexpression);
+	printf("expression=[%s]\n",original_zeexpression);
 #endif
 	zeexpression=original_zeexpression;
 	if (!zeexpression[0]) {
@@ -5621,6 +5621,9 @@ double ComputeExpressionCore(struct s_assenv *ae,char *original_zeexpression,int
 		************************************/
 		/* push operator or stack value */
 		if (!ivar) {
+#if TRACE_COMPUTE_EXPRESSION
+	printf("pushoperator [%c]\n",c);
+#endif
 			/************************************
 			          O P E R A T O R 
 			************************************/
@@ -5631,6 +5634,9 @@ double ComputeExpressionCore(struct s_assenv *ae,char *original_zeexpression,int
 			/* stackelement.value isn't used */
 			stackelement.string=NULL;
 		} else if (is_string) {
+#if TRACE_COMPUTE_EXPRESSION
+	printf("pushstring [%s]\n",ae->computectx->varbuffer);
+#endif
 			stackelement.operator=E_COMPUTE_OPERATION_PUSH_DATASTC;
 			/* priority & value isn't used */
 			stackelement.string=TxtStrDup(ae->computectx->varbuffer);
@@ -5933,7 +5939,12 @@ if (didx>0 && didx<ae->ie) {
 	}
 
 	/* pas trouvé on cherche LEGACY */
-	if (!curlabel) curlabel=SearchLabel(ae,ae->computectx->varbuffer+minusptr+bank,crc);
+	if (!curlabel) {
+		curlabel=SearchLabel(ae,ae->computectx->varbuffer+minusptr+bank,crc);
+#if TRACE_LABEL || TRACE_COMPUTE_EXPRESSION
+		if (curlabel) printf("label LEGACY trouve! ptr=%d\n",curlabel->ptr); else printf("label non trouve!\n");
+#endif
+	}
 #if TRACE_LABEL || TRACE_COMPUTE_EXPRESSION
 	else printf("label trouve via ajout du MODULE\n");
 #endif
@@ -8897,6 +8908,10 @@ void PopAllExpression(struct s_assenv *ae, int crunched_zone)
 		}
 		v=ComputeExpressionCore(ae,expr,ae->expression[i].ptr,i);
 		r=(long)floor(v+ae->rough);
+#if TRACE_POPEXPR
+		printf("resultat du compute=>%ld (%lf + rough=%lf)\n",r,v,ae->rough);
+#endif
+
 		switch (ae->expression[i].zetype) {
 			case E_EXPRESSION_J8:
 				r=r-ae->expression[i].ptr-2;
@@ -11347,7 +11362,7 @@ void _SLA(struct s_assenv *ae) {
 		} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0) {
 			___output(ae,0xFD);
 		} else {
-			MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is SLL (IX+n),reg8\n");
+			MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is SLA (IX+n),reg8\n");
 		}
 		___output(ae,0xCB);
 		switch (GetCRC(ae->wl[ae->idx+2].w)) {
@@ -17393,6 +17408,7 @@ printf("crunch if any %d blocks\n",ae->ilz);
 				sprintf(alias_value,"%.8lf",v);
 				MemFree(ae->alias[i].translation);
 				ae->alias[i].translation=TxtStrDup(alias_value);
+				ae->alias[i].len=strlen(ae->alias[i].translation);
 			}
 		}
 
@@ -21177,6 +21193,8 @@ int RasmAssembleInfoParam(const char *datain, int lenin, unsigned char **dataout
 
 #define AUTOTEST_CONFINE	"org 0: nop: org 250: confine 10: defb #aa: org 500: confine 12: defb #bb: assert $<512 "
 
+#define AUTOTEST_SAVEINVALID0	"repeat 256,x : defb x-1 : rend : save 'rasmoutput.bin',0,$"
+
 #define AUTOTEST_SAVEINVALID1	"nop : save'gruik',20,-100"
 
 #define AUTOTEST_SAVEINVALID2	"nop : save'gruik',-20,100"
@@ -21391,6 +21409,10 @@ int RasmAssembleInfoParam(const char *datain, int lenin, unsigned char **dataout
 			"v1+=getnop('ld (1234),a: ld hl,1234: ld bc,1234: ld ix,1234: ld hl,(123): ld bc,(123): ld ix,(123): ld sp,(123)'):"\
 			"v1+=getnop('ld (123),hl: ld (123),de: ld (123),iy: ld (123),sp: ld yh,45: ld sp,hl: ld sp,ix'):"\
 			"assert v1==testouille"
+
+#define AUTOTEST_DELAYED_EQU "ld (ix + PLY_AKM_Data_OffsetPtStartTrack + 1),h:PLY_AKM_Track1_Data::" \
+			"PLY_AKM_Track1_PtStartTrack defw 0:PLY_AKM_Data_OffsetPtStartTrack   "\
+	  		" equ PLY_AKM_Track1_PtStartTrack - PLY_AKM_Track1_Data"
 
 #define AUTOTEST_TICKERNOP_FULL "ticker start,v1 : rla: rlca: rrca: rra: nop: ccf: daa: scf: cpl: exx: ei: di : ticker stop,v1:"\
 "ticker start,v2 :im 0: neg : rst #10: retn : reti:ticker stop,v2:"\
@@ -22795,6 +22817,11 @@ printf("testing ticker OK\n");
 	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
 printf("testing IFDEF / IFUSED OK\n");
 
+	ret=RasmAssemble(AUTOTEST_SAVEINVALID0,strlen(AUTOTEST_SAVEINVALID0),&opcode,&opcodelen);
+	if (!ret && FileGetSize("rasmoutput.bin")==256) { } else {printf("Autotest %03d ERROR (invalid file size on DISK with SAVE => mostly a pure windows compilation error)\n",cpt);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing correct file size on DISK with SAVE OK\n");
+
 	ret=RasmAssemble(AUTOTEST_SAVEINVALID1,strlen(AUTOTEST_SAVEINVALID1),&opcode,&opcodelen);
 	if (ret) {} else {printf("Autotest %03d ERROR (invalid size for SAVE)\n",cpt);exit(-1);}
 	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
@@ -23007,6 +23034,12 @@ printf("testing segfault bugfix for accent in quote OK\n");
 	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
 	RasmFreeInfoStruct(debug);
 printf("testing segfault bugfix for opened quote with SAVE as last directive used OK\n");
+	ret=RasmAssembleInfo(AUTOTEST_DELAYED_EQU,strlen(AUTOTEST_DELAYED_EQU),&opcode,&opcodelen,&debug);
+	if (!ret && opcodelen>2 && opcode[2]==1) {} else {printf("Autotest %03d ERROR (DELAYED EQU regression test)\n",cpt);MiniDump(opcode,opcodelen);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+	RasmFreeInfoStruct(debug);
+printf("testing delayed alias regression bugfix OK\n");
+
 /*************************************************************/
 
 
