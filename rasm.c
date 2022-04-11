@@ -1,5 +1,5 @@
 #define PROGRAM_NAME      "RASM"
-#define PROGRAM_VERSION   "1.7a"
+#define PROGRAM_VERSION   "1.7"
 #define PROGRAM_DATE      "xx/11/2021"
 #define PROGRAM_COPYRIGHT "© 2017 BERGE Edouard / roudoudou from Resistance"
 
@@ -19429,8 +19429,9 @@ printf("paramz\n");
 
 			i=0;
 			while (labelines[i]) {
+				int k;
 				/* upper case */
-				for (int k=0;labelines[i][k];k++) labelines[i][k]=toupper(labelines[i][k]);
+				for (k=0;labelines[i][k];k++) labelines[i][k]=toupper(labelines[i][k]);
 
 				if ((labelsep1=strstr(labelines[i],": EQU 0"))!=NULL) {
 					/* sjasm */
