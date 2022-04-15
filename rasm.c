@@ -11851,7 +11851,7 @@ void _STR(struct s_assenv *ae) {
 						if (ae->wl[ae->idx].w[i+1]!=tquote) {
 							___output(ae,ae->charset[((unsigned int)ae->wl[ae->idx].w[i])&0xFF]);
 						} else {
-							___output(ae,ae->charset[((unsigned int)ae->wl[ae->idx].w[i]|0x80)&0xFF]);
+							___output(ae,ae->charset[((unsigned int)ae->wl[ae->idx].w[i])&0xFF]|0x80);
 						}
 					}
 
@@ -21094,6 +21094,9 @@ int RasmAssembleInfoParam(const char *datain, int lenin, unsigned char **dataout
 #define AUTOTEST_DELAYNUM	"macro test  label:    dw {label}:    endm:    repeat 3, idx:idx2 = idx-1:" \
 				" test label_{idx2}:    rend:repeat 3, idx:label_{idx-1}:nop:rend"
 
+#define AUTOTEST_STR		"CHARSET \" !#$%&'()*+,-./0123456789:;<=>?ABCDEFGHIJKLMNOPQRSTUVWXYZ[]^~abcdefghijklmnopqrstuvwxyzéè{}|\",0 : "\
+				"grouik STR 'REGION' : charset : defb 'REGION'"
+
 #define AUTOTEST_STRUCT		"org #1000:label1 :struct male:age    defb 0:height defb 0:endstruct:struct female:" \
 				"age    defb 0:height defb 0:endstruct:struct couple:struct male husband:" \
 				"struct female wife:endstruct:if $-label1!=0:stop:endif:ld a,(ix+couple.wife.age):" \
@@ -22780,6 +22783,14 @@ printf("testing proximity labels OK\n");
 	RasmFreeInfoStruct(debug);
 printf("testing BANK tag + proximity labels OK\n");
 
+	memset(&param,0,sizeof(struct s_parameter));
+	param.freequote=1;
+	ret=RasmAssembleInfoParam(AUTOTEST_STR,strlen(AUTOTEST_STR),&opcode,&opcodelen,&debug,&param);
+	if (!ret && opcodelen==12 && opcode[5]!=opcode[11] && opcode[4]==0x2D && opcode[5]==0xAC) {} else {printf("Autotest %03d ERROR (STR end mark)\n",cpt);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+	RasmFreeInfoStruct(debug);
+printf("testing STR end mark OK (thanks to Golem)\n");
+	
 	ret=RasmAssemble(AUTOTEST_STRUCT,strlen(AUTOTEST_STRUCT),&opcode,&opcodelen);
 	if (!ret) {} else {printf("Autotest %03d ERROR (structs)\n",cpt);exit(-1);}
 	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
