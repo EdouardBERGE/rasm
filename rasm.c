@@ -1,6 +1,6 @@
 #define PROGRAM_NAME      "RASM"
-#define PROGRAM_VERSION   "1.7"
-#define PROGRAM_DATE      "xx/11/2021"
+#define PROGRAM_VERSION   "1.8a"
+#define PROGRAM_DATE      "xx/04/2022"
 #define PROGRAM_COPYRIGHT "© 2017 BERGE Edouard / roudoudou from Resistance"
 
 #define RASM_VERSION PROGRAM_NAME" v"PROGRAM_VERSION" (build "PROGRAM_DATE")"
@@ -14085,7 +14085,7 @@ void __CONFINE(struct s_assenv *ae) {
 		ae->idx++;
 		while (!ae->wl[ae->idx].t) {
 			if (strcmp(ae->wl[ae->idx+1].w,"ENFORCE")==0) {
-				warning=1;
+				enforce=1;
 			} else if (strcmp(ae->wl[ae->idx+1].w,"WARNING")==0) {
 				warning=1;
 			} else /* confine with fill ? */ {
