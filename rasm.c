@@ -17462,14 +17462,15 @@ printf("*** assembling ***\n");
 							printf("; BANK\n");
 						} else if (curcrc==CRC_ORG) {
 							printf("                                        ");
-							if (ae->codeadr!=ae->outputadr) printf("ORG #%04X,#%04X\n",ae->codeadr,ae->outputadr); else printf("ORG #%04X\n",ae->codeadr);
+							if (ae->codeadr!=ae->outputadr) printf("ORG #%04X,#%04X",ae->codeadr,ae->outputadr); else printf("ORG #%04X",ae->codeadr);
+							if (ae->activebank<BANK_MAX_NUMBER) printf(" ; bank %d\n",ae->activebank); else printf(" ; in memory workspace %d\n",ae->activebank-BANK_MAX_NUMBER);
 						} else {
 							// memory position
 							iback=backaddr;
 							while (iback+4<ae->outputadr) {
 								if (iback!=backaddr) printf("\n");
-								if (backcode==backaddr) printf("[%03d]:[#%04X]         | ",backbank,iback);
-									else printf("[%03d]:[#%04X]:[#%04X] | ",backbank,backaddr,backcode);
+								if (backcode==backaddr) printf("[%03d]:[#%04X]         | ",backbank>=BANK_MAX_NUMBER?backbank-BANK_MAX_NUMBER:backbank,iback);
+									else printf("[%03d]:[#%04X]:[#%04X] | ",backbank>=BANK_MAX_NUMBER?backbank-BANK_MAX_NUMBER:backbank,backaddr,backcode);
 								printf("#%02X ",ae->mem[backbank][iback++]);
 								printf("#%02X ",ae->mem[backbank][iback++]);
 								printf("#%02X ",ae->mem[backbank][iback++]);
@@ -17477,8 +17478,8 @@ printf("*** assembling ***\n");
 							}
 							if (iback<ae->outputadr) {
 								if (iback>backaddr) printf("\n");
-								if (backcode==backaddr) printf("[%03d]:[#%04X]         | ",backbank,iback);
-									else printf("[%03d]:[#%04X]:[#%04X] | ",backbank,backaddr,backcode);
+								if (backcode==backaddr) printf("[%03d]:[#%04X]         | ",backbank>=BANK_MAX_NUMBER?backbank-BANK_MAX_NUMBER:backbank,iback);
+									else printf("[%03d]:[#%04X]:[#%04X] | ",backbank>=BANK_MAX_NUMBER?backbank-BANK_MAX_NUMBER:backbank,backaddr,backcode);
 								while (iback<ae->outputadr) {
 									printf("#%02X ",ae->mem[backbank][iback++]);
 								}
@@ -17520,11 +17521,14 @@ printf("*** assembling ***\n");
 			if (!executed) {
 				/* no instruction executed, this is a label or an assignement */
 				if (wordlist[ae->idx].e) {
+					double vtrace;
+					printf("; Expression\n");
 					ExpressionFastTranslate(ae,&wordlist[ae->idx].w,0);
-					ComputeExpression(ae,wordlist[ae->idx].w,ae->codeadr,0,0);
+					vtrace=ComputeExpression(ae,wordlist[ae->idx].w,ae->codeadr,0,0);
+					printf("%s => %.2lf | #%04X\n",wordlist[ae->idx].w,vtrace,(int)(floor(vtrace+ae->rough)));
 				} else {
-					if (backcode==backaddr) printf("[%03d]:[#%04X]         | ",backbank,backaddr);
-						else printf("[%03d]:[#%04X]:[#%04X] | ",backbank,backaddr,backcode);
+					if (backcode==backaddr) printf("[%03d]:[#%04X]         | ",backbank>=BANK_MAX_NUMBER?backbank-BANK_MAX_NUMBER:backbank,backaddr);
+						else printf("[%03d]:[#%04X]:[#%04X] | ",backbank>=BANK_MAX_NUMBER?backbank-BANK_MAX_NUMBER:backbank,backaddr,backcode);
 					printf("%s ; label\n",wordlist[ae->idx].w);
 					PushLabel(ae);
 				}
