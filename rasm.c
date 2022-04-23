@@ -6,9 +6,7 @@
 #define RASM_VERSION PROGRAM_NAME" v"PROGRAM_VERSION" (build "PROGRAM_DATE")"
 #define RASM_SNAP_VERSION PROGRAM_NAME" v"PROGRAM_VERSION
 
-#define TRACE_GENERALE 0
 #define TRACE_PREPRO 0
-#define TRACE_ASSEMBLE 0
 #define TRACE_POPEXPR 0
 #define TRACE_COMPUTE_EXPRESSION 0
 #define TRACE_HEXBIN 0
@@ -556,6 +554,7 @@ struct s_repeat {
 	int maxim;
 	int repeat_counter;
 	char *repeatvar;
+	struct s_expr_dico *repeatvarstruct;
 	double varincrement;
 	int repeatcrc;
 };
@@ -7033,9 +7032,6 @@ printf("***********\n");
 							MakeError(ae,GetCurrentFile(ae),GetExpLine(ae,0),"Variable cannot override existing alias [%s]\n",expr);
 							return 0;
 						}
-#if TRACE_ASSEMBLE
-	printf("try to set [%s] with %lf operatorassignment=%c\n",expr,v,operatorassignment);
-#endif
 						curdic=SearchDico(ae,expr,crc);
 						if (curdic) {
 							switch (operatorassignment) {
@@ -7090,9 +7086,6 @@ printf("***********\n");
 		*****************************************/
 		default:break;
 	}
-#if TRACE_ASSEMBLE
-printf("pure expression to compute [%s]\n",expr);
-#endif
 	return ComputeExpressionCore(ae,expr,ptr,didx);
 }
 int RoundComputeExpression(struct s_assenv *ae,char *expr, int ptr, int didx, int expression_expected) {
@@ -14359,7 +14352,9 @@ void __REPEAT(struct s_assenv *ae) {
 				} else {
 					/* mais ne peut être un label ou un alias */
 					ExpressionSetDicoVar(ae,ae->wl[ae->idx].w,vstart,0);
+					rvar=SearchDico(ae,ae->wl[ae->idx].w,crc);
 				}
+				currepeat.repeatvarstruct=rvar;
 				currepeat.repeatvar=ae->wl[ae->idx].w;
 				currepeat.repeatcrc=crc;
 				// adjust
@@ -14397,7 +14392,9 @@ void __REND(struct s_assenv *ae) {
 		} else {
 			ae->repeat[ae->ir-1].cpt--;
 			ae->repeat[ae->ir-1].repeat_counter++;
-			if ((rvar=SearchDico(ae,ae->repeat[ae->ir-1].repeatvar,ae->repeat[ae->ir-1].repeatcrc))!=NULL) {
+			//if ((rvar=SearchDico(ae,ae->repeat[ae->ir-1].repeatvar,ae->repeat[ae->ir-1].repeatcrc))!=NULL) {
+			if (ae->repeat[ae->ir-1].repeatvarstruct) {
+				rvar=ae->repeat[ae->ir-1].repeatvarstruct;
 				rvar->v+=ae->repeat[ae->ir-1].varincrement; // LEGACY rvar->v=ae->repeat[ae->ir-1].repeat_counter;
 			}
 			if (ae->repeat[ae->ir-1].cpt) {
@@ -16918,13 +16915,6 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 	AutomateChar['_']=AutomateCharStop['_']=1;
 
 	rasm_printf(ae,KAYGREEN"Assembling\n");
-#if TRACE_ASSEMBLE
-printf("assembling (nberr=%d)\n",ae->nberr);
-#endif
-#if TRACE_GENERALE
-printf("*** assembling ***\n");
-#endif
-
 	ae->retdebug=debug;
 
 	srand((unsigned)time(0));
@@ -17445,8 +17435,6 @@ printf("*** assembling ***\n");
 		if ((ifast=ae->fastmatch[(int)wordlist[ae->idx].w[0]])!=-1) {
 			while (instruction[ifast].mnemo[0]==wordlist[ae->idx].w[0]) {
 				if (instruction[ifast].crc==curcrc && strcmp(instruction[ifast].mnemo,wordlist[ae->idx].w)==0) {
-					instruction[ifast].makemnemo(ae);
-					executed=1;
 #define CRC_REPEAT	0xC9791639
 #define CRC_REND	0x87E997A1
 #define CRC_UNTIL	0xCC12A604
@@ -17455,8 +17443,36 @@ printf("*** assembling ***\n");
 #define CRC_ORG	        0xE1871B60
 #define CRC_BANK	0x3AB794
 #define CRC_BREAK	0xCD364DDD
+					if (curcrc==CRC_REND) {
+						if (ae->ir) {
+							printf("----- REND ----- ; counter=%d Level %d ",ae->repeat[ae->ir-1].repeat_counter,ae->ir-1);
+							if (ae->repeat[ae->ir-1].cpt>1) {
+								printf("will loop again\n");
+							} else {
+								printf("end of REPEAT\n");
+							}
+						}
+					}
+					//*** EXECUTION ***
+					instruction[ifast].makemnemo(ae);
+					executed=1;
 
 					if (curcrc==CRC_REPEAT || curcrc==CRC_REND || curcrc==CRC_UNTIL || curcrc==CRC_WHILE || curcrc==CRC_WEND || curcrc==CRC_BREAK) {
+						switch (curcrc) {
+							case CRC_REPEAT:
+							case CRC_WHILE:
+								printf("----- ");
+								printf("%s",wordlist[backidx].w);
+								if (!wordlist[backidx].t) printf(" %s",wordlist[++backidx].w);
+								while (!wordlist[backidx].t) {
+									printf(",%s",wordlist[++backidx].w);
+								}
+								printf("\n");
+								break;
+
+							case CRC_REND:
+							default:break;
+						}
 					} else {
 						if (curcrc==CRC_BANK || backbank!=ae->activebank) {
 							printf("; BANK\n");
@@ -17509,7 +17525,7 @@ printf("*** assembling ***\n");
 		if (!executed) {
 			/* is it a macro? */
 			if ((ifast=SearchMacro(ae,curcrc,wordlist[ae->idx].w))>=0) {
-				printf("; Macro %s\n",wordlist[ae->idx].w);
+				printf("; Macro %s expansion with %d parameter%s\n",wordlist[ae->idx].w,ae->macro[ifast].nbparam,ae->macro[ifast].nbparam>1?"s":"");
 				wordlist=__MACRO_EXECUTE(ae,ifast);
 				continue;
 			}
@@ -17522,14 +17538,19 @@ printf("*** assembling ***\n");
 				/* no instruction executed, this is a label or an assignement */
 				if (wordlist[ae->idx].e) {
 					double vtrace;
-					printf("; Expression\n");
 					ExpressionFastTranslate(ae,&wordlist[ae->idx].w,0);
 					vtrace=ComputeExpression(ae,wordlist[ae->idx].w,ae->codeadr,0,0);
-					printf("%s => %.2lf | #%04X\n",wordlist[ae->idx].w,vtrace,(int)(floor(vtrace+ae->rough)));
+					if (strchr(wordlist[ae->idx].w,'~')) {
+						char *ctrace=TxtStrDup(wordlist[ae->idx].w);
+						TxtReplace(ctrace,"~"," EQU ",0);
+						printf(" %s ; alias definition\n",ctrace);
+					} else {
+						printf(" %s ; %.2lf | #%04X\n",wordlist[ae->idx].w,vtrace,(int)(floor(vtrace+ae->rough)));
+					}
 				} else {
 					if (backcode==backaddr) printf("[%03d]:[#%04X]         | ",backbank>=BANK_MAX_NUMBER?backbank-BANK_MAX_NUMBER:backbank,backaddr);
 						else printf("[%03d]:[#%04X]:[#%04X] | ",backbank>=BANK_MAX_NUMBER?backbank-BANK_MAX_NUMBER:backbank,backaddr,backcode);
-					printf("%s ; label\n",wordlist[ae->idx].w);
+					printf("                %s ; label\n",wordlist[ae->idx].w);
 					PushLabel(ae);
 				}
 			} else {
@@ -17542,18 +17563,6 @@ printf("*** assembling ***\n");
 			break;
 		}
 	}
-
-
-
-
-
-#if TRACE_ASSEMBLE
-	rasm_printf(ae,KVERBOSE"%d [%s] L%d [%s] fin de la liste de mots\n",ae->idx,ae->filename[wordlist[ae->idx].ifile],wordlist[ae->idx].l,wordlist[ae->idx].w);
-	printf("check ORG\n");
-#endif
-#if TRACE_GENERALE
-printf("-check ORG\n");
-#endif
 
 	if (!ae->stop) {
 		/* end of assembly, check there is no opened struct */
@@ -17592,9 +17601,6 @@ printf("-check ORG\n");
 			MakeError(ae,ae->ifthen[i].filename,ae->ifthen[i].line,"%s conditionnal block was not closed\n",instr);
 		}
 	}
-#if TRACE_ASSEMBLE
-printf("crunch if any %d blocks\n",ae->ilz);
-#endif
 	/***************************************************
 	         c r u n c h   L Z   s e c t i o n s
 	***************************************************/
@@ -17621,10 +17627,6 @@ printf("crunch if any %d blocks\n",ae->ilz);
 		for (i=0;i<ae->ilz;i++) {
 			/* on dépile les symboles dans l'ordre mais on ne reloge pas sur les zones intermédiaires ou post-crunched */
 			if (ae->lzsection[i].lzversion!=0) {
-#if TRACE_ASSEMBLE
-printf("Crunch LZ[%d] (%d) %s\n",i,ae->lzsection[i].lzversion,ae->lzsection[i].lzversion==8?"mizou":"");
-#endif
-
 				if (ae->lzsection[i].memend==-1) {
 					/* patch idx */
 					ae->idx=ae->lzsection[i].iw;
@@ -17686,9 +17688,6 @@ printf("Crunch LZ[%d] (%d) %s\n",i,ae->lzsection[i].lzversion,ae->lzsection[i].l
 							#endif
 							break;
 						case 18:
-#if TRACE_ASSEMBLE
-							printf("crunching bank %d ptr=%d lng=%d version=%d minmatch=%d\n",ae->lzsection[i].ibank,ae->lzsection[i].memstart,input_size,ae->lzsection[i].version,ae->lzsection[i].minmatch);
-#endif
 							#ifndef NO_3RD_PARTIES
 							if (input_size>=16384 && ae->lzsection[i].version==2) rasm_printf(ae,KWARNING"LZSA is crunching %.1fkb this may take a while, be patient...\n",input_size/1024.0);
 							LZSA_crunch(input_data,input_size,&lzdata,&lzlen,ae->lzsection[i].version,ae->lzsection[i].minmatch);
@@ -17706,10 +17705,6 @@ printf("Crunch LZ[%d] (%d) %s\n",i,ae->lzsection[i].lzversion,ae->lzsection[i].l
 					}
 				}
 
-#if TRACE_ASSEMBLE
-				printf("lzsection[%d] type=%d start=%04X end=%04X crunched size=%d\n",i,ae->lzsection[i].lzversion,ae->lzsection[i].memstart,ae->lzsection[i].memend,lzlen);
-#endif
-
 				if (input_size<lzlen) {
 					//MakeError(ae,ae->filename[ae->wl[ae->lzsection[i].iw].ifile],ae->wl[ae->lzsection[i].iw].l,"As the LZ section cannot crunch data, Rasm may not guarantee assembled file!\n");
 					rasm_printf(ae,KWARNING"Warning: LZ section is bigger than original\n");
@@ -17717,9 +17712,6 @@ printf("Crunch LZ[%d] (%d) %s\n",i,ae->lzsection[i].lzversion,ae->lzsection[i].l
 				}
 
 				lzshift=lzlen-(ae->lzsection[i].memend-ae->lzsection[i].memstart);
-#if TRACE_ASSEMBLE
-printf("lzshift=%d\n",lzshift);
-#endif
 
 				/*******************************************************************************
 				  r e l o c a t e   d a t a   u n t i l   n o n   c o n t i g u o u s   O R G
@@ -17737,9 +17729,6 @@ printf("lzshift=%d\n",lzshift);
 						} else break;
 					}
 					lzmove=ae->orgzone[morgzone].memend-ae->lzsection[i].memend;
-#if TRACE_ASSEMBLE
-printf("include %d other ORG for the memove size=%d\n",morgzone-iorgzone,lzmove);
-#endif
 					if (lzmove) {
 						MemMove(ae->mem[ae->lzsection[i].ibank]+ae->lzsection[i].memend+lzshift,ae->mem[ae->lzsection[i].ibank]+ae->lzsection[i].memend,lzmove);
 					}
@@ -17759,9 +17748,6 @@ printf("include %d other ORG for the memove size=%d\n",morgzone-iorgzone,lzmove)
 						curlabel=SearchLabel(ae,ae->label[il].iw!=-1?wordlist[ae->label[il].iw].w:ae->label[il].name,ae->label[il].crc);
 						/* CANNOT be NULL */
 						curlabel->ptr+=lzshift;
-#if TRACE_ASSEMBLE
-	printf("label [%s] shifte de %d valeur #%04X -> #%04X\n",curlabel->iw!=-1?wordlist[curlabel->iw].w:curlabel->name,lzshift,curlabel->ptr-lzshift,curlabel->ptr);
-#endif
 						il++;
 					}
 					iorgzone++;
@@ -17799,9 +17785,6 @@ printf("include %d other ORG for the memove size=%d\n",morgzone-iorgzone,lzmove)
 						ae->expression[il].wptr+=lzshift;
 						/* relocate only "in place" contiguous ORG */
 						if (ae->orgzone[iorgzone].inplace) ae->expression[il].ptr+=lzshift;
-#if TRACE_ASSEMBLE
-	printf("expression [%s] shiftee ptr(%s)=#%04X wptr=#%04X\n", ae->expression[il].reference?ae->expression[il].reference:wordlist[ae->expression[il].iw].w, ae->orgzone[iorgzone].inplace?"relocated":"untouched",ae->expression[il].ptr, ae->expression[il].wptr);
-#endif
 						il++;
 					}
 					iorgzone++;
@@ -17812,10 +17795,6 @@ printf("include %d other ORG for the memove size=%d\n",morgzone-iorgzone,lzmove)
 				il=i+1;
 				do {
 					while (il<ae->ilz && ae->lzsection[il].iorgzone==iorgzone && ae->lzsection[il].ibank==ibank) {
-
-#if TRACE_ASSEMBLE
-	rasm_printf(ae,"reloger lzsection[%d] O%d B%d shift=%d\n",il,ae->lzsection[il].iorgzone,ae->lzsection[il].ibank,lzshift);
-#endif
 						ae->lzsection[il].memstart+=lzshift;
 						ae->lzsection[il].memend+=lzshift;
 						il++;
@@ -17835,9 +17814,6 @@ printf("include %d other ORG for the memove size=%d\n",morgzone-iorgzone,lzmove)
 		}
 		for (i=0;i<ae->ilz;i++) {
 			if (ae->lzsection[i].lzversion==0) {
-#if TRACE_ASSEMBLE
-//printf("PopAllExpr on intermediate section[%d] (%d) %s\n",i,ae->lzsection[i].lzversion,ae->lzsection[i].lzversion==8?"mizou":"");
-#endif
 				/* compute labels and expression outside crunched blocks BUT after crunched */
 				PopAllExpression(ae,i);
 			}
@@ -17951,15 +17927,6 @@ printf("include %d other ORG for the memove size=%d\n",morgzone-iorgzone,lzmove)
 ****************************************************************************************************************************************************************************************
 ***************************************************************************************************************************************************************************************/
 	TMP_filename=MemMalloc(PATH_MAX);
-#if 0
-for (i=0;i<ae->io;i++) {
-printf("ORG[%02d] start=%04X end=%04X ibank=%d nocode=%d protect=%d\n",i,ae->orgzone[i].memstart,ae->orgzone[i].memend,ae->orgzone[i].ibank,ae->orgzone[i].nocode,ae->orgzone[i].protect);
-}
-#endif
-#if TRACE_ASSEMBLE
-printf("output files\n");
-#endif
-
 	if (!ae->nberr && !ae->checkmode) {
 		
 		/* enregistrement des fichiers programmes par la commande SAVE */
@@ -19111,9 +19078,6 @@ printf("output files\n");
 	} else {
 		if (!ae->dependencies) rasm_printf(ae,KERROR"%d error%s\n",ae->nberr,ae->nberr>1?"s":"");
 	}
-#if TRACE_ASSEMBLE
-printf("dependencies\n");
-#endif
 /*******************************************************************************************
                         E X P O R T     D E P E N D E N C I E S
 *******************************************************************************************/
@@ -19165,12 +19129,6 @@ printf("dependencies\n");
 /*******************************************************************************************
                                   C L E A N U P
 *******************************************************************************************/
-#if TRACE_ASSEMBLE
-printf("cleanup\n");
-#endif
-#if TRACE_GENERALE
-printf("-cleanup\n");
-#endif
 	if (TMP_filename) MemFree(TMP_filename);
 	if (ae->nberr) {
 		ok=-1;
@@ -19208,13 +19166,6 @@ printf("-cleanup\n");
 	}
 
 	FreeAssenv(ae);
-#if TRACE_ASSEMBLE
-printf("end of assembling\n");
-printf("-end ok=%d\n",ok);
-#endif
-#if TRACE_GENERALE
-printf("-end ok=%d\n",ok);
-#endif
 	return ok;
 }
 
@@ -19439,12 +19390,6 @@ struct s_assenv *PreProcessing(char *filename, int flux, const char *datain, int
 	int incstartL=0;
 	char *original_filename=NULL;
 
-
-
-#if TRACE_GENERALE
-printf("*** preprocessing ***\n");
-#endif
-
 #if TRACE_PREPRO
 printf("start prepro, alloc assenv\n");
 #endif
@@ -19535,9 +19480,6 @@ printf("paramz 1\n");
 	}
 #if TRACE_PREPRO
 printf("init 0 amper=%d\n",ae->noampersand);
-#endif
-#if TRACE_GENERALE
-printf("-init\n");
 #endif
 	/* generic init */
 	ae->ctx1.maxivar=1;
@@ -19813,9 +19755,6 @@ printf("nbbank=%d initialised\n",ae->nbbank);
 #if TRACE_PREPRO
 printf("read file/flux\n");
 #endif
-#if TRACE_GENERALE
-printf("-read/flux\n");
-#endif
 
 	if (!ae->flux) {
 		zelines=FileReadLines(ae,filename);
@@ -19867,9 +19806,6 @@ if (flux_nblines<50) printf("%02d[%s]\n",flux_nblines,zelines[flux_nblines]);
 
 #if TRACE_PREPRO
 printf("remove comz, do includes\n");
-#endif
-#if TRACE_GENERALE
-printf("-comz/include\n");
 #endif
 	EarlyPrepSrc(ae,zelines,ae->filename[ae->ifile-1]);
 
@@ -20423,10 +20359,6 @@ printf("check quotes and repeats\n");
 		l++;
 	}
 #endif	
-#if TRACE_GENERALE
-printf("-build wordlist\n");
-#endif
-
 	texpr=quote_type=0;
 	l=lw=idx=0;
 	ispace=0;
@@ -21753,7 +21685,7 @@ int RasmAssembleInfoParam(const char *datain, int lenin, unsigned char **dataout
 "ticker start,v44 : ld a,(ix+0) : ld h,(ix+0) : ld (ix+0),a : ld (ix+0),l : ld (ix+0),#12 : ticker stopzx,v44:"\
 "assert v44==gettick('ld a,(ix+0) : ld h,(ix+0) : ld (ix+0),a : ld (ix+0),l : ld (ix+0),#12')"
 
-#define AUTOTEST_GETSIZE "bank:push de:assert $==getsize('push de'):bank:sub #12:assert $==getsize('sub #12'):bank:rst #10:assert $==getsize('rst #10'):" \
+#define AUTOTEST_GETSIZE1 "bank:push de:assert $==getsize('push de'):bank:sub #12:assert $==getsize('sub #12'):bank:rst #10:assert $==getsize('rst #10'):" \
 "bank:ret c:assert $==getsize('ret c'):bank:exx:assert $==getsize('exx'):bank:jp c,#1234:assert $==getsize('jp c,#1234')" \
 ":bank:in a,(#12):assert $==getsize('in a,(#12)'):bank:call c,#1234:assert $==getsize('call c,#1234'):bank:nop:assert $==getsize('nop')" \
 ":bank:sbc #12:assert $==getsize('sbc #12'):bank:rst #18:assert $==getsize('rst #18'):bank:ret po:assert $==getsize('ret po')" \
@@ -21801,8 +21733,8 @@ int RasmAssembleInfoParam(const char *datain, int lenin, unsigned char **dataout
 ":bank:sla c:assert $==getsize('sla c'):bank:sla d:assert $==getsize('sla d'):bank:sla e:assert $==getsize('sla e')" \
 ":bank:sla h:assert $==getsize('sla h'):bank:sla l:assert $==getsize('sla l'):bank:sla (hl):assert $==getsize('sla (hl)')" \
 ":bank:sla a:assert $==getsize('sla a'):bank:sra b:assert $==getsize('sra b'):bank:sra c:assert $==getsize('sra c')" \
-":bank:sra d:assert $==getsize('sra d'):bank:sra e:assert $==getsize('sra e'):bank:sra h:assert $==getsize('sra h')" \
-":bank:sra l:assert $==getsize('sra l'):bank:sra (hl):assert $==getsize('sra (hl)'):bank:sra a:assert $==getsize('sra a')" \
+":bank:sra d:assert $==getsize('sra d'):bank:sra e:assert $==getsize('sra e'):bank:sra h:assert $==getsize('sra h')" 
+#define AUTOTEST_GETSIZE5 ":bank:sra l:assert $==getsize('sra l'):bank:sra (hl):assert $==getsize('sra (hl)'):bank:sra a:assert $==getsize('sra a')" \
 ":bank:sll b:assert $==getsize('sll b'):bank:sll c:assert $==getsize('sll c'):bank:sll d:assert $==getsize('sll d')" \
 ":bank:sll e:assert $==getsize('sll e'):bank:sll h:assert $==getsize('sll h'):bank:sll l:assert $==getsize('sll l')" \
 ":bank:sll (hl):assert $==getsize('sll (hl)'):bank:sll a:assert $==getsize('sll a'):bank:srl b:assert $==getsize('srl b')" \
@@ -21861,8 +21793,8 @@ int RasmAssembleInfoParam(const char *datain, int lenin, unsigned char **dataout
 ":bank:set 2,l:assert $==getsize('set 2,l'):bank:set 2,(hl):assert $==getsize('set 2,(hl)'):bank:set 2,a:assert $==getsize('set 2,a')" \
 ":bank:set 3,b:assert $==getsize('set 3,b'):bank:set 3,c:assert $==getsize('set 3,c'):bank:set 3,d:assert $==getsize('set 3,d')" \
 ":bank:set 3,e:assert $==getsize('set 3,e'):bank:set 3,h:assert $==getsize('set 3,h'):bank:set 3,l:assert $==getsize('set 3,l')" \
-":bank:set 3,(hl):assert $==getsize('set 3,(hl)'):bank:set 3,a:assert $==getsize('set 3,a'):bank:set 4,b:assert $==getsize('set 4,b')" \
-":bank:set 4,c:assert $==getsize('set 4,c'):bank:set 4,d:assert $==getsize('set 4,d'):bank:set 4,e:assert $==getsize('set 4,e')" \
+":bank:set 3,(hl):assert $==getsize('set 3,(hl)'):bank:set 3,a:assert $==getsize('set 3,a'):bank:set 4,b:assert $==getsize('set 4,b')"
+#define AUTOTEST_GETSIZE2 ":bank:set 4,c:assert $==getsize('set 4,c'):bank:set 4,d:assert $==getsize('set 4,d'):bank:set 4,e:assert $==getsize('set 4,e')" \
 ":bank:set 4,h:assert $==getsize('set 4,h'):bank:set 4,l:assert $==getsize('set 4,l'):bank:set 4,(hl):assert $==getsize('set 4,(hl)')" \
 ":bank:set 4,a:assert $==getsize('set 4,a'):bank:set 5,b:assert $==getsize('set 5,b'):bank:set 5,c:assert $==getsize('set 5,c')" \
 ":bank:set 5,d:assert $==getsize('set 5,d'):bank:set 5,e:assert $==getsize('set 5,e'):bank:set 5,h:assert $==getsize('set 5,h')" \
@@ -21910,8 +21842,8 @@ int RasmAssembleInfoParam(const char *datain, int lenin, unsigned char **dataout
 ":bank:rl (ix+#12),e:assert $==getsize('rl (ix+#12),e'):bank:rl (ix+#12),h:assert $==getsize('rl (ix+#12),h'):bank:rl (ix+#12),l:assert $==getsize('rl (ix+#12),l')" \
 ":bank:rl (ix+#12):assert $==getsize('rl (ix+#12)'):bank:rl (ix+#12),a:assert $==getsize('rl (ix+#12),a'):bank:rr (ix+#12),b:assert $==getsize('rr (ix+#12),b')" \
 ":bank:rr (ix+#12),c:assert $==getsize('rr (ix+#12),c'):bank:rr (ix+#12),d:assert $==getsize('rr (ix+#12),d'):bank:rr (ix+#12),e:assert $==getsize('rr (ix+#12),e')" \
-":bank:rr (ix+#12),h:assert $==getsize('rr (ix+#12),h'):bank:rr (ix+#12),l:assert $==getsize('rr (ix+#12),l'):bank:rr (ix+#12):assert $==getsize('rr (ix+#12)')" \
-":bank:rr (ix+#12),a:assert $==getsize('rr (ix+#12),a'):bank:sla (ix+#12),b:assert $==getsize('sla (ix+#12),b'):bank:sla (ix+#12),c:assert $==getsize('sla (ix+#12),c')" \
+":bank:rr (ix+#12),h:assert $==getsize('rr (ix+#12),h'):bank:rr (ix+#12),l:assert $==getsize('rr (ix+#12),l'):bank:rr (ix+#12):assert $==getsize('rr (ix+#12)')"
+#define AUTOTEST_GETSIZE6 ":bank:rr (ix+#12),a:assert $==getsize('rr (ix+#12),a'):bank:sla (ix+#12),b:assert $==getsize('sla (ix+#12),b'):bank:sla (ix+#12),c:assert $==getsize('sla (ix+#12),c')" \
 ":bank:sla (ix+#12),d:assert $==getsize('sla (ix+#12),d'):bank:sla (ix+#12),e:assert $==getsize('sla (ix+#12),e'):bank:sla (ix+#12),h:assert $==getsize('sla (ix+#12),h')" \
 ":bank:sla (ix+#12),l:assert $==getsize('sla (ix+#12),l'):bank:sla (ix+#12):assert $==getsize('sla (ix+#12)'):bank:sla (ix+#12),a:assert $==getsize('sla (ix+#12),a')" \
 ":bank:sra (ix+#12),b:assert $==getsize('sra (ix+#12),b'):bank:sra (ix+#12),c:assert $==getsize('sra (ix+#12),c'):bank:sra (ix+#12),d:assert $==getsize('sra (ix+#12),d')" \
@@ -21963,8 +21895,8 @@ int RasmAssembleInfoParam(const char *datain, int lenin, unsigned char **dataout
 ":bank:set 4,(ix+#12),d:assert $==getsize('set 4,(ix+#12),d'):bank:set 4,(ix+#12),e:assert $==getsize('set 4,(ix+#12),e'):bank:set 4,(ix+#12),h:assert $==getsize('set 4,(ix+#12),h')" \
 ":bank:set 4,(ix+#12),l:assert $==getsize('set 4,(ix+#12),l'):bank:set 4,(ix+#12):assert $==getsize('set 4,(ix+#12)'):bank:set 4,(ix+#12),a:assert $==getsize('set 4,(ix+#12),a')" \
 ":bank:set 5,(ix+#12),b:assert $==getsize('set 5,(ix+#12),b'):bank:set 5,(ix+#12),c:assert $==getsize('set 5,(ix+#12),c'):bank:set 5,(ix+#12),d:assert $==getsize('set 5,(ix+#12),d')" \
-":bank:set 5,(ix+#12),e:assert $==getsize('set 5,(ix+#12),e'):bank:set 5,(ix+#12),h:assert $==getsize('set 5,(ix+#12),h'):bank:set 5,(ix+#12),l:assert $==getsize('set 5,(ix+#12),l')" \
-":bank:set 5,(ix+#12):assert $==getsize('set 5,(ix+#12)'):bank:set 5,(ix+#12),a:assert $==getsize('set 5,(ix+#12),a'):bank:set 6,(ix+#12),b:assert $==getsize('set 6,(ix+#12),b')" \
+":bank:set 5,(ix+#12),e:assert $==getsize('set 5,(ix+#12),e'):bank:set 5,(ix+#12),h:assert $==getsize('set 5,(ix+#12),h'):bank:set 5,(ix+#12),l:assert $==getsize('set 5,(ix+#12),l')"
+#define AUTOTEST_GETSIZE3 ":bank:set 5,(ix+#12):assert $==getsize('set 5,(ix+#12)'):bank:set 5,(ix+#12),a:assert $==getsize('set 5,(ix+#12),a'):bank:set 6,(ix+#12),b:assert $==getsize('set 6,(ix+#12),b')" \
 ":bank:set 6,(ix+#12),c:assert $==getsize('set 6,(ix+#12),c'):bank:set 6,(ix+#12),d:assert $==getsize('set 6,(ix+#12),d'):bank:set 6,(ix+#12),e:assert $==getsize('set 6,(ix+#12),e')" \
 ":bank:set 6,(ix+#12),h:assert $==getsize('set 6,(ix+#12),h'):bank:set 6,(ix+#12),l:assert $==getsize('set 6,(ix+#12),l'):bank:set 6,(ix+#12):assert $==getsize('set 6,(ix+#12)')" \
 ":bank:set 6,(ix+#12),a:assert $==getsize('set 6,(ix+#12),a'):bank:set 7,(ix+#12),b:assert $==getsize('set 7,(ix+#12),b'):bank:set 7,(ix+#12),c:assert $==getsize('set 7,(ix+#12),c')" \
@@ -22014,8 +21946,8 @@ int RasmAssembleInfoParam(const char *datain, int lenin, unsigned char **dataout
 ":bank:sla (iy+#12):assert $==getsize('sla (iy+#12)'):bank:sla (iy+#12),a:assert $==getsize('sla (iy+#12),a'):bank:sra (iy+#12),b:assert $==getsize('sra (iy+#12),b')" \
 ":bank:sra (iy+#12),c:assert $==getsize('sra (iy+#12),c'):bank:sra (iy+#12),d:assert $==getsize('sra (iy+#12),d'):bank:sra (iy+#12),e:assert $==getsize('sra (iy+#12),e')" \
 ":bank:sra (iy+#12),h:assert $==getsize('sra (iy+#12),h'):bank:sra (iy+#12),l:assert $==getsize('sra (iy+#12),l'):bank:sra (iy+#12):assert $==getsize('sra (iy+#12)')" \
-":bank:sra (iy+#12),a:assert $==getsize('sra (iy+#12),a'):bank:sll (iy+#12),b:assert $==getsize('sll (iy+#12),b'):bank:sll (iy+#12),c:assert $==getsize('sll (iy+#12),c')" \
-":bank:sll (iy+#12),d:assert $==getsize('sll (iy+#12),d'):bank:sll (iy+#12),e:assert $==getsize('sll (iy+#12),e'):bank:sll (iy+#12),h:assert $==getsize('sll (iy+#12),h')" \
+":bank:sra (iy+#12),a:assert $==getsize('sra (iy+#12),a'):bank:sll (iy+#12),b:assert $==getsize('sll (iy+#12),b'):bank:sll (iy+#12),c:assert $==getsize('sll (iy+#12),c')"
+#define AUTOTEST_GETSIZE7 ":bank:sll (iy+#12),d:assert $==getsize('sll (iy+#12),d'):bank:sll (iy+#12),e:assert $==getsize('sll (iy+#12),e'):bank:sll (iy+#12),h:assert $==getsize('sll (iy+#12),h')" \
 ":bank:sll (iy+#12),l:assert $==getsize('sll (iy+#12),l'):bank:sll (iy+#12):assert $==getsize('sll (iy+#12)'):bank:sll (iy+#12),a:assert $==getsize('sll (iy+#12),a')" \
 ":bank:srl (iy+#12),b:assert $==getsize('srl (iy+#12),b'):bank:srl (iy+#12),c:assert $==getsize('srl (iy+#12),c'):bank:srl (iy+#12),d:assert $==getsize('srl (iy+#12),d')" \
 ":bank:srl (iy+#12),e:assert $==getsize('srl (iy+#12),e'):bank:srl (iy+#12),h:assert $==getsize('srl (iy+#12),h'):bank:srl (iy+#12),l:assert $==getsize('srl (iy+#12),l')" \
@@ -22051,8 +21983,6 @@ int RasmAssembleInfoParam(const char *datain, int lenin, unsigned char **dataout
 ":bank:set 2,(iy+#12),b:assert $==getsize('set 2,(iy+#12),b'):bank:set 2,(iy+#12),c:assert $==getsize('set 2,(iy+#12),c'):bank:set 2,(iy+#12),d:assert $==getsize('set 2,(iy+#12),d')" \
 ":bank:set 2,(iy+#12),e:assert $==getsize('set 2,(iy+#12),e'):bank:set 2,(iy+#12),h:assert $==getsize('set 2,(iy+#12),h'):bank:set 2,(iy+#12),l:assert $==getsize('set 2,(iy+#12),l')" \
 ":bank:set 2,(iy+#12):assert $==getsize('set 2,(iy+#12)'):bank:set 2,(iy+#12),a:assert $==getsize('set 2,(iy+#12),a'):bank:set 3,(iy+#12),b:assert $==getsize('set 3,(iy+#12),b')" \
-":bank:set 3,(iy+#12),c:assert $==getsize('set 3,(iy+#12),c'):bank:set 3,(iy+#12),d:assert $==getsize('set 3,(iy+#12),d'):bank:set 3,(iy+#12),e:assert $==getsize('set 3,(iy+#12),e')" \
-":bank:set 3,(iy+#12),h:assert $==getsize('set 3,(iy+#12),h'):bank:set 3,(iy+#12),l:assert $==getsize('set 3,(iy+#12),l'):bank:set 3,(iy+#12):assert $==getsize('set 3,(iy+#12)')" \
 ":bank:set 3,(iy+#12),a:assert $==getsize('set 3,(iy+#12),a'):bank:set 4,(iy+#12),b:assert $==getsize('set 4,(iy+#12),b'):bank:set 4,(iy+#12),c:assert $==getsize('set 4,(iy+#12),c')" \
 ":bank:set 4,(iy+#12),d:assert $==getsize('set 4,(iy+#12),d'):bank:set 4,(iy+#12),e:assert $==getsize('set 4,(iy+#12),e'):bank:set 4,(iy+#12),h:assert $==getsize('set 4,(iy+#12),h')" \
 ":bank:set 4,(iy+#12),l:assert $==getsize('set 4,(iy+#12),l'):bank:set 4,(iy+#12):assert $==getsize('set 4,(iy+#12)'):bank:set 4,(iy+#12),a:assert $==getsize('set 4,(iy+#12),a')" \
@@ -22066,6 +21996,8 @@ int RasmAssembleInfoParam(const char *datain, int lenin, unsigned char **dataout
 ":bank:set 7,(ix+#12):assert $==getsize('set 7,(ix+#12)'):bank:set 7,(ix+#12),a:assert $==getsize('set 7,(ix+#12),a'):bank:add iy,bc:assert $==getsize('add iy,bc')" \
 ":bank:add iy,de:assert $==getsize('add iy,de'):bank:ld iy,#1234:assert $==getsize('ld iy,#1234'):bank:ld (#1234),iy:assert $==getsize('ld (#1234),iy')" \
 ":bank:inc iy:assert $==getsize('inc iy'):bank:inc yh:assert $==getsize('inc yh'):bank:dec yh:assert $==getsize('dec yh')" \
+":bank:set 3,(iy+#12),c:assert $==getsize('set 3,(iy+#12),c'):bank:set 3,(iy+#12),d:assert $==getsize('set 3,(iy+#12),d'):bank:set 3,(iy+#12),e:assert $==getsize('set 3,(iy+#12),e')"
+#define AUTOTEST_GETSIZE4 ":bank:set 3,(iy+#12),h:assert $==getsize('set 3,(iy+#12),h'):bank:set 3,(iy+#12),l:assert $==getsize('set 3,(iy+#12),l'):bank:set 3,(iy+#12):assert $==getsize('set 3,(iy+#12)')" \
 ":bank:ld yh,#12:assert $==getsize('ld yh,#12'):bank:add iy,iy:assert $==getsize('add iy,iy'):bank:ld iy,(#1234):assert $==getsize('ld iy,(#1234)')" \
 ":bank:dec iy:assert $==getsize('dec iy'):bank:inc yl:assert $==getsize('inc yl'):bank:dec yl:assert $==getsize('dec yl')" \
 ":bank:ld yl,#12:assert $==getsize('ld yl,#12'):bank:inc (iy+#12):assert $==getsize('inc (iy+#12)'):bank:dec (iy+#12):assert $==getsize('dec (iy+#12)')" \
@@ -22120,8 +22052,8 @@ int RasmAssembleInfoParam(const char *datain, int lenin, unsigned char **dataout
 ":bank:res 0,(iy+#12),e:assert $==getsize('res 0,(iy+#12),e'):bank:res 0,(iy+#12),h:assert $==getsize('res 0,(iy+#12),h'):bank:res 0,(iy+#12),l:assert $==getsize('res 0,(iy+#12),l')" \
 ":bank:res 0,(iy+#12):assert $==getsize('res 0,(iy+#12)'):bank:res 0,(iy+#12),a:assert $==getsize('res 0,(iy+#12),a'):bank:res 1,(iy+#12),b:assert $==getsize('res 1,(iy+#12),b')" \
 ":bank:res 1,(iy+#12),c:assert $==getsize('res 1,(iy+#12),c'):bank:res 1,(iy+#12),d:assert $==getsize('res 1,(iy+#12),d'):bank:res 1,(iy+#12),e:assert $==getsize('res 1,(iy+#12),e')" \
-":bank:res 1,(iy+#12),h:assert $==getsize('res 1,(iy+#12),h'):bank:res 1,(iy+#12),l:assert $==getsize('res 1,(iy+#12),l'):bank:res 1,(iy+#12):assert $==getsize('res 1,(iy+#12)')" \
-":bank:res 1,(iy+#12),a:assert $==getsize('res 1,(iy+#12),a'):bank:res 2,(iy+#12),b:assert $==getsize('res 2,(iy+#12),b'):bank:res 2,(iy+#12),c:assert $==getsize('res 2,(iy+#12),c')" \
+":bank:res 1,(iy+#12),h:assert $==getsize('res 1,(iy+#12),h'):bank:res 1,(iy+#12),l:assert $==getsize('res 1,(iy+#12),l'):bank:res 1,(iy+#12):assert $==getsize('res 1,(iy+#12)')" 
+#define AUTOTEST_GETSIZE8 ":bank:res 1,(iy+#12),a:assert $==getsize('res 1,(iy+#12),a'):bank:res 2,(iy+#12),b:assert $==getsize('res 2,(iy+#12),b'):bank:res 2,(iy+#12),c:assert $==getsize('res 2,(iy+#12),c')" \
 ":bank:res 2,(iy+#12),d:assert $==getsize('res 2,(iy+#12),d'):bank:res 2,(iy+#12),e:assert $==getsize('res 2,(iy+#12),e'):bank:res 2,(iy+#12),h:assert $==getsize('res 2,(iy+#12),h')" \
 ":bank:res 2,(iy+#12),l:assert $==getsize('res 2,(iy+#12),l'):bank:res 2,(iy+#12):assert $==getsize('res 2,(iy+#12)'):bank:res 2,(iy+#12),a:assert $==getsize('res 2,(iy+#12),a')" \
 ":bank:res 3,(iy+#12),b:assert $==getsize('res 3,(iy+#12),b'):bank:res 3,(iy+#12),c:assert $==getsize('res 3,(iy+#12),c'):bank:res 3,(iy+#12),d:assert $==getsize('res 3,(iy+#12),d')" \
@@ -23131,11 +23063,46 @@ printf("testing code skip OK\n");
 	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
 printf("testing formula functions + multiple parenthesis OK\n");
 
-	ret=RasmAssembleInfo(AUTOTEST_GETSIZE,strlen(AUTOTEST_GETSIZE),&opcode,&opcodelen,&debug);
-	if (!ret) {} else {printf("Autotest %03d ERROR (math function GETSIZE)\n",cpt);for (i=0;i<debug->nberror;i++) printf("%d -> %s\n",i,debug->error[i].msg);exit(-1);}
+	ret=RasmAssembleInfo(AUTOTEST_GETSIZE1,strlen(AUTOTEST_GETSIZE1),&opcode,&opcodelen,&debug);
+	if (!ret) {} else {printf("Autotest %03d ERROR (math function GETSIZE 1/4)\n",cpt);for (i=0;i<debug->nberror;i++) printf("%d -> %s\n",i,debug->error[i].msg);exit(-1);}
 	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
 	RasmFreeInfoStruct(debug);
-printf("testing GETSIZE integrity on ALL opcodes OK\n");
+printf("testing GETSIZE integrity 1/8 OK\n");
+	ret=RasmAssembleInfo(AUTOTEST_GETSIZE2,strlen(AUTOTEST_GETSIZE2),&opcode,&opcodelen,&debug);
+	if (!ret) {} else {printf("Autotest %03d ERROR (math function GETSIZE 2/4)\n",cpt);for (i=0;i<debug->nberror;i++) printf("%d -> %s\n",i,debug->error[i].msg);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+	RasmFreeInfoStruct(debug);
+printf("testing GETSIZE integrity 2/8 OK\n");
+	ret=RasmAssembleInfo(AUTOTEST_GETSIZE3,strlen(AUTOTEST_GETSIZE3),&opcode,&opcodelen,&debug);
+	if (!ret) {} else {printf("Autotest %03d ERROR (math function GETSIZE 3/4)\n",cpt);for (i=0;i<debug->nberror;i++) printf("%d -> %s\n",i,debug->error[i].msg);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+	RasmFreeInfoStruct(debug);
+printf("testing GETSIZE integrity 3/8 OK\n");
+	ret=RasmAssembleInfo(AUTOTEST_GETSIZE4,strlen(AUTOTEST_GETSIZE4),&opcode,&opcodelen,&debug);
+	if (!ret) {} else {printf("Autotest %03d ERROR (math function GETSIZE 3/4)\n",cpt);for (i=0;i<debug->nberror;i++) printf("%d -> %s\n",i,debug->error[i].msg);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+	RasmFreeInfoStruct(debug);
+printf("testing GETSIZE integrity 4/8 OK\n");
+	ret=RasmAssembleInfo(AUTOTEST_GETSIZE5,strlen(AUTOTEST_GETSIZE5),&opcode,&opcodelen,&debug);
+	if (!ret) {} else {printf("Autotest %03d ERROR (math function GETSIZE 3/4)\n",cpt);for (i=0;i<debug->nberror;i++) printf("%d -> %s\n",i,debug->error[i].msg);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+	RasmFreeInfoStruct(debug);
+printf("testing GETSIZE integrity 5/8 OK\n");
+	ret=RasmAssembleInfo(AUTOTEST_GETSIZE6,strlen(AUTOTEST_GETSIZE6),&opcode,&opcodelen,&debug);
+	if (!ret) {} else {printf("Autotest %03d ERROR (math function GETSIZE 3/4)\n",cpt);for (i=0;i<debug->nberror;i++) printf("%d -> %s\n",i,debug->error[i].msg);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+	RasmFreeInfoStruct(debug);
+printf("testing GETSIZE integrity 6/8 OK\n");
+	ret=RasmAssembleInfo(AUTOTEST_GETSIZE7,strlen(AUTOTEST_GETSIZE7),&opcode,&opcodelen,&debug);
+	if (!ret) {} else {printf("Autotest %03d ERROR (math function GETSIZE 3/4)\n",cpt);for (i=0;i<debug->nberror;i++) printf("%d -> %s\n",i,debug->error[i].msg);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+	RasmFreeInfoStruct(debug);
+printf("testing GETSIZE integrity 7/8 OK\n");
+	ret=RasmAssembleInfo(AUTOTEST_GETSIZE8,strlen(AUTOTEST_GETSIZE8),&opcode,&opcodelen,&debug);
+	if (!ret) {} else {printf("Autotest %03d ERROR (math function GETSIZE 4/4)\n",cpt);for (i=0;i<debug->nberror;i++) printf("%d -> %s\n",i,debug->error[i].msg);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+	RasmFreeInfoStruct(debug);
+printf("testing GETSIZE integrity 8/8 ALL opcodes OK\n");
 
 	ret=RasmAssemble(AUTOTEST_GETNOP_LD,strlen(AUTOTEST_GETNOP_LD),&opcode,&opcodelen);
 	if (!ret) {} else {printf("Autotest %03d ERROR (math function GETNOP with multiple LD syncronised with TICKER)\n",cpt);exit(-1);}
