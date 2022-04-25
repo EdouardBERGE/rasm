@@ -13163,34 +13163,52 @@ void __WRITE(struct s_assenv *ae) {
 	}
 }
 void __CHARSET(struct s_assenv *ae) {
-	int i,s,e,v,tquote;
+	int i,j,s,e,v,tquote,dquote;
 
 	if (ae->wl[ae->idx].t==1) {
 		/* reinit charset */
 		for (i=0;i<256;i++)
 			ae->charset[i]=i;
 	} else if (!ae->wl[ae->idx].t && !ae->wl[ae->idx+1].t && ae->wl[ae->idx+2].t==1) {
-		/* string,value | byte,value */
-		ExpressionFastTranslate(ae,&ae->wl[ae->idx+2].w,0);
-		v=RoundComputeExpression(ae,ae->wl[ae->idx+2].w,ae->codeadr,0,0);
-		if (ae->wl[ae->idx+1].w[0]=='\'' || ae->wl[ae->idx+1].w[0]=='"') {
+		/* string | string case => both strings must be the same size */
+		if (StringIsQuote(ae->wl[ae->idx+1].w) && StringIsQuote(ae->wl[ae->idx+2].w)) {
+			/* get quote type of both strings */
 			tquote=ae->wl[ae->idx+1].w[0];
-			if (ae->wl[ae->idx+1].w[strlen(ae->wl[ae->idx+1].w)-1]==tquote) {
-				i=1;
-				while (ae->wl[ae->idx+1].w[i] && ae->wl[ae->idx+1].w[i]!=tquote) {
-					if (ae->wl[ae->idx+1].w[i]=='\\') i++;
-					ae->charset[(unsigned int)ae->wl[ae->idx+1].w[i]&0xFF]=(unsigned char)v++;
-					i++;
-				}
-			} else {
-				MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"CHARSET string,value has invalid quote!\n");
+			dquote=ae->wl[ae->idx+2].w[0];
+			i=j=1;
+			while (ae->wl[ae->idx+1].w[i] && ae->wl[ae->idx+2].w[j] && ae->wl[ae->idx+1].w[i]!=tquote && ae->wl[ae->idx+2].w[j]!=dquote) {
+				if (ae->wl[ae->idx+1].w[i]=='\\') i++;
+				if (ae->wl[ae->idx+2].w[j]=='\\') j++;
+				ae->charset[(unsigned int)ae->wl[ae->idx+1].w[i]&0xFF]=(unsigned char)ae->wl[ae->idx+2].w[j];
+				i++;
+				j++;
+			}
+			if (ae->wl[ae->idx+1].w[i]!=tquote || ae->wl[ae->idx+2].w[j]!=dquote) {
+				MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"CHARSET <string>,<string> must use strings of the same size!\n");
 			}
 		} else {
-			i=RoundComputeExpression(ae,ae->wl[ae->idx+1].w,ae->codeadr,0,0);
-			if (i>=0 && i<256) {
-				ae->charset[i]=(unsigned char)v;
+			/* string,value | byte,value */
+			ExpressionFastTranslate(ae,&ae->wl[ae->idx+2].w,0);
+			v=RoundComputeExpression(ae,ae->wl[ae->idx+2].w,ae->codeadr,0,0);
+			if (ae->wl[ae->idx+1].w[0]=='\'' || ae->wl[ae->idx+1].w[0]=='"') {
+				tquote=ae->wl[ae->idx+1].w[0];
+				if (ae->wl[ae->idx+1].w[strlen(ae->wl[ae->idx+1].w)-1]==tquote) {
+					i=1;
+					while (ae->wl[ae->idx+1].w[i] && ae->wl[ae->idx+1].w[i]!=tquote) {
+						if (ae->wl[ae->idx+1].w[i]=='\\') i++;
+						ae->charset[(unsigned int)ae->wl[ae->idx+1].w[i]&0xFF]=(unsigned char)v++;
+						i++;
+					}
+				} else {
+					MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"CHARSET string,value has invalid quote!\n");
+				}
 			} else {
-				MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"CHARSET byte value must be 0-255\n");
+				i=RoundComputeExpression(ae,ae->wl[ae->idx+1].w,ae->codeadr,0,0);
+				if (i>=0 && i<256) {
+					ae->charset[i]=(unsigned char)v;
+				} else {
+					MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"CHARSET byte value must be 0-255\n");
+				}
 			}
 		}
 		ae->idx+=2;
@@ -21270,6 +21288,9 @@ int RasmAssembleInfoParam(const char *datain, int lenin, unsigned char **dataout
 
 #define AUTOTEST_CHARSET2	"charset 97,97+26,0:defb 'roua':charset:charset 97,10:defb 'roua':charset 'o',5:defb 'roua':charset 'ou',6:defb 'roua'"
 
+#define AUTOTEST_CHARSET3	"CHARSET 'ABCDEFGHIJKLMNOPQRSTUVWXYZ',\"QWERTYUIOPASDFGHJKLZXCVBNM\" : DEFB 'THE QUICK BROWN FOX' : nop"
+
+
 #define AUTOTEST_NOCODE		"let monorg=$:NoCode:Org 0:Element1 db 0:Element2 dw 3:Element3 ds 50:Element4 defb 'rdd':Org 0:pouet defb 'nop':" \
 							"Code:Org monorg:cpt=$+element2+element3+element4:defs cpt,0"
 
@@ -22809,6 +22830,11 @@ printf("testing simple charset OK\n");
 	if (opcodelen!=16 || chk!=0x312) {printf("Autotest %03d ERROR (extended charset)\n",cpt);exit(-1);}
 	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
 printf("testing extended charset OK\n");
+	
+	ret=RasmAssemble(AUTOTEST_CHARSET3,strlen(AUTOTEST_CHARSET3),&opcode,&opcodelen);
+	if (!ret && strcmp(opcode,"ZIT JXOEA WKGVF YGB")==0) {} else {printf("Autotest %03d ERROR (charset string string)\n",cpt);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing charset string string OK\n");
 	
 	ret=RasmAssemble(AUTOTEST_QUOTES,strlen(AUTOTEST_QUOTES),&opcode,&opcodelen);
 	if (!ret && opcodelen==10 && opcode[5]==0xE4 && opcode[6]==0x0D && opcode[7]==0x64 && opcode[8]==0x0D && opcode[9]==0xE4) {}
