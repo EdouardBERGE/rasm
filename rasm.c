@@ -17511,7 +17511,7 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 							while (!wordlist[backidx].t) {
 								printf(",%s",wordlist[++backidx].w);
 							}
-							printf("\n");
+							printf("   (L%d:%s)\n",wordlist[backidx-1].l,ae->filename[wordlist[backidx-1].ifile]);
 						}
 					}
 					break;
