@@ -16924,6 +16924,7 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 	int backaddr;
 	int backbank;
 	int backcode;
+	int backnop,backtick;
 
 	for (i=0;i<256;i++) {
 		if (i==0 || (i>='a' && i<='z') || (i>='A' && i<='Z')) AutomateCharStop[i]=1; else AutomateCharStop[i]=0;
@@ -17286,173 +17287,171 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 				wordlist=__MACRO_EXECUTE(ae,ifast);
 				continue;
 			}
-		}
-		/*********************************************************************
-		  e x e c u t e    e x p r e s s i o n   o r    p u s h    l a b e l
-		*********************************************************************/
-		if (!ae->stop) {
-			if (!executed) {
-				/* no instruction executed, this is a label or an assignement */
-				if (wordlist[ae->idx].e) {
-					ExpressionFastTranslate(ae,&wordlist[ae->idx].w,0);
-					ComputeExpression(ae,wordlist[ae->idx].w,ae->codeadr,0,0);
-				} else {
-					PushLabel(ae);
-				}
+			/*********************************************************************
+			  e x e c u t e    e x p r e s s i o n   o r    p u s h    l a b e l
+			*********************************************************************/
+			/* neither instruction nor macro executed, this is a label or an assignement */
+			if (wordlist[ae->idx].e) {
+				ExpressionFastTranslate(ae,&wordlist[ae->idx].w,0);
+				ComputeExpression(ae,wordlist[ae->idx].w,ae->codeadr,0,0);
 			} else {
-				while (!wordlist[ae->idx].t) {
-					ae->idx++;
-				}
+				PushLabel(ae);
 			}
-			ae->idx++; 
 		} else {
-			break;
+			while (!wordlist[ae->idx].t) {
+				ae->idx++;
+			}
 		}
+		ae->idx++; 
+		if (ae->stop) break;
 	}
 
-	else
+	else {
+		printf("Bnk|Real|Logic  Bytecode  [Time] Assembly\n");
+		printf("-----------------------------------------\n");
+		while (wordlist[ae->idx].t!=2) {
+			curcrc=GetCRC(wordlist[ae->idx].w);
 
-	while (wordlist[ae->idx].t!=2) {
-		curcrc=GetCRC(wordlist[ae->idx].w);
-
-		// assembly output progression monitor
-		backidx=ae->idx;
-		backaddr=ae->outputadr;
-		backcode=ae->codeadr;
-		backbank=ae->activebank;
-		/********************************************************************
-		  c o n d i t i o n n a l    a s s e m b l y    m a n a g e m e n t
-		********************************************************************/
-		if (ae->ii || ae->isw) {
-			/* inhibition of if/endif */
-			for (inhibe=curii=0;curii<ae->ii;curii++) {
-				if (!ae->ifthen[curii].v || ae->ifthen[curii].v==-1) {
-					inhibe=1;
-					break;
-				}
-			}
-			/* when inhibited we are looking only for a IF/IFDEF/IFNOT/IFNDEF/ELSE/ELSEIF/ENDIF or SWITCH/CASE/DEFAULT/ENDSWITCH */
-			if (inhibe) {
-				/* this section does NOT need to be agressively optimized !!! */
-				if (curcrc==CRC_ELSEIF && strcmp(wordlist[ae->idx].w,"ELSEIF")==0) {
-					/* true IF needs to be done ONLY on the active level */
-					if (curii==ae->ii-1) __ELSEIF(ae); else __ELSEIF_light(ae);
-				} else if (curcrc==CRC_ELSE && strcmp(wordlist[ae->idx].w,"ELSE")==0) {
-					__ELSE(ae);
-				} else if (curcrc==CRC_ENDIF && strcmp(wordlist[ae->idx].w,"ENDIF")==0) {
-					__ENDIF(ae);
-				} else if (curcrc==CRC_IF && strcmp(wordlist[ae->idx].w,"IF")==0) {
-					/* as we are inhibited we do not have to truly compute IF */
-					__IF_light(ae);
-				} else if (curcrc==CRC_IFDEF && strcmp(wordlist[ae->idx].w,"IFDEF")==0) {
-					__IFDEF_light(ae);
-				} else if (curcrc==CRC_IFNOT && strcmp(wordlist[ae->idx].w,"IFNOT")==0) {
-					__IFNOT_light(ae);
-				} else if (curcrc==CRC_IFUSED && strcmp(wordlist[ae->idx].w,"IFUSED")==0) {
-					__IFUSED_light(ae);
-				} else if (curcrc==CRC_IFNUSED && strcmp(wordlist[ae->idx].w,"IFNUSED")==0) {
-					__IFNUSED_light(ae);
-				} else if (curcrc==CRC_IFNDEF && strcmp(wordlist[ae->idx].w,"IFNDEF")==0) {
-					__IFNDEF_light(ae);
-				} else if (curcrc==CRC_SWITCH && strcmp(wordlist[ae->idx].w,"SWITCH")==0) {
-					__SWITCH_light(ae);
-				} else if (curcrc==CRC_CASE && strcmp(wordlist[ae->idx].w,"CASE")==0) {
-					__CASE_light(ae);
-				} else if (curcrc==CRC_ENDSWITCH && strcmp(wordlist[ae->idx].w,"ENDSWITCH")==0) {
-					__ENDSWITCH(ae);
-				} else if (curcrc==CRC_BREAK && strcmp(wordlist[ae->idx].w,"BREAK")==0) {
-					__BREAK_light(ae);
-				} else if (curcrc==CRC_DEFAULT && strcmp(wordlist[ae->idx].w,"DEFAULT")==0) {
-					__DEFAULT_light(ae);
-				}
-				while (wordlist[ae->idx].t==0) ae->idx++;
-				ae->idx++;
-				continue;
-			} else {
-				/* inhibition of switch/case */
-				for (curii=0;curii<ae->isw;curii++) {
-					if (!ae->switchcase[curii].execute) {
-						inhibe=2;
+			// assembly output progression monitor
+			backnop=ae->nop;
+			backtick=ae->tick;
+			backidx=ae->idx;
+			backaddr=ae->outputadr;
+			backcode=ae->codeadr;
+			backbank=ae->activebank;
+			/********************************************************************
+			  c o n d i t i o n n a l    a s s e m b l y    m a n a g e m e n t
+			********************************************************************/
+			if (ae->ii || ae->isw) {
+				/* inhibition of if/endif */
+				for (inhibe=curii=0;curii<ae->ii;curii++) {
+					if (!ae->ifthen[curii].v || ae->ifthen[curii].v==-1) {
+						inhibe=1;
 						break;
 					}
 				}
+				/* when inhibited we are looking only for a IF/IFDEF/IFNOT/IFNDEF/ELSE/ELSEIF/ENDIF or SWITCH/CASE/DEFAULT/ENDSWITCH */
 				if (inhibe) {
 					/* this section does NOT need to be agressively optimized !!! */
-					if (curcrc==CRC_CASE && strcmp(wordlist[ae->idx].w,"CASE")==0) {
-						__CASE(ae);
-					} else if (curcrc==CRC_ENDSWITCH && strcmp(wordlist[ae->idx].w,"ENDSWITCH")==0) {
-						__ENDSWITCH(ae);
-					} else if (curcrc==CRC_IF && strcmp(wordlist[ae->idx].w,"IF")==0) {
-						/* as we are inhibited we do not have to truly compute IF */
-						__IF_light(ae);
-					} else if (curcrc==CRC_IFDEF && strcmp(wordlist[ae->idx].w,"IFDEF")==0) {
-						__IFDEF(ae);
-					} else if (curcrc==CRC_IFNOT && strcmp(wordlist[ae->idx].w,"IFNOT")==0) {
-						__IFNOT(ae);
+					if (curcrc==CRC_ELSEIF && strcmp(wordlist[ae->idx].w,"ELSEIF")==0) {
+						/* true IF needs to be done ONLY on the active level */
+						if (curii==ae->ii-1) __ELSEIF(ae); else __ELSEIF_light(ae);
 					} else if (curcrc==CRC_ELSE && strcmp(wordlist[ae->idx].w,"ELSE")==0) {
 						__ELSE(ae);
 					} else if (curcrc==CRC_ENDIF && strcmp(wordlist[ae->idx].w,"ENDIF")==0) {
 						__ENDIF(ae);
-					} else if (curcrc==CRC_ELSEIF && strcmp(wordlist[ae->idx].w,"ELSEIF")==0) {
-						__ELSEIF(ae);
+					} else if (curcrc==CRC_IF && strcmp(wordlist[ae->idx].w,"IF")==0) {
+						/* as we are inhibited we do not have to truly compute IF */
+						__IF_light(ae);
+					} else if (curcrc==CRC_IFDEF && strcmp(wordlist[ae->idx].w,"IFDEF")==0) {
+						__IFDEF_light(ae);
+					} else if (curcrc==CRC_IFNOT && strcmp(wordlist[ae->idx].w,"IFNOT")==0) {
+						__IFNOT_light(ae);
 					} else if (curcrc==CRC_IFUSED && strcmp(wordlist[ae->idx].w,"IFUSED")==0) {
-						__IFUSED(ae);
+						__IFUSED_light(ae);
 					} else if (curcrc==CRC_IFNUSED && strcmp(wordlist[ae->idx].w,"IFNUSED")==0) {
-						__IFNUSED(ae);
+						__IFNUSED_light(ae);
 					} else if (curcrc==CRC_IFNDEF && strcmp(wordlist[ae->idx].w,"IFNDEF")==0) {
-						__IFNDEF(ae);
+						__IFNDEF_light(ae);
 					} else if (curcrc==CRC_SWITCH && strcmp(wordlist[ae->idx].w,"SWITCH")==0) {
-						__SWITCH(ae);
+						__SWITCH_light(ae);
+					} else if (curcrc==CRC_CASE && strcmp(wordlist[ae->idx].w,"CASE")==0) {
+						__CASE_light(ae);
+					} else if (curcrc==CRC_ENDSWITCH && strcmp(wordlist[ae->idx].w,"ENDSWITCH")==0) {
+						__ENDSWITCH(ae);
 					} else if (curcrc==CRC_BREAK && strcmp(wordlist[ae->idx].w,"BREAK")==0) {
-						__BREAK(ae);
+						__BREAK_light(ae);
 					} else if (curcrc==CRC_DEFAULT && strcmp(wordlist[ae->idx].w,"DEFAULT")==0) {
-						__DEFAULT(ae);
+						__DEFAULT_light(ae);
 					}
 					while (wordlist[ae->idx].t==0) ae->idx++;
 					ae->idx++;
 					continue;
-				}				
+				} else {
+					/* inhibition of switch/case */
+					for (curii=0;curii<ae->isw;curii++) {
+						if (!ae->switchcase[curii].execute) {
+							inhibe=2;
+							break;
+						}
+					}
+					if (inhibe) {
+						/* this section does NOT need to be agressively optimized !!! */
+						if (curcrc==CRC_CASE && strcmp(wordlist[ae->idx].w,"CASE")==0) {
+							__CASE(ae);
+						} else if (curcrc==CRC_ENDSWITCH && strcmp(wordlist[ae->idx].w,"ENDSWITCH")==0) {
+							__ENDSWITCH(ae);
+						} else if (curcrc==CRC_IF && strcmp(wordlist[ae->idx].w,"IF")==0) {
+							/* as we are inhibited we do not have to truly compute IF */
+							__IF_light(ae);
+						} else if (curcrc==CRC_IFDEF && strcmp(wordlist[ae->idx].w,"IFDEF")==0) {
+							__IFDEF(ae);
+						} else if (curcrc==CRC_IFNOT && strcmp(wordlist[ae->idx].w,"IFNOT")==0) {
+							__IFNOT(ae);
+						} else if (curcrc==CRC_ELSE && strcmp(wordlist[ae->idx].w,"ELSE")==0) {
+							__ELSE(ae);
+						} else if (curcrc==CRC_ENDIF && strcmp(wordlist[ae->idx].w,"ENDIF")==0) {
+							__ENDIF(ae);
+						} else if (curcrc==CRC_ELSEIF && strcmp(wordlist[ae->idx].w,"ELSEIF")==0) {
+							__ELSEIF(ae);
+						} else if (curcrc==CRC_IFUSED && strcmp(wordlist[ae->idx].w,"IFUSED")==0) {
+							__IFUSED(ae);
+						} else if (curcrc==CRC_IFNUSED && strcmp(wordlist[ae->idx].w,"IFNUSED")==0) {
+							__IFNUSED(ae);
+						} else if (curcrc==CRC_IFNDEF && strcmp(wordlist[ae->idx].w,"IFNDEF")==0) {
+							__IFNDEF(ae);
+						} else if (curcrc==CRC_SWITCH && strcmp(wordlist[ae->idx].w,"SWITCH")==0) {
+							__SWITCH(ae);
+						} else if (curcrc==CRC_BREAK && strcmp(wordlist[ae->idx].w,"BREAK")==0) {
+							__BREAK(ae);
+						} else if (curcrc==CRC_DEFAULT && strcmp(wordlist[ae->idx].w,"DEFAULT")==0) {
+							__DEFAULT(ae);
+						}
+						while (wordlist[ae->idx].t==0) ae->idx++;
+						ae->idx++;
+						continue;
+					}				
+				}
 			}
-		}
-		/*****************************************
-		  m a c r o   p o s i t i o n s
-		*****************************************/
-		if (ae->imacropos) {
-			int icheckm;
+			/*****************************************
+			  m a c r o   p o s i t i o n s
+			*****************************************/
+			if (ae->imacropos) {
+				int icheckm;
 
-			/* we must close */
-			for (icheckm=0;icheckm<ae->imacropos;icheckm++) {
-				if (ae->idx==ae->macropos[icheckm].end) {
-					/* contiguous macro management... */
-					if (ae->macropos[icheckm].pushed) {
-						PopGlobal(ae);
-						ae->macropos[icheckm].pushed=0;
+				/* we must close */
+				for (icheckm=0;icheckm<ae->imacropos;icheckm++) {
+					if (ae->idx==ae->macropos[icheckm].end) {
+						/* contiguous macro management... */
+						if (ae->macropos[icheckm].pushed) {
+							PopGlobal(ae);
+							ae->macropos[icheckm].pushed=0;
+						}
+					}
+				}
+				/* before opening */
+				for (icheckm=0;icheckm<ae->imacropos;icheckm++) {
+					if (ae->idx==ae->macropos[icheckm].start) {
+						PushGlobal(ae);
+						ae->macropos[icheckm].pushed=1;
+					}
+				}
+
+				/* are we still in a macro? */
+				if (ae->idx>=ae->macropos[0].end) {
+					/* are we out of all repetition blocks? */
+					if (!ae->ir && !ae->iw) {
+						ae->imacropos=0;
 					}
 				}
 			}
-			/* before opening */
-			for (icheckm=0;icheckm<ae->imacropos;icheckm++) {
-				if (ae->idx==ae->macropos[icheckm].start) {
-					PushGlobal(ae);
-					ae->macropos[icheckm].pushed=1;
-				}
-			}
-
-			/* are we still in a macro? */
-			if (ae->idx>=ae->macropos[0].end) {
-				/* are we out of all repetition blocks? */
-				if (!ae->ir && !ae->iw) {
-					ae->imacropos=0;
-				}
-			}
-		}
-		/*****************************************
-		  e x e c u t e    i n s t r u c t i o n
-		*****************************************/
-		executed=0;
-		if ((ifast=ae->fastmatch[(int)wordlist[ae->idx].w[0]])!=-1) {
-			while (instruction[ifast].mnemo[0]==wordlist[ae->idx].w[0]) {
-				if (instruction[ifast].crc==curcrc && strcmp(instruction[ifast].mnemo,wordlist[ae->idx].w)==0) {
+			/*****************************************
+			  e x e c u t e    i n s t r u c t i o n
+			*****************************************/
+			executed=0;
+			if ((ifast=ae->fastmatch[(int)wordlist[ae->idx].w[0]])!=-1) {
+				while (instruction[ifast].mnemo[0]==wordlist[ae->idx].w[0]) {
+					if (instruction[ifast].crc==curcrc && strcmp(instruction[ifast].mnemo,wordlist[ae->idx].w)==0) {
 #define CRC_REPEAT	0xC9791639
 #define CRC_REND	0x87E997A1
 #define CRC_UNTIL	0xCC12A604
@@ -17461,124 +17460,135 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 #define CRC_ORG	        0xE1871B60
 #define CRC_BANK	0x3AB794
 #define CRC_BREAK	0xCD364DDD
-					if (curcrc==CRC_REND) {
-						if (ae->ir) {
-							printf("----- REND ----- ; counter=%d Level %d ",ae->repeat[ae->ir-1].repeat_counter,ae->ir-1);
-							if (ae->repeat[ae->ir-1].cpt>1) {
-								printf("will loop again\n");
-							} else {
-								printf("end of REPEAT\n");
+						if (curcrc==CRC_REND) {
+							if (ae->ir) {
+								printf("----- REND ----- ; counter=%d Level %d ",ae->repeat[ae->ir-1].repeat_counter,ae->ir-1);
+								if (ae->repeat[ae->ir-1].cpt>1) {
+									printf("will loop again\n");
+								} else {
+									printf("end of REPEAT\n");
+								}
 							}
 						}
-					}
-					//*** EXECUTION ***
-					instruction[ifast].makemnemo(ae);
-					executed=1;
+						//*** EXECUTION ***
+						instruction[ifast].makemnemo(ae);
+						executed=1;
 
-					if (curcrc==CRC_REPEAT || curcrc==CRC_REND || curcrc==CRC_UNTIL || curcrc==CRC_WHILE || curcrc==CRC_WEND || curcrc==CRC_BREAK) {
-						switch (curcrc) {
-							case CRC_REPEAT:
-							case CRC_WHILE:
-								printf("----- ");
-								printf("%s",wordlist[backidx].w);
+						if (curcrc==CRC_REPEAT || curcrc==CRC_REND || curcrc==CRC_UNTIL || curcrc==CRC_WHILE || curcrc==CRC_WEND || curcrc==CRC_BREAK) {
+							switch (curcrc) {
+								case CRC_REPEAT:
+								case CRC_WHILE:
+									printf("----- ");
+									printf("%s",wordlist[backidx].w);
+									if (!wordlist[backidx].t) printf(" %s",wordlist[++backidx].w);
+									while (!wordlist[backidx].t) {
+										printf(",%s",wordlist[++backidx].w);
+									}
+									printf("\n");
+									break;
+
+								case CRC_REND:
+								default:break;
+							}
+						} else {
+							if (curcrc==CRC_BANK || backbank!=ae->activebank) {
+								printf(";     BANK\n");
+							} else if (curcrc==CRC_ORG) {
+								printf("                                    ");
+								if (ae->codeadr!=ae->outputadr) printf("ORG #%04X,#%04X",ae->codeadr,ae->outputadr); else printf("ORG #%04X",ae->codeadr);
+								if (ae->activebank<BANK_MAX_NUMBER) printf(" ; bank %d\n",ae->activebank); else printf(" ; in memory workspace %d\n",ae->activebank-BANK_MAX_NUMBER);
+							} else {
+								// memory position
+								iback=backaddr;
+								while (iback+4<ae->outputadr) {
+									if (iback!=backaddr) printf("\n");
+									if (backcode==backaddr) printf("%03X|%04X     | ",backbank>=BANK_MAX_NUMBER?backbank-BANK_MAX_NUMBER:backbank,iback);
+										else printf("%03X|%04X|%04X| ",backbank>=BANK_MAX_NUMBER?backbank-BANK_MAX_NUMBER:backbank,backaddr,backcode);
+									printf("%02X ",ae->mem[backbank][iback++]);
+									printf("%02X ",ae->mem[backbank][iback++]);
+									printf("%02X ",ae->mem[backbank][iback++]);
+									printf("%02X ",ae->mem[backbank][iback++]);
+								}
+								if (iback<ae->outputadr) {
+									if (iback>backaddr) printf("\n");
+									if (backcode==backaddr) printf("%03X|%04X     | ",backbank>=BANK_MAX_NUMBER?backbank-BANK_MAX_NUMBER:backbank,iback);
+										else printf("%03X|%04X|%04X| ",backbank>=BANK_MAX_NUMBER?backbank-BANK_MAX_NUMBER:backbank,backaddr,backcode);
+									while (iback<ae->outputadr) {
+										printf("%02X ",ae->mem[backbank][iback++]);
+									}
+								}
+								// padding
+								iback=(ae->outputadr-backaddr)&3; if (iback) iback=4-iback; while (iback) {printf("   ");iback--;}
+								// timings
+								if (backnop<ae->nop) {
+									if (ae->forcezx) {
+										printf("[%02d] ",(int)(ae->tick-backtick));
+									} else {
+										printf("[%02d] ",(int)(ae->nop-backnop));
+									}
+								}
+								// instr
+								if (backaddr==ae->outputadr && backbank==ae->activebank) {
+									printf("; "); // no op output
+								}
+								// tab instructions (instead of labels)
+								printf("    %s",wordlist[backidx].w);
 								if (!wordlist[backidx].t) printf(" %s",wordlist[++backidx].w);
 								while (!wordlist[backidx].t) {
 									printf(",%s",wordlist[++backidx].w);
 								}
-								printf("\n");
-								break;
-
-							case CRC_REND:
-							default:break;
+								printf("   (L%d:%s)\n",wordlist[backidx-1].l,ae->filename[wordlist[backidx-1].ifile]);
+							}
 						}
-					} else {
-						if (curcrc==CRC_BANK || backbank!=ae->activebank) {
-							printf("; BANK\n");
-						} else if (curcrc==CRC_ORG) {
-							printf("                                        ");
-							if (ae->codeadr!=ae->outputadr) printf("ORG #%04X,#%04X",ae->codeadr,ae->outputadr); else printf("ORG #%04X",ae->codeadr);
-							if (ae->activebank<BANK_MAX_NUMBER) printf(" ; bank %d\n",ae->activebank); else printf(" ; in memory workspace %d\n",ae->activebank-BANK_MAX_NUMBER);
-						} else {
-							// memory position
-							iback=backaddr;
-							while (iback+4<ae->outputadr) {
-								if (iback!=backaddr) printf("\n");
-								if (backcode==backaddr) printf("[%03d]:[#%04X]         | ",backbank>=BANK_MAX_NUMBER?backbank-BANK_MAX_NUMBER:backbank,iback);
-									else printf("[%03d]:[#%04X]:[#%04X] | ",backbank>=BANK_MAX_NUMBER?backbank-BANK_MAX_NUMBER:backbank,backaddr,backcode);
-								printf("#%02X ",ae->mem[backbank][iback++]);
-								printf("#%02X ",ae->mem[backbank][iback++]);
-								printf("#%02X ",ae->mem[backbank][iback++]);
-								printf("#%02X ",ae->mem[backbank][iback++]);
-							}
-							if (iback<ae->outputadr) {
-								if (iback>backaddr) printf("\n");
-								if (backcode==backaddr) printf("[%03d]:[#%04X]         | ",backbank>=BANK_MAX_NUMBER?backbank-BANK_MAX_NUMBER:backbank,iback);
-									else printf("[%03d]:[#%04X]:[#%04X] | ",backbank>=BANK_MAX_NUMBER?backbank-BANK_MAX_NUMBER:backbank,backaddr,backcode);
-								while (iback<ae->outputadr) {
-									printf("#%02X ",ae->mem[backbank][iback++]);
-								}
-							}
-							// padding
-							iback=(ae->outputadr-backaddr)&3; if (iback) iback=4-iback; while (iback) {printf("    ");iback--;}
-							// instr
-							if (backaddr==ae->outputadr && backbank==ae->activebank) {
-								printf("; "); // no op output
-							}
-							printf("%s",wordlist[backidx].w);
-							if (!wordlist[backidx].t) printf(" %s",wordlist[++backidx].w);
-							while (!wordlist[backidx].t) {
-								printf(",%s",wordlist[++backidx].w);
-							}
-							printf("   (L%d:%s)\n",wordlist[backidx-1].l,ae->filename[wordlist[backidx-1].ifile]);
-						}
+						break;
 					}
-					break;
+					ifast++;
 				}
-				ifast++;
 			}
-		}
-		/*****************************************
-		       e x e c u t e    m a c r o
-		*****************************************/
-		if (!executed) {
-			/* is it a macro? */
-			if ((ifast=SearchMacro(ae,curcrc,wordlist[ae->idx].w))>=0) {
-				printf("; Macro %s expansion with %d parameter%s\n",wordlist[ae->idx].w,ae->macro[ifast].nbparam,ae->macro[ifast].nbparam>1?"s":"");
-				wordlist=__MACRO_EXECUTE(ae,ifast);
-				continue;
-			}
-		}
-		/*********************************************************************
-		  e x e c u t e    e x p r e s s i o n   o r    p u s h    l a b e l
-		*********************************************************************/
-		if (!ae->stop) {
+			/*****************************************
+			       e x e c u t e    m a c r o
+			*****************************************/
 			if (!executed) {
-				/* no instruction executed, this is a label or an assignement */
-				if (wordlist[ae->idx].e) {
-					double vtrace;
-					ExpressionFastTranslate(ae,&wordlist[ae->idx].w,0);
-					vtrace=ComputeExpression(ae,wordlist[ae->idx].w,ae->codeadr,0,0);
-					if (strchr(wordlist[ae->idx].w,'~')) {
-						char *ctrace=TxtStrDup(wordlist[ae->idx].w);
-						TxtReplace(ctrace,"~"," EQU ",0);
-						printf(" %s ; alias definition\n",ctrace);
+				/* is it a macro? */
+				if ((ifast=SearchMacro(ae,curcrc,wordlist[ae->idx].w))>=0) {
+					printf("; Macro %s expansion with %d parameter%s\n",wordlist[ae->idx].w,ae->macro[ifast].nbparam,ae->macro[ifast].nbparam>1?"s":"");
+					wordlist=__MACRO_EXECUTE(ae,ifast);
+					continue;
+				}
+			}
+			/*********************************************************************
+			  e x e c u t e    e x p r e s s i o n   o r    p u s h    l a b e l
+			*********************************************************************/
+			if (!ae->stop) {
+				if (!executed) {
+					/* no instruction executed, this is a label or an assignement */
+					if (wordlist[ae->idx].e) {
+						double vtrace;
+						ExpressionFastTranslate(ae,&wordlist[ae->idx].w,0);
+						vtrace=ComputeExpression(ae,wordlist[ae->idx].w,ae->codeadr,0,0);
+						if (strchr(wordlist[ae->idx].w,'~')) {
+							char *ctrace=TxtStrDup(wordlist[ae->idx].w);
+							TxtReplace(ctrace,"~"," EQU ",0);
+							printf(" %s ; alias definition\n",ctrace);
+						} else {
+							printf(" %s ; %.2lf | #%04X\n",wordlist[ae->idx].w,vtrace,(int)(floor(vtrace+ae->rough)));
+						}
 					} else {
-						printf(" %s ; %.2lf | #%04X\n",wordlist[ae->idx].w,vtrace,(int)(floor(vtrace+ae->rough)));
+						if (backcode==backaddr) printf("%03d|%04X     | ",backbank>=BANK_MAX_NUMBER?backbank-BANK_MAX_NUMBER:backbank,backaddr);
+							else printf("%03d|%04X|%04X| ",backbank>=BANK_MAX_NUMBER?backbank-BANK_MAX_NUMBER:backbank,backaddr,backcode);
+						if (ae->forcezx) printf(" ");
+						printf("                %s:\n",wordlist[ae->idx].w);
+						PushLabel(ae);
 					}
 				} else {
-					if (backcode==backaddr) printf("[%03d]:[#%04X]         | ",backbank>=BANK_MAX_NUMBER?backbank-BANK_MAX_NUMBER:backbank,backaddr);
-						else printf("[%03d]:[#%04X]:[#%04X] | ",backbank>=BANK_MAX_NUMBER?backbank-BANK_MAX_NUMBER:backbank,backaddr,backcode);
-					printf("                %s ; label\n",wordlist[ae->idx].w);
-					PushLabel(ae);
+					while (!wordlist[ae->idx].t) {
+						ae->idx++;
+					}
 				}
+				ae->idx++; 
 			} else {
-				while (!wordlist[ae->idx].t) {
-					ae->idx++;
-				}
+				break;
 			}
-			ae->idx++; 
-		} else {
-			break;
 		}
 	}
 
