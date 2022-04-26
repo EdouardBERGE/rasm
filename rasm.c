@@ -17503,7 +17503,7 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 								while (iback+4<ae->outputadr) {
 									if (iback!=backaddr) printf("\n");
 									if (backcode==backaddr) printf("%03X|%04X     | ",backbank>=BANK_MAX_NUMBER?backbank-BANK_MAX_NUMBER:backbank,iback);
-										else printf("%03X|%04X|%04X| ",backbank>=BANK_MAX_NUMBER?backbank-BANK_MAX_NUMBER:backbank,backaddr,backcode);
+										else printf("%03X|%04X|%04X| ",backbank>=BANK_MAX_NUMBER?backbank-BANK_MAX_NUMBER:backbank,iback,backcode+iback-backaddr);
 									printf("%02X ",ae->mem[backbank][iback++]);
 									printf("%02X ",ae->mem[backbank][iback++]);
 									printf("%02X ",ae->mem[backbank][iback++]);
@@ -17512,7 +17512,7 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 								if (iback<ae->outputadr) {
 									if (iback>backaddr) printf("\n");
 									if (backcode==backaddr) printf("%03X|%04X     | ",backbank>=BANK_MAX_NUMBER?backbank-BANK_MAX_NUMBER:backbank,iback);
-										else printf("%03X|%04X|%04X| ",backbank>=BANK_MAX_NUMBER?backbank-BANK_MAX_NUMBER:backbank,backaddr,backcode);
+										else printf("%03X|%04X|%04X| ",backbank>=BANK_MAX_NUMBER?backbank-BANK_MAX_NUMBER:backbank,iback,backcode+iback-backaddr);
 									while (iback<ae->outputadr) {
 										printf("%02X ",ae->mem[backbank][iback++]);
 									}
