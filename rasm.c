@@ -1,5 +1,5 @@
 #define PROGRAM_NAME      "RASM"
-#define PROGRAM_VERSION   "1.8a"
+#define PROGRAM_VERSION   "1.8b"
 #define PROGRAM_DATE      "xx/04/2022"
 #define PROGRAM_COPYRIGHT "© 2017 BERGE Edouard / roudoudou from Resistance"
 
@@ -13375,6 +13375,17 @@ struct s_wordlist *__MACRO_EXECUTE(struct s_assenv *ae, int imacro) {
 			nbparam++;
 		}
 		if (!ae->wl[idx].t) {
+			lenparam=1; // macro without parameters!
+			for (i=0;i<ae->macro[imacro].nbparam;i++) {
+				lenparam+=strlen(ae->macro[imacro].param[i])+3;
+			}
+			txtparamlist=MemMalloc(lenparam);
+			txtparamlist[0]=0;
+			for (i=0;i<ae->macro[imacro].nbparam;i++) {
+				strcat(txtparamlist,ae->macro[imacro].param[i]);
+				strcat(txtparamlist," ");
+			}
+
 			MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"MACRO (multi-line mode) [%s] was defined with %d parameter%s %s\n",ae->macro[imacro].mnemo,ae->macro[imacro].nbparam,ae->macro[imacro].nbparam>1?"s":"",txtparamlist);
 			while (!ae->wl[ae->idx].t) {
 				ae->idx++;
