@@ -205,6 +205,7 @@ struct s_parameter {
 	char module_separator;
 	int enforce_symbol_case;
 	int verbose_assembling;
+	int macro_multi_line;
 };
 
 
@@ -976,6 +977,7 @@ struct s_assenv {
 	struct s_macro *macro;
 	int imacro,mmacro;
 	int macrovoid;
+	int macro_multi_line;
 	/* labels locaux */
 	int repeatcounter,whilecounter,macrocounter;
 	struct s_macro_position *macropos;
@@ -13365,6 +13367,23 @@ struct s_wordlist *__MACRO_EXECUTE(struct s_assenv *ae, int imacro) {
 		idx++;
 	}
 
+	/* multi-line macro hack will try to get additionnal params in the next lines, with kindah sort of control */
+	if (ae->macro_multi_line) {
+		/* we must at least test the end of param list */
+		while (nbparam<ae->macro[imacro].nbparam && ae->wl[idx].t!=2) {
+			ae->wl[idx++].t=0; // not necessary
+			nbparam++;
+		}
+		if (!ae->wl[idx].t) {
+			MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"MACRO (multi-line mode) [%s] was defined with %d parameter%s %s\n",ae->macro[imacro].mnemo,ae->macro[imacro].nbparam,ae->macro[imacro].nbparam>1?"s":"",txtparamlist);
+			while (!ae->wl[ae->idx].t) {
+				ae->idx++;
+			}
+			ae->idx++;
+			return ae->wl;
+		}
+	}
+
 	/* hack to secure macro without parameters with void argument */
 	if (!ae->macro[imacro].nbparam) {
 		if (nbparam) {
@@ -19463,6 +19482,7 @@ printf("paramz 1\n");
 			ae->snapshot.version=3;
 		}
 		ae->verbose_assembling=param->verbose_assembling;
+		ae->macro_multi_line=param->macro_multi_line;
 		ae->xpr=param->xpr;
 		ae->cprinfo=param->cprinfo;
 		ae->cprinfo_export=param->cprinfoexport;
@@ -20626,7 +20646,9 @@ printf("instruction en cours\n");
 						}
 					} else {
 						if (hadcomma) {
-							MakeError(ae,ae->filename[listing[l].ifile],listing[l].iline,"empty parameter\n");
+							if (!ae->macro_multi_line) {
+								MakeError(ae,ae->filename[listing[l].ifile],listing[l].iline,"empty parameter\n");
+							}
 						}
 					}
 					break;
@@ -21103,6 +21125,9 @@ int RasmAssembleInfoParam(const char *datain, int lenin, unsigned char **dataout
 #define AUTOTEST_MACRO "macro glop:@glop:ld hl,@next:djnz @glop:@next:mend:macro glop2:@glop:glop:ld hl,@next:djnz @glop:glop:" \
                        "@next:mend:cpti=0:repeat:glop:cpt=0:glop:repeat:glop2:repeat 1:@glop:dec a:ld hl,@next:glop2:glop2:" \
                        "jr nz,@glop:@next:rend:cpt=cpt+1:glop2:until cpt<3:cpti=cpti+1:glop2:until cpti<3"
+
+#define AUTOTEST_MACRO_MML1 "macro une,param1,param2:ld hl,{param1}:ld de,{param2}:add hl,de:mend:une #1000, : #2000"
+#define AUTOTEST_MACRO_MML2 "macro une,param1,param2:ld hl,{param1}:ld de,{param2}:add hl,de:mend:une #1000, : #2000,#3000"
 
 #define AUTOTEST_MACRO_ADV 	"idx=10:macro mac2 param1,param2:ld hl,{param1}{idx+10}{param2}:{param1}{idx+10}{param2}:djnz {param1}{idx+10}{param2}:mend: " \
 							"mac2 label,45:mac2 glop,10:djnz glop2010:jp label2045"
@@ -22581,6 +22606,23 @@ printf("testing command line parameter (bis) -void OK\n");
 	RasmFreeInfoStruct(debug);
 printf("testing command line parameter -twe OK\n");
 
+	memset(&param,0,sizeof(struct s_parameter));
+	param.macro_multi_line=1;
+	ret=RasmAssembleInfoParam(AUTOTEST_MACRO_MML1,strlen(AUTOTEST_MACRO_MML1),&opcode,&opcodelen,&debug,&param);
+	if (!ret) {} else {printf("Autotest %03d ERROR (testing compilation option -mml support)\n",cpt);MiniDump(opcode,opcodelen);for (i=0;i<debug->nberror;i++) printf("%d -> %s\n",i,debug->error[i].msg);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+	RasmFreeInfoStruct(debug);
+	ret=RasmAssembleInfoParam(AUTOTEST_MACRO_MML2,strlen(AUTOTEST_MACRO_MML2),&opcode,&opcodelen,&debug,&param);
+	if (ret) {} else {printf("Autotest %03d ERROR (testing compilation option -mml keeps some check)\n",cpt);MiniDump(opcode,opcodelen);for (i=0;i<debug->nberror;i++) printf("%d -> %s\n",i,debug->error[i].msg);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+	RasmFreeInfoStruct(debug);
+	param.macro_multi_line=0;
+	ret=RasmAssembleInfoParam(AUTOTEST_MACRO_MML1,strlen(AUTOTEST_MACRO_MML1),&opcode,&opcodelen,&debug,&param);
+	if (ret) {} else {printf("Autotest %03d ERROR (testing compilation option -mml disabled)\n",cpt);MiniDump(opcode,opcodelen);for (i=0;i<debug->nberror;i++) printf("%d -> %s\n",i,debug->error[i].msg);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+	RasmFreeInfoStruct(debug);
+printf("testing command line parameter -mml OK\n");
+
 /*
 	#define AUTOTEST_PARAM_ ""
 	memset(&param,0,sizeof(struct s_parameter));
@@ -24007,6 +24049,7 @@ void Usage(int help)
 		printf("-xr            extended error display\n");
 		printf("-w             disable warnings\n");
 		printf("-void          force void usage with macro without parameter\n");
+		printf("-mml           allow macro usage with parameters on multiple lines\n");
 		printf("\n");
 	} else {
 		printf("use option -h for help\n");
@@ -24246,6 +24289,8 @@ int ParseOptions(char **argv,int argc, struct s_parameter *param)
 		param->utf8enable=1;
 	} else if (strcmp(argv[i],"-twe")==0) {
 		param->erronwarn=1;
+	} else if (strcmp(argv[i],"-mml")==0) {
+		param->macro_multi_line=1;
 	} else if (strcmp(argv[i],"-map")==0) {
 		param->verbose_assembling=1;
 	} else if (strcmp(argv[i],"-pasmo")==0) {
