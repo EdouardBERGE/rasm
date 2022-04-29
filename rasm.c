@@ -12360,6 +12360,7 @@ void __BUILDROM(struct s_assenv *ae) {
 
 
 void __SNAPINIT(struct s_assenv *ae) {
+	unsigned char zxsnapheader[0x1A]={0};
 	unsigned char *dataout;
 	unsigned char *snapdata;
 	int src,idx,rep,i,srcmax;
@@ -12371,7 +12372,7 @@ void __SNAPINIT(struct s_assenv *ae) {
 	char *newfilename=NULL;
 	int fileok=0;
 
-	if (!ae->forcecpr && !ae->forcetape && !ae->forcezx && !ae->forceROM) {
+	if (!ae->forcecpr && !ae->forcetape && !ae->forceROM) {
 		// automatic BUILDSNA
 		ae->forcesnapshot=1;
 	}
@@ -12417,6 +12418,29 @@ void __SNAPINIT(struct s_assenv *ae) {
 			return;
 		}
 		FileReadBinaryClose(newfilename);
+
+		/*** ZX snapshot is easy ***/
+		if (snapsize==27+16384*3 && 
+				snapdata[0]!='M' || snapdata[1]!='V' || snapdata[2]!=' ' || snapdata[3]!='-' || snapdata[4]!=' ' || snapdata[5]!='S' || snapdata[6]!='N' || snapdata[7]!='A') {
+			// get back stack position
+			ae->zxsnapshot.stack =zxsnapheader[0x17];
+			ae->zxsnapshot.stack+=zxsnapheader[0x18]<<8;
+			// get back RUN information pointed by stack
+			ae->zxsnapshot.run =snapdata[27+ae->zxsnapshot.stack];
+			ae->zxsnapshot.run+=snapdata[28+ae->zxsnapshot.stack]<<8;
+
+			// get data
+			memcpy(ae->mem[0]+16384,snapdata+27,49152); // legacy bankset
+
+			memcpy(ae->mem[5],snapdata+27,16384);       // ROM configuration
+			memcpy(ae->mem[2],snapdata+27+16384,16384);
+			memcpy(ae->mem[0],snapdata+27+32768,16384);
+
+			MemFree(newfilename);
+			MemFree(snapdata);
+			return;
+		}
+
 
 		if (snapsize<0x100) {
 			MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"file [%s] seems too small to be a snapshot\n",newfilename);
