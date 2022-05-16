@@ -5312,6 +5312,7 @@ double ComputeExpressionCore(struct s_assenv *ae,char *original_zeexpression,int
 	char asciivalue[11];
 	unsigned char c;
 	int accu_err=0;
+	int parenth=0;
 	/* backup alias replace */
 	char *zeexpression,*expr;
 	int original=1;
@@ -5422,8 +5423,10 @@ double ComputeExpressionCore(struct s_assenv *ae,char *original_zeexpression,int
 			case ')':
 				/* next to a closing parenthesis, a minus is an operator */
 				allow_minus_as_sign=0;
+				parenth--;
 				break;
 			case '(':
+				parenth++;
 			/* operator detection */
 			case '*':
 			case '/':
@@ -5650,7 +5653,7 @@ double ComputeExpressionCore(struct s_assenv *ae,char *original_zeexpression,int
 			              V A L U E
 			************************************/
 #if TRACE_COMPUTE_EXPRESSION
-	printf("value [%s]\n",ae->computectx->varbuffer);
+	printf("pushvalue [%s]\n",ae->computectx->varbuffer);
 #endif
 			if (ae->computectx->varbuffer[0]=='-') minusptr=1; else minusptr=0;
 			/* constantes ou variables/labels */
@@ -5826,6 +5829,7 @@ double ComputeExpressionCore(struct s_assenv *ae,char *original_zeexpression,int
 								ObjectArrayAddDynamicValueConcat((void **)&ae->computectx->tokenstack,&nbtokenstack,&ae->computectx->maxtokenstack,&stackelement,sizeof(stackelement));
 								allow_minus_as_sign=1;
 								idx++;
+								parenth++;
 							} else {
 								MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"expression [%s] - %s is a reserved keyword!\n",TradExpression(zeexpression),math_keyword[imkey].mnemo);
 								curval=0;
@@ -6866,6 +6870,9 @@ printf("final POP string=%X\n",ae->computectx->operatorstack[nboperatorstack+1].
 	}
 	if (!original) {
 		MemFree(zeexpression);
+	}
+	if (parenth) {
+		MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"missing parenthesis in expression\n");
 	}
 	if (paccu==1) {
 		return accu[0];
@@ -22275,6 +22282,7 @@ struct s_autotest_keyword autotest_keyword[]={
 	{"exx",0},{"exx hl",1},{"exx hl,de",1},{"exx af,af'",1},{"exx exx",1},{"exx 5",1},
 	{"ex",1},{"ex af,af'",0},{"ex hl,de",0},{"ex hl,bc",1},{"ex hl,hl",1},{"ex hl,ix",1},
 	{"cp",1},{"cp cp ",1},{"cp $",0},{"cp '$'",0},{"cp 'c'",0},{"cp 5",0},{"cp c",0},{"cp a,5",0},{"cp a,c",0},{"cp hl",1},{"cp (hl)",0},{"cp a,(hl)",0},{"cp (de)",1},{"cp de",1},
+	{"ld hl,(123",1}, {"ld hl,123)",1}, {"ld hl,(123)",0},
 	{"cpi",0},{"cpi (hl)",1},{"cpi a",1},{"cpi 5",1},
 	{"cpd",0},{"cpd (hl)",1},{"cpd a",1},{"cpd 5",1},
 	{"cpir",0},{"cpir (hl)",1},{"cpir a",1},{"cpir 5",1},
