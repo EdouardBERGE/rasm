@@ -2142,7 +2142,7 @@ void MakeError(struct s_assenv *ae, int idx, char *filename, int line, char *for
 		if (filename && line) {
 			printf("[%s:%d] ",filename,line);
 			if (idx && ae->wl[idx].ml) {
-				printf(" inside macro => [%s:%d] ",ae->filename[ae->wl[idx].mifile],ae->wl[idx].ml);
+				printf("inside macro => [%s:%d] ",ae->filename[ae->wl[idx].mifile],ae->wl[idx].ml);
 			}
 		} else if (filename) {
 			printf("[%s] ",filename);
