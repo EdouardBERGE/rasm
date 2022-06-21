@@ -606,6 +606,7 @@ struct s_wordlist {
 	char *w;
 	int l,t,e; /* e=1 si egalite dans le mot */
 	int ifile;
+	int ml,mifile;
 };
 
 struct s_macro {
@@ -2095,7 +2096,7 @@ char *GetExpFile(struct s_assenv *ae,int didx);
 void __STOP(struct s_assenv *ae);
 
 
-void MakeError(struct s_assenv *ae, char *filename, int line, char *format, ...)
+void MakeError(struct s_assenv *ae, int idx, char *filename, int line, char *format, ...)
 {
 	#undef FUNC
 	#define FUNC "MakeError"
@@ -2140,6 +2141,9 @@ void MakeError(struct s_assenv *ae, char *filename, int line, char *format, ...)
 		fprintf(stdout,KERROR);
 		if (filename && line) {
 			printf("[%s:%d] ",filename,line);
+			if (idx && ae->wl[idx].ml) {
+				printf(" inside macro => [%s:%d] ",ae->filename[ae->wl[idx].mifile],ae->wl[idx].ml);
+			}
 		} else if (filename) {
 			printf("[%s] ",filename);
 		}
@@ -2257,8 +2261,8 @@ printf("\n%d bits used for mantissa\n",ibit);
 	/* exponent */
 	exp+=128;
 	if (exp<0 || exp>255) {
-		if (iexpression) MakeError(ae,GetExpFile(ae,iexpression),ae->wl[ae->expression[iexpression].iw].l,"Exponent overflow\n");
-		else MakeError(ae,GetExpFile(ae,0),ae->wl[ae->idx].l,"Exponent overflow\n");
+		if (iexpression) MakeError(ae,ae->expression[iexpression].iw,GetExpFile(ae,iexpression),ae->wl[ae->expression[iexpression].iw].l,"Exponent overflow\n");
+		else MakeError(ae,ae->idx,GetExpFile(ae,0),ae->wl[ae->idx].l,"Exponent overflow\n");
 		exp=128;
 	}
 	rc[4]=exp;
@@ -2390,8 +2394,8 @@ printf("\n%d bits used for mantissa\n",ibit);
 	/* exponent */
 	exp+=128;
 	if (exp<0 || exp>255) {
-		if (iexpression) MakeError(ae,GetExpFile(ae,iexpression),ae->wl[ae->expression[iexpression].iw].l,"Exponent overflow\n");
-		else MakeError(ae,GetExpFile(ae,0),ae->wl[ae->idx].l,"Exponent overflow\n");
+		if (iexpression) MakeError(ae,ae->expression[iexpression].iw,GetExpFile(ae,iexpression),ae->wl[ae->expression[iexpression].iw].l,"Exponent overflow\n");
+		else MakeError(ae,ae->idx,GetExpFile(ae,0),ae->wl[ae->idx].l,"Exponent overflow\n");
 		exp=128;
 	}
 	rc[4]=exp;
@@ -2446,6 +2450,17 @@ int GetExpLine(struct s_assenv *ae,int didx){
 		return ae->wl[ae->idx].l;
 	} else if (didx<ae->ie) {
 		return ae->wl[ae->expression[didx].iw].l;
+	} else return 0;
+}
+int GetExpIdx(struct s_assenv *ae,int didx) {
+	if (ae->label_line) return ae->label_line;
+
+	if (didx<0) {
+		return -didx;
+	} else if (!didx) {
+		return ae->idx;
+	} else if (didx<ae->ie) {
+		return ae->expression[didx].iw;
 	} else return 0;
 }
 
@@ -2738,7 +2753,7 @@ void ___internal_output(struct s_assenv *ae,unsigned char v)
 		ae->mem[ae->activebank][ae->outputadr++]=v;
 		ae->codeadr++;
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"output exceed limit %d\n",ae->maxptr);
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"output exceed limit %d\n",ae->maxptr);
 		ae->stop=1;
 		___output=___internal_output_disabled;
 	}
@@ -2765,7 +2780,7 @@ void ___internal_output_nocode(struct s_assenv *ae,unsigned char v)
 		ae->outputadr++;
 		ae->codeadr++;
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"output exceed limit %d\n",ae->maxptr);
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"output exceed limit %d\n",ae->maxptr);
 		ae->stop=1;
 		___output=___internal_output_disabled;
 	}
@@ -2783,11 +2798,11 @@ void ___output_set_limit(struct s_assenv *ae,int zelimit)
 		/* apply limit */
 		limit=zelimit;
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"limit exceed hardware limitation!");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"limit exceed hardware limitation!");
 		ae->stop=1;
 	}
 	if (ae->outputadr>=0 && ae->outputadr>=limit) {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"limit too high for current output!");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"limit too high for current output!");
 		ae->stop=1;
 	}
 	ae->maxptr=limit;
@@ -3355,10 +3370,10 @@ struct s_expr_dico *SearchDico(struct s_assenv *ae, char *dico, int crc)
 							}
 						}
 					} else {
-						MakeError(ae,GetCurrentFile(ae),GetExpLine(ae,0),"cannot use external variable [%s] inside a crunched section!\n",dico);
+						MakeError(ae,ae->idx,GetCurrentFile(ae),GetExpLine(ae,0),"cannot use external variable [%s] inside a crunched section!\n",dico);
 					}
 				} else {
-					MakeError(ae,GetCurrentFile(ae),GetExpLine(ae,0),"invalid usage of external variable [%s]\n",dico);
+					MakeError(ae,ae->idx,GetCurrentFile(ae),GetExpLine(ae,0),"invalid usage of external variable [%s]\n",dico);
 				}
 			}
 
@@ -3819,7 +3834,7 @@ char *TranslateTag(struct s_assenv *ae, char *varbuffer, int *touched, int enabl
 	*touched=0;
 	while ((starttag=strchr(varbuffer+1,'{'))!=NULL) {
 		if ((endtag=strchr(starttag,'}'))==NULL) {
-			MakeError(ae,GetCurrentFile(ae),GetExpLine(ae,0),"invalid tag in string [%s]\n",varbuffer);
+			MakeError(ae,ae->idx,GetCurrentFile(ae),GetExpLine(ae,0),"invalid tag in string [%s]\n",varbuffer);
 			return NULL;
 		}
 		/* allow inception */
@@ -3830,7 +3845,7 @@ char *TranslateTag(struct s_assenv *ae, char *varbuffer, int *touched, int enabl
 			tagcheck++;			
 		}
 		if (tagcount) {
-			MakeError(ae,GetCurrentFile(ae),GetExpLine(ae,0),"invalid brackets combination in string [%s]\n",varbuffer);
+			MakeError(ae,ae->idx,GetCurrentFile(ae),GetExpLine(ae,0),"invalid brackets combination in string [%s]\n",varbuffer);
 			return NULL;
 		} else {
 			endtag=tagcheck-1;
@@ -3847,7 +3862,7 @@ char *TranslateTag(struct s_assenv *ae, char *varbuffer, int *touched, int enabl
 		validx=(int)RoundComputeExpressionCore(ae,expr,ae->codeadr,0);
 		if (validx<0) {
 			strcpy(curvalstr,"");
-			MakeError(ae,GetCurrentFile(ae),GetExpLine(ae,0),"indexed tag must NOT be a negative value [%s]\n",varbuffer);
+			MakeError(ae,ae->idx,GetCurrentFile(ae),GetExpLine(ae,0),"indexed tag must NOT be a negative value [%s]\n",varbuffer);
 			MemFree(expr);
 			return NULL;
 		} else {
@@ -4052,7 +4067,7 @@ int __GETNOP(struct s_assenv *ae,char *oplist, int didx)
 					if (strstr(zearg,"(SP)") && strstr(zearg,"HL")) tick+=6; else
 					if (strstr(zearg,"(SP)") && strstr(zearg,"IX")) tick+=7;
 				} else {
-					MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported opcode [%s] for GETNOP, see documentation about this directive\n",opcode[idx]);
+					MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported opcode [%s] for GETNOP, see documentation about this directive\n",opcode[idx]);
 				}
 				break;
 
@@ -4060,7 +4075,7 @@ int __GETNOP(struct s_assenv *ae,char *oplist, int didx)
 				if (zearg) {
 					if (strcmp(zearg,"IX")==0) tick+=5; else tick+=4;
 				} else {
-					MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported opcode [%s] for GETNOP, see documentation about this directive\n",opcode[idx]);
+					MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported opcode [%s] for GETNOP, see documentation about this directive\n",opcode[idx]);
 				}
 				break;
 
@@ -4068,7 +4083,7 @@ int __GETNOP(struct s_assenv *ae,char *oplist, int didx)
 				if (zearg) {
 					if (strcmp(zearg,"IX")==0) tick+=4; else tick+=3;
 				} else {
-					MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported opcode [%s] for GETNOP, see documentation about this directive\n",opcode[idx]);
+					MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported opcode [%s] for GETNOP, see documentation about this directive\n",opcode[idx]);
 				}
 				break;
 
@@ -4085,7 +4100,7 @@ int __GETNOP(struct s_assenv *ae,char *oplist, int didx)
 					if (strstr(zearg,"(IX")) tick+=7; else
 						tick+=2;
 				} else {
-					MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported opcode [%s] for GETNOP, see documentation about this directive\n",opcode[idx]);
+					MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported opcode [%s] for GETNOP, see documentation about this directive\n",opcode[idx]);
 				}
 				break;
 
@@ -4094,7 +4109,7 @@ int __GETNOP(struct s_assenv *ae,char *oplist, int didx)
 				if (zearg) {
 					if (strstr(zearg,"(C)")) tick+=4; else tick+=3;
 				} else {
-					MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported opcode [%s] for GETNOP, see documentation about this directive\n",opcode[idx]);
+					MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported opcode [%s] for GETNOP, see documentation about this directive\n",opcode[idx]);
 				}
 				break;
 
@@ -4108,7 +4123,7 @@ int __GETNOP(struct s_assenv *ae,char *oplist, int didx)
 					if (strstr(zearg,"(IX")) tick+=5; else
 					if ((*zearg>='A' && *zearg<='E') || *zearg=='H' || *zearg=='L') tick+=1; else tick+=2;
 				} else {
-					MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported opcode [%s] for GETNOP, see documentation about this directive\n",opcode[idx]);
+					MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported opcode [%s] for GETNOP, see documentation about this directive\n",opcode[idx]);
 				}
 				break;
 
@@ -4132,7 +4147,7 @@ int __GETNOP(struct s_assenv *ae,char *oplist, int didx)
 					if (strstr(zearg,"(IX")) tick+=5; else
 					if ((*zearg>='A' && *zearg<='E') || *zearg=='H' || *zearg=='L') tick+=1; else tick+=2;
 				} else {
-					MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported opcode [%s] for GETNOP, see documentation about this directive\n",opcode[idx]);
+					MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported opcode [%s] for GETNOP, see documentation about this directive\n",opcode[idx]);
 				}
 				break;
 
@@ -4198,7 +4213,7 @@ int __GETNOP(struct s_assenv *ae,char *oplist, int didx)
 									tick+=3;
 									break;
 								default:
-									MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported LD %s,%s for GETNOP, see documentation\n",listarg[0],listarg[1]);
+									MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported LD %s,%s for GETNOP, see documentation\n",listarg[0],listarg[1]);
 							}
 							break;
 						case CRC_A:
@@ -4221,12 +4236,12 @@ int __GETNOP(struct s_assenv *ae,char *oplist, int didx)
 								case CRC_I:
 								case CRC_R:
 									if (crc1==CRC_A) tick+=3; else
-									MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported LD %s,%s for GETNOP, see documentation\n",listarg[0],listarg[1]);
+									MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported LD %s,%s for GETNOP, see documentation\n",listarg[0],listarg[1]);
 									break;
 								case CRC_MBC:
 								case CRC_MDE:
 									if (crc1!=CRC_A) {
-										MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported LD %s,%s for GETNOP, see documentation\n",listarg[0],listarg[1]);
+										MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported LD %s,%s for GETNOP, see documentation\n",listarg[0],listarg[1]);
 										break;
 									}
 								case CRC_XL:
@@ -4242,7 +4257,7 @@ int __GETNOP(struct s_assenv *ae,char *oplist, int didx)
 										if (crc1==CRC_A) {
 										tick+=4;
 										} else {
-											MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported LD %s,%s for GETNOP, see documentation\n",listarg[0],listarg[1]);
+											MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported LD %s,%s for GETNOP, see documentation\n",listarg[0],listarg[1]);
 										}
 									} else {
 										/* numeric value as default */
@@ -4301,7 +4316,7 @@ int __GETNOP(struct s_assenv *ae,char *oplist, int didx)
 							if (crc2==CRC_A) {
 								tick+=2;
 							} else {
-								MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported LD %s,%s for GETNOP, see documentation\n",listarg[0],listarg[1]);
+								MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported LD %s,%s for GETNOP, see documentation\n",listarg[0],listarg[1]);
 							}
 							break;
 						case CRC_MHL:
@@ -4343,19 +4358,19 @@ int __GETNOP(struct s_assenv *ae,char *oplist, int didx)
 									case CRC_SP:
 									case CRC_IX:tick+=6;break;
 									default:
-										MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported LD %s,%s for GETNOP, see documentation\n",listarg[0],listarg[1]);
+										MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported LD %s,%s for GETNOP, see documentation\n",listarg[0],listarg[1]);
 								}
 							} else {
-								MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported LD %s,%s for GETNOP, see documentation\n",listarg[0],listarg[1]);
+								MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported LD %s,%s for GETNOP, see documentation\n",listarg[0],listarg[1]);
 							}
 					}
 				} else {
-					MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported opcode LD for GETNOP, need 2 arguments [%s]\n",zearg);
+					MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported opcode LD for GETNOP, need 2 arguments [%s]\n",zearg);
 				}
 				break;
 
 			default: 
-				MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported opcode [%s] for GETNOP, see documentation about this directive\n",opcode[idx]);
+				MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported opcode [%s] for GETNOP, see documentation about this directive\n",opcode[idx]);
 		}
 		idx++;
 	}
@@ -4468,7 +4483,7 @@ int __GETTICK(struct s_assenv *ae,char *oplist, int didx)
 					if (strstr(zearg,"(SP)") && strstr(zearg,"HL")) tick+=19; else
 					if (strstr(zearg,"(SP)") && strstr(zearg,"IX")) tick+=23;
 				} else {
-					MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported opcode [%s] for GETTICK, see documentation about this directive\n",opcode[idx]);
+					MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported opcode [%s] for GETTICK, see documentation about this directive\n",opcode[idx]);
 				}
 				break;
 
@@ -4476,7 +4491,7 @@ int __GETTICK(struct s_assenv *ae,char *oplist, int didx)
 				if (zearg) {
 					if (strcmp(zearg,"IX")==0) tick+=15; else tick+=11;
 				} else {
-					MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported opcode [%s] for GETTICK, see documentation about this directive\n",opcode[idx]);
+					MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported opcode [%s] for GETTICK, see documentation about this directive\n",opcode[idx]);
 				}
 				break;
 
@@ -4484,7 +4499,7 @@ int __GETTICK(struct s_assenv *ae,char *oplist, int didx)
 				if (zearg) {
 					if (strcmp(zearg,"IX")==0) tick+=14; else tick+=10;
 				} else {
-					MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported opcode [%s] for GETTICK, see documentation about this directive\n",opcode[idx]);
+					MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported opcode [%s] for GETTICK, see documentation about this directive\n",opcode[idx]);
 				}
 				break;
 
@@ -4501,7 +4516,7 @@ int __GETTICK(struct s_assenv *ae,char *oplist, int didx)
 					if (strstr(zearg,"(IX")) tick+=23; else
 						tick+=8;
 				} else {
-					MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported opcode [%s] for GETTICK, see documentation about this directive\n",opcode[idx]);
+					MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported opcode [%s] for GETTICK, see documentation about this directive\n",opcode[idx]);
 				}
 				break;
 
@@ -4509,14 +4524,14 @@ int __GETTICK(struct s_assenv *ae,char *oplist, int didx)
 				if (zearg) {
 					if (strstr(zearg,"(C),")) tick+=12; else tick+=11;
 				} else {
-					MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported opcode [%s] for GETTICK, see documentation about this directive\n",opcode[idx]);
+					MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported opcode [%s] for GETTICK, see documentation about this directive\n",opcode[idx]);
 				}
 				break;
 			case CRC_IN:
 				if (zearg) {
 					if (strstr(zearg,"(C)")) tick+=12; else tick+=11;
 				} else {
-					MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported opcode [%s] for GETTICK, see documentation about this directive\n",opcode[idx]);
+					MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported opcode [%s] for GETTICK, see documentation about this directive\n",opcode[idx]);
 				}
 				break;
 
@@ -4531,7 +4546,7 @@ int __GETTICK(struct s_assenv *ae,char *oplist, int didx)
 					if (strstr(zearg,"XL")) tick+=8; else
 					if ((*zearg>='A' && *zearg<='E') || *zearg=='H' || *zearg=='L') tick+=4; else tick+=7;
 				} else {
-					MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported opcode [%s] for GETTICK, see documentation about this directive\n",opcode[idx]);
+					MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported opcode [%s] for GETTICK, see documentation about this directive\n",opcode[idx]);
 				}
 				break;
 
@@ -4558,7 +4573,7 @@ int __GETTICK(struct s_assenv *ae,char *oplist, int didx)
 					if (strstr(zearg,"XL")) tick+=8; else
 					if ((*zearg>='A' && *zearg<='E') || *zearg=='H' || *zearg=='L') tick+=4; else tick+=7;
 				} else {
-					MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported opcode [%s] for GETTICK, see documentation about this directive\n",opcode[idx]);
+					MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported opcode [%s] for GETTICK, see documentation about this directive\n",opcode[idx]);
 				}
 				break;
 
@@ -4626,7 +4641,7 @@ int __GETTICK(struct s_assenv *ae,char *oplist, int didx)
 									tick+=9;
 									break;
 								default:
-									MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported LD %s,%s for GETTICK, see documentation\n",listarg[0],listarg[1]);
+									MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported LD %s,%s for GETTICK, see documentation\n",listarg[0],listarg[1]);
 							}
 							break;
 						case CRC_A:
@@ -4649,12 +4664,12 @@ int __GETTICK(struct s_assenv *ae,char *oplist, int didx)
 								case CRC_I:
 								case CRC_R:
 									if (crc1==CRC_A) tick+=9; else
-									MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported LD %s,%s for GETTICK, see documentation\n",listarg[0],listarg[1]);
+									MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported LD %s,%s for GETTICK, see documentation\n",listarg[0],listarg[1]);
 									break;
 								case CRC_MBC:
 								case CRC_MDE:
 									if (crc1!=CRC_A) {
-										MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported LD %s,%s for GETTICK, see documentation\n",listarg[0],listarg[1]);
+										MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported LD %s,%s for GETTICK, see documentation\n",listarg[0],listarg[1]);
 										break;
 									}
 								case CRC_MHL:
@@ -4672,7 +4687,7 @@ int __GETTICK(struct s_assenv *ae,char *oplist, int didx)
 										if (crc1==CRC_A) {
 										tick+=13;
 										} else {
-											MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported LD %s,%s for GETTICK, see documentation\n",listarg[0],listarg[1]);
+											MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported LD %s,%s for GETTICK, see documentation\n",listarg[0],listarg[1]);
 										}
 									} else {
 										/* numeric value as default */
@@ -4729,7 +4744,7 @@ int __GETTICK(struct s_assenv *ae,char *oplist, int didx)
 							if (crc2==CRC_A) {
 								tick+=7;
 							} else {
-								MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported LD %s,%s for GETTICK, see documentation\n",listarg[0],listarg[1]);
+								MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported LD %s,%s for GETTICK, see documentation\n",listarg[0],listarg[1]);
 							}
 							break;
 						case CRC_MHL:
@@ -4771,19 +4786,19 @@ int __GETTICK(struct s_assenv *ae,char *oplist, int didx)
 									case CRC_SP:
 									case CRC_IX:tick+=20;break;
 									default:
-										MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported LD %s,%s for GETTICK, see documentation\n",listarg[0],listarg[1]);
+										MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported LD %s,%s for GETTICK, see documentation\n",listarg[0],listarg[1]);
 								}
 							} else {
-								MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported LD %s,%s for GETTICK, see documentation\n",listarg[0],listarg[1]);
+								MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported LD %s,%s for GETTICK, see documentation\n",listarg[0],listarg[1]);
 							}
 					}
 				} else {
-					MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported opcode LD for GETTICK, need 2 arguments [%s]\n",zearg);
+					MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported opcode LD for GETTICK, need 2 arguments [%s]\n",zearg);
 				}
 				break;
 
 			default: 
-				MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported opcode [%s] for GETTICK, see documentation about this directive\n",opcode[idx]);
+				MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported opcode [%s] for GETTICK, see documentation about this directive\n",opcode[idx]);
 		}
 		idx++;
 	}
@@ -4900,7 +4915,7 @@ int __GETSIZE(struct s_assenv *ae,char *oplist, int didx)
 					if (strstr(zearg,"(SP)") && strstr(zearg,"HL")) osize+=1; else
 					if (strstr(zearg,"(SP)") && strstr(zearg,"IX")) osize+=2;
 				} else {
-					MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported opcode [%s] for GETSIZE, see documentation about this directive\n",opcode[idx]);
+					MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported opcode [%s] for GETSIZE, see documentation about this directive\n",opcode[idx]);
 				}
 				break;
 
@@ -4908,7 +4923,7 @@ int __GETSIZE(struct s_assenv *ae,char *oplist, int didx)
 				if (zearg) {
 					if (strcmp(zearg,"IX")==0) osize+=2; else osize+=1;
 				} else {
-					MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported opcode [%s] for GETSIZE, see documentation about this directive\n",opcode[idx]);
+					MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported opcode [%s] for GETSIZE, see documentation about this directive\n",opcode[idx]);
 				}
 				break;
 
@@ -4916,7 +4931,7 @@ int __GETSIZE(struct s_assenv *ae,char *oplist, int didx)
 				if (zearg) {
 					if (strcmp(zearg,"IX")==0) osize+=2; else osize+=1;
 				} else {
-					MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported opcode [%s] for GETSIZE, see documentation about this directive\n",opcode[idx]);
+					MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported opcode [%s] for GETSIZE, see documentation about this directive\n",opcode[idx]);
 				}
 				break;
 
@@ -4933,7 +4948,7 @@ int __GETSIZE(struct s_assenv *ae,char *oplist, int didx)
 					if (strstr(zearg,"(IX")) osize+=4; else
 						osize+=2;
 				} else {
-					MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported opcode [%s] for GETSIZE, see documentation about this directive\n",opcode[idx]);
+					MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported opcode [%s] for GETSIZE, see documentation about this directive\n",opcode[idx]);
 				}
 				break;
 
@@ -4946,7 +4961,7 @@ int __GETSIZE(struct s_assenv *ae,char *oplist, int didx)
 					if (strstr(zearg,"(IX")) osize+=3; else
 					if (strstr(zearg,"HL") || (*zearg>='A' && *zearg<='E') || *zearg=='H' || *zearg=='L') osize+=1; else osize+=2;
 				} else {
-					MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported opcode [%s] for GETSIZE, see documentation about this directive\n",opcode[idx]);
+					MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported opcode [%s] for GETSIZE, see documentation about this directive\n",opcode[idx]);
 				}
 				break;
 
@@ -4970,7 +4985,7 @@ int __GETSIZE(struct s_assenv *ae,char *oplist, int didx)
 					if (strcmp(zearg,"XL")==0) osize+=2; else
 					if (strcmp(zearg,"(HL)")==0 || (*zearg>='A' && *zearg<='E') || *zearg=='H' || *zearg=='L') osize+=1; else osize+=2;
 				} else {
-					MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported opcode [%s] for GETSIZE, see documentation about this directive\n",opcode[idx]);
+					MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported opcode [%s] for GETSIZE, see documentation about this directive\n",opcode[idx]);
 				}
 				break;
 
@@ -5020,7 +5035,7 @@ int __GETSIZE(struct s_assenv *ae,char *oplist, int didx)
 									osize+=2;
 									break;
 								default:
-									MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported LD %s,%s for GETSIZE, see documentation\n",listarg[0],listarg[1]);
+									MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported LD %s,%s for GETSIZE, see documentation\n",listarg[0],listarg[1]);
 							}
 							break;
 						case CRC_A:
@@ -5035,7 +5050,7 @@ int __GETSIZE(struct s_assenv *ae,char *oplist, int didx)
 								case CRC_MBC:
 								case CRC_MDE:
 									if (crc1!=CRC_A) {
-										MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported LD %s,%s for GETSIZE, see documentation\n",listarg[0],listarg[1]);
+										MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported LD %s,%s for GETSIZE, see documentation\n",listarg[0],listarg[1]);
 										break;
 									}
 								case CRC_A:
@@ -5051,7 +5066,7 @@ int __GETSIZE(struct s_assenv *ae,char *oplist, int didx)
 								case CRC_I:
 								case CRC_R:
 									if (crc1==CRC_A) osize+=2; else
-									MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported LD %s,%s for GETSIZE, see documentation\n",listarg[0],listarg[1]);
+									MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported LD %s,%s for GETSIZE, see documentation\n",listarg[0],listarg[1]);
 									break;
 								case CRC_XL:
 									osize+=2;
@@ -5065,7 +5080,7 @@ int __GETSIZE(struct s_assenv *ae,char *oplist, int didx)
 										if (crc1==CRC_A) {
 											osize+=3;
 										} else {
-											MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported LD %s,%s for GETSIZE, see documentation\n",listarg[0],listarg[1]);
+											MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported LD %s,%s for GETSIZE, see documentation\n",listarg[0],listarg[1]);
 										}
 									} else {
 										/* numeric value as default */
@@ -5122,7 +5137,7 @@ int __GETSIZE(struct s_assenv *ae,char *oplist, int didx)
 							if (crc2==CRC_A) {
 								osize+=1;
 							} else {
-								MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported LD %s,%s for GETSIZE, see documentation\n",listarg[0],listarg[1]);
+								MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported LD %s,%s for GETSIZE, see documentation\n",listarg[0],listarg[1]);
 							}
 							break;
 						case CRC_MHL:
@@ -5164,19 +5179,19 @@ int __GETSIZE(struct s_assenv *ae,char *oplist, int didx)
 									case CRC_SP:
 									case CRC_IX:osize+=4;break;
 									default:
-										MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported LD %s,%s for GETSIZE, see documentation\n",listarg[0],listarg[1]);
+										MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported LD %s,%s for GETSIZE, see documentation\n",listarg[0],listarg[1]);
 								}
 							} else {
-								MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported LD %s,%s for GETSIZE, see documentation\n",listarg[0],listarg[1]);
+								MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported LD %s,%s for GETSIZE, see documentation\n",listarg[0],listarg[1]);
 							}
 					}
 				} else {
-					MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported opcode LD for GETSIZE, need 2 arguments [%s]\n",zearg);
+					MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported opcode LD for GETSIZE, need 2 arguments [%s]\n",zearg);
 				}
 				break;
 
 			default: 
-				MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported opcode [%s] for GETSIZE, see documentation about this directive\n",opcode[idx]);
+				MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported opcode [%s] for GETSIZE, see documentation about this directive\n",opcode[idx]);
 		}
 		idx++;
 	}
@@ -5206,7 +5221,7 @@ int __FILESIZE(struct s_assenv *ae,char *zefile, int didx)
 
 	f=fopen(zefile,"rb");
 	if (!f) {
-		MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"cannot retrieve filesize of [%s] file\n",zefile);
+		MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"cannot retrieve filesize of [%s] file\n",zefile);
 		return 0;
 	}
 	fseek(f,0,SEEK_END);
@@ -5245,7 +5260,7 @@ int __Soft2HardInk(struct s_assenv *ae,int soft, int didx) {
 		case 25:return 64+3 ;break;
 		case 26:return 64+11 ;break;
 		default:
-			MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"SOFT2HARD_INK needs 0-26 color index");
+			MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"SOFT2HARD_INK needs 0-26 color index");
 	}
 	return 0;
 }
@@ -5285,7 +5300,7 @@ int __Hard2SoftInk(struct s_assenv *ae,int hard, int didx) {
 		case 30:return 12;break;
 		case 31:return 14;break;
 		default:/*warning remover*/
-			MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"SOFT2HARD_INK warning remover");
+			MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"SOFT2HARD_INK warning remover");
 	}
 	return 0;
 }
@@ -5371,7 +5386,7 @@ double ComputeExpressionCore(struct s_assenv *ae,char *original_zeexpression,int
 					memcpy(zeexpression+idx,asciivalue,4);
 					idx+=3;
 				} else {
-					MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"Only single escaped char may be quoted [%s]\n",TradExpression(zeexpression));
+					MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"Only single escaped char may be quoted [%s]\n",TradExpression(zeexpression));
 					zeexpression[0]=0;
 					return 0;
 				}
@@ -5381,7 +5396,7 @@ double ComputeExpressionCore(struct s_assenv *ae,char *original_zeexpression,int
 					idx+=2;
 			} else {
 				//printf("Expression with => moar than one char in quotes\n");
-				//MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"Only single char may be quoted [%s]\n",TradExpression(zeexpression));
+				//MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"Only single char may be quoted [%s]\n",TradExpression(zeexpression));
 				//zeexpression[0]=0;
 				//return 0;
 				idx++;
@@ -5414,7 +5429,7 @@ double ComputeExpressionCore(struct s_assenv *ae,char *original_zeexpression,int
 					StateMachineResizeBuffer(&ae->computectx->varbuffer,ivar,&ae->computectx->maxivar);
 					idx++;
 				}
-				if (zeexpression[idx]) idx++; else MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"ComputeExpression [%s] quote bug!\n",TradExpression(zeexpression));
+				if (zeexpression[idx]) idx++; else MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"ComputeExpression [%s] quote bug!\n",TradExpression(zeexpression));
 				ae->computectx->varbuffer[ivar]=0;
 				is_string=1; // donc on ira jamais utiliser startvar derriere
 				break;
@@ -5493,7 +5508,7 @@ double ComputeExpressionCore(struct s_assenv *ae,char *original_zeexpression,int
 					c='e'; // boolean EQUAL
 				/* cannot affect data inside an expression */
 				} else {
-					MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"expression [%s] cannot set variable inside an expression\n",TradExpression(zeexpression));
+					MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"expression [%s] cannot set variable inside an expression\n",TradExpression(zeexpression));
 					return 0;
 				}
 				break;
@@ -5516,7 +5531,7 @@ double ComputeExpressionCore(struct s_assenv *ae,char *original_zeexpression,int
 					}
 					ae->computectx->varbuffer[ivar]=0;
 					if (ivar<2) {
-						MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"expression [%s] invalid minus sign\n",TradExpression(zeexpression));
+						MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"expression [%s] invalid minus sign\n",TradExpression(zeexpression));
 						if (!original) {
 							MemFree(zeexpression);
 						}
@@ -5607,13 +5622,13 @@ double ComputeExpressionCore(struct s_assenv *ae,char *original_zeexpression,int
 				}
 				ae->computectx->varbuffer[ivar]=0;
 				if (!ivar) {
-					MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"ComputeExpression invalid char (%d=%c) expression [%s]\n",c,c>31?c:' ',TradExpression(zeexpression));
+					MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"ComputeExpression invalid char (%d=%c) expression [%s]\n",c,c>31?c:' ',TradExpression(zeexpression));
 					if (!original) {
 						MemFree(zeexpression);
 					}
 					return 0;
 				} else if (curly) {
-					MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"ComputeExpression wrong curly brackets in expression [%s]\n",TradExpression(zeexpression));
+					MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"ComputeExpression wrong curly brackets in expression [%s]\n",TradExpression(zeexpression));
 					if (!original) {
 						MemFree(zeexpression);
 					}
@@ -5635,7 +5650,7 @@ double ComputeExpressionCore(struct s_assenv *ae,char *original_zeexpression,int
 			************************************/
 			stackelement=ae->AutomateElement[c];
 			if (stackelement.operator>E_COMPUTE_OPERATION_GREATEREQ) {
-				MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"expression [%s] has unknown operator %c (%d)\n",TradExpression(zeexpression),c>31?c:'.',c);
+				MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"expression [%s] has unknown operator %c (%d)\n",TradExpression(zeexpression),c>31?c:'.',c);
 			}
 			/* stackelement.value isn't used */
 			stackelement.string=NULL;
@@ -5663,7 +5678,7 @@ double ComputeExpressionCore(struct s_assenv *ae,char *original_zeexpression,int
 					if (ae->computectx->varbuffer[minusptr+1]=='X' && ae->AutomateHexa[(int)ae->computectx->varbuffer[minusptr+2]&0xFF]) {
 						for (icheck=minusptr+3;ae->computectx->varbuffer[icheck];icheck++) {
 							if (ae->AutomateHexa[(int)ae->computectx->varbuffer[icheck]&0xFF]) continue;
-							MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"expression [%s] - %s is not a valid hex number\n",TradExpression(zeexpression),ae->computectx->varbuffer);
+							MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"expression [%s] - %s is not a valid hex number\n",TradExpression(zeexpression),ae->computectx->varbuffer);
 							break;
 						}
 						curval=strtol(ae->computectx->varbuffer+minusptr+2,NULL,16);
@@ -5673,7 +5688,7 @@ double ComputeExpressionCore(struct s_assenv *ae,char *original_zeexpression,int
 					if (ae->computectx->varbuffer[minusptr+1]=='B' && (ae->computectx->varbuffer[minusptr+2]>='0' && ae->computectx->varbuffer[minusptr+2]<='1')) {
 						for (icheck=minusptr+3;ae->computectx->varbuffer[icheck];icheck++) {
 							if (ae->computectx->varbuffer[icheck]>='0' && ae->computectx->varbuffer[icheck]<='1') continue;
-							MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"expression [%s] - %s is not a valid binary number\n",TradExpression(zeexpression),ae->computectx->varbuffer);
+							MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"expression [%s] - %s is not a valid binary number\n",TradExpression(zeexpression),ae->computectx->varbuffer);
 							break;
 						}
 						curval=strtol(ae->computectx->varbuffer+minusptr+2,NULL,2);
@@ -5683,7 +5698,7 @@ double ComputeExpressionCore(struct s_assenv *ae,char *original_zeexpression,int
 					if (ae->computectx->varbuffer[minusptr+1]=='O' && (ae->computectx->varbuffer[minusptr+2]>='0' && ae->computectx->varbuffer[minusptr+2]<='5')) {
 						for (icheck=minusptr+3;ae->computectx->varbuffer[icheck];icheck++) {
 							if (ae->computectx->varbuffer[icheck]>='0' && ae->computectx->varbuffer[icheck]<='5') continue;
-							MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"expression [%s] - %s is not a valid octal number\n",TradExpression(zeexpression),ae->computectx->varbuffer);
+							MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"expression [%s] - %s is not a valid octal number\n",TradExpression(zeexpression),ae->computectx->varbuffer);
 							break;
 						}
 						curval=strtol(ae->computectx->varbuffer+minusptr+2,NULL,2);
@@ -5706,19 +5721,19 @@ double ComputeExpressionCore(struct s_assenv *ae,char *original_zeexpression,int
 							case 'H':
 								for (icheck=minusptr;ae->computectx->varbuffer[icheck+1];icheck++) {
 									if (ae->AutomateHexa[(int)ae->computectx->varbuffer[icheck]&0xFF]) continue;
-									MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"expression [%s] - %s is not a valid hex number\n",TradExpression(zeexpression),ae->computectx->varbuffer);
+									MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"expression [%s] - %s is not a valid hex number\n",TradExpression(zeexpression),ae->computectx->varbuffer);
 								}
 								curval=strtol(ae->computectx->varbuffer+minusptr,NULL,16);
 								break;
 							case 'B':
 								for (icheck=minusptr;ae->computectx->varbuffer[icheck+1];icheck++) {
 									if (ae->computectx->varbuffer[icheck]=='0' || ae->computectx->varbuffer[icheck]=='1') continue;
-									MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"expression [%s] - %s is not a valid binary number\n",TradExpression(zeexpression),ae->computectx->varbuffer);
+									MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"expression [%s] - %s is not a valid binary number\n",TradExpression(zeexpression),ae->computectx->varbuffer);
 								}
 								curval=strtol(ae->computectx->varbuffer+minusptr,NULL,2);
 								break;
 							default:
-								MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"expression [%s] - %s is not a valid number\n",TradExpression(zeexpression),ae->computectx->varbuffer);
+								MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"expression [%s] - %s is not a valid number\n",TradExpression(zeexpression),ae->computectx->varbuffer);
 						}
 						icheck=0;
 						break;
@@ -5728,11 +5743,11 @@ double ComputeExpressionCore(struct s_assenv *ae,char *original_zeexpression,int
 				case '%':
 					/* check number */
 					if (!ae->computectx->varbuffer[minusptr+1]) {
-						MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"expression [%s] - %s is an empty binary number\n",TradExpression(zeexpression),ae->computectx->varbuffer);
+						MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"expression [%s] - %s is an empty binary number\n",TradExpression(zeexpression),ae->computectx->varbuffer);
 					}
 					for (icheck=minusptr+1;ae->computectx->varbuffer[icheck];icheck++) {
 						if (ae->computectx->varbuffer[icheck]=='0' || ae->computectx->varbuffer[icheck]=='1') continue;
-						MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"expression [%s] - %s is not a valid binary number\n",TradExpression(zeexpression),ae->computectx->varbuffer);
+						MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"expression [%s] - %s is not a valid binary number\n",TradExpression(zeexpression),ae->computectx->varbuffer);
 						break;
 					}
 					curval=strtol(ae->computectx->varbuffer+minusptr+1,NULL,2);
@@ -5740,11 +5755,11 @@ double ComputeExpressionCore(struct s_assenv *ae,char *original_zeexpression,int
 				case '#':
 					/* check number */
 					if (!ae->computectx->varbuffer[minusptr+1]) {
-						MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"expression [%s] - %s is an empty hex number\n",TradExpression(zeexpression),ae->computectx->varbuffer);
+						MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"expression [%s] - %s is an empty hex number\n",TradExpression(zeexpression),ae->computectx->varbuffer);
 					}
 					for (icheck=minusptr+1;ae->computectx->varbuffer[icheck];icheck++) {
 						if (ae->AutomateHexa[(int)ae->computectx->varbuffer[icheck]&0xFF]) continue;
-						MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"expression [%s] - %s is not a valid hex number\n",TradExpression(zeexpression),ae->computectx->varbuffer);
+						MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"expression [%s] - %s is not a valid hex number\n",TradExpression(zeexpression),ae->computectx->varbuffer);
 						break;
 					}
 					curval=strtol(ae->computectx->varbuffer+minusptr+1,NULL,16);
@@ -5755,7 +5770,7 @@ double ComputeExpressionCore(struct s_assenv *ae,char *original_zeexpression,int
 						if (ae->computectx->varbuffer[minusptr+0]=='$' && ae->AutomateHexa[(int)ae->computectx->varbuffer[minusptr+1]&0xFF]) {
 							for (icheck=minusptr+2;ae->computectx->varbuffer[icheck];icheck++) {
 								if (ae->AutomateHexa[(int)ae->computectx->varbuffer[icheck]&0xFF]) continue;
-								MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"expression [%s] - %s is not a valid hex number\n",TradExpression(zeexpression),ae->computectx->varbuffer);
+								MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"expression [%s] - %s is not a valid hex number\n",TradExpression(zeexpression),ae->computectx->varbuffer);
 								break;
 							}
 							curval=strtol(ae->computectx->varbuffer+minusptr+1,NULL,16);
@@ -5765,7 +5780,7 @@ double ComputeExpressionCore(struct s_assenv *ae,char *original_zeexpression,int
 						if (ae->computectx->varbuffer[minusptr+0]=='@' &&  ((ae->computectx->varbuffer[minusptr+1]>='0' && ae->computectx->varbuffer[minusptr+1]<='7'))) {
 							for (icheck=minusptr+2;ae->computectx->varbuffer[icheck];icheck++) {
 								if (ae->computectx->varbuffer[icheck]>='0' && ae->computectx->varbuffer[icheck]<='7') continue;
-								MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"expression [%s] - %s is not a valid octal number\n",TradExpression(zeexpression),ae->computectx->varbuffer);
+								MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"expression [%s] - %s is not a valid octal number\n",TradExpression(zeexpression),ae->computectx->varbuffer);
 								break;
 							}
 							curval=strtol(ae->computectx->varbuffer+minusptr+1,NULL,8);
@@ -5831,7 +5846,7 @@ double ComputeExpressionCore(struct s_assenv *ae,char *original_zeexpression,int
 								idx++;
 								parenth++;
 							} else {
-								MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"expression [%s] - %s is a reserved keyword!\n",TradExpression(zeexpression),math_keyword[imkey].mnemo);
+								MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"expression [%s] - %s is a reserved keyword!\n",TradExpression(zeexpression),math_keyword[imkey].mnemo);
 								curval=0;
 								idx++;
 							}
@@ -5904,12 +5919,12 @@ double ComputeExpressionCore(struct s_assenv *ae,char *original_zeexpression,int
 										}
 									}
 									if (i==ae->irasmstructalias) {
-										MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"cannot SIZEOF unknown structure [%s]!\n",ae->computectx->varbuffer+minusptr+bank);
+										MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"cannot SIZEOF unknown structure [%s]!\n",ae->computectx->varbuffer+minusptr+bank);
 										curval=0;
 									}
 								}
 							} else {
-								MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"expression [%s] - %s is an unknown prefix!\n",TradExpression(zeexpression),ae->computectx->varbuffer);
+								MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"expression [%s] - %s is an unknown prefix!\n",TradExpression(zeexpression),ae->computectx->varbuffer);
 								bank=0; // on pourrait sauter le tag pour eviter la merde a suivre
 								page=0;
 							}
@@ -5997,7 +6012,7 @@ printf("page=%d | ptr=%X ibank=%d\n",page,curlabel->ptr,curlabel->ibank);
 														if (curlabel->ibank<BANK_MAX_NUMBER) {
 															curval=ae->setgate[curlabel->ibank];
 														} else {
-															MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"expression [%s] cannot use PAGESET - label [%s] is in a temporary space!\n",TradExpression(zeexpression),ae->computectx->varbuffer);
+															MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"expression [%s] cannot use PAGESET - label [%s] is in a temporary space!\n",TradExpression(zeexpression),ae->computectx->varbuffer);
 															curval=curlabel->ibank;
 														}
 														break;
@@ -6010,14 +6025,14 @@ printf("page=%d | ptr=%X ibank=%d\n",page,curlabel->ptr,curlabel->ibank);
 																curval=ae->bankgate[curlabel->ibank];
 															}
 														} else {
-															MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"expression [%s] cannot use PAGE - label [%s] is in a temporary space!\n",TradExpression(zeexpression),ae->computectx->varbuffer);
+															MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"expression [%s] cannot use PAGE - label [%s] is in a temporary space!\n",TradExpression(zeexpression),ae->computectx->varbuffer);
 															curval=curlabel->ibank;
 														}
 														break;
 													case 0:
 														curval=curlabel->ibank;
 														break;
-													default:MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"INTERNAL ERROR (unknown paging)\n",GetExpFile(ae,didx),GetExpLine(ae,didx));FreeAssenv(ae);exit(-664);
+													default:MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"INTERNAL ERROR (unknown paging)\n",GetExpFile(ae,didx),GetExpLine(ae,didx));FreeAssenv(ae);exit(-664);
 												}
 											}
 										} else {
@@ -6033,7 +6048,7 @@ printf("page=%d | ptr=%X ibank=%d\n",page,curlabel->ptr,curlabel->ibank);
 																	/* 4M expansion compliant */
 																	curval=ae->setgate[curlabel->ibank];
 																} else {
-																	MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"expression [%s] cannot use PAGESET - label [%s] is in a temporary space!\n",TradExpression(zeexpression),ae->computectx->varbuffer);
+																	MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"expression [%s] cannot use PAGESET - label [%s] is in a temporary space!\n",TradExpression(zeexpression),ae->computectx->varbuffer);
 																	curval=curlabel->ibank;
 																}
 																break;
@@ -6046,17 +6061,17 @@ printf("page=%d | ptr=%X ibank=%d\n",page,curlabel->ptr,curlabel->ibank);
 																		curval=ae->bankgate[curlabel->ibank];
 																	}
 																} else {
-																	MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"expression [%s] cannot use PAGE - label [%s] is in a temporary space!\n",TradExpression(zeexpression),ae->computectx->varbuffer);
+																	MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"expression [%s] cannot use PAGE - label [%s] is in a temporary space!\n",TradExpression(zeexpression),ae->computectx->varbuffer);
 																	curval=curlabel->ibank;
 																}
 																break;
 															case 0:curval=curlabel->ibank;break;
-															default:MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"INTERNAL ERROR (unknown paging)\n");FreeAssenv(ae);exit(-664);
+															default:MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"INTERNAL ERROR (unknown paging)\n");FreeAssenv(ae);exit(-664);
 														}
 													}
 												}
 											} else {
-												MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"Label [%s](%d) cannot be computed because it is located after the crunched zone %d\n",ae->computectx->varbuffer,curlabel->lz,ae->expression[didx].lz);
+												MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"Label [%s](%d) cannot be computed because it is located after the crunched zone %d\n",ae->computectx->varbuffer,curlabel->lz,ae->expression[didx].lz);
 												curval=0;
 											}
 										}
@@ -6071,7 +6086,7 @@ printf("stage 2 | page=%d | ptr=%X ibank=%d\n",page,curlabel->ptr,curlabel->iban
 													if (curlabel->ibank<BANK_MAX_NUMBER) {
 														curval=ae->setgate[curlabel->ibank];
 													} else {
-														MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"expression [%s] cannot use PAGESET - label [%s] is in a temporary space!\n",TradExpression(zeexpression),ae->computectx->varbuffer);
+														MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"expression [%s] cannot use PAGESET - label [%s] is in a temporary space!\n",TradExpression(zeexpression),ae->computectx->varbuffer);
 														curval=curlabel->ibank;
 													}
 													break;
@@ -6084,14 +6099,14 @@ printf("stage 2 | page=%d | ptr=%X ibank=%d\n",page,curlabel->ptr,curlabel->iban
 															curval=ae->bankgate[curlabel->ibank];
 														}
 													} else {
-														MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"expression [%s] cannot use PAGE - label [%s] is in a temporary space!\n",TradExpression(zeexpression),ae->computectx->varbuffer);
+														MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"expression [%s] cannot use PAGE - label [%s] is in a temporary space!\n",TradExpression(zeexpression),ae->computectx->varbuffer);
 														curval=curlabel->ibank;
 													}
 													break;
 												case 0:
 													curval=curlabel->ibank;
 													break;
-												default:MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"INTERNAL ERROR (unknown paging)\n",GetExpFile(ae,didx),GetExpLine(ae,didx));FreeAssenv(ae);exit(-664);
+												default:MakeError(ae,GetExpIdx(ae,didx),GetCurrentFile(ae),ae->wl[ae->idx].l,"INTERNAL ERROR (unknown paging)\n",GetExpFile(ae,didx),GetExpLine(ae,didx));FreeAssenv(ae);exit(-664);
 											}
 										} else {
 											curval=curlabel->ptr;
@@ -6171,26 +6186,26 @@ printf("stage 2 | page=%d | ptr=%X ibank=%d\n",page,curlabel->ptr,curlabel->iban
 												if (ae->ir) {
 													curval=ae->repeat[ae->ir-1].repeat_counter;
 												} else {
-													MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"cannot use REPEAT_COUNTER keyword outside a repeat loop\n");
+													MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"cannot use REPEAT_COUNTER keyword outside a repeat loop\n");
 													curval=0;
 												}
 											} else if (strcmp(ae->computectx->varbuffer+minusptr,"WHILE_COUNTER")==0) {
 												if (ae->iw) {
 													curval=ae->whilewend[ae->iw-1].while_counter;
 												} else {
-													MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"cannot use WHILE_COUNTER keyword outside a while loop\n");
+													MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"cannot use WHILE_COUNTER keyword outside a while loop\n");
 													curval=0;
 												}
 											} else {
 												/* in case the expression is a register */
 												if (IsRegister(ae->computectx->varbuffer+minusptr)) {
-													MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"cannot use register %s in this context\n",TradExpression(zeexpression));
+													MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"cannot use register %s in this context\n",TradExpression(zeexpression));
 												} else {
 													if (IsDirective(ae->computectx->varbuffer+minusptr)) {
-														MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"cannot use directive %s in this context\n",TradExpression(zeexpression));
+														MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"cannot use directive %s in this context\n",TradExpression(zeexpression));
 													} else {
 
-														MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"expression [%s] keyword [%s] not found in variables, labels or aliases\n",TradExpression(zeexpression),ae->computectx->varbuffer+minusptr);
+														MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"expression [%s] keyword [%s] not found in variables, labels or aliases\n",TradExpression(zeexpression),ae->computectx->varbuffer+minusptr);
 														if (ae->extended_error) {
 															char *lookstr;
 															lookstr=StringLooksLike(ae,ae->computectx->varbuffer+minusptr);
@@ -6332,7 +6347,7 @@ printf("discard )\n");
 					}
 				}
 				if (!okclose) {
-					MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"missing parenthesis [%s]\n",TradExpression(zeexpression));
+					MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"missing parenthesis [%s]\n",TradExpression(zeexpression));
 					if (!original) {
 						MemFree(zeexpression);
 					}
@@ -6511,7 +6526,7 @@ printf("final POP string=%X\n",ae->computectx->operatorstack[nboperatorstack+1].
 								     if (zemod>0) {
 									     accu[paccu-1]=FastRand()%zemod;
 								     } else {
-									MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"RND function needs a value greater than zero to perform a random value\n");
+									MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"RND function needs a value greater than zero to perform a random value\n");
 								        accu[paccu-1]=0;
 								     }
 							     }
@@ -6537,13 +6552,13 @@ printf("final POP string=%X\n",ae->computectx->operatorstack[nboperatorstack+1].
 									      computestack[integeridx].string=NULL;
 								      } else {
 									      if (integeridx>=0 && integeridx<nbcomputestack) {
-											MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"GETNOP function needs a proper string\n");
+											MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"GETNOP function needs a proper string\n");
 										} else {
-											MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"GETNOP internal error (wrong string index)\n");
+											MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"GETNOP internal error (wrong string index)\n");
 										}
 									}
 								} else {
-									MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"GETNOP is empty\n");
+									MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"GETNOP is empty\n");
 								}
 							       break;
 							       /* CC GETNOP */
@@ -6557,13 +6572,13 @@ printf("final POP string=%X\n",ae->computectx->operatorstack[nboperatorstack+1].
 									      computestack[integeridx].string=NULL;
 								      } else {
 									      if (integeridx>=0 && integeridx<nbcomputestack) {
-											MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"GETTICK function needs a proper string\n");
+											MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"GETTICK function needs a proper string\n");
 										} else {
-											MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"GETTICK internal error (wrong string index)\n");
+											MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"GETTICK internal error (wrong string index)\n");
 										}
 									}
 								} else {
-									MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"GETTICK is empty\n");
+									MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"GETTICK is empty\n");
 								}
 							       break;
 							       /* CC GETNOP */
@@ -6577,13 +6592,13 @@ printf("final POP string=%X\n",ae->computectx->operatorstack[nboperatorstack+1].
 									      computestack[integeridx].string=NULL;
 								      } else {
 									      if (integeridx>=0 && integeridx<nbcomputestack) {
-											MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"DURATION function needs a proper string\n");
+											MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"DURATION function needs a proper string\n");
 										} else {
-											MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"DURATION internal error (wrong string index)\n");
+											MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"DURATION internal error (wrong string index)\n");
 										}
 									}
 								} else {
-									MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"DURATION is empty\n");
+									MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"DURATION is empty\n");
 								}
 							       break;
 				case E_COMPUTE_OPERATION_FILESIZE:if (paccu>0) {
@@ -6596,13 +6611,13 @@ printf("final POP string=%X\n",ae->computectx->operatorstack[nboperatorstack+1].
 									      computestack[integeridx].string=NULL;
 								      } else {
 									      if (integeridx>=0 && integeridx<nbcomputestack) {
-											MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"FILESIZE function needs a proper string\n");
+											MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"FILESIZE function needs a proper string\n");
 										} else {
-											MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"FILESIZE internal error (wrong string index)\n");
+											MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"FILESIZE internal error (wrong string index)\n");
 										}
 									}
 								} else {
-									MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"DURATION is empty\n");
+									MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"DURATION is empty\n");
 								}
 							       break;
 							       /* CC GETNOP */
@@ -6616,23 +6631,23 @@ printf("final POP string=%X\n",ae->computectx->operatorstack[nboperatorstack+1].
 									      computestack[integeridx].string=NULL;
 								      } else {
 									      if (integeridx>=0 && integeridx<nbcomputestack) {
-											MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"GETSIZE function needs a proper string\n");
+											MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"GETSIZE function needs a proper string\n");
 										} else {
-											MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"GETSIZE internal error (wrong string index)\n");
+											MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"GETSIZE internal error (wrong string index)\n");
 										}
 									}
 								} else {
-									MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"GETTICK is empty\n");
+									MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"GETTICK is empty\n");
 								}
 							       break;
 							       /* CC GETNOP */
-				default:MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"invalid computing state! (%d)\n",computestack[i].operator);paccu=0;
+				default:MakeError(ae,GetExpIdx(ae,didx),GetCurrentFile(ae),GetExpLine(ae,didx),"invalid computing state! (%d)\n",computestack[i].operator);paccu=0;
 			}
 			if (!paccu) {
 				if (zeexpression[0]=='&') {
-					MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"Missing operand for calculation [%s] Did you use & for an hexadecimal value?\n",TradExpression(zeexpression));
+					MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"Missing operand for calculation [%s] Did you use & for an hexadecimal value?\n",TradExpression(zeexpression));
 				} else {
-					MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"Missing operand for calculation [%s]\n",TradExpression(zeexpression));
+					MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"Missing operand for calculation [%s]\n",TradExpression(zeexpression));
 				}
 				accu_err=1;
 				break;
@@ -6740,7 +6755,7 @@ printf("final POP string=%X\n",ae->computectx->operatorstack[nboperatorstack+1].
 								     if (zemod>0) {
 									     accu[paccu-1]=FastRand()%zemod;
 								     } else {
-									MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"RND function needs a value greater than zero to perform a random value\n");
+									MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"RND function needs a value greater than zero to perform a random value\n");
 								        accu[paccu-1]=0;
 								     }
 							     }
@@ -6766,13 +6781,13 @@ printf("final POP string=%X\n",ae->computectx->operatorstack[nboperatorstack+1].
 									      computestack[integeridx].string=NULL;
 								      } else {
 									      if (integeridx>=0 && integeridx<nbcomputestack) {
-											MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"GETNOP function needs a proper string\n");
+											MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"GETNOP function needs a proper string\n");
 										} else {
-											MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"GETNOP internal error (wrong string index)\n");
+											MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"GETNOP internal error (wrong string index)\n");
 										}
 									}
 								} else {
-									MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"GETNOP is empty\n");
+									MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"GETNOP is empty\n");
 								}
 							       break;
 							       /* CC GETNOP */
@@ -6786,13 +6801,13 @@ printf("final POP string=%X\n",ae->computectx->operatorstack[nboperatorstack+1].
 									      computestack[integeridx].string=NULL;
 								      } else {
 									      if (integeridx>=0 && integeridx<nbcomputestack) {
-											MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"GETTICK function needs a proper string\n");
+											MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"GETTICK function needs a proper string\n");
 										} else {
-											MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"GETTICK internal error (wrong string index)\n");
+											MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"GETTICK internal error (wrong string index)\n");
 										}
 									}
 								} else {
-									MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"GETTICK is empty\n");
+									MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"GETTICK is empty\n");
 								}
 							       break;
 							       /* CC GETNOP */
@@ -6806,13 +6821,13 @@ printf("final POP string=%X\n",ae->computectx->operatorstack[nboperatorstack+1].
 									      computestack[integeridx].string=NULL;
 								      } else {
 									      if (integeridx>=0 && integeridx<nbcomputestack) {
-											MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"DURATION function needs a proper string\n");
+											MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"DURATION function needs a proper string\n");
 										} else {
-											MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"DURATION internal error (wrong string index)\n");
+											MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"DURATION internal error (wrong string index)\n");
 										}
 									}
 								} else {
-									MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"DURATION is empty\n");
+									MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"DURATION is empty\n");
 								}
 							       break;
 				case E_COMPUTE_OPERATION_FILESIZE:if (paccu>0) {
@@ -6825,13 +6840,13 @@ printf("final POP string=%X\n",ae->computectx->operatorstack[nboperatorstack+1].
 									      computestack[integeridx].string=NULL;
 								      } else {
 									      if (integeridx>=0 && integeridx<nbcomputestack) {
-											MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"FILESIZE function needs a proper string\n");
+											MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"FILESIZE function needs a proper string\n");
 										} else {
-											MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"FILESIZE internal error (wrong string index)\n");
+											MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"FILESIZE internal error (wrong string index)\n");
 										}
 									}
 								} else {
-									MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"DURATION is empty\n");
+									MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"DURATION is empty\n");
 								}
 							       break;
 							       /* CC GETNOP */
@@ -6845,23 +6860,23 @@ printf("final POP string=%X\n",ae->computectx->operatorstack[nboperatorstack+1].
 									      computestack[integeridx].string=NULL;
 								      } else {
 									      if (integeridx>=0 && integeridx<nbcomputestack) {
-											MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"GETSIZE function needs a proper string\n");
+											MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"GETSIZE function needs a proper string\n");
 										} else {
-											MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"GETSIZE internal error (wrong string index)\n");
+											MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"GETSIZE internal error (wrong string index)\n");
 										}
 									}
 								} else {
-									MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"GETTICK is empty\n");
+									MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"GETTICK is empty\n");
 								}
 							       break;
 							       /* CC GETNOP */
-				default:MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"invalid computing state! (%d)\n",computestack[i].operator);paccu=0;
+				default:MakeError(ae,GetExpIdx(ae,didx),GetCurrentFile(ae),GetExpLine(ae,didx),"invalid computing state! (%d)\n",computestack[i].operator);paccu=0;
 			}
 			if (!paccu) {
 				if (zeexpression[0]=='&') {
-					MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"Missing operand for calculation [%s] Did you use & for an hexadecimal value?\n",TradExpression(zeexpression));
+					MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"Missing operand for calculation [%s] Did you use & for an hexadecimal value?\n",TradExpression(zeexpression));
 				} else {
-					MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"Missing operand for calculation [%s]\n",TradExpression(zeexpression));
+					MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"Missing operand for calculation [%s]\n",TradExpression(zeexpression));
 				}
 				accu_err=1;
 				break;
@@ -6872,15 +6887,15 @@ printf("final POP string=%X\n",ae->computectx->operatorstack[nboperatorstack+1].
 		MemFree(zeexpression);
 	}
 	if (parenth) {
-		MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"missing parenthesis in expression\n");
+		MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"missing parenthesis in expression\n");
 	}
 	if (paccu==1) {
 		return accu[0];
 	} else if (!accu_err) {
 		if (paccu) {
-			MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"Missing operator\n");
+			MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"Missing operator\n");
 		} else {
-			MakeError(ae,GetExpFile(ae,didx),GetExpLine(ae,didx),"Missing operand for calculation\n");
+			MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"Missing operand for calculation\n");
 		}
 		return 0;
 	} else {
@@ -6905,7 +6920,7 @@ void ExpressionSetDicoVar(struct s_assenv *ae,char *name, double v, int var_exte
 	curdic.external=var_external;
 	//ObjectArrayAddDynamicValueConcat((void**)&ae->dico,&ae->idic,&ae->mdic,&curdic,sizeof(curdic));
 	if (SearchLabel(ae,curdic.name,curdic.crc)) {
-		MakeError(ae,GetCurrentFile(ae),GetExpLine(ae,0),"cannot create variable [%s] as there is already a label with the same name\n",name);
+		MakeError(ae,ae->idx,GetCurrentFile(ae),GetExpLine(ae,0),"cannot create variable [%s] as there is already a label with the same name\n",name);
 		MemFree(curdic.name);
 		return;
 	}
@@ -6964,10 +6979,10 @@ printf("MakeAlias (2) EXPR=[%s EQU %s]\n",expr,ptr_exp2);
 			curalias.lz=ae->ilz;
 
 			if ((ialias=SearchAlias(ae,curalias.crc,curalias.alias))>=0) {
-				MakeError(ae,GetCurrentFile(ae),GetExpLine(ae,0),"Duplicate alias [%s]\n",expr);
+				MakeError(ae,ae->idx,GetCurrentFile(ae),GetExpLine(ae,0),"Duplicate alias [%s]\n",expr);
 				MemFree(curalias.alias);
 			} else if (SearchDico(ae,curalias.alias,curalias.crc)) {
-				MakeError(ae,GetCurrentFile(ae),GetExpLine(ae,0),"Alias cannot override existing variable [%s]\n",expr);
+				MakeError(ae,ae->idx,GetCurrentFile(ae),GetExpLine(ae,0),"Alias cannot override existing variable [%s]\n",expr);
 				MemFree(curalias.alias);
 			} else {
 				curalias.translation=MemMalloc(strlen(ptr_exp2)+1+2);
@@ -7006,13 +7021,13 @@ printf("***********\n");
 						/* maxam mode AND expected a value -> force comparison */
 					} else {
 						/* use of a single '=' but expected a comparison anyway */
-						MakeError(ae,GetCurrentFile(ae),GetExpLine(ae,0),"meaningless use of an expression [%s]\n",expr);
+						MakeError(ae,ae->idx,GetCurrentFile(ae),GetExpLine(ae,0),"meaningless use of an expression [%s]\n",expr);
 						return 0;
 					}
 				} else {
 					/* ASSIGN */
 					if ((expr[0]<'A' || expr[0]>'Z') && expr[0]!='_') {
-						MakeError(ae,GetCurrentFile(ae),GetExpLine(ae,0),"variable name must begin by a letter or '_' [%s]\n",expr);
+						MakeError(ae,ae->idx,GetCurrentFile(ae),GetExpLine(ae,0),"variable name must begin by a letter or '_' [%s]\n",expr);
 						return 0;
 					} else {
 						char operatorassignment;
@@ -7038,7 +7053,7 @@ printf("***********\n");
 
 						crc=GetCRC(expr);
 						if ((ialias=SearchAlias(ae,crc,expr))>=0) {
-							MakeError(ae,GetCurrentFile(ae),GetExpLine(ae,0),"Variable cannot override existing alias [%s]\n",expr);
+							MakeError(ae,ae->idx,GetCurrentFile(ae),GetExpLine(ae,0),"Variable cannot override existing alias [%s]\n",expr);
 							return 0;
 						}
 						curdic=SearchDico(ae,expr,crc);
@@ -7077,7 +7092,7 @@ printf("***********\n");
 						} else {
 							switch (operatorassignment) {
 								default: /* cannot do operator on non existing variable */
-									MakeError(ae,GetCurrentFile(ae),GetExpLine(ae,0),"Cannot do an operator assignment on non existing variable [%s]\n",expr);
+									MakeError(ae,ae->idx,GetCurrentFile(ae),GetExpLine(ae,0),"Cannot do an operator assignment on non existing variable [%s]\n",expr);
 									return 0;
 								case 0: /* assign a new variable */
 									ExpressionSetDicoVar(ae,expr,v,0);
@@ -7180,7 +7195,7 @@ void ExpressionFastTranslate(struct s_assenv *ae, char **ptr_expr, int fullrepla
 					memcpy(expr+idx,tmpuchar,4);
 					idx+=3;
 				} else {
-					MakeError(ae,GetCurrentFile(ae),GetExpLine(ae,0),"expression [%s] - Only single escaped char may be quoted\n",expr);
+					MakeError(ae,ae->idx,GetCurrentFile(ae),GetExpLine(ae,0),"expression [%s] - Only single escaped char may be quoted\n",expr);
 					expr[0]=0;
 					return;
 				}
@@ -7190,7 +7205,7 @@ void ExpressionFastTranslate(struct s_assenv *ae, char **ptr_expr, int fullrepla
 					idx+=2;
 			} else {
 				//printf("FAST => moar than one quoted char\n");
-				//MakeError(ae,GetCurrentFile(ae),GetExpLine(ae,0),"expression [%s] - Only single char may be quoted\n",expr);
+				//MakeError(ae,ae->idx,GetCurrentFile(ae),GetExpLine(ae,0),"expression [%s] - Only single char may be quoted\n",expr);
 				//expr[0]=0;
 				//return;
 				idx++;
@@ -7264,10 +7279,10 @@ void ExpressionFastTranslate(struct s_assenv *ae, char **ptr_expr, int fullrepla
 				}
 				varbuffer[ivar]=0;
 				if (!ivar) {
-					MakeError(ae,GetCurrentFile(ae),GetExpLine(ae,0),"invalid expression [%s] c=[%c] idx=%d\n",expr,c,idx);
+					MakeError(ae,ae->idx,GetCurrentFile(ae),GetExpLine(ae,0),"invalid expression [%s] c=[%c] idx=%d\n",expr,c,idx);
 					return;
 				} else if (curly) {
-					MakeError(ae,GetCurrentFile(ae),GetExpLine(ae,0),"wrong curly brackets in expression [%s]\n",expr);
+					MakeError(ae,ae->idx,GetCurrentFile(ae),GetExpLine(ae,0),"wrong curly brackets in expression [%s]\n",expr);
 					return;
 				}
 		}
@@ -7394,7 +7409,7 @@ void ExpressionFastTranslate(struct s_assenv *ae, char **ptr_expr, int fullrepla
 						/* recurse maximum count is a mix of alias len and alias number */
 						if (recursecount>ae->ialias+ae->alias[ialias].len) {
 							if (strchr(expr,'~')!=NULL) *strchr(expr,'~')=0;
-							MakeError(ae,GetCurrentFile(ae),GetExpLine(ae,0),"alias definition of %s has infinite recursivity\n",expr);
+							MakeError(ae,ae->idx,GetCurrentFile(ae),GetExpLine(ae,0),"alias definition of %s has infinite recursivity\n",expr);
 							expr[0]=0; /* avoid some errors due to shitty definition */
 							return;
 						} else {
@@ -7473,7 +7488,7 @@ void ExpressionFastTranslate(struct s_assenv *ae, char **ptr_expr, int fullrepla
 					if (strncmp(varbuffer,"{SIZEOF}",8)==0) tagoffset=8; else
 					{
 						tagoffset=0;
-						MakeError(ae,GetCurrentFile(ae),GetExpLine(ae,0),"Unknown prefix tag\n");
+						MakeError(ae,ae->idx,GetCurrentFile(ae),GetExpLine(ae,0),"Unknown prefix tag\n");
 					}
 				
 					if (varbuffer[tagoffset]=='.') {
@@ -7533,7 +7548,7 @@ void ExpressionFastTranslate(struct s_assenv *ae, char **ptr_expr, int fullrepla
 								if (ae->activebank<32) {
 									tagvalue=ae->activebank;
 								} else {
-									MakeError(ae,GetCurrentFile(ae),GetExpLine(ae,0),"expression [%s] cannot use BANK $ in a temporary space!\n",TradExpression(expr));
+									MakeError(ae,ae->idx,GetCurrentFile(ae),GetExpLine(ae,0),"expression [%s] cannot use BANK $ in a temporary space!\n",TradExpression(expr));
 									tagvalue=0;
 								}
 							} else if (ae->forcesnapshot) {
@@ -7546,7 +7561,7 @@ void ExpressionFastTranslate(struct s_assenv *ae, char **ptr_expr, int fullrepla
 								}
 									
 								} else {
-									MakeError(ae,GetCurrentFile(ae),GetExpLine(ae,0),"expression [%s] cannot use BANK $ in a temporary space!\n",TradExpression(expr));
+									MakeError(ae,ae->idx,GetCurrentFile(ae),GetExpLine(ae,0),"expression [%s] cannot use BANK $ in a temporary space!\n",TradExpression(expr));
 									tagvalue=0;
 								}
 							}
@@ -7558,7 +7573,7 @@ void ExpressionFastTranslate(struct s_assenv *ae, char **ptr_expr, int fullrepla
 									tagvalue=ae->bankgate[ae->activebank];
 								}
 							} else {
-								MakeError(ae,GetCurrentFile(ae),GetExpLine(ae,0),"expression [%s] cannot use PAGE $ in a temporary space!\n",TradExpression(expr));
+								MakeError(ae,ae->idx,GetCurrentFile(ae),GetExpLine(ae,0),"expression [%s] cannot use PAGE $ in a temporary space!\n",TradExpression(expr));
 								tagvalue=ae->activebank;
 							}
 						} else if (strcmp(varbuffer,"{PAGESET}$")==0) {
@@ -7566,7 +7581,7 @@ void ExpressionFastTranslate(struct s_assenv *ae, char **ptr_expr, int fullrepla
 								tagvalue=ae->setgate[ae->activebank];
 								//if (ae->activebank>3) tagvalue=((ae->activebank>>2)-1)*8+0xC2; else tagvalue=0xC0;
 							} else {
-								MakeError(ae,GetCurrentFile(ae),GetExpLine(ae,0),"expression [%s] cannot use PAGESET $ in a temporary space!\n",TradExpression(expr));
+								MakeError(ae,ae->idx,GetCurrentFile(ae),GetExpLine(ae,0),"expression [%s] cannot use PAGESET $ in a temporary space!\n",TradExpression(expr));
 								tagvalue=ae->activebank;
 							}
 						}
@@ -7622,7 +7637,7 @@ void ExpressionFastTranslate(struct s_assenv *ae, char **ptr_expr, int fullrepla
 					idx=startvar+newlen;
 					ivar=0;
 				} else {
-					MakeError(ae,GetCurrentFile(ae),GetExpLine(ae,0),"cannot use REPEAT_COUNTER outside repeat loop\n");
+					MakeError(ae,ae->idx,GetCurrentFile(ae),GetExpLine(ae,0),"cannot use REPEAT_COUNTER outside repeat loop\n");
 				}
 			}
 			if (!found_replace && strcmp(varbuffer,"WHILE_COUNTER")==0) {
@@ -7648,7 +7663,7 @@ void ExpressionFastTranslate(struct s_assenv *ae, char **ptr_expr, int fullrepla
 					idx=startvar+newlen;
 					ivar=0;
 				} else {
-					MakeError(ae,GetCurrentFile(ae),GetExpLine(ae,0),"cannot use WHILE_COUNTER outside repeat loop\n");
+					MakeError(ae,ae->idx,GetCurrentFile(ae),GetExpLine(ae,0),"cannot use WHILE_COUNTER outside repeat loop\n");
 				}
 			}
 			/* unknown symbol -> add to used symbol pool */
@@ -7689,7 +7704,7 @@ void PushExpression(struct s_assenv *ae,int iw,enum e_expression zetype)
 						case CRC_IY:
 						case CRC_MIX:
 						case CRC_MIY:
-							MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"invalid register usage\n",ae->maxptr);
+							MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"invalid register usage\n",ae->maxptr);
 						default:break;
 					}
 				case E_EXPRESSION_J8:
@@ -7780,7 +7795,7 @@ void PushExpression(struct s_assenv *ae,int iw,enum e_expression zetype)
 			ObjectArrayAddDynamicValueConcat((void **)&ae->expression,&ae->ie,&ae->me,&curexp,sizeof(curexp));
 		} else {
 			/* to avoid double error message */
-			if (!ae->stop) MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"output exceed limit %d\n",ae->maxptr); else MaxError(ae);
+			if (!ae->stop) MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"output exceed limit %d\n",ae->maxptr); else MaxError(ae);
 			ae->stop=1;
 			return;
 		}
@@ -7809,7 +7824,7 @@ void PushExpression(struct s_assenv *ae,int iw,enum e_expression zetype)
 		}
 		if (ae->outputadr<=ae->maxptr) {
 		} else {
-			MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"NOCODE output exceed limit %d\n",ae->maxptr);
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"NOCODE output exceed limit %d\n",ae->maxptr);
 			FreeAssenv(ae);exit(3);
 		}
 	}
@@ -8242,7 +8257,7 @@ int EDSK_addfile(struct s_assenv *ae,char *edskfilename,int facenumber, char *fi
 	for (i=0;i<curwrap->nbentry;i++) {
 		if (!strncmp((char *)curwrap->entry[i].filename,amsdos_name,11)) {
 			if (!ae->edskoverwrite) {
-				MakeError(ae,NULL,0,"Error - Cannot save [%s] in edsk [%s] with overwrite disabled as the file already exists\n",amsdos_name,edskfilename);
+				MakeError(ae,0,NULL,0,"Error - Cannot save [%s] in edsk [%s] with overwrite disabled as the file already exists\n",amsdos_name,edskfilename);
 				MemFree(data);
 				return 0;
 			} else {
@@ -8288,7 +8303,7 @@ int EDSK_addfile(struct s_assenv *ae,char *edskfilename,int facenumber, char *fi
 	printf("extended entry for file (filesize=%d)\nblocklist: ",filesize);
 #endif
 			if ((ie=EDSK_getdirid(curwrap))==-1)  {
-				MakeError(ae,NULL,0,"Error - edsk [%s] DIRECTORY FULL\n",edskfilename);
+				MakeError(ae,0,NULL,0,"Error - edsk [%s] DIRECTORY FULL\n",edskfilename);
 				MemFree(data);
 				return 0;
 			}
@@ -8296,7 +8311,7 @@ int EDSK_addfile(struct s_assenv *ae,char *edskfilename,int facenumber, char *fi
 			idxb=0;
 			for (i=0;i<16;i++) {
 				if ((ib=EDSK_getblockid(fb))==-1) {
-					MakeError(ae,NULL,0,"Error - edsk [%s] DISK FULL\n",edskfilename);
+					MakeError(ae,0,NULL,0,"Error - edsk [%s] DISK FULL\n",edskfilename);
 					MemFree(data);
 					return 0;
 				} else {
@@ -8327,7 +8342,7 @@ int EDSK_addfile(struct s_assenv *ae,char *edskfilename,int facenumber, char *fi
 	printf("last entry for file (filesize=%d)\nblocklist: ",filesize);
 #endif
 			if ((ie=EDSK_getdirid(curwrap))==-1)  {
-				MakeError(ae,NULL,0,"Error - edsk [%s] DIRECTORY FULL\n",edskfilename);
+				MakeError(ae,0,NULL,0,"Error - edsk [%s] DIRECTORY FULL\n",edskfilename);
 				MemFree(data);
 				return 0;
 			}
@@ -8340,7 +8355,7 @@ int EDSK_addfile(struct s_assenv *ae,char *edskfilename,int facenumber, char *fi
 			idxb=0;
 			for (i=0;i<16 && filesize>0;i++) {
 				if ((ib=EDSK_getblockid(fb))==-1) {
-					MakeError(ae,NULL,0,"Error - edsk [%s] DISK FULL\n",edskfilename);
+					MakeError(ae,0,NULL,0,"Error - edsk [%s] DISK FULL\n",edskfilename);
 					MemFree(data);
 					return 0;
 				} else {
@@ -8772,17 +8787,17 @@ void PopAllSave(struct s_assenv *ae)
 		}
 
 		if (size<1 || size>65536) {
-			MakeError(ae,NULL,0,"cannot save [%s] as the size is invalid!\n",filename);
+			MakeError(ae,0,NULL,0,"cannot save [%s] as the size is invalid!\n",filename);
 			MemFree(filename);
 			continue;
 		}
 		if (offset<0 || offset>65535) {
-			MakeError(ae,NULL,0,"cannot save [%s] as the offset is invalid!\n",filename);
+			MakeError(ae,0,NULL,0,"cannot save [%s] as the offset is invalid!\n",filename);
 			MemFree(filename);
 			continue;
 		}
 		if (offset+size>65536) {
-			MakeError(ae,NULL,0,"cannot save [%s] as the offset+size will be out of bounds!\n",filename);
+			MakeError(ae,0,NULL,0,"cannot save [%s] as the offset+size will be out of bounds!\n",filename);
 			MemFree(filename);
 			continue;
 		}
@@ -8921,7 +8936,7 @@ void PopAllExpression(struct s_assenv *ae, int crunched_zone)
 			case E_EXPRESSION_J8:
 				r=r-ae->expression[i].ptr-2;
 				if (r<-128 || r>127) {
-					MakeError(ae,GetExpFile(ae,i),ae->wl[ae->expression[i].iw].l,"relative offset %d too far [%s]\n",r,ae->wl[ae->expression[i].iw].w);
+					MakeError(ae,ae->expression[i].iw,GetExpFile(ae,i),ae->wl[ae->expression[i].iw].l,"relative offset %d too far [%s]\n",r,ae->wl[ae->expression[i].iw].w);
 				}
 				mem[ae->expression[i].wptr]=(unsigned char)r;
 				break;
@@ -8991,7 +9006,7 @@ void PopAllExpression(struct s_assenv *ae, int crunched_zone)
 					case 0x01:mem[ae->expression[i].wptr]=0x56;break;
 					case 0x02:mem[ae->expression[i].wptr]=0x5E;break;
 					default:
-						MakeError(ae,GetExpFile(ae,i),ae->wl[ae->expression[i].iw].l,"IM 0,1 or 2 only\n");
+						MakeError(ae,ae->expression[i].iw,GetExpFile(ae,i),ae->wl[ae->expression[i].iw].l,"IM 0,1 or 2 only\n");
 						mem[ae->expression[i].wptr]=0;
 				}
 				break;
@@ -9006,7 +9021,7 @@ void PopAllExpression(struct s_assenv *ae, int crunched_zone)
 					case 0x30:mem[ae->expression[i].wptr]=0xF7;break;
 					case 0x38:mem[ae->expression[i].wptr]=0xFF;break;
 					default:
-						MakeError(ae,GetExpFile(ae,i),ae->wl[ae->expression[i].iw].l,"RST #0,#8,#10,#18,#20,#28,#30,#38 only\n");
+						MakeError(ae,ae->expression[i].iw,GetExpFile(ae,i),ae->wl[ae->expression[i].iw].l,"RST #0,#8,#10,#18,#20,#28,#30,#38 only\n");
 						mem[ae->expression[i].wptr]=0;
 				}
 				break;
@@ -9042,11 +9057,11 @@ void PopAllExpression(struct s_assenv *ae, int crunched_zone)
 				if (r>=0 && r<8) {
 					mem[ae->expression[i].wptr]+=r*8;
 				} else {
-					MakeError(ae,GetExpFile(ae,i),ae->wl[ae->expression[i].iw].l,"SET,RES,BIT shift value from 0 to 7 only\n");
+					MakeError(ae,ae->expression[i].iw,GetExpFile(ae,i),ae->wl[ae->expression[i].iw].l,"SET,RES,BIT shift value from 0 to 7 only\n");
 				}
 				break;
 			default:
-				MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"FATAL - unknown expression type\n");
+				MakeError(ae,ae->expression[i].iw,GetExpFile(ae,i),ae->wl[ae->expression[i].iw].l,"FATAL - unknown expression type\n");
 				FreeAssenv(ae);exit(-8);
 		}	
 	}
@@ -9084,7 +9099,7 @@ void PushLabelLight(struct s_assenv *ae, struct s_label *curlabel) {
 	
 	/* PushLabel light */
 	if ((searched_label=SearchLabel(ae,curlabel->name,curlabel->crc))!=NULL) {
-		MakeError(ae,GetCurrentFile(ae),GetExpLine(ae,0),"%s caused duplicate label [%s]\n",ae->idx?"Structure insertion":"Label import",curlabel->name);
+		MakeError(ae,ae->idx,GetCurrentFile(ae),GetExpLine(ae,0),"%s caused duplicate label [%s]\n",ae->idx?"Structure insertion":"Label import",curlabel->name);
 		MemFree(curlabel->name);
 	} else {
 		curlabel->backidx=ae->il;
@@ -9113,13 +9128,13 @@ void PushLabel(struct s_assenv *ae)
 			if (ae->wl[ae->idx].w[i]=='{') tagcount++; else if (ae->wl[ae->idx].w[i]=='}') tagcount--;
 			if (!tagcount) {
 				if (!ae->AutomateValidLabel[(int)ae->wl[ae->idx].w[i]&0xFF]) {
-					MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Invalid char in label declaration (%c)\n",ae->wl[ae->idx].w[i]);
+					MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Invalid char in label declaration (%c)\n",ae->wl[ae->idx].w[i]);
 					return;
 				}
 			}
 		}
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Invalid first char in label declaration (%c)\n",ae->wl[ae->idx].w[0]);
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Invalid first char in label declaration (%c)\n",ae->wl[ae->idx].w[0]);
 		return;
 	}
 	
@@ -9136,7 +9151,7 @@ void PushLabel(struct s_assenv *ae)
 				case 'L':
 				case 'I':
 				case 'R':
-					MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Cannot use reserved word [%s] for label\n",ae->wl[ae->idx].w);
+					MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Cannot use reserved word [%s] for label\n",ae->wl[ae->idx].w);
 					return;
 				default:break;
 			}
@@ -9146,19 +9161,19 @@ void PushLabel(struct s_assenv *ae)
 				strcmp(ae->wl[ae->idx].w,"IX")==0 || strcmp(ae->wl[ae->idx].w,"IY")==0 || strcmp(ae->wl[ae->idx].w,"SP")==0 ||
 				strcmp(ae->wl[ae->idx].w,"LX")==0 || strcmp(ae->wl[ae->idx].w,"HX")==0 || strcmp(ae->wl[ae->idx].w,"XL")==0 || strcmp(ae->wl[ae->idx].w,"XH")==0 ||
 				strcmp(ae->wl[ae->idx].w,"LY")==0 || strcmp(ae->wl[ae->idx].w,"HY")==0 || strcmp(ae->wl[ae->idx].w,"YL")==0 || strcmp(ae->wl[ae->idx].w,"YH")==0) {
-				MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Cannot use reserved word [%s] for label\n",ae->wl[ae->idx].w);
+				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Cannot use reserved word [%s] for label\n",ae->wl[ae->idx].w);
 				return;
 			}
 			break;
 		case 3:
 			if (strcmp(ae->wl[ae->idx].w,"IXL")==0 || strcmp(ae->wl[ae->idx].w,"IYL")==0 || strcmp(ae->wl[ae->idx].w,"IXH")==0 || strcmp(ae->wl[ae->idx].w,"IYH")==0) {
-				MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Cannot use reserved word [%s] for label\n",ae->wl[ae->idx].w);
+				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Cannot use reserved word [%s] for label\n",ae->wl[ae->idx].w);
 				return;
 			}			
 			break;
 		case 4:
 			if (strcmp(ae->wl[ae->idx].w,"VOID")==0) {
-				MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Cannot use reserved word [%s] for label\n",ae->wl[ae->idx].w);
+				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Cannot use reserved word [%s] for label\n",ae->wl[ae->idx].w);
 				return;
 			}
 		default:break;
@@ -9182,7 +9197,7 @@ void PushLabel(struct s_assenv *ae)
 	printf("label used for structs! [%s]\n",varbuffer);
 #endif
 		if (varbuffer[0]=='@') {
-			MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Please no local label in a struct [%s]\n",ae->wl[ae->idx].w);
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Please no local label in a struct [%s]\n",ae->wl[ae->idx].w);
 			MemFree(varbuffer);
 			return;
 		}
@@ -9302,11 +9317,11 @@ printf("PUSH Orphan PROXIMITY label that cannot be exported [%s]->[%s]\n",ae->wl
 
 			/* contrôle dico uniquement avec des labels non locaux */
 			if (SearchDico(ae,curlabel.name,curlabel.crc)) {
-				MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"cannot create label [%s] as there is already a variable with the same name\n",curlabel.name);
+				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"cannot create label [%s] as there is already a variable with the same name\n",curlabel.name);
 				return;
 			}
 			if(SearchAlias(ae,curlabel.crc,curlabel.name)!=-1) {
-				MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"cannot create label [%s] as there is already an alias with the same name\n",curlabel.name);
+				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"cannot create label [%s] as there is already an alias with the same name\n",curlabel.name);
 				return;
 			}
 		}
@@ -9317,7 +9332,7 @@ printf("PUSH Orphan PROXIMITY label that cannot be exported [%s]->[%s]\n",ae->wl
 	}
 
 	if ((searched_label=SearchLabel(ae,curlabel.name,curlabel.crc))!=NULL) {
-		MakeError(ae,GetCurrentFile(ae),GetExpLine(ae,0),"Duplicate label [%s] - previously defined in [%s:%d]\n",curlabel.name,ae->filename[searched_label->fileidx],searched_label->fileline);
+		MakeError(ae,ae->idx,GetCurrentFile(ae),GetExpLine(ae,0),"Duplicate label [%s] - previously defined in [%s:%d]\n",curlabel.name,ae->filename[searched_label->fileidx],searched_label->fileline);
 		MemFree(curlabel.name);
 	} else {
 //printf("PushLabel(%s) name=%s crc=%X lz=%d\n",curlabel.name,curlabel.name?curlabel.name:"null",curlabel.crc,curlabel.lz);
@@ -9382,7 +9397,7 @@ void _IN(struct s_assenv *ae) {
 				case CRC_H:___output(ae,0xED);___output(ae,0x60);ae->nop+=4;ae->tick+=12;break;
 				case CRC_L:___output(ae,0xED);___output(ae,0x68);ae->nop+=4;ae->tick+=12;break;
 				default:
-					MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is IN [0,F,A,B,C,D,E,H,L],(C)\n");
+					MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is IN [0,F,A,B,C,D,E,H,L],(C)\n");
 			}
 		} else if (strcmp(ae->wl[ae->idx+1].w,"A")==0 && StringIsMem(ae->wl[ae->idx+2].w)) {
 			___output(ae,0xDB);
@@ -9390,11 +9405,11 @@ void _IN(struct s_assenv *ae) {
 			ae->nop+=3;
 			ae->tick+=11;
 		} else {
-			MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"IN [0,F,A,B,C,D,E,H,L],(C) or IN A,(n) only\n");
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"IN [0,F,A,B,C,D,E,H,L],(C) or IN A,(n) only\n");
 		}
 		ae->idx+=2;
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"IN [0,F,A,B,C,D,E,H,L],(C) or IN A,(n) only\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"IN [0,F,A,B,C,D,E,H,L],(C) or IN A,(n) only\n");
 	}
 }
 
@@ -9411,7 +9426,7 @@ void _OUT(struct s_assenv *ae) {
 				case CRC_H:___output(ae,0xED);___output(ae,0x61);ae->nop+=4;ae->tick+=12;break;
 				case CRC_L:___output(ae,0xED);___output(ae,0x69);ae->nop+=4;ae->tick+=12;break;
 				default:
-					MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is OUT (C),[0,A,B,C,D,E,H,L]\n");
+					MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is OUT (C),[0,A,B,C,D,E,H,L]\n");
 			}
 		} else if (strcmp(ae->wl[ae->idx+2].w,"A")==0 && StringIsMem(ae->wl[ae->idx+1].w)) {
 			___output(ae,0xD3);
@@ -9419,11 +9434,11 @@ void _OUT(struct s_assenv *ae) {
 			ae->nop+=3;
 			ae->tick+=11;
 		} else {
-			MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"OUT (C),[0,A,B,C,D,E,H,L] or OUT (n),A only\n");
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"OUT (C),[0,A,B,C,D,E,H,L] or OUT (n),A only\n");
 		}
 		ae->idx+=2;
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"OUT (C),[0,A,B,C,D,E,H,L] or OUT (n),A only\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"OUT (C),[0,A,B,C,D,E,H,L] or OUT (n),A only\n");
 	}
 }
 
@@ -9435,14 +9450,14 @@ void _EX(struct s_assenv *ae) {
 					case CRC_DE:___output(ae,0xEB);ae->nop+=1;ae->tick+=4;break;
 					case CRC_MSP:___output(ae,0xE3);ae->nop+=6;ae->tick+=19;break;
 					default:
-						MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is EX HL,[(SP),DE]\n");
+						MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is EX HL,[(SP),DE]\n");
 				}
 				break;
 			case CRC_AF:
 				if (strcmp(ae->wl[ae->idx+2].w,"AF'")==0) {
 					___output(ae,0x08);ae->nop+=1;ae->tick+=4;
 				} else {
-					MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is EX AF,AF'\n");
+					MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is EX AF,AF'\n");
 				}
 				break;
 			case CRC_MSP:
@@ -9451,36 +9466,36 @@ void _EX(struct s_assenv *ae) {
 					case CRC_IX:___output(ae,0xDD);___output(ae,0xE3);ae->nop+=7;ae->tick+=23;break;
 					case CRC_IY:___output(ae,0xFD);___output(ae,0xE3);ae->nop+=7;ae->tick+=23;break;
 					default:
-						MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is EX (SP),[HL,IX,IY]\n");
+						MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is EX (SP),[HL,IX,IY]\n");
 				}
 				break;
 			case CRC_DE:
 				switch (GetCRC(ae->wl[ae->idx+2].w)) {
 					case CRC_HL:___output(ae,0xEB);ae->nop+=1;ae->tick+=4;break;
 					default:
-						MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is EX DE,HL\n");
+						MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is EX DE,HL\n");
 				}
 				break;
 			case CRC_IX:
 				switch (GetCRC(ae->wl[ae->idx+2].w)) {
 					case CRC_MSP:___output(ae,0xDD);___output(ae,0xE3);ae->nop+=7;ae->tick+=23;break;
 					default:
-						MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is EX IX,(SP)\n");
+						MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is EX IX,(SP)\n");
 				}
 				break;
 			case CRC_IY:
 				switch (GetCRC(ae->wl[ae->idx+2].w)) {
 					case CRC_MSP:___output(ae,0xFD);___output(ae,0xE3);ae->nop+=7;ae->tick+=23;break;
 					default:
-						MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is EX IY,(SP)\n");
+						MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is EX IY,(SP)\n");
 				}
 				break;
 			default:
-				MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is EX [AF,DE,HL,(SP),IX,IY],reg16\n");
+				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is EX [AF,DE,HL,(SP),IX,IY],reg16\n");
 		}
 		ae->idx+=2;
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Use EX reg16,[DE|(SP)]\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Use EX reg16,[DE|(SP)]\n");
 	}
 }
 
@@ -9502,7 +9517,7 @@ void _SBC(struct s_assenv *ae) {
 			case CRC_IYH:case CRC_HY:case CRC_YH:___output(ae,0xFD);___output(ae,0x9C);ae->nop+=2;ae->tick+=8;break;
 			case CRC_IYL:case CRC_LY:case CRC_YL:___output(ae,0xFD);___output(ae,0x9D);ae->nop+=2;ae->tick+=8;break;
 			case CRC_IX:case CRC_IY:
-				MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Use SBC with A,B,C,D,E,H,L,XH,XL,YH,YL,(HL),(IX),(IY)\n");
+				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Use SBC with A,B,C,D,E,H,L,XH,XL,YH,YL,(HL),(IX),(IY)\n");
 				ae->idx++;
 				return;
 			default:
@@ -9530,15 +9545,15 @@ void _SBC(struct s_assenv *ae) {
 					case CRC_HL:___output(ae,0xED);___output(ae,0x62);ae->nop+=4;ae->tick+=15;break;
 					case CRC_SP:___output(ae,0xED);___output(ae,0x72);ae->nop+=4;ae->tick+=15;break;
 					default:
-						MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is SBC HL,[BC,DE,HL,SP]\n");
+						MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is SBC HL,[BC,DE,HL,SP]\n");
 				}
 				break;
 			default:
-				MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is SBC HL,[BC,DE,HL,SP]\n");
+				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is SBC HL,[BC,DE,HL,SP]\n");
 		}
 		ae->idx+=2;
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Invalid syntax for SBC\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Invalid syntax for SBC\n");
 	}
 }
 
@@ -9560,7 +9575,7 @@ void _ADC(struct s_assenv *ae) {
 			case CRC_IYH:case CRC_HY:case CRC_YH:___output(ae,0xFD);___output(ae,0x8C);ae->nop+=2;ae->tick+=8;break;
 			case CRC_IYL:case CRC_LY:case CRC_YL:___output(ae,0xFD);___output(ae,0x8D);ae->nop+=2;ae->tick+=8;break;
 			case CRC_IX:case CRC_IY:
-				MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Use ADC with A,B,C,D,E,H,L,XH,XL,YH,YL,(HL),(IX),(IY)\n");
+				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Use ADC with A,B,C,D,E,H,L,XH,XL,YH,YL,(HL),(IX),(IY)\n");
 				ae->idx++;
 				return;
 			default:
@@ -9588,15 +9603,15 @@ void _ADC(struct s_assenv *ae) {
 					case CRC_HL:___output(ae,0xED);___output(ae,0x6A);ae->nop+=4;ae->tick+=15;break;
 					case CRC_SP:___output(ae,0xED);___output(ae,0x7A);ae->nop+=4;ae->tick+=15;break;
 					default:
-						MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is ADC HL,[BC,DE,HL,SP]\n");
+						MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is ADC HL,[BC,DE,HL,SP]\n");
 				}
 				break;
 			default:
-				MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is ADC HL,[BC,DE,HL,SP]\n");
+				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is ADC HL,[BC,DE,HL,SP]\n");
 		}
 		ae->idx+=2;
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Invalid syntax for ADC\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Invalid syntax for ADC\n");
 	}
 }
 
@@ -9618,7 +9633,7 @@ void _ADD(struct s_assenv *ae) {
 			case CRC_IYH:case CRC_HY:case CRC_YH:___output(ae,0xFD);___output(ae,0x84);ae->nop+=2;ae->tick+=8;break;
 			case CRC_IYL:case CRC_LY:case CRC_YL:___output(ae,0xFD);___output(ae,0x85);ae->nop+=2;ae->tick+=8;break;
 			case CRC_IX:case CRC_IY:
-				MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Use ADD with A,B,C,D,E,H,L,XH,XL,YH,YL,(HL),(IX),(IY)\n");
+				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Use ADD with A,B,C,D,E,H,L,XH,XL,YH,YL,(HL),(IX),(IY)\n");
 				ae->idx++;
 				return;
 			default:
@@ -9646,7 +9661,7 @@ void _ADD(struct s_assenv *ae) {
 					case CRC_HL:___output(ae,0x29);ae->nop+=3;ae->tick+=11;break;
 					case CRC_SP:___output(ae,0x39);ae->nop+=3;ae->tick+=11;break;
 					default:
-						MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is ADD HL,[BC,DE,HL,SP]\n");
+						MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is ADD HL,[BC,DE,HL,SP]\n");
 				}
 				break;
 			case CRC_IX:
@@ -9656,7 +9671,7 @@ void _ADD(struct s_assenv *ae) {
 					case CRC_IX:___output(ae,0xDD);___output(ae,0x29);ae->nop+=4;ae->tick+=15;break;
 					case CRC_SP:___output(ae,0xDD);___output(ae,0x39);ae->nop+=4;ae->tick+=15;break;
 					default:
-						MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is ADD IX,[BC,DE,IX,SP]\n");
+						MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is ADD IX,[BC,DE,IX,SP]\n");
 				}
 				break;
 			case CRC_IY:
@@ -9666,15 +9681,15 @@ void _ADD(struct s_assenv *ae) {
 					case CRC_IY:___output(ae,0xFD);___output(ae,0x29);ae->nop+=4;ae->tick+=15;break;
 					case CRC_SP:___output(ae,0xFD);___output(ae,0x39);ae->nop+=4;ae->tick+=15;break;
 					default:
-						MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is ADD IY,[BC,DE,IY,SP]\n");
+						MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is ADD IY,[BC,DE,IY,SP]\n");
 				}
 				break;
 			default:
-				MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is ADD [HL,IX,IY],reg16\n");
+				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is ADD [HL,IX,IY],reg16\n");
 		}
 		ae->idx+=2;
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Invalid syntax for ADD\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Invalid syntax for ADD\n");
 	}
 }
 
@@ -9712,7 +9727,7 @@ void _CP(struct s_assenv *ae) {
 		}
 		ae->idx++;
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Syntax is CP reg8/(reg16)\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Syntax is CP reg8/(reg16)\n");
 	}
 }
 
@@ -9728,14 +9743,14 @@ void _RET(struct s_assenv *ae) {
 			case CRC_P:___output(ae,0xF0);ae->nop+=2;ae->tick+=5;break;
 			case CRC_M:___output(ae,0xF8);ae->nop+=2;ae->tick+=5;break;
 			default:
-				MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Available flags for RET are C,NC,Z,NZ,PE,PO,P,M\n");
+				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Available flags for RET are C,NC,Z,NZ,PE,PO,P,M\n");
 		}
 		ae->idx++;
 	} else if (ae->wl[ae->idx].t==1) {
 		___output(ae,0xC9);
 		ae->nop+=3;ae->tick+=10;
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Invalid RET syntax\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Invalid RET syntax\n");
 	}
 }
 
@@ -9751,7 +9766,7 @@ void _CALL(struct s_assenv *ae) {
 			case CRC_P:___output(ae,0xF4);ae->nop+=3;ae->tick+=10;break;
 			case CRC_M:___output(ae,0xFC);ae->nop+=3;ae->tick+=10;break;
 			default:
-				MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Available flags for CALL are C,NC,Z,NZ,PE,PO,P,M\n");
+				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Available flags for CALL are C,NC,Z,NZ,PE,PO,P,M\n");
 		}
 		PushExpression(ae,ae->idx+2,E_EXPRESSION_J16C);
 		ae->idx+=2;
@@ -9761,7 +9776,7 @@ void _CALL(struct s_assenv *ae) {
 		ae->idx++;
 		ae->nop+=5;ae->tick+=17;
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Invalid CALL syntax\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Invalid CALL syntax\n");
 	}
 }
 
@@ -9773,7 +9788,7 @@ void _JR(struct s_assenv *ae) {
 			case CRC_Z:___output(ae,0x28);ae->nop+=2;ae->tick+=7;break;
 			case CRC_NC:___output(ae,0x30);ae->nop+=2;ae->tick+=7;break;
 			default:
-				MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Available flags for JR are C,NC,Z,NZ\n");
+				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Available flags for JR are C,NC,Z,NZ\n");
 		}
 		PushExpression(ae,ae->idx+2,E_EXPRESSION_J8);
 		ae->idx+=2;
@@ -9783,7 +9798,7 @@ void _JR(struct s_assenv *ae) {
 		ae->idx++;
 		ae->nop+=3;ae->tick+=12;
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Invalid JR syntax\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Invalid JR syntax\n");
 	}
 }
 
@@ -9799,10 +9814,10 @@ void _JP(struct s_assenv *ae) {
 			case CRC_P:___output(ae,0xF2);ae->nop+=3;ae->tick+=10;break;
 			case CRC_M:___output(ae,0xFA);ae->nop+=3;ae->tick+=10;break;
 			default:
-				MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Available flags for JP are C,NC,Z,NZ,PE,PO,P,M\n");
+				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Available flags for JP are C,NC,Z,NZ,PE,PO,P,M\n");
 		}
 		if (!strcmp(ae->wl[ae->idx+2].w,"(IX)") || !strcmp(ae->wl[ae->idx+2].w,"(IY)")) {
-			MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"conditionnal JP cannot use register addressing\n");
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"conditionnal JP cannot use register addressing\n");
 		} else {
 			PushExpression(ae,ae->idx+2,E_EXPRESSION_J16);
 		}
@@ -9814,7 +9829,7 @@ void _JP(struct s_assenv *ae) {
 			case CRC_IY:case CRC_MIY:___output(ae,0xFD);___output(ae,0xE9);ae->nop+=2;ae->tick+=8;break;
 			default:
 				if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0 || strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0) {
-					MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"JP (IX) or JP (IY) only\n");
+					MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"JP (IX) or JP (IY) only\n");
 				} else {
 					___output(ae,0xC3);
 					PushExpression(ae,ae->idx+1,E_EXPRESSION_J16);
@@ -9824,7 +9839,7 @@ void _JP(struct s_assenv *ae) {
 		}
 		ae->idx++;
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Invalid JP syntax\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Invalid JP syntax\n");
 	}
 }
 
@@ -9861,13 +9876,13 @@ void _DEC(struct s_assenv *ae) {
 						PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
 						ae->nop+=6;ae->tick+=23;
 					} else {
-						MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Use DEC with A,B,C,D,E,H,L,XH,XL,YH,YL,BC,DE,HL,SP,(HL),(IX),(IY)\n");
+						MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Use DEC with A,B,C,D,E,H,L,XH,XL,YH,YL,BC,DE,HL,SP,(HL),(IX),(IY)\n");
 					}
 			}
 			ae->idx++;
 		} while (ae->wl[ae->idx].t==0);
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Use DEC with A,B,C,D,E,H,L,XH,XL,YH,YL,BC,DE,HL,SP,(HL),(IX),(IY)\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Use DEC with A,B,C,D,E,H,L,XH,XL,YH,YL,BC,DE,HL,SP,(HL),(IX),(IY)\n");
 	}
 }
 void _INC(struct s_assenv *ae) {
@@ -9902,13 +9917,13 @@ void _INC(struct s_assenv *ae) {
 						PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
 						ae->nop+=6;ae->tick+=23;
 					} else {
-						MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Use INC with A,B,C,D,E,H,L,XH,XL,YH,YL,BC,DE,HL,SP,(HL),(IX),(IY)\n");
+						MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Use INC with A,B,C,D,E,H,L,XH,XL,YH,YL,BC,DE,HL,SP,(HL),(IX),(IY)\n");
 					}
 			}
 			ae->idx++;
 		} while (ae->wl[ae->idx].t==0);
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Use INC with A,B,C,D,E,H,L,XH,XL,YH,YL,BC,DE,HL,SP,(HL),(IX),(IY)\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Use INC with A,B,C,D,E,H,L,XH,XL,YH,YL,BC,DE,HL,SP,(HL),(IX),(IY)\n");
 	}
 }
 
@@ -9934,7 +9949,7 @@ void _SUB(struct s_assenv *ae) {
 			case CRC_IYH:case CRC_HY:case CRC_YH:___output(ae,0xFD);___output(ae,OPCODE+4);ae->nop+=2;ae->tick+=8;break;
 			case CRC_IYL:case CRC_LY:case CRC_YL:___output(ae,0xFD);___output(ae,OPCODE+5);ae->nop+=2;ae->tick+=8;break;
 			case CRC_IX:case CRC_IY:
-				MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Use SUB with A,B,C,D,E,H,L,XH,XL,YH,YL,(HL),(IX),(IY)\n");
+				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Use SUB with A,B,C,D,E,H,L,XH,XL,YH,YL,(HL),(IX),(IY)\n");
 				ae->idx++;
 				return;
 			default:
@@ -9954,7 +9969,7 @@ void _SUB(struct s_assenv *ae) {
 		}
 		ae->idx++;
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Use SUB with A,B,C,D,E,H,L,XH,XL,YH,YL,(HL),(IX),(IY)\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Use SUB with A,B,C,D,E,H,L,XH,XL,YH,YL,(HL),(IX),(IY)\n");
 	}
 }
 void _AND(struct s_assenv *ae) {
@@ -9994,7 +10009,7 @@ void _AND(struct s_assenv *ae) {
 		}
 		ae->idx++;
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Use AND with A,B,C,D,E,H,L,XH,XL,YH,YL,(HL),(IX),(IY)\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Use AND with A,B,C,D,E,H,L,XH,XL,YH,YL,(HL),(IX),(IY)\n");
 	}
 }
 void _OR(struct s_assenv *ae) {
@@ -10034,7 +10049,7 @@ void _OR(struct s_assenv *ae) {
 		}
 		ae->idx++;
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Use OR with A,B,C,D,E,H,L,XH,XL,YH,YL,(HL),(IX),(IY)\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Use OR with A,B,C,D,E,H,L,XH,XL,YH,YL,(HL),(IX),(IY)\n");
 	}
 }
 void _XOR(struct s_assenv *ae) {
@@ -10074,7 +10089,7 @@ void _XOR(struct s_assenv *ae) {
 		}
 		ae->idx++;
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Use XOR with A,B,C,D,E,H,L,XH,XL,YH,YL,(HL),(IX),(IY)\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Use XOR with A,B,C,D,E,H,L,XH,XL,YH,YL,(HL),(IX),(IY)\n");
 	}
 }
 
@@ -10091,11 +10106,11 @@ void _POP(struct s_assenv *ae) {
 				case CRC_IX:___output(ae,0xDD);___output(ae,0xE1);ae->nop+=4;ae->tick+=14;break;
 				case CRC_IY:___output(ae,0xFD);___output(ae,0xE1);ae->nop+=4;ae->tick+=14;break;
 				default:
-					MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Use POP with AF,BC,DE,HL,IX,IY\n");
+					MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Use POP with AF,BC,DE,HL,IX,IY\n");
 			}
 		} while (ae->wl[ae->idx].t!=1);
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"POP need at least one parameter\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"POP need at least one parameter\n");
 	}
 }
 void _PUSH(struct s_assenv *ae) {
@@ -10110,11 +10125,11 @@ void _PUSH(struct s_assenv *ae) {
 				case CRC_IX:___output(ae,0xDD);___output(ae,0xE5);ae->nop+=5;ae->tick+=15;break;
 				case CRC_IY:___output(ae,0xFD);___output(ae,0xE5);ae->nop+=5;ae->tick+=15;break;
 				default:
-					MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Use PUSH with AF,BC,DE,HL,IX,IY\n");
+					MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Use PUSH with AF,BC,DE,HL,IX,IY\n");
 			}
 		} while (ae->wl[ae->idx].t!=1);
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"PUSH need at least one parameter\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"PUSH need at least one parameter\n");
 	}
 }
 
@@ -10127,7 +10142,7 @@ void _IM(struct s_assenv *ae) {
 		ae->nop+=2;
 		ae->tick+=8;
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"IM need one parameter\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"IM need one parameter\n");
 	}
 }
 
@@ -10137,7 +10152,7 @@ void _RLCA(struct s_assenv *ae) {
 		ae->nop+=1;
 		ae->tick+=4;
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"RLCA does not need parameter\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"RLCA does not need parameter\n");
 	}
 }
 void _RRCA(struct s_assenv *ae) {
@@ -10146,7 +10161,7 @@ void _RRCA(struct s_assenv *ae) {
 		ae->nop+=1;
 		ae->tick+=4;
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"RRCA does not need parameter\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"RRCA does not need parameter\n");
 	}
 }
 void _NEG(struct s_assenv *ae) {
@@ -10156,7 +10171,7 @@ void _NEG(struct s_assenv *ae) {
 		ae->nop+=2;
 		ae->tick+=8;
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"NEG does not need parameter\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"NEG does not need parameter\n");
 	}
 }
 void _DAA(struct s_assenv *ae) {
@@ -10165,7 +10180,7 @@ void _DAA(struct s_assenv *ae) {
 		ae->nop+=1;
 		ae->tick+=4;
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"DAA does not need parameter\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"DAA does not need parameter\n");
 	}
 }
 void _CPL(struct s_assenv *ae) {
@@ -10174,7 +10189,7 @@ void _CPL(struct s_assenv *ae) {
 		ae->nop+=1;
 		ae->tick+=4;
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"CPL does not need parameter\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"CPL does not need parameter\n");
 	}
 }
 void _RETI(struct s_assenv *ae) {
@@ -10184,7 +10199,7 @@ void _RETI(struct s_assenv *ae) {
 		ae->nop+=4;
 		ae->tick+=14;
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"RETI does not need parameter\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"RETI does not need parameter\n");
 	}
 }
 void _SCF(struct s_assenv *ae) {
@@ -10193,7 +10208,7 @@ void _SCF(struct s_assenv *ae) {
 		ae->nop+=1;
 		ae->tick+=4;
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"SCF does not need parameter\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"SCF does not need parameter\n");
 	}
 }
 void _LDD(struct s_assenv *ae) {
@@ -10203,7 +10218,7 @@ void _LDD(struct s_assenv *ae) {
 		ae->nop+=5;
 		ae->tick+=16;
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"LDD does not need parameter\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"LDD does not need parameter\n");
 	}
 }
 void _LDDR(struct s_assenv *ae) {
@@ -10213,7 +10228,7 @@ void _LDDR(struct s_assenv *ae) {
 		ae->nop+=5;
 		ae->tick+=16;
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"LDDR does not need parameter\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"LDDR does not need parameter\n");
 	}
 }
 void _LDI(struct s_assenv *ae) {
@@ -10223,7 +10238,7 @@ void _LDI(struct s_assenv *ae) {
 		ae->nop+=5;
 		ae->tick+=16;
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"LDI does not need parameter\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"LDI does not need parameter\n");
 	}
 }
 void _LDIR(struct s_assenv *ae) {
@@ -10233,7 +10248,7 @@ void _LDIR(struct s_assenv *ae) {
 		ae->nop+=5;
 		ae->tick+=16;
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"LDIR does not need parameter\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"LDIR does not need parameter\n");
 	}
 }
 void _CCF(struct s_assenv *ae) {
@@ -10242,7 +10257,7 @@ void _CCF(struct s_assenv *ae) {
 		ae->nop+=1;
 		ae->tick+=4;
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"CCF does not need parameter\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"CCF does not need parameter\n");
 	}
 }
 void _CPD(struct s_assenv *ae) {
@@ -10252,7 +10267,7 @@ void _CPD(struct s_assenv *ae) {
 		ae->nop+=4;
 		ae->tick+=16;
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"CPD does not need parameter\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"CPD does not need parameter\n");
 	}
 }
 void _CPDR(struct s_assenv *ae) {
@@ -10262,7 +10277,7 @@ void _CPDR(struct s_assenv *ae) {
 		ae->nop+=4;
 		ae->tick+=16;
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"CPDR does not need parameter\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"CPDR does not need parameter\n");
 	}
 }
 void _CPI(struct s_assenv *ae) {
@@ -10272,7 +10287,7 @@ void _CPI(struct s_assenv *ae) {
 		ae->nop+=4;
 		ae->tick+=16;
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"CPI does not need parameter\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"CPI does not need parameter\n");
 	}
 }
 void _CPIR(struct s_assenv *ae) {
@@ -10282,7 +10297,7 @@ void _CPIR(struct s_assenv *ae) {
 		ae->nop+=4;
 		ae->tick+=16;
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"CPIR does not need parameter\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"CPIR does not need parameter\n");
 	}
 }
 void _OUTD(struct s_assenv *ae) {
@@ -10292,7 +10307,7 @@ void _OUTD(struct s_assenv *ae) {
 		ae->nop+=5;
 		ae->tick+=16;
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"OUTD does not need parameter\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"OUTD does not need parameter\n");
 	}
 }
 void _OTDR(struct s_assenv *ae) {
@@ -10302,7 +10317,7 @@ void _OTDR(struct s_assenv *ae) {
 		ae->nop+=5;
 		ae->tick+=16;
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"OTDR does not need parameter\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"OTDR does not need parameter\n");
 	}
 }
 void _OUTI(struct s_assenv *ae) {
@@ -10312,7 +10327,7 @@ void _OUTI(struct s_assenv *ae) {
 		ae->nop+=5;
 		ae->tick+=16;
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"OUTI does not need parameter\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"OUTI does not need parameter\n");
 	}
 }
 void _OTIR(struct s_assenv *ae) {
@@ -10322,7 +10337,7 @@ void _OTIR(struct s_assenv *ae) {
 		ae->nop+=5;
 		ae->tick+=16;
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"OTIR does not need parameter\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"OTIR does not need parameter\n");
 	}
 }
 void _RETN(struct s_assenv *ae) {
@@ -10332,7 +10347,7 @@ void _RETN(struct s_assenv *ae) {
 		ae->nop+=4;
 		ae->tick+=14;
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"RETN does not need parameter\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"RETN does not need parameter\n");
 	}
 }
 void _IND(struct s_assenv *ae) {
@@ -10342,7 +10357,7 @@ void _IND(struct s_assenv *ae) {
 		ae->nop+=5;
 		ae->tick+=16;
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"IND does not need parameter\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"IND does not need parameter\n");
 	}
 }
 void _INDR(struct s_assenv *ae) {
@@ -10352,7 +10367,7 @@ void _INDR(struct s_assenv *ae) {
 		ae->nop+=5;
 		ae->tick+=16;
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"INDR does not need parameter\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"INDR does not need parameter\n");
 	}
 }
 void _INI(struct s_assenv *ae) {
@@ -10362,7 +10377,7 @@ void _INI(struct s_assenv *ae) {
 		ae->nop+=5;
 		ae->tick+=16;
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"INI does not need parameter\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"INI does not need parameter\n");
 	}
 }
 void _INIR(struct s_assenv *ae) {
@@ -10372,7 +10387,7 @@ void _INIR(struct s_assenv *ae) {
 		ae->nop+=5;
 		ae->tick+=16;
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"INIR does not need parameter\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"INIR does not need parameter\n");
 	}
 }
 void _EXX(struct s_assenv *ae) {
@@ -10381,7 +10396,7 @@ void _EXX(struct s_assenv *ae) {
 		ae->nop+=1;
 		ae->tick+=4;
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"EXX does not need parameter\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"EXX does not need parameter\n");
 	}
 }
 void _HALT(struct s_assenv *ae) {
@@ -10390,7 +10405,7 @@ void _HALT(struct s_assenv *ae) {
 		ae->nop+=1;
 		ae->tick+=4;
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"HALT does not need parameter\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"HALT does not need parameter\n");
 	}
 }
 
@@ -10400,7 +10415,7 @@ void _RLA(struct s_assenv *ae) {
 		ae->nop+=1;
 		ae->tick+=4;
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"RLA does not need parameter\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"RLA does not need parameter\n");
 	}
 }
 void _RRA(struct s_assenv *ae) {
@@ -10409,7 +10424,7 @@ void _RRA(struct s_assenv *ae) {
 		ae->nop+=1;
 		ae->tick+=4;
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"RRA does not need parameter\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"RRA does not need parameter\n");
 	}
 }
 void _RLD(struct s_assenv *ae) {
@@ -10419,7 +10434,7 @@ void _RLD(struct s_assenv *ae) {
 		ae->nop+=5;
 		ae->tick+=18;
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"RLD does not need parameter\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"RLD does not need parameter\n");
 	}
 }
 void _RRD(struct s_assenv *ae) {
@@ -10429,7 +10444,7 @@ void _RRD(struct s_assenv *ae) {
 		ae->nop+=5;
 		ae->tick+=18;
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"RRD does not need parameter\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"RRD does not need parameter\n");
 	}
 }
 
@@ -10439,7 +10454,7 @@ void _EXA(struct s_assenv *ae) {
 		___output(ae,0x08);ae->nop+=1;
 		ae->tick+=4;
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"EXA alias does not need parameter\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"EXA alias does not need parameter\n");
 	}
 }
 
@@ -10462,7 +10477,7 @@ void _NOP(struct s_assenv *ae) {
 			}
 		}
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"NOP is supposed to be used without parameter or with one optional parameter\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"NOP is supposed to be used without parameter or with one optional parameter\n");
 	}
 }
 void _DI(struct s_assenv *ae) {
@@ -10471,7 +10486,7 @@ void _DI(struct s_assenv *ae) {
 	ae->nop+=1;
 	ae->tick+=4;
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"DI does not need parameter\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"DI does not need parameter\n");
 	}
 }
 void _EI(struct s_assenv *ae) {
@@ -10480,14 +10495,14 @@ void _EI(struct s_assenv *ae) {
 		ae->nop+=1;
 		ae->tick+=4;
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"EI does not need parameter\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"EI does not need parameter\n");
 	}
 }
 
 void _RST(struct s_assenv *ae) {
 	if (!ae->wl[ae->idx].t && ae->wl[ae->idx+1].t!=2) {
 		if (!strcmp(ae->wl[ae->idx+1].w,"(IY)") || !strcmp(ae->wl[ae->idx+1].w,"(IX)")) {
-			MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"RST cannot use IX or IY\n");
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"RST cannot use IX or IY\n");
 		} else {
 			/* la valeur du parametre va definir l'opcode du RST */
 			PushExpression(ae,ae->idx+1,E_EXPRESSION_RST);
@@ -10496,16 +10511,16 @@ void _RST(struct s_assenv *ae) {
 		ae->nop+=4;
 		ae->tick+=11;
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"RST need one parameter\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"RST need one parameter\n");
 	}
 }
 
 void _DJNZ(struct s_assenv *ae) {
 	if (!ae->wl[ae->idx].t && ae->wl[ae->idx+1].t==1) {
 		if (IsRegister(ae->wl[ae->idx+1].w)) {
-			MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"DJNZ cannot use register\n");
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"DJNZ cannot use register\n");
 		} else if (strcmp("(IX)",ae->wl[ae->idx+1].w)==0 || strcmp("(IY)",ae->wl[ae->idx+1].w)==0) {
-			MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"DJNZ cannot use register\n");
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"DJNZ cannot use register\n");
 		} else {
 			___output(ae,0x10);
 			PushExpression(ae,ae->idx+1,E_EXPRESSION_J8);
@@ -10514,7 +10529,7 @@ void _DJNZ(struct s_assenv *ae) {
 		}
 		ae->idx++;
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"DJNZ need one parameter\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"DJNZ need one parameter\n");
 	}
 }
 
@@ -10566,7 +10581,7 @@ void _LD(struct s_assenv *ae) {
 					___output(ae,0xED);___output(ae,0x47);
 					ae->nop+=3;ae->tick+=9;
 				} else {
-					MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"LD I,A only\n");
+					MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"LD I,A only\n");
 				}
 				break;
 			case CRC_R:
@@ -10574,7 +10589,7 @@ void _LD(struct s_assenv *ae) {
 					___output(ae,0xED);___output(ae,0x4F);
 					ae->nop+=3;ae->tick+=9;
 				} else {
-					MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"LD R,A only\n");
+					MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"LD R,A only\n");
 				}
 				break;
 			case CRC_B:
@@ -10716,7 +10731,7 @@ void _LD(struct s_assenv *ae) {
 							PushExpression(ae,ae->idx+2,E_EXPRESSION_V8);
 							ae->nop+=3;ae->tick+=11;
 						} else {
-							MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"LD iyh,n/r only\n");
+							MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"LD iyh,n/r only\n");
 						}
 				}
 				break;
@@ -10735,7 +10750,7 @@ void _LD(struct s_assenv *ae) {
 							PushExpression(ae,ae->idx+2,E_EXPRESSION_V8);
 							ae->nop+=3;ae->tick+=11;
 						} else {
-							MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"LD iyl,n/r only\n");
+							MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"LD iyl,n/r only\n");
 						}
 				}
 				break;
@@ -10754,7 +10769,7 @@ void _LD(struct s_assenv *ae) {
 							PushExpression(ae,ae->idx+2,E_EXPRESSION_V8);
 							ae->nop+=3;ae->tick+=11;
 						} else {
-							MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"LD ixh,n/r only\n");
+							MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"LD ixh,n/r only\n");
 						}
 				}
 				break;
@@ -10773,7 +10788,7 @@ void _LD(struct s_assenv *ae) {
 							PushExpression(ae,ae->idx+2,E_EXPRESSION_V8);
 							ae->nop+=3;ae->tick+=11;
 						} else {
-							MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"LD ixl,n/r only\n");
+							MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"LD ixl,n/r only\n");
 						}
 				}
 				break;
@@ -10847,7 +10862,7 @@ void _LD(struct s_assenv *ae) {
 						PushExpression(ae,ae->idx+2,E_EXPRESSION_V8);
 						ae->nop+=3;ae->tick+=10;
 					} else {
-						MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"LD (HL),n/r only\n");
+						MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"LD (HL),n/r only\n");
 					}
 				}
 				break;
@@ -10856,7 +10871,7 @@ void _LD(struct s_assenv *ae) {
 					___output(ae,0x02);
 					ae->nop+=2;ae->tick+=7;
 				} else {
-					MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"LD (BC),A only\n");
+					MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"LD (BC),A only\n");
 				}
 				break;
 			case CRC_MDE:
@@ -10864,7 +10879,7 @@ void _LD(struct s_assenv *ae) {
 					___output(ae,0x12);
 					ae->nop+=2;ae->tick+=7;
 				} else {
-					MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"LD (DE),A only\n");
+					MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"LD (DE),A only\n");
 				}
 				break;
 			case CRC_HL:
@@ -10989,7 +11004,7 @@ void _LD(struct s_assenv *ae) {
 								ae->nop+=4;ae->tick+=14;
 							}
 						} else {
-							MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"LD IX,(nn)/BC/DE/nn only\n");
+							MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"LD IX,(nn)/BC/DE/nn only\n");
 						}
 				}
 				break;
@@ -11012,7 +11027,7 @@ void _LD(struct s_assenv *ae) {
 								ae->nop+=4;ae->tick+=14;
 							}
 						} else {
-							MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"LD IY,(nn)/BC/DE/nn only\n");
+							MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"LD IY,(nn)/BC/DE/nn only\n");
 						}
 				}
 				break;
@@ -11033,7 +11048,7 @@ void _LD(struct s_assenv *ae) {
 								ae->nop+=3;ae->tick+=10;
 							}
 						} else {
-							MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"LD SP,(nn)/HL/IX/IY only\n");
+							MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"LD SP,(nn)/HL/IX/IY only\n");
 						}
 				}
 				break;
@@ -11058,7 +11073,7 @@ void _LD(struct s_assenv *ae) {
 								PushExpression(ae,ae->idx+2,E_EXPRESSION_3V8);
 								ae->nop+=6;ae->tick+=23;
 							} else {
-								MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"LD (IX+n),n/r only\n");
+								MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"LD (IX+n),n/r only\n");
 							}
 					}
 				} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0) {
@@ -11080,7 +11095,7 @@ void _LD(struct s_assenv *ae) {
 								PushExpression(ae,ae->idx+2,E_EXPRESSION_3V8);
 								ae->nop+=6;ae->tick+=23;
 							} else {
-								MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"LD (IX+n),n/r only\n");
+								MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"LD (IX+n),n/r only\n");
 							}
 					}
 				} else if (StringIsMem(ae->wl[ae->idx+1].w)) {
@@ -11093,16 +11108,16 @@ void _LD(struct s_assenv *ae) {
 						case CRC_IY:___output(ae,0xFD);___output(ae,0x22);PushExpression(ae,ae->idx+1,E_EXPRESSION_IV16);ae->nop+=6;ae->tick+=20;break;
 						case CRC_SP:___output(ae,0xED);___output(ae,0x73);PushExpression(ae,ae->idx+1,E_EXPRESSION_IV16);ae->nop+=6;ae->tick+=20;break;
 						default:
-							MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"LD (#nnnn),[A,BC,DE,HL,SP,IX,IY] only\n");
+							MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"LD (#nnnn),[A,BC,DE,HL,SP,IX,IY] only\n");
 					}
 				} else {
-					MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Unknown LD format\n");
+					MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Unknown LD format\n");
 				}
 				break;
 		}
 		ae->idx+=2;
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"LD needs two parameters\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"LD needs two parameters\n");
 	}
 }
 
@@ -11131,7 +11146,7 @@ void _RLC(struct s_assenv *ae) {
 					___output(ae,0x6);
 					ae->nop+=7;ae->tick+=23;
 				} else {
-					MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is RLC reg8/(HL)/(IX+n)/(IY+n)\n");
+					MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is RLC reg8/(HL)/(IX+n)/(IY+n)\n");
 				}
 		}
 		ae->idx++;
@@ -11141,7 +11156,7 @@ void _RLC(struct s_assenv *ae) {
 		} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0) {
 			___output(ae,0xFD);
 		} else {
-			MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is RLC (IX+n),reg8\n");
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is RLC (IX+n),reg8\n");
 		}
 		___output(ae,0xCB);
 		switch (GetCRC(ae->wl[ae->idx+2].w)) {
@@ -11153,7 +11168,7 @@ void _RLC(struct s_assenv *ae) {
 			case CRC_L:PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);___output(ae,0x5);ae->nop+=7;ae->tick+=23;break;
 			case CRC_A:PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);___output(ae,0x7);ae->nop+=7;ae->tick+=23;break;
 			default:			
-				MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is RLC (IX+n),reg8\n");
+				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is RLC (IX+n),reg8\n");
 		}
 		ae->idx++;
 		ae->idx++;
@@ -11184,7 +11199,7 @@ void _RRC(struct s_assenv *ae) {
 					___output(ae,0xE);ae->tick+=23;
 					ae->nop+=7;
 				} else {
-					MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is RRC reg8/(HL)/(IX+n)/(IY+n)\n");
+					MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is RRC reg8/(HL)/(IX+n)/(IY+n)\n");
 				}
 		}
 		ae->idx++;
@@ -11194,7 +11209,7 @@ void _RRC(struct s_assenv *ae) {
 		} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0) {
 			___output(ae,0xFD);
 		} else {
-			MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is RRC (IX+n),reg8\n");
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is RRC (IX+n),reg8\n");
 		}
 		___output(ae,0xCB);
 		switch (GetCRC(ae->wl[ae->idx+2].w)) {
@@ -11206,7 +11221,7 @@ void _RRC(struct s_assenv *ae) {
 			case CRC_L:PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);___output(ae,0xD);ae->nop+=7;ae->tick+=23;break;
 			case CRC_A:PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);___output(ae,0xF);ae->nop+=7;ae->tick+=23;break;
 			default:			
-				MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is RRC (IX+n),reg8\n");
+				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is RRC (IX+n),reg8\n");
 		}
 		ae->idx++;
 		ae->idx++;
@@ -11241,7 +11256,7 @@ void _RL(struct s_assenv *ae) {
 					___output(ae,0x16);
 					ae->nop+=7;ae->tick+=23;
 				} else {
-					MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is RL reg8/(HL)/(IX+n)/(IY+n)\n");
+					MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is RL reg8/(HL)/(IX+n)/(IY+n)\n");
 				}
 		}
 		ae->idx++;
@@ -11251,7 +11266,7 @@ void _RL(struct s_assenv *ae) {
 		} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0) {
 			___output(ae,0xFD);
 		} else {
-			MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is RL (IX+n),reg8\n");
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is RL (IX+n),reg8\n");
 		}
 		___output(ae,0xCB);
 		switch (GetCRC(ae->wl[ae->idx+2].w)) {
@@ -11263,12 +11278,12 @@ void _RL(struct s_assenv *ae) {
 			case CRC_L:PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);___output(ae,0x15);ae->nop+=7;ae->tick+=23;break;
 			case CRC_A:PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);___output(ae,0x17);ae->nop+=7;ae->tick+=23;break;
 			default:			
-				MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is RL (IX+n),reg8\n");
+				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is RL (IX+n),reg8\n");
 		}
 		ae->idx++;
 		ae->idx++;
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is RL (IX+n),reg8 or RL reg8/(HL)/(IX+n)/(IY+n)\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is RL (IX+n),reg8 or RL reg8/(HL)/(IX+n)/(IY+n)\n");
 	}
 }
 
@@ -11299,7 +11314,7 @@ void _RR(struct s_assenv *ae) {
 					___output(ae,0x1E);
 					ae->nop+=7;ae->tick+=23;
 				} else {
-					MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is RR reg8/(HL)/(IX+n)/(IY+n)\n");
+					MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is RR reg8/(HL)/(IX+n)/(IY+n)\n");
 				}
 		}
 		ae->idx++;
@@ -11309,7 +11324,7 @@ void _RR(struct s_assenv *ae) {
 		} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0) {
 			___output(ae,0xFD);
 		} else {
-			MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is RR (IX+n),reg8\n");
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is RR (IX+n),reg8\n");
 		}
 		___output(ae,0xCB);
 		switch (GetCRC(ae->wl[ae->idx+2].w)) {
@@ -11321,12 +11336,12 @@ void _RR(struct s_assenv *ae) {
 			case CRC_L:PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);___output(ae,0x1D);ae->nop+=7;ae->tick+=23;break;
 			case CRC_A:PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);___output(ae,0x1F);ae->nop+=7;ae->tick+=23;break;
 			default:			
-				MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is RR (IX+n),reg8\n");
+				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is RR (IX+n),reg8\n");
 		}
 		ae->idx++;
 		ae->idx++;
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is RR (IX+n),reg8 or RR reg8/(HL)/(IX+n)/(IY+n)\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is RR (IX+n),reg8 or RR reg8/(HL)/(IX+n)/(IY+n)\n");
 	}
 }
 
@@ -11357,7 +11372,7 @@ void _SLA(struct s_assenv *ae) {
 					___output(ae,0x26);
 					ae->nop+=7;ae->tick+=23;
 				} else {
-					MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is SLA reg8/(HL)/(IX+n)/(IY+n)\n");
+					MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is SLA reg8/(HL)/(IX+n)/(IY+n)\n");
 				}
 		}
 		ae->idx++;
@@ -11367,7 +11382,7 @@ void _SLA(struct s_assenv *ae) {
 		} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0) {
 			___output(ae,0xFD);
 		} else {
-			MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is SLA (IX+n),reg8\n");
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is SLA (IX+n),reg8\n");
 		}
 		___output(ae,0xCB);
 		switch (GetCRC(ae->wl[ae->idx+2].w)) {
@@ -11379,12 +11394,12 @@ void _SLA(struct s_assenv *ae) {
 			case CRC_L:PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);___output(ae,0x25);ae->nop+=7;ae->tick+=23;break;
 			case CRC_A:PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);___output(ae,0x27);ae->nop+=7;ae->tick+=23;break;
 			default:			
-				MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is SLA (IX+n),reg8\n");
+				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is SLA (IX+n),reg8\n");
 		}
 		ae->idx++;
 		ae->idx++;
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is SLA reg8/(HL)/(IX+n)/(IY+n) or SLA (IX+n),reg8\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is SLA reg8/(HL)/(IX+n)/(IY+n) or SLA (IX+n),reg8\n");
 	}
 }
 
@@ -11415,7 +11430,7 @@ void _SRA(struct s_assenv *ae) {
 					___output(ae,0x2E);
 					ae->nop+=7;ae->tick+=23;
 				} else {
-					MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is SRA reg8/(HL)/(IX+n)/(IY+n)\n");
+					MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is SRA reg8/(HL)/(IX+n)/(IY+n)\n");
 				}
 		}
 		ae->idx++;
@@ -11425,7 +11440,7 @@ void _SRA(struct s_assenv *ae) {
 		} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0) {
 			___output(ae,0xFD);
 		} else {
-			MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is SRA (IX+n),reg8\n");
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is SRA (IX+n),reg8\n");
 		}
 		___output(ae,0xCB);
 		switch (GetCRC(ae->wl[ae->idx+2].w)) {
@@ -11437,12 +11452,12 @@ void _SRA(struct s_assenv *ae) {
 			case CRC_L:PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);___output(ae,0x2D);ae->nop+=7;ae->tick+=23;break;
 			case CRC_A:PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);___output(ae,0x2F);ae->nop+=7;ae->tick+=23;break;
 			default:			
-				MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is SRA (IX+n),reg8\n");
+				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is SRA (IX+n),reg8\n");
 		}
 		ae->idx++;
 		ae->idx++;
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is SRA reg8/(HL)/(IX+n)/(IY+n) or SRA (IX+n),reg8\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is SRA reg8/(HL)/(IX+n)/(IY+n) or SRA (IX+n),reg8\n");
 	}
 }
 
@@ -11474,7 +11489,7 @@ void _SLL(struct s_assenv *ae) {
 					___output(ae,0x36);
 					ae->nop+=7;ae->tick+=23;
 				} else {
-					MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is SLL reg8/(HL)/(IX+n)/(IY+n)\n");
+					MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is SLL reg8/(HL)/(IX+n)/(IY+n)\n");
 				}
 		}
 		ae->idx++;
@@ -11484,7 +11499,7 @@ void _SLL(struct s_assenv *ae) {
 		} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0) {
 			___output(ae,0xFD);
 		} else {
-			MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is SLL (IX+n),reg8\n");
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is SLL (IX+n),reg8\n");
 		}
 		___output(ae,0xCB);
 		switch (GetCRC(ae->wl[ae->idx+2].w)) {
@@ -11496,12 +11511,12 @@ void _SLL(struct s_assenv *ae) {
 			case CRC_L:PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);___output(ae,0x35);ae->nop+=7;ae->tick+=23;break;
 			case CRC_A:PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);___output(ae,0x37);ae->nop+=7;ae->tick+=23;break;
 			default:			
-				MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is SLL (IX+n),reg8\n");
+				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is SLL (IX+n),reg8\n");
 		}
 		ae->idx++;
 		ae->idx++;
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is SLL reg8/(HL)/(IX+n)/(IY+n) or SLL (IX+n),reg8\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is SLL reg8/(HL)/(IX+n)/(IY+n) or SLL (IX+n),reg8\n");
 	}
 }
 
@@ -11532,7 +11547,7 @@ void _SRL(struct s_assenv *ae) {
 					___output(ae,0x3E);
 					ae->nop+=7;ae->tick+=23;
 				} else {
-					MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is SRL reg8/(HL)/(IX+n)/(IY+n)\n");
+					MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is SRL reg8/(HL)/(IX+n)/(IY+n)\n");
 				}
 		}
 		ae->idx++;
@@ -11542,7 +11557,7 @@ void _SRL(struct s_assenv *ae) {
 		} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0) {
 			___output(ae,0xFD);
 		} else {
-			MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is SRL (IX+n),reg8\n");
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is SRL (IX+n),reg8\n");
 		}
 		___output(ae,0xCB);
 		switch (GetCRC(ae->wl[ae->idx+2].w)) {
@@ -11554,12 +11569,12 @@ void _SRL(struct s_assenv *ae) {
 			case CRC_L:PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);___output(ae,0x3D);ae->nop+=7;ae->tick+=23;break;
 			case CRC_A:PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);___output(ae,0x3F);ae->nop+=7;ae->tick+=23;break;
 			default:			
-				MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is SRL (IX+n),reg8\n");
+				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is SRL (IX+n),reg8\n");
 		}
 		ae->idx++;
 		ae->idx++;
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is SRL reg8/(HL)/(IX+n)/(IY+n) or SRL (IX+n),reg8\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is SRL reg8/(HL)/(IX+n)/(IY+n) or SRL (IX+n),reg8\n");
 	}
 }
 
@@ -11572,7 +11587,7 @@ void _BIT(struct s_assenv *ae) {
 
 	o=0;
 	if (o<0 || o>7) {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is BIT <value from 0 to 7>,... (%d)\n",o);
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is BIT <value from 0 to 7>,... (%d)\n",o);
 	} else {
 		o=0x40+o*8;
 		if (ae->wl[ae->idx+1].t==0 && ae->wl[ae->idx+2].t==1) {
@@ -11597,7 +11612,7 @@ void _BIT(struct s_assenv *ae) {
 						PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x6+o);
 						ae->nop+=6;ae->tick+=20;
 					} else {
-						MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is BIT n,reg8/(HL)/(IX+n)/(IY+n)\n");
+						MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is BIT n,reg8/(HL)/(IX+n)/(IY+n)\n");
 					}
 			}
 			ae->idx+=2;
@@ -11607,7 +11622,7 @@ void _BIT(struct s_assenv *ae) {
 			} else if (strncmp(ae->wl[ae->idx+2].w,"(IY",3)==0) {
 				___output(ae,0xFD);
 			} else {
-				MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is BIT (IX+n),reg8\n");
+				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is BIT (IX+n),reg8\n");
 			}
 			___output(ae,0xCB);
 			switch (GetCRC(ae->wl[ae->idx+3].w)) {
@@ -11619,11 +11634,11 @@ void _BIT(struct s_assenv *ae) {
 				case CRC_L:PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x5+o);ae->nop+=6;ae->tick+=20;break;
 				case CRC_A:PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x7+o);ae->nop+=6;ae->tick+=20;break;
 				default:			
-					MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is BIT n,(IX+n),reg8\n");
+					MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is BIT n,(IX+n),reg8\n");
 			}
 			ae->idx+=3;
 		} else {
-			MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is BIT n,reg8/(HL)/(IX+n)[,reg8]/(IY+n)[,reg8]\n");
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is BIT n,reg8/(HL)/(IX+n)[,reg8]/(IY+n)[,reg8]\n");
 		}
 	}
 }
@@ -11635,7 +11650,7 @@ void _RES(struct s_assenv *ae) {
 	o=RoundComputeExpressionCore(ae,ae->wl[ae->idx+1].w,ae->codeadr,0); */
 	o=0;
 	if (o<0 || o>7) {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is RES <value from 0 to 7>,... (%d)\n",o);
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is RES <value from 0 to 7>,... (%d)\n",o);
 	} else {
 		o=0x80+o*8;
 		if (ae->wl[ae->idx+1].t==0 && ae->wl[ae->idx+2].t==1) {
@@ -11660,7 +11675,7 @@ void _RES(struct s_assenv *ae) {
 						PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x6+o);
 						ae->nop+=7;ae->tick+=23;
 					} else {
-						MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is RES n,reg8/(HL)/(IX+n)/(IY+n)\n");
+						MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is RES n,reg8/(HL)/(IX+n)/(IY+n)\n");
 					}
 			}
 			ae->idx+=2;
@@ -11670,7 +11685,7 @@ void _RES(struct s_assenv *ae) {
 			} else if (strncmp(ae->wl[ae->idx+2].w,"(IY",3)==0) {
 				___output(ae,0xFD);
 			} else {
-				MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is RES n,(IX+n),reg8\n");
+				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is RES n,(IX+n),reg8\n");
 			}
 			___output(ae,0xCB);
 			switch (GetCRC(ae->wl[ae->idx+3].w)) {
@@ -11682,11 +11697,11 @@ void _RES(struct s_assenv *ae) {
 				case CRC_L:PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x5+o);ae->nop+=7;ae->tick+=23;break;
 				case CRC_A:PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x7+o);ae->nop+=7;ae->tick+=23;break;
 				default:			
-					MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is RES n,(IX+n),reg8\n");
+					MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is RES n,(IX+n),reg8\n");
 			}
 			ae->idx+=3;
 		} else {
-			MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is RES n,reg8/(HL)/(IX+n)[,reg8]/(IY+n)[,reg8]\n");
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is RES n,reg8/(HL)/(IX+n)[,reg8]/(IY+n)[,reg8]\n");
 		}
 	}
 }
@@ -11698,7 +11713,7 @@ void _SET(struct s_assenv *ae) {
 	o=RoundComputeExpressionCore(ae,ae->wl[ae->idx+1].w,ae->codeadr,0); */
 	o=0;
 	if (o<0 || o>7) {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is SET <value from 0 to 7>,... (%d)\n",o);
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is SET <value from 0 to 7>,... (%d)\n",o);
 	} else {
 		o=0xC0+o*8;
 		if (ae->wl[ae->idx+1].t==0 && ae->wl[ae->idx+2].t==1) {
@@ -11723,7 +11738,7 @@ void _SET(struct s_assenv *ae) {
 						PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x6+o);
 						ae->nop+=7;ae->tick+=23;
 					} else {
-						MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is SET n,reg8/(HL)/(IX+n)/(IY+n)\n");
+						MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is SET n,reg8/(HL)/(IX+n)/(IY+n)\n");
 					}
 			}
 			ae->idx+=2;
@@ -11733,7 +11748,7 @@ void _SET(struct s_assenv *ae) {
 			} else if (strncmp(ae->wl[ae->idx+2].w,"(IY",3)==0) {
 				___output(ae,0xFD);
 			} else {
-				MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is SET n,(IX+n),reg8\n");
+				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is SET n,(IX+n),reg8\n");
 			}
 			___output(ae,0xCB);
 			switch (GetCRC(ae->wl[ae->idx+3].w)) {
@@ -11745,11 +11760,11 @@ void _SET(struct s_assenv *ae) {
 				case CRC_L:PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x5+o);ae->nop+=7;ae->tick+=23;break;
 				case CRC_A:PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x7+o);ae->nop+=7;ae->tick+=23;break;
 				default:			
-					MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is SET n,(IX+n),reg8\n");
+					MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is SET n,(IX+n),reg8\n");
 			}
 			ae->idx+=3;
 		} else {
-			MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is SET n,reg8/(HL)/(IX+n)[,reg8]/(IY+n)[,reg8]\n");
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is SET n,reg8/(HL)/(IX+n)[,reg8]/(IY+n)[,reg8]\n");
 		}
 	}
 }
@@ -11757,7 +11772,7 @@ void _SET(struct s_assenv *ae) {
 void _DEFS(struct s_assenv *ae) {
 	int i,r,v;
 	if (ae->wl[ae->idx].t) {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Syntax is DEFS repeat,value or DEFS repeat\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Syntax is DEFS repeat,value or DEFS repeat\n");
 	} else do {
 		ae->idx++;
 		if (!ae->wl[ae->idx].t) {
@@ -11765,7 +11780,7 @@ void _DEFS(struct s_assenv *ae) {
 			ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0); /* doing FastTranslate but not a complete evaluation */
 			r=RoundComputeExpressionCore(ae,ae->wl[ae->idx].w,ae->codeadr,0);
 			if (r<0) {
-				MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"DEFS size must be greater or equal to zero\n");
+				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"DEFS size must be greater or equal to zero\n");
 			}
 			for (i=0;i<r;i++) {
 				/* keep flexibility */
@@ -11778,7 +11793,7 @@ void _DEFS(struct s_assenv *ae) {
 			r=RoundComputeExpressionCore(ae,ae->wl[ae->idx].w,ae->codeadr,0);
 			v=0;
 			if (r<0) {
-				MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"DEFS size must be greater or equal to zero\n");
+				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"DEFS size must be greater or equal to zero\n");
 			}
 			for (i=0;i<r;i++) {
 				___output(ae,v);
@@ -11791,7 +11806,7 @@ void _DEFS(struct s_assenv *ae) {
 void _DEFS_struct(struct s_assenv *ae) {
 	int i,r,v;
 	if (ae->wl[ae->idx].t) {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Syntax is DEFS repeat,value or DEFS repeat\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Syntax is DEFS repeat,value or DEFS repeat\n");
 	} else do {
 		ae->idx++;
 		if (!ae->wl[ae->idx].t) {
@@ -11800,7 +11815,7 @@ void _DEFS_struct(struct s_assenv *ae) {
 			r=RoundComputeExpressionCore(ae,ae->wl[ae->idx].w,ae->codeadr,0);
 			v=RoundComputeExpressionCore(ae,ae->wl[ae->idx+1].w,ae->codeadr,0);
 			if (r<0) {
-				MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"DEFS size must be greater or equal to zero\n");
+				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"DEFS size must be greater or equal to zero\n");
 			}
 			for (i=0;i<r;i++) {
 				___output(ae,v);
@@ -11812,7 +11827,7 @@ void _DEFS_struct(struct s_assenv *ae) {
 			r=RoundComputeExpressionCore(ae,ae->wl[ae->idx].w,ae->codeadr,0);
 			v=0;
 			if (r<0) {
-				MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"DEFS size must be greater or equal to zero\n");
+				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"DEFS size must be greater or equal to zero\n");
 			}
 			for (i=0;i<r;i++) {
 				___output(ae,v);
@@ -11863,11 +11878,11 @@ void _STR(struct s_assenv *ae) {
 					i++;
 				}
 			} else {
-				MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"STR handle only quoted strings!\n");
+				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"STR handle only quoted strings!\n");
 			}
 		} while (ae->wl[ae->idx].t==0);
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"STR needs one or more quotes parameters\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"STR needs one or more quotes parameters\n");
 	}
 }
 
@@ -11882,7 +11897,7 @@ void _DEFF(struct s_assenv *ae) {
 		if (ae->getstruct) {
 			___output(ae,0);___output(ae,0);___output(ae,0);___output(ae,0);___output(ae,0);
 		} else {
-			MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"DEFF needs one or more parameters\n");
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"DEFF needs one or more parameters\n");
 		}
 	}
 }
@@ -11904,7 +11919,7 @@ void _DEFF_struct(struct s_assenv *ae) {
 		if (ae->getstruct) {
 			___output(ae,0);___output(ae,0);___output(ae,0);___output(ae,0);___output(ae,0);
 		} else {
-			MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"DEFF needs one or more parameters\n");
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"DEFF needs one or more parameters\n");
 		}
 	}
 }
@@ -11920,7 +11935,7 @@ void _DEFR(struct s_assenv *ae) {
 		if (ae->getstruct) {
 			___output(ae,0);___output(ae,0);___output(ae,0);___output(ae,0);___output(ae,0);
 		} else {
-			MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"DEFR needs one or more parameters\n");
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"DEFR needs one or more parameters\n");
 		}
 	}
 }
@@ -11942,7 +11957,7 @@ void _DEFR_struct(struct s_assenv *ae) {
 		if (ae->getstruct) {
 			___output(ae,0);___output(ae,0);___output(ae,0);___output(ae,0);___output(ae,0);
 		} else {
-			MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"DEFR needs one or more parameters\n");
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"DEFR needs one or more parameters\n");
 		}
 	}
 }
@@ -11990,7 +12005,7 @@ void _DEFB(struct s_assenv *ae) {
 		if (ae->getstruct) {
 			___output(ae,0);
 		} else {
-			MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"DEFB needs one or more parameters\n");
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"DEFB needs one or more parameters\n");
 		}
 	}
 }
@@ -12038,7 +12053,7 @@ void _DEFB_struct(struct s_assenv *ae) {
 		if (ae->getstruct) {
 			___output(ae,0);
 		} else {
-			MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"DEFB needs one or more parameters\n");
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"DEFB needs one or more parameters\n");
 		}
 	}
 }
@@ -12053,7 +12068,7 @@ void _DEFW(struct s_assenv *ae) {
 		if (ae->getstruct) {
 			___output(ae,0);___output(ae,0);
 		} else {
-			MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"DEFW needs one or more parameters\n");
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"DEFW needs one or more parameters\n");
 		}
 	}
 }
@@ -12071,7 +12086,7 @@ void _DEFW_struct(struct s_assenv *ae) {
 		if (ae->getstruct) {
 			___output(ae,0);___output(ae,0);
 		} else {
-			MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"DEFW needs one or more parameters\n");
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"DEFW needs one or more parameters\n");
 		}
 	}
 }
@@ -12086,7 +12101,7 @@ void _DEFI(struct s_assenv *ae) {
 		if (ae->getstruct) {
 			___output(ae,0);___output(ae,0);___output(ae,0);___output(ae,0);
 		} else {
-			MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"DEFI needs one or more parameters\n");
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"DEFI needs one or more parameters\n");
 		}
 	}
 }
@@ -12104,7 +12119,7 @@ void _DEFI_struct(struct s_assenv *ae) {
 		if (ae->getstruct) {
 			___output(ae,0);___output(ae,0);___output(ae,0);___output(ae,0);
 		} else {
-			MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"DEFI needs one or more parameters\n");
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"DEFI needs one or more parameters\n");
 		}
 	}
 }
@@ -12137,7 +12152,7 @@ void _DEFB_as80(struct s_assenv *ae) {
 		if (ae->getstruct) {
 			___output(ae,0);
 		} else {
-			MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"DEFB needs one or more parameters\n");
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"DEFB needs one or more parameters\n");
 		}
 	}
 }
@@ -12155,7 +12170,7 @@ void _DEFW_as80(struct s_assenv *ae) {
 		if (ae->getstruct) {
 			___output(ae,0);___output(ae,0);
 		} else {
-			MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"DEFW needs one or more parameters\n");
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"DEFW needs one or more parameters\n");
 		}
 	}
 }
@@ -12173,7 +12188,7 @@ void _DEFI_as80(struct s_assenv *ae) {
 		if (ae->getstruct) {
 			___output(ae,0);___output(ae,0);___output(ae,0);___output(ae,0);
 		} else {
-			MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"DEFI needs one or more parameters\n");
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"DEFI needs one or more parameters\n");
 		}
 	}
 }
@@ -12307,7 +12322,7 @@ void __internal_EXPORT(struct s_assenv *ae, int exportval) {
 				if ((ialias=SearchAlias(ae,crc,ae->wl[ae->idx].w))!=-1) {
 					ae->alias[ialias].autorise_export=exportval;
 				} else {
-					MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"(E)NOEXPORT did not found [%s] in variables, labels or aliases\n",ae->wl[ae->idx].w);
+					MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"(E)NOEXPORT did not found [%s] in variables, labels or aliases\n",ae->wl[ae->idx].w);
 				}
 			}
 		}
@@ -12323,31 +12338,31 @@ void __ENOEXPORT(struct s_assenv *ae) {
 
 void __BUILDOBJ(struct s_assenv *ae) {
 	if (!ae->wl[ae->idx].t) {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"BUILDOBJ does not need a parameter\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"BUILDOBJ does not need a parameter\n");
 	}
 	ae->buildobj=1;
 }
 void __BUILDZX(struct s_assenv *ae) {
 	if (!ae->wl[ae->idx].t) {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"BUILDZX does not need a parameter\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"BUILDZX does not need a parameter\n");
 	}
 	if (!ae->forcesnapshot && !ae->forcetape && !ae->forcecpr && !ae->forceROM) {
 		ae->forcesnapshot=1;
 		ae->forcezx=1;
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Cannot select ZX output when already in Amstrad ROM/cartridge/snapshot/tape output\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Cannot select ZX output when already in Amstrad ROM/cartridge/snapshot/tape output\n");
 	}
 }
 void __BUILDCPR(struct s_assenv *ae) {
 	if (!ae->wl[ae->idx].t && ae->wl[ae->idx+1].t==1 && strcmp(ae->wl[ae->idx+1].w,"EXTENDED")==0) {
 		ae->extendedCPR=1;
 	} else if (!ae->wl[ae->idx].t) {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"BUILDCPR unknown parameter\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"BUILDCPR unknown parameter\n");
 	}
 	if (!ae->forcesnapshot && !ae->forcetape && !ae->forcezx && !ae->forceROM) {
 		ae->forcecpr=1;
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Cannot select Amstrad cartridge output when already in ZX/ROM/snapshot/tape output\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Cannot select Amstrad cartridge output when already in ZX/ROM/snapshot/tape output\n");
 	}
 }
 void __BUILDROM(struct s_assenv *ae) {
@@ -12356,15 +12371,141 @@ void __BUILDROM(struct s_assenv *ae) {
 			if (strcmp(ae->wl[ae->idx+1].w,"CONCAT")==0) {
 				ae->forceROMconcat=1;
 			} else {
-				MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"usage is BUILDROM [CONCAT]\n");
+				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"usage is BUILDROM [CONCAT]\n");
 			}
 		}
 		ae->forceROM=1;
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Cannot select ROM output when already in ZX/cartridge/snapshot/tape output\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Cannot select ROM output when already in ZX/cartridge/snapshot/tape output\n");
 	}
 }
 
+
+void __CPRINIT(struct s_assenv *ae) {
+	unsigned char *cprdata;
+	int cprsize,chunksize;
+	int idx,curbank,cursize;
+	int i;
+	// integration
+	char *newfilename=NULL;
+	int fileok=0;
+
+	if (!ae->wl[ae->idx].t) {
+		if (!StringIsQuote(ae->wl[ae->idx+1].w)) {
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"CPRINIT needs a snapshot filename to proceed\n");
+			return;
+		} else {
+			newfilename=TxtStrDup(ae->wl[ae->idx+1].w+1); // skip first quote
+			newfilename[strlen(newfilename)-1]=0; // remove last quote
+		}
+	} else {
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"CPRINIT needs a snapshot filename to proceed\n");
+		return;
+	}
+
+	/* Where is the file to load? */
+	if (!FileExists(newfilename)) {
+		int ilookfile;
+		char *filename_toread;
+
+		/* on cherche dans les include */
+		for (ilookfile=0;ilookfile<ae->ipath && !fileok;ilookfile++) {
+			filename_toread=MergePath(ae,ae->includepath[ilookfile],newfilename);
+			if (FileExists(filename_toread)) {
+				fileok=1;
+				MemFree(newfilename);
+				newfilename=TxtStrDup(filename_toread); // Merge renvoie un static
+			}
+		}
+	} else {
+		fileok=1;
+	}
+
+	if (fileok) {
+		cprsize=FileGetSize(newfilename);
+		if (cprsize<33) {
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"[%s] is too small to be a valid CPR file\n",newfilename);
+			return;
+		}
+		cprdata=MemMalloc(cprsize);
+		if (FileReadBinary(newfilename,(char*)cprdata,cprsize)!=cprsize) {
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"read error on file [%s]\n",newfilename);
+			MemFree(newfilename);
+			MemFree(cprdata);
+			return;
+		}
+	} else {
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"cannot find file [%s]\n",newfilename);
+		return;
+	}
+
+	// check CPR header + consistency
+	if (strncmp(cprdata,"RIFF",4)) {
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"[%s] has not a RIFF chunk!\n",newfilename);
+		MemFree(newfilename);
+		MemFree(cprdata);
+		return;
+	}
+	chunksize=cprdata[4]+cprdata[5]*256+cprdata[6]*65536+cprdata[7]*256*65536;
+	if (chunksize+8!=cprsize) {
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"[%s] has an invalid chunk size %d!=%d!\n",newfilename,chunksize+8,cprsize);
+		MemFree(newfilename);
+		MemFree(cprdata);
+		return;
+	}
+	if (strncmp(cprdata+8,"AMS!",4)) {
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"[%s] chunk must start with 'AMS!' tag!\n",newfilename);
+		MemFree(newfilename);
+		MemFree(cprdata);
+		return;
+	}
+
+	chunksize-=4; // skip AMS!
+	idx=12; // skip header+tag	
+
+	// handle fmt TAG
+	if (idx+8<chunksize && !strncmp(cprdata+idx,"fmt ",4)) {
+		//MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"[%s] chunk must start with 'AMS!' tag!\n",newfilename);
+		//MemFree(newfilename);
+		//MemFree(cprdata);
+		//return;
+		idx+=8;
+		chunksize-=8;
+	}
+
+	while (idx+8<chunksize) {
+		if (strncmp(cprdata+idx,"cb",2) || cprdata[idx+2]<'0' || cprdata[idx+2]>'9' || cprdata[idx+3]<'0' || cprdata[idx+3]>'9') {
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"[%s] has an invalid block header! %c%c%c%c\n",newfilename,cprdata[idx],cprdata[idx+1],cprdata[idx+2],cprdata[idx+3]);
+			MemFree(newfilename);
+			MemFree(cprdata);
+			return;
+		}
+		// decimal notation
+		curbank=(cprdata[idx+2]-'0')*10+cprdata[idx+3]-'0';
+		if (curbank>31 || curbank<0) {
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"[%s] has an invalid block number (%d)!\n",newfilename,curbank);
+			MemFree(newfilename);
+			MemFree(cprdata);
+			return;
+		}
+		cursize=cprdata[idx+4]+cprdata[idx+5]*256+cprdata[idx+6]*65536+cprdata[idx+7]*256*65536;
+		idx+=8;
+		if (cursize<0 || cursize>16384) {
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"[%s] has an invalid block size (%d) block n%d!\n",newfilename,cursize,curbank);
+			MemFree(newfilename);
+			MemFree(cprdata);
+			return;
+		}
+		// initialise memory with cartridge data
+		for (i=0;i<cursize;i++) {
+			ae->mem[curbank][i]=cprdata[idx];
+			ae->mem[curbank][i+16384]=cprdata[idx];
+			ae->mem[curbank][i+32768]=cprdata[idx];
+			ae->mem[curbank][i+49152]=cprdata[idx];
+			idx++;
+		}
+	}
+}
 
 void __SNAPINIT(struct s_assenv *ae) {
 	unsigned char zxsnapheader[0x1A]={0};
@@ -12386,14 +12527,14 @@ void __SNAPINIT(struct s_assenv *ae) {
 
 	if (!ae->wl[ae->idx].t) {
 		if (!StringIsQuote(ae->wl[ae->idx+1].w)) {
-			MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"SNAPINIT needs a snapshot filename to proceed\n");
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"SNAPINIT needs a snapshot filename to proceed\n");
 			return;
 		} else {
 			newfilename=TxtStrDup(ae->wl[ae->idx+1].w+1); // skip first quote
 			newfilename[strlen(newfilename)-1]=0; // remove last quote
 		}
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"SNAPINIT needs a snapshot filename to proceed\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"SNAPINIT needs a snapshot filename to proceed\n");
 		return;
 	}
 
@@ -12419,7 +12560,7 @@ void __SNAPINIT(struct s_assenv *ae) {
 		snapsize=FileGetSize(newfilename);
 		snapdata=MemMalloc(snapsize);
 		if (FileReadBinary(newfilename,(char*)snapdata,snapsize)!=snapsize) {
-			MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"read error on file [%s]\n",newfilename);
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"read error on file [%s]\n",newfilename);
 			MemFree(newfilename);
 			MemFree(snapdata);
 			return;
@@ -12450,13 +12591,13 @@ void __SNAPINIT(struct s_assenv *ae) {
 
 
 		if (snapsize<0x100) {
-			MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"file [%s] seems too small to be a snapshot\n",newfilename);
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"file [%s] seems too small to be a snapshot\n",newfilename);
 		} else if (snapdata[0]!='M' || snapdata[1]!='V' || snapdata[2]!=' ' || snapdata[3]!='-' || snapdata[4]!=' ' || snapdata[5]!='S' || snapdata[6]!='N' || snapdata[7]!='A') {
-			MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"file [%s] invalid snapshot header\n",newfilename);
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"file [%s] invalid snapshot header\n",newfilename);
 		} else {
 		}
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"file [%s] not found!\n",newfilename);
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"file [%s] not found!\n",newfilename);
 		return;
 	}
 
@@ -12467,7 +12608,7 @@ void __SNAPINIT(struct s_assenv *ae) {
 		default:
 		case 0:
 			if (snapdata[16]<3) {
-				MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"file [%s] empty snapshot v2\n",newfilename);
+				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"file [%s] empty snapshot v2\n",newfilename);
 				snapsize=0;
 			}
 			break;
@@ -12477,7 +12618,7 @@ void __SNAPINIT(struct s_assenv *ae) {
 				src+=65536;
 				ae->snapRAMsize=4;
 			} else {
-				MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"file [%s] snapshot v2 inconsistency (supposed to be 64k)\n",newfilename);
+				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"file [%s] snapshot v2 inconsistency (supposed to be 64k)\n",newfilename);
 				snapsize=0;
 			}
 			break;
@@ -12488,7 +12629,7 @@ void __SNAPINIT(struct s_assenv *ae) {
 				src+=65536*2;
 				ae->snapRAMsize=8;
 			} else {
-				MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"file [%s] snapshot v2 inconsistency (supposed to be 128k)\n",newfilename);
+				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"file [%s] snapshot v2 inconsistency (supposed to be 128k)\n",newfilename);
 				snapsize=0;
 			}
 			break;
@@ -12510,7 +12651,7 @@ void __SNAPINIT(struct s_assenv *ae) {
 			src+=8;
 			srcmax=src+chunksize;
 			if (srcmax>snapsize) {
-				MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"file [%s] invalid chunk in snapshot (overrun) chunksize=%d\n",newfilename,chunksize);
+				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"file [%s] invalid chunk in snapshot (overrun) chunksize=%d\n",newfilename,chunksize);
 				break;
 			}
 
@@ -12530,7 +12671,7 @@ void __SNAPINIT(struct s_assenv *ae) {
 				}
 			}
 			if (src!=srcmax) {
-				MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"file [%s] invalid chunk in snapshot (overrun)\n",newfilename);
+				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"file [%s] invalid chunk in snapshot (overrun)\n",newfilename);
 				break;
 			}
 		} else {
@@ -12555,23 +12696,23 @@ void __BUILDSNA(struct s_assenv *ae) {
 		if (strcmp(ae->wl[ae->idx+1].w,"V2")==0) {
 		ae->snapshot.version=2;
 		} else {
-			MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"BUILDSNA unrecognized option\n");
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"BUILDSNA unrecognized option\n");
 		}
 	}
 	if (!ae->forcecpr && !ae->forcetape && !ae->forcezx && !ae->forceROM) {
 		ae->forcesnapshot=1;
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Cannot select snapshot output when already in ZX/ROM/cartridge/tape output\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Cannot select snapshot output when already in ZX/ROM/cartridge/tape output\n");
 	}
 }
 void __BUILDTAPE(struct s_assenv *ae) {
 	if (!ae->wl[ae->idx].t) {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"BUILDTAPE does not need a parameter\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"BUILDTAPE does not need a parameter\n");
 	}
 	if (!ae->forcesnapshot && !ae->forcecpr && !ae->forcezx && !ae->forceROM) {
 		ae->forcetape=1;
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Cannot select tape output when already in ZX/ROM/snapshot/cartridge output\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Cannot select tape output when already in ZX/ROM/snapshot/cartridge output\n");
 	}
 }
 	
@@ -12583,17 +12724,17 @@ void __LZSA1(struct s_assenv *ae) {
 		ae->idx++;
 		curlz.minmatch=atoi(ae->wl[ae->idx].w);
 		if (!ae->wl[ae->idx].t) {
-			MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"LZSA1 directive may only have 1 parameter\n");
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"LZSA1 directive may only have 1 parameter\n");
 		}
 	}
 	#ifdef NO_3RD_PARTIES
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Cannot use 3rd parties cruncher with this version of RASM\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Cannot use 3rd parties cruncher with this version of RASM\n");
 		FreeAssenv(ae);
 		exit(-5);
 	#endif
 	
 	if (ae->lz>=0 && ae->lz<ae->ilz && ae->lzsection[ae->ilz-1].lzversion) {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Cannot start a new LZ section inside another one (%d)\n",ae->lz);
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Cannot start a new LZ section inside another one (%d)\n",ae->lz);
 		FreeAssenv(ae);
 		exit(-5);
 	}
@@ -12614,17 +12755,17 @@ void __LZSA2(struct s_assenv *ae) {
 		ae->idx++;
 		curlz.minmatch=atoi(ae->wl[ae->idx].w);
 		if (!ae->wl[ae->idx].t) {
-			MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"LZSA2 directive may only have 1 parameter\n");
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"LZSA2 directive may only have 1 parameter\n");
 		}
 	}
 	#ifdef NO_3RD_PARTIES
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Cannot use 3rd parties cruncher with this version of RASM\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Cannot use 3rd parties cruncher with this version of RASM\n");
 		FreeAssenv(ae);
 		exit(-5);
 	#endif
 	
 	if (ae->lz>=0 && ae->lz<ae->ilz && ae->lzsection[ae->ilz-1].lzversion) {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Cannot start a new LZ section inside another one (%d)\n",ae->lz);
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Cannot start a new LZ section inside another one (%d)\n",ae->lz);
 		FreeAssenv(ae);
 		exit(-5);
 	}
@@ -12642,17 +12783,17 @@ void __LZAPU(struct s_assenv *ae) {
 	struct s_lz_section curlz;
 	
 	if (!ae->wl[ae->idx].t) {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"LZ directive does not need any parameter\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"LZ directive does not need any parameter\n");
 		return;
 	}
 	#ifdef NO_3RD_PARTIES
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Cannot use 3rd parties cruncher with this version of RASM\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Cannot use 3rd parties cruncher with this version of RASM\n");
 		FreeAssenv(ae);
 		exit(-5);
 	#endif
 	
 	if (ae->lz>=0 && ae->lz<ae->ilz && ae->lzsection[ae->ilz-1].lzversion) {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Cannot start a new LZ section inside another one (%d)\n",ae->lz);
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Cannot start a new LZ section inside another one (%d)\n",ae->lz);
 		FreeAssenv(ae);
 		exit(-5);
 	}
@@ -12669,17 +12810,17 @@ void __LZ4(struct s_assenv *ae) {
 	struct s_lz_section curlz;
 	
 	if (!ae->wl[ae->idx].t) {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"LZ directive does not need any parameter\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"LZ directive does not need any parameter\n");
 		return;
 	}
 	#ifdef NO_3RD_PARTIES
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Cannot use 3rd parties cruncher with this version of RASM\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Cannot use 3rd parties cruncher with this version of RASM\n");
 		FreeAssenv(ae);
 		exit(-5);
 	#endif
 	
 	if (ae->lz>=0 && ae->lz<ae->ilz && ae->lzsection[ae->ilz-1].lzversion) {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Cannot start a new LZ section inside another one (%d)\n",ae->lz);
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Cannot start a new LZ section inside another one (%d)\n",ae->lz);
 		FreeAssenv(ae);
 		exit(-5);
 	}
@@ -12696,17 +12837,17 @@ void __LZX0(struct s_assenv *ae) {
 	struct s_lz_section curlz;
 
 	if (!ae->wl[ae->idx].t) {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"LZ directive does not need any parameter\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"LZ directive does not need any parameter\n");
 		return;
 	}
 	#ifdef NO_3RD_PARTIES
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Cannot use 3rd parties cruncher with this version of RASM\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Cannot use 3rd parties cruncher with this version of RASM\n");
 		FreeAssenv(ae);
 		exit(-5);
 	#endif
 	
 	if (ae->lz>=0 && ae->lz<ae->ilz && ae->lzsection[ae->ilz-1].lzversion) {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Cannot start a new LZ section inside another one (%d)\n",ae->lz);
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Cannot start a new LZ section inside another one (%d)\n",ae->lz);
 		FreeAssenv(ae);
 		exit(-5);
 	}
@@ -12724,17 +12865,17 @@ void __LZX0B(struct s_assenv *ae) {
 	struct s_lz_section curlz;
 	
 	if (!ae->wl[ae->idx].t) {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"LZ directive does not need any parameter\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"LZ directive does not need any parameter\n");
 		return;
 	}
 	#ifdef NO_3RD_PARTIES
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Cannot use 3rd parties cruncher with this version of RASM\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Cannot use 3rd parties cruncher with this version of RASM\n");
 		FreeAssenv(ae);
 		exit(-5);
 	#endif
 	
 	if (ae->lz>=0 && ae->lz<ae->ilz && ae->lzsection[ae->ilz-1].lzversion) {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Cannot start a new LZ section inside another one (%d)\n",ae->lz);
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Cannot start a new LZ section inside another one (%d)\n",ae->lz);
 		FreeAssenv(ae);
 		exit(-5);
 	}
@@ -12752,17 +12893,17 @@ void __LZX7(struct s_assenv *ae) {
 	struct s_lz_section curlz;
 	
 	if (!ae->wl[ae->idx].t) {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"LZ directive does not need any parameter\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"LZ directive does not need any parameter\n");
 		return;
 	}
 	#ifdef NO_3RD_PARTIES
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Cannot use 3rd parties cruncher with this version of RASM\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Cannot use 3rd parties cruncher with this version of RASM\n");
 		FreeAssenv(ae);
 		exit(-5);
 	#endif
 	
 	if (ae->lz>=0 && ae->lz<ae->ilz && ae->lzsection[ae->ilz-1].lzversion) {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Cannot start a new LZ section inside another one (%d)\n",ae->lz);
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Cannot start a new LZ section inside another one (%d)\n",ae->lz);
 		FreeAssenv(ae);
 		exit(-5);
 	}
@@ -12779,17 +12920,17 @@ void __LZEXO(struct s_assenv *ae) {
 	struct s_lz_section curlz;
 	
 	if (!ae->wl[ae->idx].t) {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"LZ directive does not need any parameter\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"LZ directive does not need any parameter\n");
 		return;
 	}
 	#ifdef NO_3RD_PARTIES
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Cannot use 3rd parties cruncher with this version of RASM\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Cannot use 3rd parties cruncher with this version of RASM\n");
 		FreeAssenv(ae);
 		exit(-5);
 	#endif
 	
 	if (ae->lz>=0 && ae->lz<ae->ilz && ae->lzsection[ae->ilz-1].lzversion) {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Cannot start a new LZ section inside another one (%d)\n",ae->lz);
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Cannot start a new LZ section inside another one (%d)\n",ae->lz);
 		FreeAssenv(ae);
 		exit(-5);
 	}
@@ -12806,11 +12947,11 @@ void __LZ48(struct s_assenv *ae) {
 	struct s_lz_section curlz;
 
 	if (!ae->wl[ae->idx].t) {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"LZ directive does not need any parameter\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"LZ directive does not need any parameter\n");
 		return;
 	}
 	if (ae->lz>=0 && ae->lz<ae->ilz && ae->lzsection[ae->ilz-1].lzversion) {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Cannot start a new LZ section inside another one (%d)\n",ae->lz);
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Cannot start a new LZ section inside another one (%d)\n",ae->lz);
 		FreeAssenv(ae);
 		exit(-5);
 	}
@@ -12827,11 +12968,11 @@ void __LZ49(struct s_assenv *ae) {
 	struct s_lz_section curlz;
 	
 	if (!ae->wl[ae->idx].t) {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"LZ directive does not need any parameter\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"LZ directive does not need any parameter\n");
 		return;
 	}
 	if (ae->lz>=0 && ae->lz<ae->ilz && ae->lzsection[ae->ilz-1].lzversion) {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Cannot start a new LZ section inside another one (%d)\n",ae->lz);
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Cannot start a new LZ section inside another one (%d)\n",ae->lz);
 		FreeAssenv(ae);
 		exit(-5);
 	}
@@ -12849,7 +12990,7 @@ void __LZCLOSE(struct s_assenv *ae) {
 	struct s_lz_section curlz;
 
 	if (!ae->ilz || ae->lz==-1) {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Cannot close LZ section as it wasn't opened\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Cannot close LZ section as it wasn't opened\n");
 		return;
 	}
 	
@@ -12875,7 +13016,7 @@ void __LIMIT(struct s_assenv *ae) {
 		___output_set_limit(ae,RoundComputeExpression(ae,ae->wl[ae->idx+1].w,ae->outputadr,0,0));
 		ae->idx++;
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"LIMIT directive need one integer parameter\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"LIMIT directive need one integer parameter\n");
 	}
 }
 void OverWriteCheck(struct s_assenv *ae)
@@ -12896,9 +13037,9 @@ void OverWriteCheck(struct s_assenv *ae)
 							|| (ae->orgzone[i].memstart<=ae->orgzone[j].memstart && ae->orgzone[i].memend>=ae->orgzone[j].memend)) {
 							ae->idx--;
 							if (ae->orgzone[j].protect) {
-								MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"PROTECTED section error [%s] L%d [#%04X-#%04X-B%d] with [%s] L%d [#%04X/#%04X]\n",ae->filename[ae->orgzone[j].ifile],ae->orgzone[j].iline,ae->orgzone[j].memstart,ae->orgzone[j].memend,ae->orgzone[j].ibank<32?ae->orgzone[j].ibank:0,ae->filename[ae->orgzone[i].ifile],ae->orgzone[i].iline,ae->orgzone[i].memstart,ae->orgzone[i].memend);
+								MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"PROTECTED section error [%s] L%d [#%04X-#%04X-B%d] with [%s] L%d [#%04X/#%04X]\n",ae->filename[ae->orgzone[j].ifile],ae->orgzone[j].iline,ae->orgzone[j].memstart,ae->orgzone[j].memend,ae->orgzone[j].ibank<32?ae->orgzone[j].ibank:0,ae->filename[ae->orgzone[i].ifile],ae->orgzone[i].iline,ae->orgzone[i].memstart,ae->orgzone[i].memend);
 							} else {
-								MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Assembling overwrite [%s] L%d [#%04X-#%04X-B%d] with [%s] L%d [#%04X/#%04X]\n",ae->filename[ae->orgzone[j].ifile],ae->orgzone[j].iline,ae->orgzone[j].memstart,ae->orgzone[j].memend,ae->orgzone[j].ibank<32?ae->orgzone[j].ibank:0,ae->filename[ae->orgzone[i].ifile],ae->orgzone[i].iline,ae->orgzone[i].memstart,ae->orgzone[i].memend);
+								MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Assembling overwrite [%s] L%d [#%04X-#%04X-B%d] with [%s] L%d [#%04X/#%04X]\n",ae->filename[ae->orgzone[j].ifile],ae->orgzone[j].iline,ae->orgzone[j].memstart,ae->orgzone[j].memend,ae->orgzone[j].ibank<32?ae->orgzone[j].ibank:0,ae->filename[ae->orgzone[i].ifile],ae->orgzone[i].iline,ae->orgzone[i].memstart,ae->orgzone[i].memend);
 							}
 							i=j=ae->io;
 							break;
@@ -12978,29 +13119,29 @@ void __BANK(struct s_assenv *ae) {
 			ae->activebank=RoundComputeExpression(ae,ae->wl[ae->idx+1].w,ae->codeadr,0,0);
 		}
 		if (ae->forcecpr && (ae->activebank<0 || ae->activebank>31) && !ae->extendedCPR) {
-			MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"FATAL - Bank selection must be from 0 to 31 in cartridge mode\n");
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"FATAL - Bank selection must be from 0 to 31 in cartridge mode\n");
 			FreeAssenv(ae);
 			exit(2);
 		} else if (ae->extendedCPR && (ae->activebank<0 || ae->activebank>256) && !ae->extendedCPR) {
-			MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"FATAL - Bank selection must be from 0 to 256 in extended cartridge mode\n");
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"FATAL - Bank selection must be from 0 to 256 in extended cartridge mode\n");
 			FreeAssenv(ae);
 			exit(2);
 		} else if (ae->forcezx && (ae->activebank<0 || ae->activebank>7)) {
-			MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"FATAL - Bank selection must be from 0 to 7 in ZX Spectrum mode\n");
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"FATAL - Bank selection must be from 0 to 7 in ZX Spectrum mode\n");
 			FreeAssenv(ae);
 			exit(2);
 		} else if (ae->forceROM && (ae->activebank<0 || ae->activebank>=256)) {
-			MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"FATAL - Bank selection must be from 0 to 255 in ROM mode\n");
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"FATAL - Bank selection must be from 0 to 255 in ROM mode\n");
 			FreeAssenv(ae);
 			exit(2);
 		} else if (ae->forcesnapshot && (ae->activebank<0 || ae->activebank>=260)) {
-			MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"FATAL - Bank selection must be from 0 to 259 in snapshot mode\n");
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"FATAL - Bank selection must be from 0 to 259 in snapshot mode\n");
 			FreeAssenv(ae);
 			exit(2);
 		}
 		/* bankset control */
 		if (ae->forcesnapshot && ae->bankset[ae->activebank/4]) {
-			MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Cannot BANK %d was already select by a previous BANKSET %d\n",ae->activebank,(int)ae->activebank/4);
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Cannot BANK %d was already select by a previous BANKSET %d\n",ae->activebank,(int)ae->activebank/4);
 			ae->idx++;
 			return;
 		} else {
@@ -13008,7 +13149,7 @@ void __BANK(struct s_assenv *ae) {
 		}
 		ae->idx++;
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"BANK directive need one integer parameter\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"BANK directive need one integer parameter\n");
 		return;
 	}
 	if (ae->lz>=0) {
@@ -13046,7 +13187,7 @@ void __BANKSET(struct s_assenv *ae) {
 
 	if (!ae->forcesnapshot && !ae->forcecpr && !ae->forcezx && !ae->forceROM) ae->forcesnapshot=1;
 	if (!ae->forcesnapshot) {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"BANKSET directive is specific to snapshot output\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"BANKSET directive is specific to snapshot output\n");
 		return;
 	}
 	
@@ -13060,7 +13201,7 @@ void __BANKSET(struct s_assenv *ae) {
 		ae->activebank=RoundComputeExpression(ae,ae->wl[ae->idx+1].w,ae->codeadr,0,0);
 		ae->activebank*=4;
 		if (ae->forcesnapshot && (ae->activebank<0 || ae->activebank>=260)) {
-			MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"FATAL - Bank set selection must be from 0 to 64 in snapshot mode\n");
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"FATAL - Bank set selection must be from 0 to 64 in snapshot mode\n");
 			FreeAssenv(ae);
 			exit(2);
 		}
@@ -13068,7 +13209,7 @@ void __BANKSET(struct s_assenv *ae) {
 		ibank=ae->activebank;
 		if (!ae->bankset[ibank>>2]) {
 			if (ae->bankused[ibank] || ae->bankused[ibank+1]|| ae->bankused[ibank+2]|| ae->bankused[ibank+3]) {
-				MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Cannot BANKSET because bank %d was already selected in single page mode\n",ibank);
+				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Cannot BANKSET because bank %d was already selected in single page mode\n",ibank);
 				ae->idx++;
 				return;
 			} else {
@@ -13083,7 +13224,7 @@ void __BANKSET(struct s_assenv *ae) {
 		} 
 		ae->idx++;
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"BANKSET directive need one integer parameter\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"BANKSET directive need one integer parameter\n");
 		return;
 	}
 	if (ae->lz>=0) {
@@ -13111,19 +13252,19 @@ void __NameBANK(struct s_assenv *ae) {
 	ae->bankmode=1;
 	if (!ae->wl[ae->idx].t && !ae->wl[ae->idx+1].t && ae->wl[ae->idx+2].t==1) {
 		if (!StringIsQuote(ae->wl[ae->idx+2].w)) {
-			MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Syntax is NAMEBANK <bank number>,'<string>'\n");
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Syntax is NAMEBANK <bank number>,'<string>'\n");
 		} else {
 			ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
 			ibank=RoundComputeExpression(ae,ae->wl[ae->idx+1].w,ae->codeadr,0,0);
 			if (ibank<0 || ibank>=BANK_MAX_NUMBER) {
-				MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"NAMEBANK selection must be from 0 to %d\n",BANK_MAX_NUMBER);
+				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"NAMEBANK selection must be from 0 to %d\n",BANK_MAX_NUMBER);
 			} else {
 				ae->iwnamebank[ibank]=ae->idx+2;
 			}
 		}
 		ae->idx+=2;
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"NAMEBANK directive need one integer parameter and a string\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"NAMEBANK directive need one integer parameter and a string\n");
 	}
 }
 
@@ -13217,7 +13358,7 @@ void __CHARSET(struct s_assenv *ae) {
 				j++;
 			}
 			if (ae->wl[ae->idx+1].w[i]!=tquote || ae->wl[ae->idx+2].w[j]!=dquote) {
-				MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"CHARSET <string>,<string> must use strings of the same size!\n");
+				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"CHARSET <string>,<string> must use strings of the same size!\n");
 			}
 		} else {
 			/* string,value | byte,value */
@@ -13233,14 +13374,14 @@ void __CHARSET(struct s_assenv *ae) {
 						i++;
 					}
 				} else {
-					MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"CHARSET string,value has invalid quote!\n");
+					MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"CHARSET string,value has invalid quote!\n");
 				}
 			} else {
 				i=RoundComputeExpression(ae,ae->wl[ae->idx+1].w,ae->codeadr,0,0);
 				if (i>=0 && i<256) {
 					ae->charset[i]=(unsigned char)v;
 				} else {
-					MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"CHARSET byte value must be 0-255\n");
+					MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"CHARSET byte value must be 0-255\n");
 				}
 			}
 		}
@@ -13259,10 +13400,10 @@ void __CHARSET(struct s_assenv *ae) {
 				ae->charset[i]=(unsigned char)v++;
 			}
 		} else {
-			MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"CHARSET Winape directive wrong interval value\n");
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"CHARSET Winape directive wrong interval value\n");
 		}
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"CHARSET Winape directive wrong parameter count\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"CHARSET Winape directive wrong parameter count\n");
 	}
 }
 
@@ -13296,7 +13437,7 @@ printf("<== PopGlobal on Stack [%s] igs=%d\n",ae->globalstack[ae->igs],ae->igs+1
 
 		if (ae->globalstack[ae->igs]) MemFree(ae->globalstack[ae->igs]);
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"PopGlobal INTERNAL ERROR / Please report\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"PopGlobal INTERNAL ERROR / Please report\n");
 	}
 }
 
@@ -13317,19 +13458,19 @@ void __MACRO(struct s_assenv *ae) {
 		/* overload forbidden */
 		/* macro, keywords and directives forbidden */
 		if (SearchMacro(ae,curmacro.crc,curmacro.mnemo)>=0) {
-			MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Macro already defined with this name\n");
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Macro already defined with this name\n");
 		} else {
 			if ((SearchDico(ae,ae->wl[ae->idx+1].w,curmacro.crc))!=NULL) {
-				MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Macro definition: There is already a variable with this name\n");
+				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Macro definition: There is already a variable with this name\n");
 			} else {
 				if ((SearchLabel(ae,ae->wl[ae->idx+1].w,curmacro.crc))!=NULL) {
-					MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Macro definition: There is already a label with this name\n");
+					MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Macro definition: There is already a label with this name\n");
 				} else {
 					if ((SearchAlias(ae,curmacro.crc,ae->wl[ae->idx+1].w))!=-1) {
-						MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Macro definition: There is already an alias with this name\n");
+						MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Macro definition: There is already an alias with this name\n");
 					} else {
 						if (IsRegister(curmacro.mnemo)) {
-							MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Macro definition: Cannot choose a register as macro name\n");
+							MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Macro definition: Cannot choose a register as macro name\n");
 						}
 					}
 				}
@@ -13343,7 +13484,7 @@ void __MACRO(struct s_assenv *ae) {
 				referentfilename=GetCurrentFile(ae);
 				refidx=ae->idx;
 				ae->idx=idx;
-				MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"You cannot define a macro inside another one (MACRO %s in [%s] L%d)\n",ae->wl[refidx+1].w,referentfilename,ae->wl[refidx].l);
+				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"You cannot define a macro inside another one (MACRO %s in [%s] L%d)\n",ae->wl[refidx+1].w,referentfilename,ae->wl[refidx].l);
 				__STOP(ae);
 			}
 			if (getparam) {
@@ -13369,7 +13510,7 @@ void __MACRO(struct s_assenv *ae) {
 			idx++;
 		}
 		if (ae->wl[idx].t==2) {
-			MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Macro was not closed\n");
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Macro was not closed\n");
 		}
 		ObjectArrayAddDynamicValueConcat((void**)&ae->macro,&ae->imacro,&ae->mmacro,&curmacro,sizeof(curmacro));
 		/* le quicksort n'est pas optimal mais on n'est pas supposé en créer des milliers */
@@ -13379,7 +13520,7 @@ void __MACRO(struct s_assenv *ae) {
 		if (ae->wl[idx].t==2) idx--;
 		ae->idx=idx;
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"MACRO definition need at least one parameter for the name of the macro\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"MACRO definition need at least one parameter for the name of the macro\n");
 	}
 }
 
@@ -13417,7 +13558,7 @@ struct s_wordlist *__MACRO_EXECUTE(struct s_assenv *ae, int imacro) {
 				strcat(txtparamlist," ");
 			}
 
-			MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"MACRO (multi-line mode) [%s] was defined with %d parameter%s %s\n",ae->macro[imacro].mnemo,ae->macro[imacro].nbparam,ae->macro[imacro].nbparam>1?"s":"",txtparamlist);
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"MACRO (multi-line mode) [%s] was defined with %d parameter%s %s\n",ae->macro[imacro].mnemo,ae->macro[imacro].nbparam,ae->macro[imacro].nbparam>1?"s":"",txtparamlist);
 			while (!ae->wl[ae->idx].t) {
 				ae->idx++;
 			}
@@ -13435,7 +13576,7 @@ struct s_wordlist *__MACRO_EXECUTE(struct s_assenv *ae, int imacro) {
 			}
 		} else {
 			if (ae->macrovoid) {
-				MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"MACRO [%s] used without (void) and option -void used!\n",ae->macro[imacro].mnemo);
+				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"MACRO [%s] used without (void) and option -void used!\n",ae->macro[imacro].mnemo);
 			}
 		}
 	}
@@ -13443,7 +13584,7 @@ struct s_wordlist *__MACRO_EXECUTE(struct s_assenv *ae, int imacro) {
 	
 	/* cannot VOID a macro with parameters! */
 	if (ae->macro[imacro].nbparam && strcmp(ae->wl[ae->idx+1].w,"(VOID)")==0) {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"MACRO [%s] has %d parameter%s\n",ae->macro[imacro].mnemo,ae->macro[imacro].nbparam,ae->macro[imacro].nbparam>1?"s":"");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"MACRO [%s] has %d parameter%s\n",ae->macro[imacro].mnemo,ae->macro[imacro].nbparam,ae->macro[imacro].nbparam>1?"s":"");
 		while (!ae->wl[ae->idx].t) {
 			ae->idx++;
 		}
@@ -13461,7 +13602,7 @@ struct s_wordlist *__MACRO_EXECUTE(struct s_assenv *ae, int imacro) {
 				strcat(txtparamlist," ");
 			}
 
-			MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"MACRO [%s] was defined with %d parameter%s %s\n",ae->macro[imacro].mnemo,ae->macro[imacro].nbparam,ae->macro[imacro].nbparam>1?"s":"",txtparamlist);
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"MACRO [%s] was defined with %d parameter%s %s\n",ae->macro[imacro].mnemo,ae->macro[imacro].nbparam,ae->macro[imacro].nbparam>1?"s":"",txtparamlist);
 			while (!ae->wl[ae->idx].t) {
 				ae->idx++;
 			}
@@ -13547,6 +13688,8 @@ struct s_wordlist *__MACRO_EXECUTE(struct s_assenv *ae, int imacro) {
 				ae->wl[i+ae->idx].w=TxtStrDup(ae->macro[imacro].wc[i].w);
 				ae->wl[i+ae->idx].l=iline;
 				ae->wl[i+ae->idx].ifile=ifile;
+				ae->wl[i+ae->idx].ml=ae->macro[imacro].wc[i].l;
+				ae->wl[i+ae->idx].mifile=ae->macro[imacro].wc[i].ifile;
 				/* @@@sujet a evolution, ou double controle */
 				ae->wl[i+ae->idx].t=ae->macro[imacro].wc[i].t;
 				ae->wl[i+ae->idx].e=ae->macro[imacro].wc[i].e;
@@ -13642,14 +13785,14 @@ void __TICKER(struct s_assenv *ae) {
 					else ExpressionSetDicoVar(ae,ae->wl[ae->idx+2].w,ae->nop-ae->ticker[i].nopstart,0);
 				}
 			} else {
-				MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"TICKER not found\n");
+				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"TICKER not found\n");
 			}
 		} else {
-			MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"usage is TICKER start/stop(z),<variable>\n");
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"usage is TICKER start/stop(z),<variable>\n");
 		}
 		ae->idx+=2;
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"usage is TICKER start/stop(z),<variable>\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"usage is TICKER start/stop(z),<variable>\n");
 	}
 }
 
@@ -13659,7 +13802,7 @@ void __LET(struct s_assenv *ae) {
 		ExpressionFastTranslate(ae,&ae->wl[ae->idx].w,0);
 		RoundComputeExpression(ae,ae->wl[ae->idx].w,ae->codeadr,0,0);
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"LET useless Winape directive need one expression\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"LET useless Winape directive need one expression\n");
 	}
 }
 
@@ -13675,7 +13818,7 @@ void __RUN(struct s_assenv *ae) {
 				PushExpression(ae,ae->idx+1,E_EXPRESSION_ZXSTACK); // delayed STACK value
 				ae->idx++;
 			} else {
-				MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"usage is RUN <address>,<stack> (ZX mode, you must set address+stack)\n");
+				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"usage is RUN <address>,<stack> (ZX mode, you must set address+stack)\n");
 			}
 		} else {
 			PushExpression(ae,ae->idx+1,E_EXPRESSION_RUN); // delayed RUN value
@@ -13695,8 +13838,8 @@ void __RUN(struct s_assenv *ae) {
 			}
 		}
 	} else {
-		if (ae->forcezx) MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"usage is RUN <address>,<stack> (ZX mode)\n");
-		else MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"usage is RUN <address>[,<ppi>]\n");
+		if (ae->forcezx) MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"usage is RUN <address>,<stack> (ZX mode)\n");
+		else MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"usage is RUN <address>[,<ppi>]\n");
 	}
 	if (ae->rundefined && !ae->nowarning) {
 		rasm_printf(ae,KWARNING"[%s:%d] Warning: run address redefinition\n",GetCurrentFile(ae),ae->wl[ae->idx].l);
@@ -13715,7 +13858,7 @@ void __BREAKPOINT(struct s_assenv *ae) {
 		breakpoint.address=RoundComputeExpression(ae,ae->wl[ae->idx+1].w,ae->codeadr,0,0);
 		ObjectArrayAddDynamicValueConcat((void **)&ae->breakpoint,&ae->ibreakpoint,&ae->maxbreakpoint,&breakpoint,sizeof(struct s_breakpoint));
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is BREAKPOINT [address]\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is BREAKPOINT [address]\n");
 	}
 }
 
@@ -13880,7 +14023,7 @@ void __SNASET(struct s_assenv *ae) {
 			} else if (strcmp(ae->wl[ae->idx].w,"INT_REQ")==0) {
 				ae->snapshot.interruptrequestflag=myvalue;
 			} else {
-				MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"SNASET directive unknown non array settings\n");
+				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"SNASET directive unknown non array settings\n");
 			}
 		} else if (!ae->wl[ae->idx].t && !ae->wl[ae->idx+1].t && ae->wl[ae->idx+2].t==1) {
 			/* index value */
@@ -13895,25 +14038,25 @@ void __SNASET(struct s_assenv *ae) {
 				if (idx>=0 && idx<17) {
 					ae->snapshot.gatearray.palette[idx]=myvalue;
 				} else {
-					MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"SNASET directive needs [0-16] index for GA_PAL\n");
+					MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"SNASET directive needs [0-16] index for GA_PAL\n");
 				}
 			} else if (strcmp(ae->wl[ae->idx].w,"CRTC_REG")==0) {
 				if (idx>=0 && idx<18) {
 					ae->snapshot.crtc.registervalue[idx]=myvalue;
 				} else {
-					MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"SNASET directive needs [0-17] index for CRTC_REG\n");
+					MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"SNASET directive needs [0-17] index for CRTC_REG\n");
 				}
 			} else if (strcmp(ae->wl[ae->idx].w,"PSG_REG")==0) {
 				if (idx>=0 && idx<16) {
 					ae->snapshot.psg.registervalue[idx]=myvalue;
 				} else {
-					MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"SNASET directive needs [0-15] index for PSG_REG\n");
+					MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"SNASET directive needs [0-15] index for PSG_REG\n");
 				}
 			} else {
-				MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"SNASET directive unknown array settings\n");
+				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"SNASET directive unknown array settings\n");
 			}
 		} else {
-			MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"SNASET directive need 2 or 3 parameters (see documentation for more informations)\n");
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"SNASET directive need 2 or 3 parameters (see documentation for more informations)\n");
 		}
 	}
 
@@ -13949,10 +14092,10 @@ void __SETCPC(struct s_assenv *ae) {
 				ae->snapshot.CPCType=mycpc;
 				break;
 			default:
-				MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"SETCPC directive has wrong value (0,1,2,4,5,6 only)\n");
+				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"SETCPC directive has wrong value (0,1,2,4,5,6 only)\n");
 		}
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"SETCPC directive need one integer parameter\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"SETCPC directive need one integer parameter\n");
 	}
 }
 void __SETCRTC(struct s_assenv *ae) {
@@ -13974,7 +14117,7 @@ void __SETCRTC(struct s_assenv *ae) {
 		mycrtc=RoundComputeExpression(ae,ae->wl[ae->idx+1].w,ae->codeadr,0,0);
 		ae->idx++;
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"SETCRTC directive need one integer parameter\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"SETCRTC directive need one integer parameter\n");
 		mycrtc=0;
 	}
 	switch (mycrtc) {
@@ -13986,25 +14129,25 @@ void __SETCRTC(struct s_assenv *ae) {
 			ae->snapshot.crtcstate.model=mycrtc;
 			break;
 		default:
-			MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"SETCRTC directive has wrong value (0,1,2,3,4 only)\n");
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"SETCRTC directive has wrong value (0,1,2,3,4 only)\n");
 	}
 }
 
 
 void __LIST(struct s_assenv *ae) {
 	if (!ae->wl[ae->idx].t) {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"LIST Winape directive does not need parameter\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"LIST Winape directive does not need parameter\n");
 	}
 }
 void __NOLIST(struct s_assenv *ae) {
 	if (!ae->wl[ae->idx].t) {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"NOLIST Winape directive does not need parameter\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"NOLIST Winape directive does not need parameter\n");
 	}
 }
 
 void __BRK(struct s_assenv *ae) {
 	if (!ae->wl[ae->idx].t) {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"BRK Winape directive does not need parameter\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"BRK Winape directive does not need parameter\n");
 	} else {
 		___output(ae,0xED);
 		___output(ae,0xFF);
@@ -14063,7 +14206,7 @@ void __PRINT(struct s_assenv *ae) {
 				string2print=TxtStrDup(ae->wl[ae->idx+1].w+6);
 				entier=ae->wl[ae->idx+1].w[4]-'0';
 				if (entier<2 || entier>5) {
-					MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"invalid prefix, must be from INT2 to INT5\n");
+					MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"invalid prefix, must be from INT2 to INT5\n");
 					entier=5;
 				}
 			} else {
@@ -14167,14 +14310,14 @@ void __CONFINE(struct s_assenv *ae) {
 				ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
 				ifill=RoundComputeExpression(ae,ae->wl[ae->idx+1].w,ae->codeadr,0,0);
 				if (ifill<0 || ifill>255) {
-					MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"ALIGN fill value must be 0 to 255\n");
+					MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"ALIGN fill value must be 0 to 255\n");
 					ifill=0;
 				}
 			}
 			ae->idx++;
 		}
 		if (aval<1 || aval>256) {
-			MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"CONFINE size must be in [2-256] interval\n");
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"CONFINE size must be in [2-256] interval\n");
 			aval=1;
 		}
 		/* touch codeadr only if needed */
@@ -14192,7 +14335,7 @@ void __CONFINE(struct s_assenv *ae) {
 			}
 		}
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"CONFINE <confined size>[,fill] directive need one or two integers parameters\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"CONFINE <confined size>[,fill] directive need one or two integers parameters\n");
 	}
 }
 
@@ -14212,13 +14355,13 @@ void __ALIGN(struct s_assenv *ae) {
 			ifill=RoundComputeExpression(ae,ae->wl[ae->idx+1].w,ae->codeadr,0,0);
 			ae->idx++;
 			if (ifill<0 || ifill>255) {
-				MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"ALIGN fill value must be 0 to 255\n");
+				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"ALIGN fill value must be 0 to 255\n");
 				ifill=0;
 			}
 		}
 
 		if (aval<1 || aval>65535) {
-			MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"ALIGN boundary must be greater than zero and lower than 65536\n");
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"ALIGN boundary must be greater than zero and lower than 65536\n");
 			aval=1;
 		}
 
@@ -14237,7 +14380,7 @@ void __ALIGN(struct s_assenv *ae) {
 			}
 		}
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"ALIGN <boundary>[,fill] directive need one or two integers parameters\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"ALIGN <boundary>[,fill] directive need one or two integers parameters\n");
 	}
 }
 
@@ -14257,37 +14400,37 @@ void ___internal_skip_loop_block(struct s_assenv *ae, int eloopstyle) {
 			} else if (ae->wl[cidx+1].t) {
 				IntArrayAddDynamicValueConcat(&loopstyle,&iloop,&mloop,E_LOOPSTYLE_REPEATN);
 			} else {
-				MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Invalid REPEAT syntax\n");
+				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Invalid REPEAT syntax\n");
 			}
 		} else if (strcmp(ae->wl[cidx].w,"WHILE")==0) {
 			if (!ae->wl[cidx].t && ae->wl[cidx+1].t) {
 				IntArrayAddDynamicValueConcat(&loopstyle,&iloop,&mloop,E_LOOPSTYLE_WHILE);
 			} else {
-				MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Invalid WHILE syntax\n");
+				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Invalid WHILE syntax\n");
 			}
 		} else if (strcmp(ae->wl[cidx].w,"WEND")==0) {
 			iloop--;
 			if (iloop<0) {
 				iloop=0;
-				MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"WEND encountered that was not expected\n");
+				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"WEND encountered that was not expected\n");
 			} else if (loopstyle[iloop]!=E_LOOPSTYLE_WHILE) {
-				MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"WEND encountered but expecting %s\n",loopstyle[iloop]==E_LOOPSTYLE_REPEATN?"REND":"UNTIL");
+				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"WEND encountered but expecting %s\n",loopstyle[iloop]==E_LOOPSTYLE_REPEATN?"REND":"UNTIL");
 			}
 		} else if (strcmp(ae->wl[cidx].w,"REND")==0) {
 			iloop--;
 			if (iloop<0) {
 				iloop=0;
-				MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"REND encountered that was not expected\n");
+				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"REND encountered that was not expected\n");
 			} else if (loopstyle[iloop]!=E_LOOPSTYLE_REPEATN) {
-				MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"REND encountered but expecting %s\n",loopstyle[iloop]==E_LOOPSTYLE_REPEATUNTIL?"UNTIL":"WEND");
+				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"REND encountered but expecting %s\n",loopstyle[iloop]==E_LOOPSTYLE_REPEATUNTIL?"UNTIL":"WEND");
 			}
 		} else if (strcmp(ae->wl[cidx].w,"UNTIL")==0) {
 			iloop--;
 			if (iloop<0) {
 				iloop=0;
-				MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"UNTIL encountered that was not expected\n");
+				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"UNTIL encountered that was not expected\n");
 			} else if (loopstyle[iloop]!=E_LOOPSTYLE_REPEATUNTIL) {
-				MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"UNTIL encountered but expecting %s\n",loopstyle[iloop]==E_LOOPSTYLE_REPEATN?"REND":"WEND");
+				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"UNTIL encountered but expecting %s\n",loopstyle[iloop]==E_LOOPSTYLE_REPEATN?"REND":"WEND");
 			}
 		}
 		while (!ae->wl[cidx].t) cidx++;
@@ -14326,7 +14469,7 @@ void __WHILE(struct s_assenv *ae) {
 			ObjectArrayAddDynamicValueConcat((void**)&ae->whilewend,&ae->iw,&ae->mw,&whilewend,sizeof(whilewend));
 		}
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is WHILE <expression>\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is WHILE <expression>\n");
 	}
 }
 void __WEND(struct s_assenv *ae) {
@@ -14340,7 +14483,7 @@ void __WEND(struct s_assenv *ae) {
 					/*************************************************/
 					PopGlobal(ae);
 
-					MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Bypass infinite WHILE loop\n");
+					MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Bypass infinite WHILE loop\n");
 					ae->iw--;
 					/* refresh macro check index */
 					if (ae->iw) ae->imacropos=ae->whilewend[ae->iw-1].maxim;
@@ -14363,10 +14506,10 @@ void __WEND(struct s_assenv *ae) {
 				if (ae->iw) ae->imacropos=ae->whilewend[ae->iw-1].maxim;
 			}
 		} else {
-			MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"WEND does not need any parameter\n");
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"WEND does not need any parameter\n");
 		}
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"WEND encounter whereas there is no referent WHILE\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"WEND encounter whereas there is no referent WHILE\n");
 	}
 }
 
@@ -14401,7 +14544,7 @@ void __REPEAT(struct s_assenv *ae) {
 				___internal_skip_loop_block(ae,E_LOOPSTYLE_REPEATN);
 				return;
 			} else if (currepeat.cpt<1 || currepeat.cpt>65536) {
-				MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Repeat value (%d) must be from 1 to 65535. Skipping block\n",currepeat.cpt);
+				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Repeat value (%d) must be from 1 to 65535. Skipping block\n",currepeat.cpt);
 				___internal_skip_loop_block(ae,E_LOOPSTYLE_REPEATN);
 				return;
 			}
@@ -14459,7 +14602,7 @@ void __REPEAT(struct s_assenv *ae) {
 		if (ae->imacropos>currepeat.maxim) currepeat.maxim=ae->imacropos;
 		ObjectArrayAddDynamicValueConcat((void**)&ae->repeat,&ae->ir,&ae->mr,&currepeat,sizeof(currepeat));
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"wrong REPEAT usage\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"wrong REPEAT usage\n");
 	}
 }
 
@@ -14467,7 +14610,7 @@ void __REND(struct s_assenv *ae) {
 	struct s_expr_dico *rvar;
 	if (ae->ir>0) {
 		if (ae->repeat[ae->ir-1].cpt==-1) {
-			MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"REND encounter whereas referent REPEAT was waiting for UNTIL\n");
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"REND encounter whereas referent REPEAT was waiting for UNTIL\n");
 		} else {
 			ae->repeat[ae->ir-1].cpt--;
 			ae->repeat[ae->ir-1].repeat_counter++;
@@ -14493,14 +14636,14 @@ void __REND(struct s_assenv *ae) {
 			}
 		}
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"REND encounter whereas there is no referent REPEAT\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"REND encounter whereas there is no referent REPEAT\n");
 	}
 }
 
 void __UNTIL(struct s_assenv *ae) {
 	if (ae->ir>0) {
 		if (ae->repeat[ae->ir-1].cpt>=0) {
-			MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"[%s:%d] UNTIL encounter whereas referent REPEAT n was waiting for REND\n");
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"[%s:%d] UNTIL encounter whereas referent REPEAT n was waiting for REND\n");
 		} else {
 			if (ae->wl[ae->idx].t==0 && ae->wl[ae->idx+1].t==1) {
 				ae->repeat[ae->ir-1].repeat_counter++;
@@ -14513,7 +14656,7 @@ void __UNTIL(struct s_assenv *ae) {
 						/*************************************************/
 						PopGlobal(ae);
 
-						MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Bypass infinite REPEAT loop\n");
+						MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Bypass infinite REPEAT loop\n");
 						ae->ir--;
 						/* refresh macro check index */
 						if (ae->ir) ae->imacropos=ae->repeat[ae->ir-1].maxim;
@@ -14535,11 +14678,11 @@ void __UNTIL(struct s_assenv *ae) {
 					if (ae->ir) ae->imacropos=ae->repeat[ae->ir-1].maxim;
 				}
 			} else {
-				MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"UNTIL need one expression/evaluation as parameter\n");
+				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"UNTIL need one expression/evaluation as parameter\n");
 			}
 		}
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"UNTIL encounter whereas there is no referent REPEAT\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"UNTIL encounter whereas there is no referent REPEAT\n");
 	}
 }
 
@@ -14552,7 +14695,7 @@ void __ASSERT(struct s_assenv *ae) {
 		if (strlen(ae->wl[ae->idx+1].w)>29) strcpy(Dot3,"..."); else strcpy(Dot3,"");
 		rexpr=!!RoundComputeExpression(ae,ae->wl[ae->idx+1].w,ae->codeadr,0,1);
 		if (!rexpr) {
-			MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx+1].l,"ASSERT %.29s%s failed with ",ae->wl[ae->idx+1].w,Dot3);
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx+1].l,"ASSERT %.29s%s failed with ",ae->wl[ae->idx+1].w,Dot3);
 			ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,1);
 			rasm_printf(ae,"%s\n",ae->wl[ae->idx+1].w);
  			if (!ae->wl[ae->idx+1].t) {
@@ -14565,7 +14708,7 @@ void __ASSERT(struct s_assenv *ae) {
 			while (!ae->wl[ae->idx].t) ae->idx++;
 		}
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"ASSERT need one expression\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"ASSERT need one expression\n");
 	}
 }
 
@@ -14583,7 +14726,7 @@ void __IF(struct s_assenv *ae) {
 		ObjectArrayAddDynamicValueConcat((void **)&ae->ifthen,&ae->ii,&ae->mi,&ifthen,sizeof(ifthen));
 		ae->idx++;
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"IF need one expression\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"IF need one expression\n");
 	}
 }
 
@@ -14599,7 +14742,7 @@ void __IF_light(struct s_assenv *ae) {
 		ObjectArrayAddDynamicValueConcat((void **)&ae->ifthen,&ae->ii,&ae->mi,&ifthen,sizeof(ifthen));
 		ae->idx++;
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"IF need one expression\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"IF need one expression\n");
 	}
 }
 
@@ -14639,7 +14782,7 @@ void __IFUSED(struct s_assenv *ae) {
 		ObjectArrayAddDynamicValueConcat((void **)&ae->ifthen,&ae->ii,&ae->mi,&ifthen,sizeof(ifthen));
 		ae->idx++;
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"IFUSED need one variable or label\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"IFUSED need one variable or label\n");
 	}
 }
 void __IFNUSED(struct s_assenv *ae) {
@@ -14658,7 +14801,7 @@ void __IFUSED_light(struct s_assenv *ae) {
 		ObjectArrayAddDynamicValueConcat((void **)&ae->ifthen,&ae->ii,&ae->mi,&ifthen,sizeof(ifthen));
 		ae->idx++;
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"IFUSED need one variable or label\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"IFUSED need one variable or label\n");
 	}
 }
 void __IFNUSED_light(struct s_assenv *ae) {
@@ -14704,7 +14847,7 @@ void __IFDEF(struct s_assenv *ae) {
 		ObjectArrayAddDynamicValueConcat((void **)&ae->ifthen,&ae->ii,&ae->mi,&ifthen,sizeof(ifthen));
 		ae->idx++;
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"IFDEF need one variable or label\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"IFDEF need one variable or label\n");
 	}
 }
 void __IFDEF_light(struct s_assenv *ae) {
@@ -14718,7 +14861,7 @@ void __IFDEF_light(struct s_assenv *ae) {
 		ObjectArrayAddDynamicValueConcat((void **)&ae->ifthen,&ae->ii,&ae->mi,&ifthen,sizeof(ifthen));
 		ae->idx++;
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"IFDEF need one variable or label\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"IFDEF need one variable or label\n");
 	}
 }
 void __IFNDEF(struct s_assenv *ae) {
@@ -14758,7 +14901,7 @@ void __IFNDEF(struct s_assenv *ae) {
 		ObjectArrayAddDynamicValueConcat((void **)&ae->ifthen,&ae->ii,&ae->mi,&ifthen,sizeof(ifthen));
 		ae->idx++;
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"IFNDEF need one variable or label\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"IFNDEF need one variable or label\n");
 	}
 }
 void __IFNDEF_light(struct s_assenv *ae) {
@@ -14773,7 +14916,7 @@ void __IFNDEF_light(struct s_assenv *ae) {
 		ObjectArrayAddDynamicValueConcat((void **)&ae->ifthen,&ae->ii,&ae->mi,&ifthen,sizeof(ifthen));
 		ae->idx++;
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"IFNDEF need one variable or label\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"IFNDEF need one variable or label\n");
 	}
 }
 
@@ -14784,7 +14927,7 @@ void __UNDEF(struct s_assenv *ae) {
 		DelDico(ae,ae->wl[ae->idx+1].w,GetCRC(ae->wl[ae->idx+1].w));
 		ae->idx++;
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is UNDEF <variable>\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is UNDEF <variable>\n");
 	}
 
 }
@@ -14800,7 +14943,7 @@ void __SWITCH(struct s_assenv *ae) {
 		ObjectArrayAddDynamicValueConcat((void**)&ae->switchcase,&ae->isw,&ae->msw,&curswitch,sizeof(curswitch));
 		ae->idx++;
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"SWITCH need one expression\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"SWITCH need one expression\n");
 	}
 }
 void __CASE(struct s_assenv *ae) {
@@ -14816,10 +14959,10 @@ void __CASE(struct s_assenv *ae) {
 				ae->switchcase[ae->isw-1].casematch=1;
 			}
 		} else {
-			MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"CASE not need one parameter\n");
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"CASE not need one parameter\n");
 		}
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"CASE encounter whereas there is no referent SWITCH\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"CASE encounter whereas there is no referent SWITCH\n");
 	}
 }
 void __DEFAULT(struct s_assenv *ae) {
@@ -14831,10 +14974,10 @@ void __DEFAULT(struct s_assenv *ae) {
 				ae->switchcase[ae->isw-1].execute=1;
 			}
 		} else {
-			MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"DEFAULT does not need parameter\n");
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"DEFAULT does not need parameter\n");
 		}
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"DEFAULT encounter whereas there is no referent SWITCH\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"DEFAULT encounter whereas there is no referent SWITCH\n");
 	}
 }
 void __BREAK(struct s_assenv *ae) {
@@ -14843,10 +14986,10 @@ void __BREAK(struct s_assenv *ae) {
 		if (ae->wl[ae->idx].t==1) {
 			ae->switchcase[ae->isw-1].execute=0;
 		} else {
-			MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"BREAK does not need parameter\n");
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"BREAK does not need parameter\n");
 		}
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"BREAK encounter whereas there is no referent SWITCH\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"BREAK encounter whereas there is no referent SWITCH\n");
 	}
 }
 void __SWITCH_light(struct s_assenv *ae) {
@@ -14859,14 +15002,14 @@ void __SWITCH_light(struct s_assenv *ae) {
 		ObjectArrayAddDynamicValueConcat((void**)&ae->switchcase,&ae->isw,&ae->msw,&curswitch,sizeof(curswitch));
 		ae->idx++;
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"SWITCH need one expression\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"SWITCH need one expression\n");
 	}
 }
 void __CASE_light(struct s_assenv *ae) {
 	if (ae->isw) {
 		/* shadowed execution */
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"CASE encounter whereas there is no referent SWITCH\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"CASE encounter whereas there is no referent SWITCH\n");
 	}
 }
 void __DEFAULT_light(struct s_assenv *ae) {
@@ -14874,14 +15017,14 @@ void __DEFAULT_light(struct s_assenv *ae) {
 	if (ae->isw) {
 		/* shadowed execution */
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"DEFAULT encounter whereas there is no referent SWITCH\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"DEFAULT encounter whereas there is no referent SWITCH\n");
 	}
 }
 void __BREAK_light(struct s_assenv *ae) {
 	if (ae->isw) {
 		/* shadowed execution */
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"BREAK encounter whereas there is no referent SWITCH\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"BREAK encounter whereas there is no referent SWITCH\n");
 	}
 }
 void __ENDSWITCH(struct s_assenv *ae) {
@@ -14889,10 +15032,10 @@ void __ENDSWITCH(struct s_assenv *ae) {
 		if (ae->wl[ae->idx].t==1) {
 			ae->isw--;
 		} else {
-			MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"ENDSWITCH does not need any parameter\n");
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"ENDSWITCH does not need any parameter\n");
 		}
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"ENDSWITCH encounter whereas there is no referent SWITCH\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"ENDSWITCH encounter whereas there is no referent SWITCH\n");
 	}
 }
 
@@ -14911,7 +15054,7 @@ void __IFNOT(struct s_assenv *ae) {
 		//IntArrayAddDynamicValueConcat(&ae->ifthen,&ae->ii,&ae->mi,rexpr);
 		ae->idx++;
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"IFNOT need one expression\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"IFNOT need one expression\n");
 	}
 }
 void __IFNOT_light(struct s_assenv *ae) {
@@ -14926,7 +15069,7 @@ void __IFNOT_light(struct s_assenv *ae) {
 		//IntArrayAddDynamicValueConcat(&ae->ifthen,&ae->ii,&ae->mi,rexpr);
 		ae->idx++;
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"IFNOT need one expression\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"IFNOT need one expression\n");
 	}
 }
 
@@ -14943,10 +15086,10 @@ void __ELSE(struct s_assenv *ae) {
 			ae->ifthen[ae->ii-1].line=ae->wl[ae->idx].l;
 			ae->ifthen[ae->ii-1].filename=GetCurrentFile(ae);
 		} else {
-			MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"ELSE does not need any parameter\n");
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"ELSE does not need any parameter\n");
 		}
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"ELSE encounter whereas there is no referent IF\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"ELSE encounter whereas there is no referent IF\n");
 	}
 }
 void __ELSEIF(struct s_assenv *ae) {
@@ -14964,7 +15107,7 @@ void __ELSEIF(struct s_assenv *ae) {
 		}
 		ae->idx++;
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"ELSEIF need one expression\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"ELSEIF need one expression\n");
 	}
 }
 void __ELSEIF_light(struct s_assenv *ae) {
@@ -14981,7 +15124,7 @@ void __ELSEIF_light(struct s_assenv *ae) {
 		}
 		ae->idx++;
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"ELSEIF need one expression\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"ELSEIF need one expression\n");
 	}
 }
 void __ENDIF(struct s_assenv *ae) {
@@ -14989,10 +15132,10 @@ void __ENDIF(struct s_assenv *ae) {
 		if (ae->wl[ae->idx].t==1) {
 			ae->ii--;
 		} else {
-			MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"ENDIF does not need any parameter\n");
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"ENDIF does not need any parameter\n");
 		}
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"ENDIF encounter whereas there is no referent IF\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"ENDIF encounter whereas there is no referent IF\n");
 	}
 }
 
@@ -15020,13 +15163,13 @@ void __PROTECT(struct s_assenv *ae) {
 		memend=RoundComputeExpression(ae,ae->wl[ae->idx+2].w,0,0,0);
 		__internal_PROTECT(ae,memstart,memend);
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"PROTECT need two parameters: startadr,endadr\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"PROTECT need two parameters: startadr,endadr\n");
 	}
 }
 
 void ___org_close(struct s_assenv *ae) {
 	if (ae->lz>=0 && ae->lzsection[ae->ilz-1].lzversion) {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Cannot ORG inside a LZ section\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Cannot ORG inside a LZ section\n");
 		return;
 	}
 	__internal_UpdateLZBlockIfAny(ae);
@@ -15047,9 +15190,9 @@ void ___org_new(struct s_assenv *ae, int nocode) {
 			if (ae->orgzone[i].ibank==ae->activebank) {
 				if (ae->outputadr<ae->orgzone[i].memend && ae->outputadr>=ae->orgzone[i].memstart) {
 					if (ae->orgzone[i].protect) {
-						MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"ORG located a PROTECTED section [#%04X-#%04X-B%d] file [%s] line %d\n",ae->orgzone[i].memstart,ae->orgzone[i].memend,ae->orgzone[i].ibank<32?ae->orgzone[i].ibank:0,ae->filename[ae->orgzone[i].ifile],ae->orgzone[i].iline);
+						MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"ORG located a PROTECTED section [#%04X-#%04X-B%d] file [%s] line %d\n",ae->orgzone[i].memstart,ae->orgzone[i].memend,ae->orgzone[i].ibank<32?ae->orgzone[i].ibank:0,ae->filename[ae->orgzone[i].ifile],ae->orgzone[i].iline);
 					} else {
-						MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"ORG (output at #%04X) located in a previous ORG section [#%04X-#%04X-B%d] file [%s] line %d\n",ae->outputadr,ae->orgzone[i].memstart,ae->orgzone[i].memend,ae->orgzone[i].ibank<32?ae->orgzone[i].ibank:0,ae->filename[ae->orgzone[i].ifile],ae->orgzone[i].iline);
+						MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"ORG (output at #%04X) located in a previous ORG section [#%04X-#%04X-B%d] file [%s] line %d\n",ae->outputadr,ae->orgzone[i].memstart,ae->orgzone[i].memend,ae->orgzone[i].ibank<32?ae->orgzone[i].ibank:0,ae->filename[ae->orgzone[i].ifile],ae->orgzone[i].iline);
 					}
 				}
 			}
@@ -15084,14 +15227,14 @@ void __ORG(struct s_assenv *ae) {
 		ae->codeadr=RoundComputeExpression(ae,ae->wl[ae->idx+1].w,ae->outputadr,0,0);
 		if (ae->codeadr<0 || ae->codeadr>0xFFFF) {
 			ae->codeadr=0;
-			MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"[%s:%d] cannot ORG outside memory!\n");
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"[%s:%d] cannot ORG outside memory!\n");
 		}
 		if (!ae->wl[ae->idx+1].t && ae->wl[ae->idx+2].t!=2) {
 			ExpressionFastTranslate(ae,&ae->wl[ae->idx+2].w,0);
 			ae->outputadr=RoundComputeExpression(ae,ae->wl[ae->idx+2].w,ae->outputadr,0,0);
 			if (ae->outputadr<0 || ae->outputadr>0xFFFF) {
 				ae->outputadr=0;
-				MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"[%s:%d] cannot ORG outside memory!\n");
+				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"[%s:%d] cannot ORG outside memory!\n");
 			}
 			ae->idx+=2;
 		} else {
@@ -15099,7 +15242,7 @@ void __ORG(struct s_assenv *ae) {
 			ae->idx++;
 		}
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"[%s:%d] ORG code location[,output location]\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"[%s:%d] ORG code location[,output location]\n");
 		return;
 	}
 	
@@ -15114,7 +15257,7 @@ void __NOCODE(struct s_assenv *ae) {
 		ae->outputadrbackup=ae->outputadr;
 		___org_new(ae,1);
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"NOCODE directive does not need parameter\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"NOCODE directive does not need parameter\n");
 	}
 }
 void __CODE(struct s_assenv *ae) {
@@ -15125,14 +15268,14 @@ void __CODE(struct s_assenv *ae) {
 			ae->outputadr=ae->outputadrbackup;
 			___org_new(ae,1);
 		} else {
-			MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"unknown parameter for CODE directive\n");
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"unknown parameter for CODE directive\n");
 		}
 		ae->idx++;
 	} else if (ae->wl[ae->idx].t==1) {
 		___org_close(ae);
 		___org_new(ae,0);
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"CODE directive does not need parameter\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"CODE directive does not need parameter\n");
 	}
 }
 void __STRUCT(struct s_assenv *ae) {
@@ -15155,7 +15298,7 @@ void __STRUCT(struct s_assenv *ae) {
 				/* cannot be an existing label or EQU (but variable ok) */
 				crc=GetCRC(ae->wl[ae->idx+1].w);
 				if ((SearchLabel(ae,ae->wl[ae->idx+1].w,crc))!=NULL || (SearchAlias(ae,crc,ae->wl[ae->idx+1].w))!=-1) {
-					MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"STRUCT name must be different from existing labels ou aliases\n");
+					MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"STRUCT name must be different from existing labels ou aliases\n");
 				} else {
 					ae->backup_filename=GetCurrentFile(ae);
 					ae->backup_line=ae->wl[ae->idx].l;
@@ -15181,7 +15324,7 @@ void __STRUCT(struct s_assenv *ae) {
 					instruction[ICRC_DEFS].makemnemo=_DEFS_struct;instruction[ICRC_DS].makemnemo=_DEFS_struct;
 				}
 			} else {
-				MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"STRUCT cannot be declared inside previous opened STRUCT [%s] Line %d\n",ae->backup_filename,ae->backup_line);
+				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"STRUCT cannot be declared inside previous opened STRUCT [%s] Line %d\n",ae->backup_filename,ae->backup_line);
 			}
 		} else {
 			/**************************************************
@@ -15198,7 +15341,7 @@ printf("structure insertion\n");
 				if (ae->rasmstruct[irs].crc==crc && strcmp(ae->rasmstruct[irs].name,ae->wl[ae->idx+1].w)==0) break;
 			}
 			if (irs==ae->irasmstruct) {
-				MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Unknown STRUCT %s\n",ae->wl[ae->idx+1].w);
+				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Unknown STRUCT %s\n",ae->wl[ae->idx+1].w);
 			} else {
 				/* create alias for sizeof */
 				if (!ae->getstruct) {
@@ -15226,7 +15369,7 @@ printf("structalias [%s] ptr=%d size=%d\n",rasmstructalias.name,rasmstructalias.
 					ExpressionFastTranslate(ae,&ae->wl[ae->idx+3].w,0);
 					nbelem=RoundComputeExpression(ae,ae->wl[ae->idx+3].w,ae->outputadr,0,0);
 					if (nbelem<1) {
-						MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Struct array need a positive number of elements!\n");
+						MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Struct array need a positive number of elements!\n");
 						nbelem=1;
 					}
 					ae->idx++;
@@ -15249,7 +15392,7 @@ printf("EVOL 119 - tableau! %d elem(s)\n",nbelem);
 				} else {
 					/* or check for non-local name in struct declaration */
 					if (ae->wl[ae->idx+2].w[0]=='@') {
-						MakeError(ae,GetCurrentFile(ae),GetExpLine(ae,0),"Meaningless use of local label in a STRUCT definition\n");
+						MakeError(ae,ae->idx,GetCurrentFile(ae),GetExpLine(ae,0),"Meaningless use of local label in a STRUCT definition\n");
 					} else {
 						curlabel.name=TxtStrDup(rasmstructalias.name);
 						curlabel.crc=GetCRC(curlabel.name);
@@ -15376,7 +15519,7 @@ printf("struct (almost) legacy filler from %d to %d-1\n",localsize,ae->rasmstruc
 			}
 		}
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"STRUCT directive needs one or two parameters\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"STRUCT directive needs one or two parameters\n");
 	}
 }
 void __ENDSTRUCT(struct s_assenv *ae) {
@@ -15389,7 +15532,7 @@ void __ENDSTRUCT(struct s_assenv *ae) {
 #endif
 
 	if (!ae->wl[ae->idx].t) {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"ENDSTRUCT directive does not need parameter\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"ENDSTRUCT directive does not need parameter\n");
 	} else {
 		if (ae->getstruct) {
 			ae->rasmstruct[ae->irasmstruct-1].size=ae->codeadr;
@@ -15448,7 +15591,7 @@ void __ENDSTRUCT(struct s_assenv *ae) {
 			___org_close(ae);
 			___org_new(ae,0);
 		} else {
-			MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"ENDSTRUCT encountered outside STRUCT declaration\n");
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"ENDSTRUCT encountered outside STRUCT declaration\n");
 		}
 	}
 }
@@ -15457,7 +15600,7 @@ void __MEMSPACE(struct s_assenv *ae) {
 	if (ae->wl[ae->idx].t) {
 		___new_memory_space(ae);
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"MEMSPACE directive does not need parameter\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"MEMSPACE directive does not need parameter\n");
 	}
 }
 
@@ -15556,7 +15699,7 @@ void _AudioLoadSample(struct s_assenv *ae, unsigned char *data, unsigned int fil
 	int subchunksize;
 
 	if (filesize<sizeof(struct s_wav_header)) {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"WAV import - this file is too small to be a valid WAV!\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"WAV import - this file is too small to be a valid WAV!\n");
 		return;
 	}
 
@@ -15567,23 +15710,23 @@ printf("AudioLoadSample filesize=%d st=%d normalize=%.2lf\n",filesize,sample_typ
 #endif
 	if (strncmp(wav_header->ChunkID,"RIFF",4)) {
 		if (strncmp(wav_header->ChunkID,"RIFX",4)) {
-			MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"WAV import - unsupported audio sample type (chunkid must be 'RIFF' or 'RIFX')\n");
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"WAV import - unsupported audio sample type (chunkid must be 'RIFF' or 'RIFX')\n");
 			return;
 		} else {
 			bigendian=1;
 		}
 	}
 	if (strncmp(wav_header->Format,"WAVE",4)) {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"[%s:%d] WAV import - unsupported audio sample type (format must be 'WAVE')\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"[%s:%d] WAV import - unsupported audio sample type (format must be 'WAVE')\n");
 		return;
 	}
 	controlsize=wav_header->SubChunk1Size[0]+wav_header->SubChunk1Size[1]*256+wav_header->SubChunk1Size[2]*65536+wav_header->SubChunk1Size[3]*256*65536;
 	if (controlsize!=16) {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"WAV import - invalid wav chunk size (subchunk1 control)\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"WAV import - invalid wav chunk size (subchunk1 control)\n");
 		return;
 	}
 	if (strncmp(wav_header->SubChunk1ID,"fmt",3)) {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"WAV import - unsupported audio sample type (subchunk1id must be 'fmt')\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"WAV import - unsupported audio sample type (subchunk1id must be 'fmt')\n");
 		return;
 	}
 
@@ -15594,7 +15737,7 @@ printf("AudioLoadSample getsubchunk\n");
 	while (strncmp((char *)subchunk,"data",4)) {
 		subchunksize=8+subchunk[4]+subchunk[5]*256+subchunk[6]*65536+subchunk[7]*256*65536;
 		if (subchunksize>=filesize) {
-			MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"WAV import - data subchunk not found\n");
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"WAV import - data subchunk not found\n");
 			return;
 		}
 		subchunk+=subchunksize;
@@ -15604,13 +15747,13 @@ printf("AudioLoadSample getsubchunk\n");
 
 	nbchannel=wav_header->NumChannels[0]+wav_header->NumChannels[1]*256;
 	if (nbchannel<1) {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"WAV import - invalid number of audio channel\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"WAV import - invalid number of audio channel\n");
 		return;
 	}
 
 	wFormat=wav_header->AudioFormat[0]+wav_header->AudioFormat[1]*256;
 	if (wFormat!=1 && wFormat!=3) {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"WAV import - invalid or unsupported wFormatTag (%04X)\n",wFormat);
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"WAV import - invalid or unsupported wFormatTag (%04X)\n",wFormat);
 		return;
 	}
 
@@ -15651,18 +15794,18 @@ printf("AudioLoadSample bitpersample=%d | Format=%s\n",bitspersample,wFormat==1?
 						}
 					}
 			} else {
-				MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"WAV import - unsupported 32bits PCM\n",wFormat);
+				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"WAV import - unsupported 32bits PCM\n",wFormat);
 				return;
 			}
 			break;
 		default:
-			MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"WAV import - unsupported bits per sample (%d)\n",bitspersample);
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"WAV import - unsupported bits per sample (%d)\n",bitspersample);
 			return;
 	}
 
 	nbsample=controlsize/nbchannel/(bitspersample/8);
 	if (controlsize+sizeof(struct s_wav_header)>filesize) {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"WAV import - cannot read %d byte%s of audio whereas the file is %d bytes big!\n",controlsize,controlsize>1?"s":"",filesize);
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"WAV import - cannot read %d byte%s of audio whereas the file is %d bytes big!\n",controlsize,controlsize>1?"s":"",filesize);
 		return;
 	}
 
@@ -15830,12 +15973,12 @@ void __READ(struct s_assenv *ae) {
 		ae->idx++;
 
 		if (idx>=0 && idx<ae->ih) {
-			MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"File to include was not found [%s]\n",ae->hexbin[idx].filename);
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"File to include was not found [%s]\n",ae->hexbin[idx].filename);
 		} else {
-			MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"internal error with text file import (index out of bounds)\n");
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"internal error with text file import (index out of bounds)\n");
 		}
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"READ directive need a proper filename as argument\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"READ directive need a proper filename as argument\n");
 	}
 }
 
@@ -15859,7 +16002,7 @@ void __HEXBIN(struct s_assenv *ae) {
 		ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,1);
 		hbinidx=RoundComputeExpressionCore(ae,ae->wl[ae->idx+1].w,ae->codeadr,0);
 		if (hbinidx>=ae->ih) {
-			MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"internal error with binary file import (index out of bounds)\n");
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"internal error with binary file import (index out of bounds)\n");
 			return;
 		}
 #if TRACE_HEXBIN
@@ -15883,7 +16026,7 @@ printf("Hexbin legacy datalen=%d\n",ae->hexbin[hbinidx].datalen);
 				if (strcmp("REVERT",ae->wl[ae->idx+2].w)==0) {
 					/* revert data */
 					if (!ae->wl[ae->idx+2].t) {
-						MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"INCBIN REVERT does not need extra parameters\n");
+						MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"INCBIN REVERT does not need extra parameters\n");
 					}
 #if TRACE_HEXBIN
 printf(" -> REVERT loading\n");
@@ -15898,7 +16041,7 @@ printf(" -> REVERT loading\n");
 						ExpressionFastTranslate(ae,&ae->wl[ae->idx+3].w,1);
 						remap=RoundComputeExpressionCore(ae,ae->wl[ae->idx+3].w,ae->codeadr,0);
 					} else {
-						MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"INCBIN REMAP need a number of columns for reordering\n");
+						MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"INCBIN REMAP need a number of columns for reordering\n");
 					}
 #if TRACE_HEXBIN
 printf(" -> REMAP loading\n");
@@ -15913,7 +16056,7 @@ printf(" -> REMAP loading\n");
 						tilex=RoundComputeExpressionCore(ae,ae->wl[ae->idx+3].w,ae->codeadr,0);
 						gtiles=1;
 					} else {
-						MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"usage is INCBIN'file',GTILES,width\n");
+						MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"usage is INCBIN'file',GTILES,width\n");
 						tilex=0;
 					}
 #if TRACE_HEXBIN
@@ -15928,7 +16071,7 @@ printf(" -> GTILES loading\n");
 						tilex=RoundComputeExpressionCore(ae,ae->wl[ae->idx+3].w,ae->codeadr,0);
 						itiles=1;
 					} else {
-						MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"usage is INCBIN'file',ITILES,width\n");
+						MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"usage is INCBIN'file',ITILES,width\n");
 						tilex=0;
 					}
 #if TRACE_HEXBIN
@@ -15942,7 +16085,7 @@ printf(" -> ITILES loading\n");
 						ExpressionFastTranslate(ae,&ae->wl[ae->idx+3].w,1);
 						vtiles=RoundComputeExpressionCore(ae,ae->wl[ae->idx+3].w,ae->codeadr,0);
 					} else {
-						MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"INCBIN VTILES need a number of lines for reordering\n");
+						MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"INCBIN VTILES need a number of lines for reordering\n");
 					}
 #if TRACE_HEXBIN
 printf(" -> VTILES loading\n");
@@ -15972,7 +16115,7 @@ printf(" -> VTILES loading\n");
 	printf("size=%d\n",size);
 #endif
 						if (size<-65535 || size>65536) {
-							MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"INCBIN invalid size\n");
+							MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"INCBIN invalid size\n");
 						}
 						if (!ae->wl[ae->idx+3].t) {
 							if (ae->wl[ae->idx+4].w[0]) {
@@ -15990,7 +16133,7 @@ printf(" -> VTILES loading\n");
 	printf("mode OVERWRITE\n");
 #endif
 								} else if (ae->wl[ae->idx+5].w[0]) {
-									MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"INCBIN invalid overwrite value. Must be 'OFF' or 'ON'\n");
+									MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"INCBIN invalid overwrite value. Must be 'OFF' or 'ON'\n");
 								}
 								if (!ae->wl[ae->idx+5].t) {
 									/* copy raw len to a (new) variable */
@@ -16066,7 +16209,7 @@ printf("Hexbin -> surprise! we found the file!\n");
 				curhexbin->rawlen=curhexbin->datalen=FileGetSize(newfilename);
 				curhexbin->data=MemMalloc(curhexbin->datalen*1.3+10);
 				if (FileReadBinary(newfilename,(char*)curhexbin->data,curhexbin->datalen)!=curhexbin->datalen) {
-					MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"read error on file [%s]\n",newfilename);
+					MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"read error on file [%s]\n",newfilename);
 					MemFree(curhexbin->data);
 					MemFree(newfilename);
 					return;
@@ -16075,7 +16218,7 @@ printf("Hexbin -> surprise! we found the file!\n");
 				deload=1;
 			} else {
 				/* still not found */
-				MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"file not found [%s]\n",newfilename);
+				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"file not found [%s]\n",newfilename);
 				MemFree(newfilename);
 				return;
 			}
@@ -16117,11 +16260,11 @@ printf("Hexbin -> %s\n",ae->wl[ae->idx+2].w);
 									dma_args++;
 									dma_repeat=ComputeExpressionCore(ae,ae->wl[ae->idx+dma_args].w,ae->codeadr,0);
 									if (dma_repeat<1 || dma_repeat>4095) {
-										MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"DMA_REPEAT value out of bounds (1-4095)\n");
+										MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"DMA_REPEAT value out of bounds (1-4095)\n");
 										dma_repeat=0;
 									}
 								} else {
-									MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"DMA_REPEAT must be followed by another parameter\n");
+									MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"DMA_REPEAT must be followed by another parameter\n");
 								}
 							} else if (strcmp(ae->wl[ae->idx+dma_args].w,"DMA_CHANNEL_A")==0) {
 								dma_channel=AUDIOSAMPLE_DMAA;
@@ -16133,7 +16276,7 @@ printf("Hexbin -> %s\n",ae->wl[ae->idx+2].w);
 								dma_channel=AUDIOSAMPLE_DMAC;
 								mypsgreg=0xA;
 							} else {
-								MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Unrecognized DMA option [%s]\n",ae->wl[ae->idx+dma_args].w);
+								MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Unrecognized DMA option [%s]\n",ae->wl[ae->idx+dma_args].w);
 							}
 						}
 					}
@@ -16171,7 +16314,7 @@ printf("taille négative %d -> conversion en %d\n",size,ae->hexbin[hbinidx].datal
 #endif
 					size=ae->hexbin[hbinidx].datalen+size;
 					if (size<1) {
-						MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"INCBIN negative size is greater or equal to filesize\n");
+						MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"INCBIN negative size is greater or equal to filesize\n");
 					}
 				}
 				/* negative offset conversion */
@@ -16195,7 +16338,7 @@ printf("taille nulle et offset=%d -> conversion en %d\n",offset,size);
 					rasm_printf(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"INCBIN size is greater than filesize\n");
 				} else {
 					if (size+offset>ae->hexbin[hbinidx].datalen) {
-						MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"INCBIN size+offset is greater than filesize\n");
+						MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"INCBIN size+offset is greater than filesize\n");
 					} else {
 						/* OUTPUT DATA */
 						unsigned char *outputdata;
@@ -16216,7 +16359,7 @@ printf("output fictif pour réorganiser les données\n");
 							int tx,it;
 
 							if (size % (tilex*8)) {
-								MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"INCBIN ITILES/GTILES cannot reorder tiles %d bytewidth with file of size %d\n",tilex,size);
+								MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"INCBIN ITILES/GTILES cannot reorder tiles %d bytewidth with file of size %d\n",tilex,size);
 							} else {
 								if (itiles) {
 									/* zigzag with regular gray coding */
@@ -16255,7 +16398,7 @@ printf("output fictif pour réorganiser les données\n");
 							width=size/remap;
 
 							if ((size % remap) || (remap*width>size)) {
-								MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"INCBIN REMAP cannot reorder %d columns%s with file of size %d\n",remap,remap>1?"s":"",size);
+								MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"INCBIN REMAP cannot reorder %d columns%s with file of size %d\n",remap,remap>1?"s":"",size);
 							} else {
 								for (it=0;it<remap;it++) {
 									for (tx=0;tx<width;tx++) {
@@ -16271,7 +16414,7 @@ printf("output fictif pour réorganiser les données\n");
 							width=size/vtiles;
 
 							if ((size % vtiles) || (vtiles*width>size)) {
-								MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"INCBIN VTILES cannot reorder %d line%s with file of size %d\n",vtiles,vtiles>1?"s":"",size);
+								MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"INCBIN VTILES cannot reorder %d line%s with file of size %d\n",vtiles,vtiles>1?"s":"",size);
 							} else {
 #if TRACE_HEXBIN
 printf("Hexbin -> re-tiling MAP! width=%d\n",width);
@@ -16430,13 +16573,13 @@ if (curhexbin->crunch) printf("CRUNCHED! (%d)\n",curhexbin->crunch);
 					}
 				}
 			} else {
-				MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"INTERNAL - HEXBIN refer to unknown structure\n");
+				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"INTERNAL - HEXBIN refer to unknown structure\n");
 				FreeAssenv(ae);
 				exit(2);
 			}
 		}
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"INTERNAL - HEXBIN need one HEX parameter\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"INTERNAL - HEXBIN need one HEX parameter\n");
 		FreeAssenv(ae);
 		exit(2);
 	}
@@ -16468,7 +16611,7 @@ void __SAVE(struct s_assenv *ae) {
 	if (!ae->wl[ae->idx].t) {
 		/* nom de fichier entre quotes ou bien mot clef DSK */
 		if (!StringIsQuote(ae->wl[ae->idx+1].w)) {
-			MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"SAVE invalid filename quote\n");
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"SAVE invalid filename quote\n");
 			ko=0;
 		} else {
 			if (!ae->wl[ae->idx+1].t) {
@@ -16495,7 +16638,7 @@ void __SAVE(struct s_assenv *ae) {
 								cursave.iwdskname=ae->idx+5;
 							} else {
 								cursave.iwdskname=-1;
-								MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"cannot autoselect TAPE, please specify a filename after TAPE arg\n");
+								MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"cannot autoselect TAPE, please specify a filename after TAPE arg\n");
 							}
 						} else if (strcmp(ae->wl[ae->idx+4].w,"AMSDOS")==0) {
 							cursave.amsdos=1;
@@ -16528,11 +16671,11 @@ void __SAVE(struct s_assenv *ae) {
 									cursave.face=ae->save[ae->nbsave-1].face; /* previous face */
 								} else {
 									cursave.iwdskname=-1;
-									MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"cannot autoselect DSK as there was not a previous selection\n");
+									MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"cannot autoselect DSK as there was not a previous selection\n");
 								}
 							}
 						} else {
-							MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"SAVE 4th parameter must be empty or AMSDOS or DSK\n");
+							MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"SAVE 4th parameter must be empty or AMSDOS or DSK\n");
 							ko=0;
 						}
 					}
@@ -16543,7 +16686,7 @@ void __SAVE(struct s_assenv *ae) {
 		}
 	}
 	if (ko) {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Use SAVE 'filename',offset,size[,AMSDOS|DSK[,A|B|'dskname'[,A|B]]]\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Use SAVE 'filename',offset,size[,AMSDOS|DSK[,A|B|'dskname'[,A|B]]]\n");
 	}
 	while (!ae->wl[ae->idx].t) ae->idx++;
 }
@@ -16577,7 +16720,7 @@ void __ENDMODULE(struct s_assenv *ae) {
 	#define FUNC "__ENDMODULE"
 
 	if (!ae->wl[ae->idx].t && ae->wl[ae->idx+1].t==1) {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"ENDMODULE does not need any parameter\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"ENDMODULE does not need any parameter\n");
 	} else {
 		__MODULE(ae);
 	}
@@ -16601,7 +16744,7 @@ void __SUMMEM(struct s_assenv *ae) {
 		}
 		___output(ae,0);
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"usage is SUMMEM start,end\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"usage is SUMMEM start,end\n");
 	}
 }
 
@@ -16623,7 +16766,7 @@ void __XORMEM(struct s_assenv *ae) {
 		}
 		___output(ae,0);
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"usage is XORMEM start,end\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"usage is XORMEM start,end\n");
 	}
 }
 
@@ -16647,7 +16790,7 @@ void __CIPHERMEM(struct s_assenv *ae) {
 						if (!ae->wl[ae->idx+3].t) {
 							poker.istring=ae->idx+4;
 						} else {
-							MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"usage is CIPHERMEM start,end,4,'keystring'\n");
+							MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"usage is CIPHERMEM start,end,4,'keystring'\n");
 						}
 						break;
 				}
@@ -16665,7 +16808,7 @@ void __CIPHERMEM(struct s_assenv *ae) {
 						break;
 				}
 				if (!ae->wl[ae->idx+3].t && !ae->wl[ae->idx+4].t) {
-					MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Too many parameters! Usage is CIPHERMEM start,end[,method[,'keystring']]\n");
+					MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Too many parameters! Usage is CIPHERMEM start,end[,method[,'keystring']]\n");
 				}
 			} else {
 				poker.method=E_POKER_CIPHER001;
@@ -16680,7 +16823,7 @@ void __CIPHERMEM(struct s_assenv *ae) {
 			ObjectArrayAddDynamicValueConcat((void**)&ae->poker,&ae->nbpoker,&ae->maxpoker,&poker,sizeof(poker));
 		}
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"usage is CIPHERMEM start,end[,method[,'keystring']]\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"usage is CIPHERMEM start,end[,method[,'keystring']]\n");
 	}
 }
 
@@ -16914,6 +17057,7 @@ struct s_asm_keyword instruction[]={
 {"LZCLOSE",0,__LZCLOSE},
 {"SNASET",0,__SNASET},
 {"SNAPINIT",0,__SNAPINIT},
+{"CPRINIT",0,__CPRINIT},
 {"BUILDZX",0,__BUILDZX},
 {"BUILDOBJ",0,__BUILDOBJ},
 {"BUILDCPR",0,__BUILDCPR},
@@ -17656,7 +17800,7 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 	if (!ae->stop) {
 		/* end of assembly, check there is no opened struct */
 		if (ae->getstruct) {
-			MakeError(ae,ae->backup_filename,ae->backup_line,"STRUCT declaration was not closed\n");
+			MakeError(ae,0,ae->backup_filename,ae->backup_line,"STRUCT declaration was not closed\n");
 		}
 		/* end of assembly, close the last ORG zone */
 		if (ae->io) {
@@ -17668,10 +17812,10 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 	
 		/* end of assembly, check for opened repeat and opened while loop */
 		for (i=0;i<ae->ir;i++) {
-			MakeError(ae,ae->filename[wordlist[ae->repeat[i].start].ifile],wordlist[ae->repeat[i].start].l,"REPEAT was not closed\n");
+			MakeError(ae,ae->repeat[i].start,ae->filename[wordlist[ae->repeat[i].start].ifile],wordlist[ae->repeat[i].start].l,"REPEAT was not closed\n");
 		}
 		for (i=0;i<ae->iw;i++) {
-			MakeError(ae,ae->filename[wordlist[ae->whilewend[i].start].ifile],wordlist[ae->whilewend[i].start].l,"WHILE was not closed\n");
+			MakeError(ae,ae->whilewend[i].start,ae->filename[wordlist[ae->whilewend[i].start].ifile],wordlist[ae->whilewend[i].start].l,"WHILE was not closed\n");
 		}
 		/* is there any IF opened? -> need an evolution for a better error message */
 		for (i=0;i<ae->ii;i++) {
@@ -17687,7 +17831,7 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 				case E_IFTHEN_TYPE_IFNUSED:strcpy(instr,"IFNUSED");break;
 				default:strcpy(instr,"<unknown>");
 			}
-			MakeError(ae,ae->ifthen[i].filename,ae->ifthen[i].line,"%s conditionnal block was not closed\n",instr);
+			MakeError(ae,0,ae->ifthen[i].filename,ae->ifthen[i].line,"%s conditionnal block was not closed\n",instr); //@@TODO evolution de la trace pour le IF/THEN
 		}
 	}
 	/***************************************************
@@ -17719,7 +17863,7 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 				if (ae->lzsection[i].memend==-1) {
 					/* patch idx */
 					ae->idx=ae->lzsection[i].iw;
-					MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"Crunched section was not closed\n");
+					MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Crunched section was not closed\n");
 					continue;
 				}
 
@@ -17977,7 +18121,7 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 						ae->mem[ae->poker[i].ibank][j]=ae->mem[ae->poker[i].ibank][j]^xorval;
 					}
 				} else {
-					MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"CIPHER needs a string of one char or more to run properly\n");
+					MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"CIPHER needs a string of one char or more to run properly\n");
 				}
 				if (zekey) MemFree(zekey);
 				}
@@ -18439,7 +18583,7 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 									/* extended chunk for 4M extension -> MX09 to MX40 (hexa numbered) */
 									sprintf(ChunkName,"MX%02X",bankset);
 								} else {
-									MakeError(ae,"(core)",0,"internal error during snapshot write, please report (%d)\n",bankset);
+									MakeError(ae,0,"(core)",0,"internal error during snapshot write, please report (%d)\n",bankset);
 								}
 								
 								if (!ae->flux) {
@@ -19311,7 +19455,7 @@ void EarlyPrepSrc(struct s_assenv *ae, char **listing, char *filename) {
 							idx=0;
 							l++;
 							if (!listing[l]) {
-								MakeError(ae,filename,l+1,"opened comment to the end of the file\n");
+								MakeError(ae,0,filename,l+1,"opened comment to the end of the file\n");
 								return;
 							}
 						} else if (c=='*' && listing[l][idx]=='/') {
@@ -19976,7 +20120,7 @@ if (!idx) printf("[%s]\n",listing[l].listing);
 					if (c==quote_type) waiting_quote=2; else {
 						/* enforce there is only spaces or tabs between READ/INC and string */
 						if (c!=' ' && c!=0x9) {
-							MakeError(ae,ae->filename[listing[l].ifile],listing[l].iline,"A quoted string must follow INCLUDE/READ directive\n");
+							MakeError(ae,0,ae->filename[listing[l].ifile],listing[l].iline,"A quoted string must follow INCLUDE/READ directive\n");
 							waiting_quote=0;
 							idx--;
 							continue;
@@ -20034,7 +20178,7 @@ if (!idx) printf("[%s]\n",listing[l].listing);
 						int iconcat=incstartL;
 						int ilen;
 
-						MakeError(ae,ae->filename[listing[incstartL].ifile],listing[incstartL].iline,"INCBIN filename cannot be on multiple lines\n");
+						MakeError(ae,0,ae->filename[listing[incstartL].ifile],listing[incstartL].iline,"INCBIN filename cannot be on multiple lines\n");
 
 						ilen=strlen(listing[iconcat].listing)+1;
 						idx+=ilen-rewrite;
@@ -20096,7 +20240,7 @@ if (!idx) printf("[%s]\n",listing[l].listing);
 						int iconcat=incstartL;
 						int ilen;
 
-						MakeError(ae,ae->filename[listing[incstartL].ifile],listing[incstartL].iline,"INCLUDE filename cannot be on multiple lines\n");
+						MakeError(ae,0,ae->filename[listing[incstartL].ifile],listing[incstartL].iline,"INCLUDE filename cannot be on multiple lines\n");
 						ilen=strlen(listing[iconcat].listing)+1;
 						idx+=ilen-rewrite;
 						while (iconcat<l) {
@@ -20327,7 +20471,7 @@ if (!idx) printf("[%s]\n",listing[l].listing);
 								}
 							}
 							if (ri==-1) {
-								MakeError(ae,ae->filename[listing[l].ifile],listing[l].iline,"%s refers to unknown REPEAT\n",bval);
+								MakeError(ae,0,ae->filename[listing[l].ifile],listing[l].iline,"%s refers to unknown REPEAT\n",bval);
 								//exit(1);
 							}
 						}
@@ -20354,7 +20498,7 @@ if (!idx) printf("[%s]\n",listing[l].listing);
 								}
 							}
 							if (ri==-1) {
-								MakeError(ae,ae->filename[listing[l].ifile],listing[l].iline,"%s refers to unknown REPEAT\n",bval);
+								MakeError(ae,0,ae->filename[listing[l].ifile],listing[l].iline,"%s refers to unknown REPEAT\n",bval);
 								//exit(1);
 							}
 						} else if (strcmp(bval,"REPEAT")==0) {
@@ -20383,7 +20527,7 @@ if (!idx) printf("[%s]\n",listing[l].listing);
 								}
 							}
 							if (wi==-1) {
-								MakeError(ae,ae->filename[listing[l].ifile],listing[l].iline,"WEND refers to unknown WHILE\n");
+								MakeError(ae,0,ae->filename[listing[l].ifile],listing[l].iline,"WEND refers to unknown WHILE\n");
 								//exit(1);
 							}
 								
@@ -20408,21 +20552,21 @@ printf("bval=[%s]\n",bval);
 		}
 	}
 	if (waiting_quote && ilisting) {
-		MakeError(ae,ae->filename[listing[ilisting-1].ifile],listing[ilisting-1].iline,"A quoted string must follow INCLUDE/READ directive\n");
+		MakeError(ae,0,ae->filename[listing[ilisting-1].ifile],listing[ilisting-1].iline,"A quoted string must follow INCLUDE/READ directive\n");
 	}
 
 #if TRACE_PREPRO
 printf("check quotes and repeats\n");
 #endif
 	if (quote_type) {
-		MakeError(ae,ae->filename[listing[lquote].ifile],listing[lquote].iline,"quote opened was not closed\n");
+		MakeError(ae,0,ae->filename[listing[lquote].ifile],listing[lquote].iline,"quote opened was not closed\n");
 		//exit(1);
 	}
 
 	/* repeat expansion check */
 	for (ri=0;ri<nri;ri++) {
 		if (TABrindex[ri].cl==-1) {
-			MakeError(ae,ae->filename[TABrindex[ri].ifile],TABrindex[ri].ol,"REPEAT was not closed\n");
+			MakeError(ae,0,ae->filename[TABrindex[ri].ifile],TABrindex[ri].ol,"REPEAT was not closed\n");
 		}
 	}
 
@@ -20467,7 +20611,7 @@ printf("check quotes and repeats\n");
 #endif
 			switch (Automate[((int)c)&0xFF]) {
 				case 0:
-					MakeError(ae,ae->filename[listing[l].ifile],listing[l].iline,"invalid char '%c' (%d) char %d\n",c,c,idx);
+					MakeError(ae,0,ae->filename[listing[l].ifile],listing[l].iline,"invalid char '%c' (%d) char %d\n",c,c,idx);
 #if TRACE_PREPRO
 printf("c='%c' automate[c]=%d\n",c>31?c:'.',Automate[((int)c)&0xFF]);			
 #endif
@@ -20689,7 +20833,7 @@ printf("instruction en cours\n");
 					} else {
 						if (hadcomma) {
 							if (!ae->macro_multi_line) {
-								MakeError(ae,ae->filename[listing[l].ifile],listing[l].iline,"empty parameter\n");
+								MakeError(ae,0,ae->filename[listing[l].ifile],listing[l].iline,"empty parameter\n");
 							}
 						}
 					}
@@ -20866,7 +21010,7 @@ printf("mot precedent=[%s] t=%d\n",wordlist[nbword-1].w,wordlist[nbword-1].t);
 							Automate[' ']=1;
 							Automate['\t']=1;
 						} else {
-							MakeError(ae,ae->filename[listing[l].ifile],listing[l].iline,"cannot start expression with '=','!','<','>'\n");
+							MakeError(ae,0,ae->filename[listing[l].ifile],listing[l].iline,"cannot start expression with '=','!','<','>'\n");
 						}
 					}
 					break;
@@ -20891,7 +21035,7 @@ printf("quote start with %c\n",c);
 			do {
 				c=listing[l].listing[idx++];
 				if (!c) {
-					MakeError(ae,ae->filename[listing[l].ifile],listing[l].iline,"Quoted string must be on a single line!\n");
+					MakeError(ae,0,ae->filename[listing[l].ifile],listing[l].iline,"Quoted string must be on a single line!\n");
 					idx=0;
 					l++;
 					lw=0; // to avoid side effects
@@ -20924,7 +21068,7 @@ printf("quote start with %c\n",c);
 							case 0xC2:
 								if ((unsigned char)w[utidx+1]==0xBF) w[utidx]=174; else // ¿
 								if ((unsigned char)w[utidx+1]==0xA1) w[utidx]=175; else // ¡
-									MakeError(ae,ae->filename[listing[l].ifile],listing[l].iline,"Unsupported UTF8 char for quoted string\n");
+									MakeError(ae,0,ae->filename[listing[l].ifile],listing[l].iline,"Unsupported UTF8 char for quoted string\n");
 								break;
 							case 0xC3:
 								if ((unsigned char)w[utidx+1]==0xB9) w[utidx]=124; else // ù
@@ -20937,10 +21081,10 @@ printf("quote start with %c\n",c);
 									w[utidx]=92;
 									w[utidx+1]=92;
 								} else
-									MakeError(ae,ae->filename[listing[l].ifile],listing[l].iline,"Unsupported UTF8 char for quoted string\n");
+									MakeError(ae,0,ae->filename[listing[l].ifile],listing[l].iline,"Unsupported UTF8 char for quoted string\n");
 								break;
 							default:
-								MakeError(ae,ae->filename[listing[l].ifile],listing[l].iline,"Unsupported UTF8 char for quoted string\n");
+								MakeError(ae,0,ae->filename[listing[l].ifile],listing[l].iline,"Unsupported UTF8 char for quoted string\n");
 						}
 						// shift string bytes except for \ char
 						if (w[utidx+1] && w[utidx+1]!=92) {
@@ -20956,7 +21100,7 @@ printf("quote start with %c\n",c);
 					if ((w[utidx]>=32 && w[utidx]<127) || w[utidx]=='\t') {
 						// is ok
 					} else {
-						MakeError(ae,ae->filename[listing[l].ifile],listing[l].iline,"Invalid char for quoted string\n");
+						MakeError(ae,0,ae->filename[listing[l].ifile],listing[l].iline,"Invalid char for quoted string\n");
 					}
 				}
 			}
