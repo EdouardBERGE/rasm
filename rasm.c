@@ -881,13 +881,15 @@ struct s_assenv {
 	unsigned char **mem;
 	int iwnamebank[BANK_MAX_NUMBER];
 	int nbbank,maxbank;
-	int forcetape,forcezx,forcecpr,forceROM,forceROMconcat,bankmode,activebank,amsdos,forcesnapshot,packedbank,extendedCPR,xpr,cprinfo,cprinfo_export;
+	int forcetape,forcezx,forcecpr,forceROM,forceROMconcat,bankmode;
+	int amsdos,forcesnapshot,packedbank,extendedCPR,xpr,cprinfo,cprinfo_export;
+	int activebank; // current used bank where data/code has to be written | used with outputadr (see ORG tracking)
 	char *cprinfo_filename;
 	struct s_snapshot snapshot;
 	struct s_zxsnapshot zxsnapshot;
 	int snapRAMsize;
-	int bankset[BANK_MAX_NUMBER>>2];   /* 64K selected flag */
-	int bankused[BANK_MAX_NUMBER]; /* 16K selected flag */
+	int bankset[BANK_MAX_NUMBER>>2]; /* 64K selected flag */
+	int bankused[BANK_MAX_NUMBER];   /* 16K selected flag */
 	int bankgate[BANK_MAX_NUMBER+1];
 	int setgate[BANK_MAX_NUMBER+1];
 	int rundefined;
@@ -897,7 +899,7 @@ struct s_assenv {
 	int idx,stage;
 	char *label_filename;
 	int label_line;
-	char **filename;
+	char **filename;   // each name of file read
 	int ifile,maxfile;
 	char **rawfile; // case export
 	int *rawlen;    // case export
@@ -906,16 +908,15 @@ struct s_assenv {
 	unsigned char charset[256];
 	int maxerr,extended_error,nowarning,erronwarn,utf8enable,freequote;
 	/* ORG tracking */
-	int codeadr,outputadr,nocode;
-	int codeadrbackup,outputadrbackup;
-	int minadr,maxadr;
-	struct s_orgzone *orgzone;
+	int codeadr,outputadr,nocode;      // codeadr is logical code position | outputadr is physical code position | nocode is a flag 1: no code to output 0: output code
+	int codeadrbackup,outputadrbackup; // when using NOCODE, switching back to CODE will restore physical AND logical addresses
+	struct s_orgzone *orgzone;         // each ORG is monitored to avoid conflicts
 	int io,mo;
 	/* Struct */
 	struct s_rasmstruct *rasmstruct;
 	int irasmstruct,mrasmstruct;
 	int getstruct;
-	int backup_outputadr,backup_codeadr;
+	int backup_outputadr,backup_codeadr; // struct is declared like a NOCODE section so we must restore physical AND logical addresses after declaration ends
 	char *backup_filename;
 	int backup_line;
 	struct s_rasmstruct *rasmstructalias;
@@ -923,7 +924,7 @@ struct s_assenv {
 	/* expressions */
 	struct s_expression *expression;
 	int ie,me;
-	int maxam,as80,dams,pasmo;
+	int maxam,as80,dams,pasmo;  // compatibility flags
 	float rough;
 	struct s_compute_core_data *computectx,ctx1,ctx2;
 	struct s_crcstring_tree stringtree;
@@ -941,8 +942,8 @@ struct s_assenv {
 	int lastgloballabellen, lastglobalalloc;
 	char **globalstack; /* retrieve back global from previous scope */
 	int igs,mgs;
-	char *source_bigbuffer;
-	int source_bigbuffer_len;
+	char *source_bigbuffer;   // huge buffer which will be preserved from preprocessing
+	int source_bigbuffer_len; // len of this buffer which will be used to get back label case
 	/* repeat */
 	struct s_repeat *repeat;
 	int ir,mr;
@@ -2095,7 +2096,28 @@ double ComputeExpressionCore(struct s_assenv *ae,char *original_zeexpression,int
 char *GetExpFile(struct s_assenv *ae,int didx);
 void __STOP(struct s_assenv *ae);
 
-
+/****************************************************************************************
+ *       this function is used to display error from almost anywhere is RASM
+ *       except from command line processing because first arg "ae" need to
+ *       be allocated and this is done in the very beginning of "PreProcessing"
+ *
+ *       idx: if not zero, a check will be performed to display macro informations, if any
+ *       filename: if not NULL, the source where the error occurs
+ *       line: if not zero, the line in the source where the error occurs
+ *
+ *       there is 3 major ways to call "MakeError"
+ *       1/ when using expression engine because we do not know if the calculations are postponed or not
+ *          MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),...);
+ *
+ *       2/ when using any directive because we are in the unique pass of the assembling
+ *          MakeError(ae,ae->idx,GetCurrentFile(ae),GetExpLine(ae,0),...);
+ *
+ *       3/ during preprocessing because there is no wordlist yet containing debug information
+ *          MakeError(ae,0,ae->filename[listing[l].ifile],listing[l].iline,...);
+ *
+ *       this will need some rewrite for harmonisation in the future...
+ *
+****************************************************************************************/
 void MakeError(struct s_assenv *ae, int idx, char *filename, int line, char *format, ...)
 {
 	#undef FUNC
@@ -2162,6 +2184,7 @@ void MakeError(struct s_assenv *ae, int idx, char *filename, int line, char *for
  * sign:1
  * mantiss:23
  *
+ * /!\ this function is called ONLY from expression calculation so you need to have a proper index of expression (or allocate at least one expression and fake expression usage)
  * */
 unsigned char *__internal_MakeRosoftREAL(struct s_assenv *ae, double v, int iexpression)
 {
@@ -2298,6 +2321,7 @@ printf("\n%d bits used for mantissa\n",ibit);
  * sign:1
  * mantiss:23
  *
+ * /!\ this function is called ONLY from expression calculation so you need to have a proper index of expression (or allocate at least one expression and fake expression usage)
  * */
 unsigned char *__internal_MakeAmsdosREAL(struct s_assenv *ae, double v, int iexpression)
 {
@@ -2703,7 +2727,11 @@ void FreeAssenv(struct s_assenv *ae)
 }
 
 
-
+/******************************************************************
+ * simple function to count errors
+ * display source error if requested (@@TODO check for postponed execution)
+ * strong exit of Rasm is max error is reached!
+******************************************************************/
 void MaxError(struct s_assenv *ae)
 {
 	#undef FUNC
@@ -6113,10 +6141,40 @@ printf("stage 2 | page=%d | ptr=%X ibank=%d\n",page,curlabel->ptr,curlabel->iban
 										}
 									}
 								} else {
-									/***********
+									/***********************************************
 										to allow aliases declared after use
-									***********/
-									if ((ialias=SearchAlias(ae,crc,ae->computectx->varbuffer+minusptr))>=0) {
+									***********************************************/
+									ialias=-1;
+									if (didx>0 && didx<ae->ie) {
+										if (ae->expression[didx].module) {
+											// build module+alias
+											char *dblvarbuffer;
+											dblvarbuffer=MemMalloc(strlen(ae->computectx->varbuffer)+strlen(ae->expression[didx].module)+2);
+                									strcpy(dblvarbuffer,ae->expression[didx].module);
+											strcat(dblvarbuffer,ae->module_separator);
+											strcat(dblvarbuffer,ae->computectx->varbuffer+minusptr);
+											ialias=SearchAlias(ae,GetCRC(dblvarbuffer),dblvarbuffer);
+											MemFree(dblvarbuffer);
+										}
+										if (ialias==-1) {
+											ialias=SearchAlias(ae,crc,ae->computectx->varbuffer+minusptr);
+										}
+									} else {
+										if (ae->module) {
+											char *dblvarbuffer;
+											dblvarbuffer=MemMalloc(strlen(ae->computectx->varbuffer)+strlen(ae->module)+2);
+											strcpy(dblvarbuffer,ae->module);
+											strcat(dblvarbuffer,ae->module_separator);
+											strcat(dblvarbuffer,ae->computectx->varbuffer+minusptr);
+											ialias=SearchAlias(ae,GetCRC(dblvarbuffer),dblvarbuffer);
+											MemFree(dblvarbuffer);
+										}
+										if (ialias==-1) {
+											ialias=SearchAlias(ae,crc,ae->computectx->varbuffer+minusptr);
+										}
+									}
+
+									if (ialias>=0) { // IX alias is always declared in the very beginning so ialias cannot be zero
 										newlen=ae->alias[ialias].len;
 										lenw=strlen(zeexpression);
 										if (newlen>ivar) {
@@ -6974,6 +7032,18 @@ printf("MakeAlias (2) EXPR=[%s EQU %s]\n",expr,ptr_exp2);
 			} else {
 				curalias.alias=TxtStrDup(expr);
 			}
+
+			/* handle module prefix */
+                        if (curalias.alias[0]!='@' && ae->module && ae->modulen) {
+                                char *newaliasname;
+
+                                newaliasname=MemMalloc(strlen(curalias.alias)+ae->modulen+2);
+                                strcpy(newaliasname,ae->module);
+                                strcat(newaliasname,ae->module_separator);
+                                strcat(newaliasname,curalias.alias);
+                                MemFree(curalias.alias);
+                                curalias.alias=newaliasname;
+                        }
 			curalias.crc=GetCRC(curalias.alias);
 			curalias.ptr=ae->codeadr;
 			curalias.lz=ae->ilz;
@@ -7401,7 +7471,23 @@ void ExpressionFastTranslate(struct s_assenv *ae, char **ptr_expr, int fullrepla
 			}
 			/* non trouve on cherche dans les alias */
 			if (!found_replace) {
-				if ((ialias=SearchAlias(ae,crc,varbuffer))>=0) {
+
+				if (ae->module) {
+					char *dblvarbuffer;
+// handle module!!!
+//printf("ExpressionFastTranslate SearchAlias inside module => varbuffer=[%s]\n",varbuffer);
+
+					dblvarbuffer=MemMalloc(strlen(varbuffer)+strlen(ae->module)+2);
+					strcpy(dblvarbuffer,ae->module);
+					strcat(dblvarbuffer,ae->module_separator);
+					strcat(dblvarbuffer,varbuffer);
+					ialias=SearchAlias(ae,GetCRC(dblvarbuffer),dblvarbuffer);
+					MemFree(dblvarbuffer);
+				} else {
+					ialias=-1;
+				}
+
+				if (ialias>=0 || (ialias=SearchAlias(ae,crc,varbuffer))>=0) {
 					newlen=ae->alias[ialias].len;
 					lenw=strlen(expr);
 					/* infinite replacement check */
@@ -21165,7 +21251,7 @@ printf("free\n");
 		e tag: non zero if there is comparison or equality
 	*/
 	ae->wl=wordlist;
-	if (param) {
+	if (param && param->filename) {
 		MemFree(param->filename);
 	}
 	if (MacroFast) MemFree(MacroFast);
