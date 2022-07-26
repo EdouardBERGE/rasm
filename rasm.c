@@ -2730,7 +2730,7 @@ void FreeAssenv(struct s_assenv *ae)
 /******************************************************************
  * simple function to count errors
  * display source error if requested (@@TODO check for postponed execution)
- * strong exit of Rasm is max error is reached!
+ * strong exit of Rasm if max error is reached!
 ******************************************************************/
 void MaxError(struct s_assenv *ae)
 {
@@ -3220,7 +3220,7 @@ void WarnDicoTreeRecurse(struct s_assenv *ae, struct s_crcdico_tree *lt)
 		}
 	}
 	for (i=0;i<lt->ndico;i++) {
-		if (strcmp(lt->dico[i].name,"IX") && strcmp(lt->dico[i].name,"IY") && strcmp(lt->dico[i].name,"PI") && strcmp(lt->dico[i].name,"ASSEMBLER_RASM") && lt->dico[i].autorise_export) {
+		if (strcmp(lt->dico[i].name,"IX") && strcmp(lt->dico[i].name,"IY") && strcmp(lt->dico[i].name,"PI") && strcmp(lt->dico[i].name,"ASSEMBLER_RASM") && !lt->dico[i].used) {
 			rasm_printf(ae,KWARNING"[%s:%d] Warning: variable %s declared but not used\n",ae->filename[ae->wl[lt->dico[i].iw].ifile],ae->wl[lt->dico[i].iw].l,lt->dico[i].name);
 				if (ae->erronwarn) MaxError(ae);
 		}
@@ -16782,17 +16782,21 @@ void __MODULE(struct s_assenv *ae) {
 	#undef FUNC
 	#define FUNC "__MODULE"
 
-	if (!ae->wl[ae->idx].t && ae->wl[ae->idx+1].t==1) {
-		if (strcmp(ae->wl[ae->idx+1].w,"OFF")==0) {
-			if (ae->module || ae->modulen) MemFree(ae->module);
-			ae->module=NULL;
-			ae->modulen=0;
-		} else {
-			if (ae->modulen || ae->module) {
-				MemFree(ae->module);
+	if (!ae->wl[ae->idx].t)
+	       if (ae->wl[ae->idx+1].t==1) {
+			if (strcmp(ae->wl[ae->idx+1].w,"OFF")==0) {
+				if (ae->module || ae->modulen) MemFree(ae->module);
+				ae->module=NULL;
+				ae->modulen=0;
+			} else {
+				if (ae->modulen || ae->module) {
+					MemFree(ae->module);
+				}
+				ae->modulen=strlen(ae->wl[ae->idx+1].w);
+				ae->module=TxtStrDup(ae->wl[ae->idx+1].w);
 			}
-			ae->modulen=strlen(ae->wl[ae->idx+1].w);
-			ae->module=TxtStrDup(ae->wl[ae->idx+1].w);
+		} else {
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"usage is MODULE [<module name>|OFF], directive without parameter or using 'OFF' will quit the current module\n");
 		}
 		ae->idx++;
 	} else {
@@ -17080,8 +17084,6 @@ struct s_asm_keyword instruction[]={
 {"REPEAT",0,__REPEAT},
 {"STARTINGINDEX",0,__STARTINGINDEX},
 {"REND",0,__REND},
-{"ENDREPEAT",0,__REND},
-{"ENDREP",0,__REND},
 {"UNTIL",0,__UNTIL},
 {"ORG",0,__ORG},
 {"PROTECT",0,__PROTECT},
