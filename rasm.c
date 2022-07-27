@@ -16782,7 +16782,7 @@ void __MODULE(struct s_assenv *ae) {
 	#undef FUNC
 	#define FUNC "__MODULE"
 
-	if (!ae->wl[ae->idx].t)
+	if (!ae->wl[ae->idx].t) {
 	       if (ae->wl[ae->idx+1].t==1) {
 			if (strcmp(ae->wl[ae->idx+1].w,"OFF")==0) {
 				if (ae->module || ae->modulen) MemFree(ae->module);
