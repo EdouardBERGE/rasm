@@ -270,7 +270,8 @@ E_COMPUTE_OPERATION_GETTICK=49,
 E_COMPUTE_OPERATION_DURATION=50,
 E_COMPUTE_OPERATION_FILESIZE=51,
 E_COMPUTE_OPERATION_GETSIZE=52,
-E_COMPUTE_OPERATION_END=53
+E_COMPUTE_OPERATION_IS_REGISTER=53,
+E_COMPUTE_OPERATION_END=54
 };
 
 struct s_compute_element {
@@ -912,6 +913,7 @@ struct s_assenv {
 	int codeadrbackup,outputadrbackup; // when using NOCODE, switching back to CODE will restore physical AND logical addresses
 	struct s_orgzone *orgzone;         // each ORG is monitored to avoid conflicts
 	int io,mo;
+	int deadend;
 	/* Struct */
 	struct s_rasmstruct *rasmstruct;
 	int irasmstruct,mrasmstruct;
@@ -1097,6 +1099,7 @@ struct s_math_keyword math_keyword[]={
 {"DURATION",0,E_COMPUTE_OPERATION_DURATION},
 {"FILESIZE",0,E_COMPUTE_OPERATION_FILESIZE},
 {"GETSIZE",0,E_COMPUTE_OPERATION_GETSIZE},
+{"IS_REGISTER",0,E_COMPUTE_OPERATION_IS_REGISTER},
 {"",0,-1}
 };
 
@@ -2952,7 +2955,7 @@ int SearchAlias(struct s_assenv *ae, int crc, char *zemot)
 	if (ae->ialias<5) {
 		for (i=0;i<ae->ialias;i++) {
 			if (ae->alias[i].crc==crc && strcmp(ae->alias[i].alias,zemot)==0) {
-				ae->alias[i].used=1;
+				ae->alias[i].used++;
 //printf("found\n");
 				return i;
 			}
@@ -2971,7 +2974,7 @@ int SearchAlias(struct s_assenv *ae, int crc, char *zemot)
 			/* controle sur le texte entier */
 			while (ae->alias[dm].crc==crc && strcmp(ae->alias[dm].alias,zemot)) dm++;
 			if (ae->alias[dm].crc==crc && strcmp(ae->alias[dm].alias,zemot)==0) {
-				ae->alias[dm].used=1;
+				ae->alias[dm].used++;
 //printf("[%s] found => [%s]\n",zemot,ae->alias[dm].translation);
 				return dm;
 			} else return -1;
@@ -3378,7 +3381,7 @@ struct s_expr_dico *SearchDico(struct s_assenv *ae, char *dico, int crc)
 	}
 	for (i=0;i<curdicotree->ndico;i++) {
 		if (strcmp(curdicotree->dico[i].name,dico)==0) {
-			curdicotree->dico[i].used=1;
+			curdicotree->dico[i].used++;
 
 			if (curdicotree->dico[i].external) {
 				if (ae->external_mapping_size) {
@@ -3694,11 +3697,11 @@ struct s_label *SearchLabel(struct s_assenv *ae, char *label, int crc)
 	}
 	for (i=0;i<curlabeltree->nlabel;i++) {
 		if (!curlabeltree->label[i].name && strcmp(ae->wl[curlabeltree->label[i].iw].w,label)==0) {
-			curlabeltree->label[i].used=1;
+			curlabeltree->label[i].used++;
 //printf(" found (global)\n");
 			return &curlabeltree->label[i];
 		} else if (curlabeltree->label[i].name && strcmp(curlabeltree->label[i].name,label)==0) {
-			curlabeltree->label[i].used=1;
+			curlabeltree->label[i].used++;
 //printf(" found (local or proximity)\n");
 			return &curlabeltree->label[i];
 		}
@@ -4834,6 +4837,21 @@ int __GETTICK(struct s_assenv *ae,char *oplist, int didx)
 	if (opcode) MemFree(opcode);
 	return tick;
 }
+int __IS_REGISTER(struct s_assenv *ae,char *argstr)
+{
+	#undef FUNC
+	#define FUNC "__IS_REGISTER"
+
+	int idx=0;
+
+	/* upper case */
+	while (argstr[idx]) {
+		argstr[idx]=toupper(argstr[idx]);
+		idx++;
+	}
+
+	return IsRegister(argstr);
+}
 int __GETSIZE(struct s_assenv *ae,char *oplist, int didx)
 {
 	#undef FUNC
@@ -5414,14 +5432,22 @@ double ComputeExpressionCore(struct s_assenv *ae,char *original_zeexpression,int
 					memcpy(zeexpression+idx,asciivalue,4);
 					idx+=3;
 				} else {
-					MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"Only single escaped char may be quoted [%s]\n",TradExpression(zeexpression));
-					zeexpression[0]=0;
-					return 0;
+					//MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"Only single escaped char may be quoted [%s]\n",TradExpression(zeexpression));
+					//zeexpression[0]=0;
+					//return 0;
+					idx++;
+					while (zeexpression[idx] && zeexpression[idx]!=c) idx++; // no escape code management
 				}
 			} else if (zeexpression[idx+1] && zeexpression[idx+2]==c) {
+				// without escaped char, we convert it to value EXCEPT if we are looking for a register!
+				if (idx>=12 && strncmp(&zeexpression[idx-12],"IS_REGISTER(",12)==0) {
+					// skip conversion for register test
+					idx+=2;
+				} else {
 					sprintf(asciivalue,"#%02X",zeexpression[idx+1]);
 					memcpy(zeexpression+idx,asciivalue,3);
 					idx+=2;
+				}
 			} else {
 				//printf("Expression with => moar than one char in quotes\n");
 				//MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"Only single char may be quoted [%s]\n",TradExpression(zeexpression));
@@ -6357,6 +6383,7 @@ printf("stage 2 | page=%d | ptr=%X ibank=%d\n",page,curlabel->ptr,curlabel->iban
 			case E_COMPUTE_OPERATION_DURATION:printf("duration ");break;
 			case E_COMPUTE_OPERATION_FILESIZE:printf("filesize ");break;
 			case E_COMPUTE_OPERATION_GETSIZE:printf("getsize ");break;
+			case E_COMPUTE_OPERATION_IS_REGISTER:printf("is_register ");break;
 			default:printf("bug\n");break;
 		}
 		
@@ -6485,6 +6512,7 @@ printf("operator string=%X\n",ae->computectx->operatorstack[o2].string);
 			case E_COMPUTE_OPERATION_DURATION:
 			case E_COMPUTE_OPERATION_FILESIZE:
 			case E_COMPUTE_OPERATION_GETSIZE:
+			case E_COMPUTE_OPERATION_IS_REGISTER:
 #if DEBUG_STACK
 printf("ajout de la fonction\n");
 #endif
@@ -6695,7 +6723,27 @@ printf("final POP string=%X\n",ae->computectx->operatorstack[nboperatorstack+1].
 										}
 									}
 								} else {
-									MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"GETTICK is empty\n");
+									MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"GETSIZE is empty\n");
+								}
+							       break;
+							       /* CC GETNOP */
+				case E_COMPUTE_OPERATION_IS_REGISTER:if (paccu>0) {
+								      int integeridx;
+								      integeridx=floor(accu[paccu-1]);
+
+								      if (integeridx>=0 && integeridx<nbcomputestack && computestack[integeridx].string) {
+									      accu[paccu-1]=__IS_REGISTER(ae,computestack[integeridx].string);
+									      MemFree(computestack[integeridx].string);
+									      computestack[integeridx].string=NULL;
+								      } else {
+									      if (integeridx>=0 && integeridx<nbcomputestack) {
+											MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"IS_REGISTER function needs a proper string\n");
+										} else {
+											MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"IS_REGISTER internal error (wrong string index)\n");
+										}
+									}
+								} else {
+									MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"IS_REGISTERGETTICK is empty\n");
 								}
 							       break;
 							       /* CC GETNOP */
@@ -6925,6 +6973,26 @@ printf("final POP string=%X\n",ae->computectx->operatorstack[nboperatorstack+1].
 									}
 								} else {
 									MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"GETTICK is empty\n");
+								}
+							       break;
+							       /* CC GETNOP */
+				case E_COMPUTE_OPERATION_IS_REGISTER:if (paccu>0) {
+								      int integeridx;
+								      integeridx=floor(accu[paccu-1]);
+
+								      if (integeridx>=0 && integeridx<nbcomputestack && computestack[integeridx].string) {
+									      accu[paccu-1]=__IS_REGISTER(ae,computestack[integeridx].string);
+									      MemFree(computestack[integeridx].string);
+									      computestack[integeridx].string=NULL;
+								      } else {
+									      if (integeridx>=0 && integeridx<nbcomputestack) {
+											MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"IS_REGISTER function needs a proper string\n");
+										} else {
+											MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"IS_REGISTER internal error (wrong string index)\n");
+										}
+									}
+								} else {
+									MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"IS_REGISTERGETTICK is empty\n");
 								}
 							       break;
 							       /* CC GETNOP */
@@ -7212,7 +7280,7 @@ void ExpressionFastTranslate(struct s_assenv *ae, char **ptr_expr, int fullrepla
 	int curly=0,curlyflag=0;
 	char *Automate;
 	int recurse=-1,recursecount=0;
-	
+
 	if (!ae || !ptr_expr) {
 		if (varbuffer) MemFree(varbuffer);
 		varbuffer=NULL;
@@ -7265,14 +7333,20 @@ void ExpressionFastTranslate(struct s_assenv *ae, char **ptr_expr, int fullrepla
 					memcpy(expr+idx,tmpuchar,4);
 					idx+=3;
 				} else {
-					MakeError(ae,ae->idx,GetCurrentFile(ae),GetExpLine(ae,0),"expression [%s] - Only single escaped char may be quoted\n",expr);
-					expr[0]=0;
-					return;
+					//MakeError(ae,ae->idx,GetCurrentFile(ae),GetExpLine(ae,0),"expression [%s] - Only single escaped char may be quoted\n",expr);
+					//expr[0]=0;
+					//return;
+					idx++;
+					while (expr[idx] && expr[idx]!=c) idx++;
 				}
 			} else if (expr[idx+1] && expr[idx+2]==c) {
+				if (idx>=12 && strncmp("IS_REGISTER(",&expr[idx-12],12)==0) {
+					// do not convert simple char with this function!
+				} else {
 					sprintf(tmpuchar,"#%02X",ae->charset[((unsigned int)expr[idx+1])&0xFF]);
 					memcpy(expr+idx,tmpuchar,3);
-					idx+=2;
+				}
+				idx+=2;
 			} else {
 				//printf("FAST => moar than one quoted char\n");
 				//MakeError(ae,ae->idx,GetCurrentFile(ae),GetExpLine(ae,0),"expression [%s] - Only single char may be quoted\n",expr);
@@ -9209,6 +9283,9 @@ void PushLabel(struct s_assenv *ae)
 #if TRACE_LABEL
 	printf("check label [%s]\n",ae->wl[ae->idx].w);
 #endif
+
+	ae->deadend=0;
+
 	if (ae->AutomateValidLabelFirst[(int)ae->wl[ae->idx].w[0]&0xFF]) {
 		for (i=1;ae->wl[ae->idx].w[i];i++) {
 			if (ae->wl[ae->idx].w[i]=='{') tagcount++; else if (ae->wl[ae->idx].w[i]=='}') tagcount--;
@@ -9835,6 +9912,7 @@ void _RET(struct s_assenv *ae) {
 	} else if (ae->wl[ae->idx].t==1) {
 		___output(ae,0xC9);
 		ae->nop+=3;ae->tick+=10;
+		ae->deadend=1;
 	} else {
 		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Invalid RET syntax\n");
 	}
@@ -9861,6 +9939,7 @@ void _CALL(struct s_assenv *ae) {
 		PushExpression(ae,ae->idx+1,E_EXPRESSION_J16C);
 		ae->idx++;
 		ae->nop+=5;ae->tick+=17;
+		ae->deadend=1;
 	} else {
 		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Invalid CALL syntax\n");
 	}
@@ -9883,6 +9962,7 @@ void _JR(struct s_assenv *ae) {
 		PushExpression(ae,ae->idx+1,E_EXPRESSION_J8);
 		ae->idx++;
 		ae->nop+=3;ae->tick+=12;
+		ae->deadend=1;
 	} else {
 		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Invalid JR syntax\n");
 	}
@@ -9924,6 +10004,7 @@ void _JP(struct s_assenv *ae) {
 				}
 		}
 		ae->idx++;
+		ae->deadend=1;
 	} else {
 		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Invalid JP syntax\n");
 	}
@@ -21351,6 +21432,8 @@ int RasmAssembleInfoParam(const char *datain, int lenin, unsigned char **dataout
 	return ret;
 }
 
+#define AUTOTEST_IS_REGISTER "assert is_register('bc')==1 : assert is_register('d')==1 : assert is_register('e')==1 : assert is_register('z')==0 : assert is_register('rr')==0 : nop "
+
 #define AUTOTEST_ACCENT "defb 'grouiké'"
 
 #define AUTOTEST_QUOTELAST "nop : save'grouik"
@@ -23415,6 +23498,11 @@ printf("testing code skip OK\n");
 	if (!ret) {} else {printf("Autotest %03d ERROR (formula case 2 function+multiple parenthesis)\n",cpt);exit(-1);}
 	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
 printf("testing formula functions + multiple parenthesis OK\n");
+
+	ret=RasmAssemble(AUTOTEST_IS_REGISTER,strlen(AUTOTEST_IS_REGISTER),&opcode,&opcodelen);
+	if (!ret) {} else {printf("Autotest %03d ERROR (is_register simple tests)\n",cpt);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing formula function is_register OK\n");
 
 	ret=RasmAssembleInfo(AUTOTEST_GETSIZE1,strlen(AUTOTEST_GETSIZE1),&opcode,&opcodelen,&debug);
 	if (!ret) {} else {printf("Autotest %03d ERROR (math function GETSIZE 1/4)\n",cpt);for (i=0;i<debug->nberror;i++) printf("%d -> %s\n",i,debug->error[i].msg);exit(-1);}
