@@ -7,6 +7,7 @@
 #define RASM_SNAP_VERSION PROGRAM_NAME" v"PROGRAM_VERSION
 
 #define TRACE_PREPRO 0
+#define TRACE_LIGHT_PREPRO 0
 #define TRACE_POPEXPR 0
 #define TRACE_COMPUTE_EXPRESSION 0
 #define TRACE_HEXBIN 0
@@ -19677,6 +19678,15 @@ void EarlyPrepSrc(struct s_assenv *ae, char **listing, char *filename) {
 		}
 		l--;
 	}
+#if TRACE_LIGHT_PREPRO
+	l=0;
+	printf("----- EARLY -----\n");
+	while (listing[l]) {
+		printf("early [%s] \n",listing[l]);
+		l++;
+	}
+	printf("-----------------\n");
+#endif
 }
 
 void PreProcessingSplitListing(struct s_listing **listing, int *il, int *ml, int idx, int end, int start)
@@ -19694,7 +19704,7 @@ void PreProcessingSplitListing(struct s_listing **listing, int *il, int *ml, int
 	if ((*listing)[idx].listing[start]) {
 		(*listing)[idx+1].listing=TxtStrDup((*listing)[idx].listing+start);
 	} else {
-		(*listing)[idx+1].listing=TxtStrDup(";");
+		(*listing)[idx+1].listing=TxtStrDup(":");
 	}
 	strcpy((*listing)[idx].listing+end,":");
 }
@@ -20236,10 +20246,11 @@ printf("remove comz, do includes\n");
 	/* also do all sources and binaries includes ****************************************/
 	/************************************************************************************/
 	/************************************************************************************/
+
 	l=idx=0;
 	while (l<ilisting) {
 
-#if TRACE_PREPRO
+#if TRACE_PREPRO || TRACE_LIGHT_PREPRO
 if (!idx) printf("[%s]\n",listing[l].listing);
 #endif
 
@@ -20451,7 +20462,7 @@ if (!idx) printf("[%s]\n",listing[l].listing);
 							PreProcessingSplitListing(&listing,&ilisting,&maxlisting,l,rewrite,idx);
 							/* insertion des nouvelles lignes + reference fichier + numeros de ligne */
 							PreProcessingInsertListing(&listing,&ilisting,&maxlisting,l,listing_include,ae->ifile-1);
-							
+
 							MemFree(listing_include); /* free le tableau mais pas les lignes */
 							listing_include=NULL;
 							idx=0; /* on reste sur la meme ligne mais on se prepare a relire du caractere 0! */
