@@ -2610,6 +2610,7 @@ void FreeAssenv(struct s_assenv *ae)
 		for (i=0;i<ae->nbsave;i++) {
 			if (ae->save[i].filename) MemFree(ae->save[i].filename);
 		}
+		MemFree(ae->save);
 	}
 	if (ae->mh) {
 		for (i=0;i<ae->ih;i++) {
@@ -9009,10 +9010,6 @@ void PopAllSave(struct s_assenv *ae)
 		MemFree(ae->edsk_wrapper[i].edsk_filename);
 	}
 	if (ae->maxedskwrapper) MemFree(ae->edsk_wrapper);
-
-	if (ae->nbsave) {
-		MemFree(ae->save);
-	}
 }
 
 void PopAllExpression(struct s_assenv *ae, int crunched_zone)
