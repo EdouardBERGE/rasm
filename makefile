@@ -3,7 +3,7 @@ EXEC=rasm.exe
 
 CFLAGS=-lm -lrt -march=native -o $(EXEC)
 CFLAGS_OPT = $(CFLAGS) -O2
-CFLAGS_DBG = $(CFLAGS) -g -pthread -DRDD
+CFLAGS_DBG = $(CFLAGS) -g -pthread -lefence
 CFLAGS_3RD = $(CFLAGS) -g -pthread -DNO_3RD_PARTIES
 
 SRC_APUDIR=./apultra-master/src
@@ -74,7 +74,7 @@ debug:
 	$(CC) $(SRC_LZSADIR)/shrink_inmem.c $(LZSA_FLAGS)      -o $(SRC_LZSADIR)/shrink_inmem.o
 	$(CC) $(SRC_LZSADIR)/stream.c $(LZSA_FLAGS)            -o $(SRC_LZSADIR)/stream.o
 
-	$(CC) rasm.c $(CFLAGS_DBG)
+	$(CC) rasm.c $(CFLAGS_DBG) $(APU_OBJ) $(LZSA_OBJ) $(ZX0_OBJ)
 
 prod:
 	$(CC) $(SRC_ZX0DIR)/optimize.c $(ZX0_FLAGS)           -o $(SRC_ZX0DIR)/optimize.o
