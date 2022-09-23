@@ -17940,7 +17940,7 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 						vtrace=ComputeExpression(ae,wordlist[ae->idx].w,ae->codeadr,0,0);
 						if (strchr(wordlist[ae->idx].w,'~')) {
 							char *ctrace=TxtStrDup(wordlist[ae->idx].w);
-							TxtReplace(ctrace,"~"," EQU ",0);
+							ctrace=TxtReplace(ctrace,"~"," EQU ",0);
 							printf(" %s ; alias definition\n",ctrace);
 						} else {
 							printf(" %s ; %.2lf | #%04X\n",wordlist[ae->idx].w,vtrace,(int)(floor(vtrace+ae->rough)));
