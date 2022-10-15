@@ -12138,21 +12138,25 @@ void _DEFB(struct s_assenv *ae) {
 				while (ae->wl[ae->idx].w[i] && ae->wl[ae->idx].w[i]!=tquote) {
 					if (ae->wl[ae->idx].w[i]=='\\') {
 						i++;
-						/* no conversion on escaped chars */
-						c=ae->wl[ae->idx].w[i];
-						switch (c) {
-							case 'e':___output(ae,0x1B);break;
-							case 'a':___output(ae,0x07);break; // alarm
-							case 'b':___output(ae,'\b');break;
-							case 'v':___output(ae,'\v');break; // v-tab
-							case 'f':___output(ae,'\f');break; // feed
-							case '0':___output(ae,'\0');break;
-							case 'r':___output(ae,'\r');break; // return
-							case 'n':___output(ae,'\n');break; // carriage-return
-							case 't':___output(ae,'\t');break; // tab
-							default:
-							___output(ae,c);
-						}						
+						if (ae->wl[ae->idx].w[i]!='\\') {
+							/* no conversion on escaped chars EXCEPT escape char ^_^ */
+							c=ae->wl[ae->idx].w[i];
+							switch (c) {
+								case 'e':___output(ae,0x1B);break;
+								case 'a':___output(ae,0x07);break; // alarm
+								case 'b':___output(ae,'\b');break;
+								case 'v':___output(ae,'\v');break; // v-tab
+								case 'f':___output(ae,'\f');break; // feed
+								case '0':___output(ae,'\0');break;
+								case 'r':___output(ae,'\r');break; // return
+								case 'n':___output(ae,'\n');break; // carriage-return
+								case 't':___output(ae,'\t');break; // tab
+								default:
+								___output(ae,c);
+							}
+						} else {
+							___output(ae,ae->charset[(unsigned int)(ae->wl[ae->idx].w[i]&0xFF)]);
+						}
 						ae->nop+=1;
 					} else {
 						/* charset conversion on the fly */
@@ -12185,20 +12189,24 @@ void _DEFB_struct(struct s_assenv *ae) {
 				while (ae->wl[ae->idx].w[i] && ae->wl[ae->idx].w[i]!=tquote) {
 					if (ae->wl[ae->idx].w[i]=='\\') {
 						i++;
-						/* no conversion on escaped chars */
-						c=ae->wl[ae->idx].w[i];
-						switch (c) {
-							case 'b':___output(ae,'\b');break;
-							case 'v':___output(ae,'\v');break;
-							case 'f':___output(ae,'\f');break;
-							case '0':___output(ae,'\0');break;
-							case 'r':___output(ae,'\r');break;
-							case 'n':___output(ae,'\n');break;
-							case 't':___output(ae,'\t');break;
-							default:
-							___output(ae,c);
-							ae->nop+=1;
-						}						
+						if (ae->wl[ae->idx].w[i]!='\\') {
+							/* no conversion on escaped chars EXCEPT escape char ^_^ */
+							c=ae->wl[ae->idx].w[i];
+							switch (c) {
+								case 'b':___output(ae,'\b');break;
+								case 'v':___output(ae,'\v');break;
+								case 'f':___output(ae,'\f');break;
+								case '0':___output(ae,'\0');break;
+								case 'r':___output(ae,'\r');break;
+								case 'n':___output(ae,'\n');break;
+								case 't':___output(ae,'\t');break;
+								default:
+								___output(ae,c);
+							}
+						} else {
+							___output(ae,ae->charset[(unsigned int)ae->wl[ae->idx].w[i]&0xFF]);
+						}
+						ae->nop+=1;
 					} else {
 						/* charset conversion on the fly */
 						___output(ae,ae->charset[(unsigned int)ae->wl[ae->idx].w[i]&0xFF]);
@@ -21256,7 +21264,7 @@ printf("quote start with %c\n",c);
 								if ((unsigned char)w[utidx+1]==0xB1) w[utidx]=171; else // ñ
 								if ((unsigned char)w[utidx+1]==0xA7) {                  // ç
 									w[utidx]=92;
-									w[utidx+1]=92;
+									w[utidx+1]=92; // conversion to "\\"
 								} else
 									MakeError(ae,0,ae->filename[listing[l].ifile],listing[l].iline,"Unsupported UTF8 char for quoted string\n");
 								break;
