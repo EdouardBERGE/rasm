@@ -12733,7 +12733,7 @@ void __SNAPINIT(struct s_assenv *ae) {
 		snapsize=FileGetSize(newfilename);
 		snapdata=MemMalloc(snapsize);
 		if (FileReadBinary(newfilename,(char*)snapdata,snapsize)!=snapsize) {
-			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"read error on file [%s]\n",newfilename);
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"read error on snapshot file [%s]\n",newfilename);
 			MemFree(newfilename);
 			MemFree(snapdata);
 			return;
@@ -12770,7 +12770,7 @@ void __SNAPINIT(struct s_assenv *ae) {
 		} else {
 		}
 	} else {
-		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"file [%s] not found!\n",newfilename);
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"snapshot file [%s] not found!\n",newfilename);
 		return;
 	}
 
