@@ -592,6 +592,7 @@ E_IFTHEN_TYPE_ELSE=4,
 E_IFTHEN_TYPE_ELSEIF=5,
 E_IFTHEN_TYPE_IFUSED=6,
 E_IFTHEN_TYPE_IFNUSED=7,
+E_IFTHEN_TYPE_ELSEIFNOT=8,
 E_IFTHEN_TYPE_END
 };
 
@@ -1110,6 +1111,7 @@ struct s_math_keyword math_keyword[]={
 #define CRC_BREAK     0xCD364DDD
 #define CRC_ENDSWITCH 0x18E9FB21
 
+#define CRC_ELSEIFNOT 0x348E521
 #define CRC_ELSEIF 0xE175E230
 #define CRC_ELSE   0x3FF177A1
 #define CRC_ENDIF  0xCD5265DE
@@ -12621,7 +12623,7 @@ void __CPRINIT(struct s_assenv *ae) {
 	}
 	chunksize=cprdata[4]+cprdata[5]*256+cprdata[6]*65536+cprdata[7]*256*65536;
 	if (chunksize+8!=cprsize) {
-		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"[%s] has an invalid chunk size %d!=%d!\n",newfilename,chunksize+8,cprsize);
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"[%s] has an invalid chunk size %d!=%d! [#%02X%02X%02X%02X]\n",newfilename,chunksize+8,cprsize,cprdata[7],cprdata[6],cprdata[5],cprdata[4]);
 		MemFree(newfilename);
 		MemFree(cprdata);
 		return;
@@ -15211,6 +15213,41 @@ void __ENDSWITCH(struct s_assenv *ae) {
 		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"ENDSWITCH encounter whereas there is no referent SWITCH\n");
 	}
 }
+void __ELSEIFNOT(struct s_assenv *ae) {
+
+	if (!ae->wl[ae->idx].t && ae->wl[ae->idx+1].t==1) {
+		ae->ifthen[ae->ii-1].type=E_IFTHEN_TYPE_ELSEIFNOT;
+		ae->ifthen[ae->ii-1].line=ae->wl[ae->idx].l;
+		ae->ifthen[ae->ii-1].filename=GetCurrentFile(ae);
+		if (ae->ifthen[ae->ii-1].v) {
+			/* il faut signifier aux suivants qu'on va jusqu'au ENDIF */
+			ae->ifthen[ae->ii-1].v=-1;
+		} else {
+			ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
+			ae->ifthen[ae->ii-1].v=!RoundComputeExpression(ae,ae->wl[ae->idx+1].w,ae->codeadr,0,1);
+		}
+		ae->idx++;
+	} else {
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"ELSEIFNOT need one expression\n");
+	}
+}
+void __ELSEIFNOT_light(struct s_assenv *ae) {
+
+	if (!ae->wl[ae->idx].t && ae->wl[ae->idx+1].t==1) {
+		ae->ifthen[ae->ii-1].type=E_IFTHEN_TYPE_ELSEIFNOT;
+		ae->ifthen[ae->ii-1].line=ae->wl[ae->idx].l;
+		ae->ifthen[ae->ii-1].filename=GetCurrentFile(ae);
+		if (ae->ifthen[ae->ii-1].v) {
+			/* il faut signifier aux suivants qu'on va jusqu'au ENDIF */
+			ae->ifthen[ae->ii-1].v=-1;
+		} else {
+			ae->ifthen[ae->ii-1].v=0;
+		}
+		ae->idx++;
+	} else {
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"ELSEIFNOT need one expression\n");
+	}
+}
 
 void __IFNOT(struct s_assenv *ae) {
 	struct s_ifthen ifthen={0};
@@ -17181,6 +17218,7 @@ struct s_asm_keyword instruction[]={
 {"HEXBIN",0,__HEXBIN},
 {"ALIGN",0,__ALIGN},
 {"CONFINE",0,__CONFINE},
+{"ELSEIFNOT",0,__ELSEIFNOT},
 {"ELSEIF",0,__ELSEIF},
 {"ELSE",0,__ELSE},
 {"IF",0,__IF},
@@ -17548,6 +17586,8 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 					__IFNOT_light(ae);
 				} else if (curcrc==CRC_IFUSED && strcmp(wordlist[ae->idx].w,"IFUSED")==0) {
 					__IFUSED_light(ae);
+				} else if (curcrc==CRC_ELSEIFNOT && strcmp(wordlist[ae->idx].w,"ELSEIFNOT")==0) {
+					if (curii==ae->ii-1) __ELSEIFNOT(ae); else __ELSEIFNOT_light(ae);
 				} else if (curcrc==CRC_IFNUSED && strcmp(wordlist[ae->idx].w,"IFNUSED")==0) {
 					__IFNUSED_light(ae);
 				} else if (curcrc==CRC_IFNDEF && strcmp(wordlist[ae->idx].w,"IFNDEF")==0) {
@@ -17593,6 +17633,8 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 						__ENDIF(ae);
 					} else if (curcrc==CRC_ELSEIF && strcmp(wordlist[ae->idx].w,"ELSEIF")==0) {
 						__ELSEIF(ae);
+					} else if (curcrc==CRC_ELSEIFNOT && strcmp(wordlist[ae->idx].w,"ELSEIFNOT")==0) {
+						__ELSEIFNOT(ae);
 					} else if (curcrc==CRC_IFUSED && strcmp(wordlist[ae->idx].w,"IFUSED")==0) {
 						__IFUSED(ae);
 					} else if (curcrc==CRC_IFNUSED && strcmp(wordlist[ae->idx].w,"IFNUSED")==0) {
@@ -17710,12 +17752,15 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 						break;
 					}
 				}
-				/* when inhibited we are looking only for a IF/IFDEF/IFNOT/IFNDEF/ELSE/ELSEIF/ENDIF or SWITCH/CASE/DEFAULT/ENDSWITCH */
+				/* when inhibited we are looking only for a IF/IFDEF/IFNOT/IFNDEF/ELSEIFNOT/ELSE/ELSEIF/ENDIF or SWITCH/CASE/DEFAULT/ENDSWITCH */
 				if (inhibe) {
 					/* this section does NOT need to be agressively optimized !!! */
 					if (curcrc==CRC_ELSEIF && strcmp(wordlist[ae->idx].w,"ELSEIF")==0) {
 						/* true IF needs to be done ONLY on the active level */
 						if (curii==ae->ii-1) __ELSEIF(ae); else __ELSEIF_light(ae);
+					} else if (curcrc==CRC_ELSEIFNOT && strcmp(wordlist[ae->idx].w,"ELSEIFNOT")==0) {
+						/* true IF needs to be done ONLY on the active level */
+						if (curii==ae->ii-1) __ELSEIFNOT(ae); else __ELSEIFNOT_light(ae);
 					} else if (curcrc==CRC_ELSE && strcmp(wordlist[ae->idx].w,"ELSE")==0) {
 						__ELSE(ae);
 					} else if (curcrc==CRC_ENDIF && strcmp(wordlist[ae->idx].w,"ENDIF")==0) {
@@ -17774,6 +17819,8 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 							__ENDIF(ae);
 						} else if (curcrc==CRC_ELSEIF && strcmp(wordlist[ae->idx].w,"ELSEIF")==0) {
 							__ELSEIF(ae);
+						} else if (curcrc==CRC_ELSEIFNOT && strcmp(wordlist[ae->idx].w,"ELSEIFNOT")==0) {
+							__ELSEIFNOT(ae);
 						} else if (curcrc==CRC_IFUSED && strcmp(wordlist[ae->idx].w,"IFUSED")==0) {
 							__IFUSED(ae);
 						} else if (curcrc==CRC_IFNUSED && strcmp(wordlist[ae->idx].w,"IFNUSED")==0) {
@@ -18004,6 +18051,7 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 				case E_IFTHEN_TYPE_ELSEIF:strcpy(instr,"ELSEIF");break;
 				case E_IFTHEN_TYPE_IFUSED:strcpy(instr,"IFUSED");break;
 				case E_IFTHEN_TYPE_IFNUSED:strcpy(instr,"IFNUSED");break;
+				case E_IFTHEN_TYPE_ELSEIFNOT:strcpy(instr,"ELSEIFNOT");break;
 				default:strcpy(instr,"<unknown>");
 			}
 			MakeError(ae,0,ae->ifthen[i].filename,ae->ifthen[i].line,"%s conditionnal block was not closed\n",instr); //@@TODO evolution de la trace pour le IF/THEN
@@ -21485,6 +21533,24 @@ int RasmAssembleInfoParam(const char *datain, int lenin, unsigned char **dataout
 
 #define AUTOTEST_IFDEFMACRO	"macro test:nop:endm:ifndef test:error:else:test:endif:ifdef test:test:else:error:endif:nop"
 
+#define AUTOTEST_ELSEIFNOT "ok=1:true=1:"\
+"if true:"\
+"if true: nop: else: ok=0: endif: assert ok:"\
+"if !true: ok=0: else: nop: endif: assert ok:"\
+"ifnot true: ok=0: else: nop: endif: assert ok:"\
+"ifnot !true: nop: else: ok=0: endif: assert ok:"\
+"if !true : ok=0 : elseif true : nop : else : ok=0 : endif : assert ok:"\
+"if !true : ok=0 : elseifnot !true : nop : else : ok=0 : endif : assert ok:"\
+"else:"\
+"ok=0:"\
+"if true: ok=0: else: ok=0: endif: ok=0:"\
+"if !true: ok=0: else: ok=0: endif: ok=0:"\
+"ifnot true: ok=0: else: ok=0 : endif: ok=0:"\
+"ifnot !true: ok=0 : else: ok=0: endif: ok=0:"\
+"if !true : ok=0 : elseif true : ok=0 : else : ok=0 : endif : ok=0:"\
+"if !true : ok=0 : elseifnot !true : ok=0 : else : ok=0 : endif : ok=0:"\
+"endif:assert ok"
+
 #define AUTOTEST_PRINTVAR "label1:   macro test, param:        print 'param {param}', {hex}{param}:    endm::    test label1: nop"
 
 #define AUTOTEST_PRINTSPACE "idx=5: print 'grouik { idx + 3 } ':nop"
@@ -23318,6 +23384,11 @@ printf("testing macro parameters OK\n");
 	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
 printf("testing macro parameter overload OK\n");
 	
+	ret=RasmAssemble(AUTOTEST_ELSEIFNOT,strlen(AUTOTEST_ELSEIFNOT),&opcode,&opcodelen);
+	if (!ret) {} else {printf("Autotest %03d ERROR (elseifnot)\n",cpt);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing ELSEIFNOT OK\n");
+	
 	ret=RasmAssemble(AUTOTEST_IFDEFMACRO,strlen(AUTOTEST_IFDEFMACRO),&opcode,&opcodelen);
 	if (!ret) {} else {printf("Autotest %03d ERROR (ifdef macro)\n",cpt);exit(-1);}
 	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
@@ -24451,6 +24522,12 @@ printf("           |_| \\_\\__,_|___/_| |_| |_|\n");
 printf("\n");	
 printf("          is using MIT 'expat' license\n");
 printf("\" Copyright (c) BERGE Edouard (roudoudou)\n\n");
+printf("\n");
+printf("Si on doit resumer la licence, il est possible\n");
+printf("de faire ce que vous voulez avec le code, meme\n");
+printf("virer mon nom et renommer le logiciel...\n");
+printf("Mais les gens honnetes ne font pas ca? Si?\n");
+printf("\n");
 
 printf("Permission  is  hereby  granted,  free  of charge,\n");
 printf("to any person obtaining a copy  of  this  software\n");
