@@ -187,7 +187,7 @@ struct s_parameter {
 	int xpr;
 	float rough;
 	int as80,dams,pasmo;
-	int v2;
+	int v2,remu;
 	int warn_unused;
 	char *symbol_name;
 	char *binary_name;
@@ -885,7 +885,7 @@ struct s_assenv {
 	int iwnamebank[BANK_MAX_NUMBER];
 	int nbbank,maxbank;
 	int forcetape,forcezx,forcecpr,forceROM,forceROMconcat,bankmode;
-	int amsdos,forcesnapshot,packedbank,extendedCPR,xpr,cprinfo,cprinfo_export;
+	int amsdos,forcesnapshot,packedbank,extendedCPR,xpr,cprinfo,cprinfo_export,dsksnapshot;
 	int activebank; // current used bank where data/code has to be written | used with outputadr (see ORG tracking)
 	char *cprinfo_filename;
 	struct s_snapshot snapshot;
@@ -1015,7 +1015,7 @@ struct s_assenv {
 	char *outputfilename;
 	int export_sym,export_local,export_multisym;
 	int export_var,export_equ;
-	int export_sna,export_snabrk;
+	int export_sna,export_snabrk,remu;
 	int export_brk,export_tape;
 	int autorise_export;
 	char *flexible_export;
@@ -12867,12 +12867,15 @@ void __SNAPINIT(struct s_assenv *ae) {
 
 
 void __BUILDSNA(struct s_assenv *ae) {
-	if (!ae->wl[ae->idx].t) {
+	while (!ae->wl[ae->idx].t) {
 		if (strcmp(ae->wl[ae->idx+1].w,"V2")==0) {
-		ae->snapshot.version=2;
+			ae->snapshot.version=2;
+		} else if (strcmp(ae->wl[ae->idx+1].w,"DSK")==0) {
+			ae->dsksnapshot=1;
 		} else {
-			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"BUILDSNA unrecognized option\n");
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"BUILDSNA unrecognized option [%s]\n",ae->wl[ae->idx+1].w);
 		}
+		ae->idx++;
 	}
 	if (!ae->forcecpr && !ae->forcetape && !ae->forcezx && !ae->forceROM) {
 		ae->forcesnapshot=1;
@@ -18423,6 +18426,72 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 				FileWriteLineClose(cprinfo_filename);
 			}
 
+			/****************************
+			    case export hack
+			****************************/
+			if (ae->enforce_symbol_case) {
+				char *casefound;
+				int ilocal=0;
+
+				for (i=0;i<ae->il;i++) {
+					if (ae->label[i].autorise_export) {
+						if (!ae->label[i].name) {
+							if ((casefound=_internal_stristr(ae->rawfile[ae->label[i].fileidx],ae->rawlen[ae->label[i].fileidx],ae->wl[ae->label[i].iw].w))!=NULL) {
+								memcpy(ae->wl[ae->label[i].iw].w,casefound,strlen(ae->wl[ae->label[i].iw].w));
+							}
+						} else if (ae->export_local || !ae->label[i].local) {
+							char splitlabel[256];
+							char casecharbackup;
+							int caseidx;
+							int istart,iend,ilen,isplit,icopy;
+
+							ilen=strlen(ae->label[i].name);
+
+							if (ae->label[i].name[0]=='@') {
+								// remove radix
+								while (ae->label[i].name[ilen]!='R') ilen--;
+								ae->label[i].name[ilen]=0;
+							}
+
+							iend=0;
+							do {
+								istart=iend;
+								while (!AutomateCharStop[ae->label[i].name[istart]]) istart++;
+								if (istart>=ilen) break;
+
+								iend=istart;
+								while (AutomateChar[ae->label[i].name[iend]]) iend++;
+
+								isplit=0;
+								icopy=istart;
+								while (icopy<iend && isplit<255) splitlabel[isplit++]=ae->label[i].name[icopy++];
+								splitlabel[isplit]=0;
+
+								if (isplit>1) {
+									casefound=_internal_stristr(ae->rawfile[ae->label[i].fileidx],ae->rawlen[ae->label[i].fileidx],splitlabel);
+									if (casefound) {
+										memcpy(ae->label[i].name+istart,casefound,isplit);
+									}
+								}
+							} while (istart<ilen && iend<ilen);
+
+							if (ae->label[i].name[0]=='@') {
+								// put simplified radix back
+								ae->label[i].name[ilen]='_';
+								sprintf(ae->label[i].name+ilen+1,"%x",ilocal++);
+							}
+						}
+					}
+				}
+				// translate alias only if there are exported
+				if (ae->export_equ) {
+					for (i=0;i<ae->ialias;i++) {
+						if ((casefound=_internal_stristr(ae->rawfile[ae->wl[ae->alias[i].iw].ifile],ae->rawlen[ae->wl[ae->alias[i].iw].ifile],ae->alias[i].alias))!=NULL) {
+							memcpy(ae->alias[i].alias,casefound,strlen(ae->alias[i].alias));
+						}
+					}
+				}
+			}
 			/*********************************************
 			**********************************************
 			               C A R T R I D G E
@@ -18828,6 +18897,78 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 						**************************************************************/
 						if (!ae->flux && ae->snapshot.version>=3) {
 							/* export breakpoint */
+							struct s_breakpoint breakpoint={0};
+							/* add labels and local labels to breakpoint pool (if any) */
+							for (i=0;i<ae->il;i++) {
+								if (!ae->label[i].name) {
+									if (strncmp(ae->wl[ae->label[i].iw].w,"BRK",3)==0 || strncmp(ae->wl[ae->label[i].iw].w,"@BRK",4)==0 || strstr(ae->wl[ae->label[i].iw].w,".BRK")!=NULL) {
+										breakpoint.address=ae->label[i].ptr;
+										breakpoint.bank=ae->label[i].ibank;
+										ObjectArrayAddDynamicValueConcat((void **)&ae->breakpoint,&ae->ibreakpoint,&ae->maxbreakpoint,&breakpoint,sizeof(struct s_breakpoint));
+									}
+								} else {
+									if (strncmp(ae->label[i].name,"BRK",3)==0 || strncmp(ae->label[i].name,"@BRK",4)==0 || strstr(ae->label[i].name,".BRK")) {
+										breakpoint.address=ae->label[i].ptr;
+										breakpoint.bank=ae->label[i].ibank;
+										ObjectArrayAddDynamicValueConcat((void **)&ae->breakpoint,&ae->ibreakpoint,&ae->maxbreakpoint,&breakpoint,sizeof(struct s_breakpoint));	
+									}
+								}
+							}
+							if (ae->remu) {
+								unsigned char *remu_output=NULL;
+								char zedigit[128];
+								char shortlabel[64];
+								int ilocal=0;
+								unsigned int chunksize;
+
+								remu_output=MemMalloc(ae->ibreakpoint*64+ae->il*256+ae->ialias*256+16);
+
+								strcpy(remu_output,"REMU    ");
+
+								for (i=0;i<ae->ibreakpoint;i++) {
+									strcat(remu_output,"brk");
+									sprintf(zedigit," %d %d;",ae->breakpoint[i].address,ae->breakpoint[i].bank);
+									strcat(remu_output,zedigit);
+								}
+								for (i=0;i<ae->il;i++) {
+									if (ae->label[i].autorise_export) {
+										if (!ae->label[i].name) {
+											strcat(remu_output,"label ");
+											memset(shortlabel,0,sizeof(shortlabel));
+											strncpy(shortlabel,ae->wl[ae->label[i].iw].w,sizeof(shortlabel)-1);
+											strcat(remu_output,shortlabel);
+											sprintf(zedigit," %d %d;",ae->label[i].ptr,ae->label[i].ibank);
+											strcat(remu_output,zedigit);
+										} else {
+											strcat(remu_output,"label ");
+											memset(shortlabel,0,sizeof(shortlabel));
+											strncpy(shortlabel,ae->label[i].name,sizeof(shortlabel)-1);
+											strcat(remu_output,shortlabel);
+											sprintf(zedigit," %d %d;",ae->label[i].ptr,ae->label[i].ibank);
+											strcat(remu_output,zedigit);
+										}
+									}
+								}
+								// pas d'info sur la bank avec les alias
+								for (i=0;i<ae->ialias;i++) {
+									int tmpptr;
+									strcat(remu_output,"alias ");
+									memset(shortlabel,0,sizeof(shortlabel));
+									strncpy(shortlabel,ae->alias[i].alias,sizeof(shortlabel)-1);
+									strcat(remu_output,shortlabel);
+									tmpptr=RoundComputeExpression(ae,ae->alias[i].translation,0,0,0);
+									sprintf(zedigit," %d;",tmpptr);
+									strcat(remu_output,zedigit);
+								}
+								chunksize=strlen(remu_output)-8;
+								remu_output[4]=chunksize&0xFF;
+								remu_output[5]=(chunksize>>8)&0xFF;
+								remu_output[6]=(chunksize>>16)&0xFF;
+								remu_output[7]=(chunksize>>24)&0xFF;
+								FileWriteBinary(TMP_filename,(char*)remu_output,chunksize+8); // 8 bytes for the chunk header
+								MemFree(remu_output);
+							}
+							for (i=0;i<ae->ibreakpoint;i++) if (ae->breakpoint[i].bank>3) ae->breakpoint[i].bank=1; else ae->breakpoint[i].bank=0; // downgrade for Winape
 							if (ae->export_snabrk) {
 								/* BRKS chunk for Winape emulator (unofficial) 
 								
@@ -18835,26 +18976,9 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 								1 byte  - 0=base 64K / 1=extended
 								2 bytes - condition (zeroed)
 								*/
-								struct s_breakpoint breakpoint={0};
 								unsigned char *brkschunk=NULL;
 								unsigned int idx=8;
 								
-								/* add labels and local labels to breakpoint pool (if any) */
-								for (i=0;i<ae->il;i++) {
-									if (!ae->label[i].name) {
-										if (strncmp(ae->wl[ae->label[i].iw].w,"BRK",3)==0 || strncmp(ae->wl[ae->label[i].iw].w,"@BRK",4)==0 || strstr(ae->wl[ae->label[i].iw].w,".BRK")!=NULL) {
-											breakpoint.address=ae->label[i].ptr;
-											if (ae->label[i].ibank>3) breakpoint.bank=1; else breakpoint.bank=0;
-											ObjectArrayAddDynamicValueConcat((void **)&ae->breakpoint,&ae->ibreakpoint,&ae->maxbreakpoint,&breakpoint,sizeof(struct s_breakpoint));
-										}
-									} else {
-										if (strncmp(ae->label[i].name,"BRK",3)==0 || strncmp(ae->label[i].name,"@BRK",4)==0 || strstr(ae->label[i].name,".BRK")) {
-											breakpoint.address=ae->label[i].ptr;
-											if (ae->label[i].ibank>3) breakpoint.bank=1; else breakpoint.bank=0;
-											ObjectArrayAddDynamicValueConcat((void **)&ae->breakpoint,&ae->ibreakpoint,&ae->maxbreakpoint,&breakpoint,sizeof(struct s_breakpoint));								
-										}
-									}
-								}
 
 								brkschunk=MemMalloc(ae->ibreakpoint*5+8);
 								strcpy((char *)brkschunk,"BRKS");
@@ -18922,27 +19046,29 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 								strcpy((char *)symbchunk,"SYMB");
 
 								for (i=0;i<ae->il;i++) {
-									if (!ae->label[i].name) {
-										symbol_len=strlen(ae->wl[ae->label[i].iw].w);
-										if (symbol_len>255) symbol_len=255;
-										symbchunk[idx++]=symbol_len;
-										memcpy(symbchunk+idx,ae->wl[ae->label[i].iw].w,symbol_len);
-										idx+=symbol_len;
-										memset(symbchunk+idx,0,6);
-										idx+=6;
-										symbchunk[idx++]=(ae->label[i].ptr&0xFF00)/256;
-										symbchunk[idx++]=ae->label[i].ptr&0xFF;
-									} else {
-										if (ae->export_local || !ae->label[i].local) {
-											symbol_len=strlen(ae->label[i].name);
+									if (ae->label[i].autorise_export) {
+										if (!ae->label[i].name) {
+											symbol_len=strlen(ae->wl[ae->label[i].iw].w);
 											if (symbol_len>255) symbol_len=255;
 											symbchunk[idx++]=symbol_len;
-											memcpy(symbchunk+idx,ae->label[i].name,symbol_len);
+											memcpy(symbchunk+idx,ae->wl[ae->label[i].iw].w,symbol_len);
 											idx+=symbol_len;
 											memset(symbchunk+idx,0,6);
 											idx+=6;
 											symbchunk[idx++]=(ae->label[i].ptr&0xFF00)/256;
 											symbchunk[idx++]=ae->label[i].ptr&0xFF;
+										} else {
+											if (ae->export_local || !ae->label[i].local) {
+												symbol_len=strlen(ae->label[i].name);
+												if (symbol_len>255) symbol_len=255;
+												symbchunk[idx++]=symbol_len;
+												memcpy(symbchunk+idx,ae->label[i].name,symbol_len);
+												idx+=symbol_len;
+												memset(symbchunk+idx,0,6);
+												idx+=6;
+												symbchunk[idx++]=(ae->label[i].ptr&0xFF00)/256;
+												symbchunk[idx++]=ae->label[i].ptr&0xFF;
+											}
 										}
 									}
 								}
@@ -19209,72 +19335,6 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 				rasm_printf(ae,KIO"Write symbol file %s\n",TMP_filename);
 			}
 
-			/****************************
-			    case export hack
-			****************************/
-			if (ae->enforce_symbol_case) {
-				char *casefound;
-				int ilocal=0;
-
-				for (i=0;i<ae->il;i++) {
-					if (ae->label[i].autorise_export) {
-						if (!ae->label[i].name) {
-							if ((casefound=_internal_stristr(ae->rawfile[ae->label[i].fileidx],ae->rawlen[ae->label[i].fileidx],ae->wl[ae->label[i].iw].w))!=NULL) {
-								memcpy(ae->wl[ae->label[i].iw].w,casefound,strlen(ae->wl[ae->label[i].iw].w));
-							}
-						} else if (ae->export_local || !ae->label[i].local) {
-							char splitlabel[256];
-							char casecharbackup;
-							int caseidx;
-							int istart,iend,ilen,isplit,icopy;
-
-							ilen=strlen(ae->label[i].name);
-
-							if (ae->label[i].name[0]=='@') {
-								// remove radix
-								while (ae->label[i].name[ilen]!='R') ilen--;
-								ae->label[i].name[ilen]=0;
-							}
-
-							iend=0;
-							do {
-								istart=iend;
-								while (!AutomateCharStop[ae->label[i].name[istart]]) istart++;
-								if (istart>=ilen) break;
-
-								iend=istart;
-								while (AutomateChar[ae->label[i].name[iend]]) iend++;
-
-								isplit=0;
-								icopy=istart;
-								while (icopy<iend && isplit<255) splitlabel[isplit++]=ae->label[i].name[icopy++];
-								splitlabel[isplit]=0;
-
-								if (isplit>1) {
-									casefound=_internal_stristr(ae->rawfile[ae->label[i].fileidx],ae->rawlen[ae->label[i].fileidx],splitlabel);
-									if (casefound) {
-										memcpy(ae->label[i].name+istart,casefound,isplit);
-									}
-								}
-							} while (istart<ilen && iend<ilen);
-
-							if (ae->label[i].name[0]=='@') {
-								// put simplified radix back
-								ae->label[i].name[ilen]='_';
-								sprintf(ae->label[i].name+ilen+1,"%x",ilocal++);
-							}
-						}
-					}
-				}
-				// translate alias only if there are exported
-				if (ae->export_equ) {
-					for (i=0;i<ae->ialias;i++) {
-						if ((casefound=_internal_stristr(ae->rawfile[ae->wl[ae->alias[i].iw].ifile],ae->rawlen[ae->wl[ae->alias[i].iw].ifile],ae->alias[i].alias))!=NULL) {
-							memcpy(ae->alias[i].alias,casefound,strlen(ae->alias[i].alias));
-						}
-					}
-				}
-			}
 
 			switch (ae->export_sym) {
 				case 5:
@@ -19893,6 +19953,7 @@ printf("paramz 1\n");
 		ae->pasmo=param->pasmo;
 		ae->dams=param->dams;
 		ae->macrovoid=param->macrovoid;
+		ae->remu=param->remu;
 		if (param->v2) {
 			ae->forcesnapshot=1;
 			ae->snapshot.version=2;
@@ -24753,6 +24814,8 @@ int ParseOptions(char **argv,int argc, struct s_parameter *param)
 		param->pasmo=1;
 	} else if (strcmp(argv[i],"-cprquiet")==0) {
 		param->cprinfo=0;
+	} else if (strcmp(argv[i],"-remu")==0) {
+		param->remu=1;
 	} else if (strcmp(argv[i],"-ass")==0) {
 		param->as80=1;
 	} else if (strcmp(argv[i],"-amper")==0 || strcmp(argv[i],"--noampersand")==0) {
