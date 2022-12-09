@@ -1,7 +1,8 @@
 #define PROGRAM_NAME      "RASM"
-#define PROGRAM_VERSION   "1.8b"
-#define PROGRAM_DATE      "xx/04/2022"
+#define PROGRAM_VERSION   "1.8"
+#define PROGRAM_DATE      "xx/12/2022"
 #define PROGRAM_COPYRIGHT "© 2017 BERGE Edouard / roudoudou from Resistance"
+#define RELEASE_NAME      "Flying monkeys"
 
 #define RASM_VERSION PROGRAM_NAME" v"PROGRAM_VERSION" (build "PROGRAM_DATE")"
 #define RASM_SNAP_VERSION PROGRAM_NAME" v"PROGRAM_VERSION
