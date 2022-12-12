@@ -159,57 +159,8 @@ E_DEPENDENCIES_LIST,
 E_DEPENDENCIES_MAKE
 };
 
-struct s_parameter {
-	char **labelfilename;
-	char *filename;
-	char *outputfilename;
-	int automatic_radix;
-	int export_local;
-	int export_var;
-	int export_equ;
-	int export_sym;
-	int export_multisym;
-	int export_tape;
-	char *flexible_export;
-	int export_sna;
-	int export_snabrk;
-	int export_brk;
-	int nowarning;
-	int erronwarn;
-	int utf8enable;
-	int freequote;
-	int checkmode;
-	int dependencies;
-	int maxerr;
-	int macrovoid;
-	int extended_error;
-	int display_stats;
-	int edskoverwrite;
-	int xpr;
-	float rough;
-	int as80,dams,pasmo;
-	int v2,remu;
-	int warn_unused;
-	char *symbol_name;
-	char *binary_name;
-	char *cartridge_name;
-	char *snapshot_name;
-	char *rom_name;
-	char *tape_name;
-	char *breakpoint_name;
-	char *cprinfo_name;
-	char **symboldef;
-	int nsymb,msymb;
-	char **pathdef;
-	int npath,mpath;
-	int noampersand;
-	int cprinfo,cprinfoexport;
-	char module_separator;
-	int enforce_symbol_case;
-	int verbose_assembling;
-	int macro_multi_line;
-};
-
+#define INSIDE_RASM
+#include "rasm.h"
 
 
 /*******************************************************************
@@ -839,8 +790,6 @@ struct s_rasmstruct {
            D E B U G        
 *********************************/
 
-#define INSIDE_RASM
-#include "rasm.h"
 
 
 /*******************************************
