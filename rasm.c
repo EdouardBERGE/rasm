@@ -9487,6 +9487,8 @@ unsigned char *EncodeSnapshotRLE(unsigned char *memin, int *lenout) {
 
 #undef FUNC
 #define FUNC "Instruction CORE"
+						
+#define EnforceNoAddressingMode(zidx) if (StringIsMem(ae->wl[zidx].w)) MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Ambiguous and potentially erroneous mnemonic entry. Expecting immediate value instead of immediate addressing value\n");
 
 void _IN(struct s_assenv *ae) {
 	if (!ae->wl[ae->idx].t && !ae->wl[ae->idx+1].t && ae->wl[ae->idx+2].t==1) {
@@ -10260,8 +10262,22 @@ void _RLCA(struct s_assenv *ae) {
 		___output(ae,0x7);
 		ae->nop+=1;
 		ae->tick+=4;
+	} else if (!ae->wl[ae->idx].t && ae->wl[ae->idx+1].t==1) {
+		int o;
+		ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
+		o=RoundComputeExpressionCore(ae,ae->wl[ae->idx+1].w,ae->codeadr,0);
+		if (o>0) {
+			while (o>0) {
+				___output(ae,0x7);
+				ae->nop+=1;
+				ae->tick+=4;
+				o--;
+			}
+		} else {
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"RLCA <repetition> allows only non zero positive values\n");
+		}
 	} else {
-		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"RLCA does not need parameter\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"RLCA does not need parameter except if you want repetition\n");
 	}
 }
 void _RRCA(struct s_assenv *ae) {
@@ -10269,8 +10285,22 @@ void _RRCA(struct s_assenv *ae) {
 		___output(ae,0xF);
 		ae->nop+=1;
 		ae->tick+=4;
+	} else if (!ae->wl[ae->idx].t && ae->wl[ae->idx+1].t==1) {
+		int o;
+		ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
+		o=RoundComputeExpressionCore(ae,ae->wl[ae->idx+1].w,ae->codeadr,0);
+		if (o>=0) {
+			while (o>0) {
+				___output(ae,0xF);
+				ae->nop+=1;
+				ae->tick+=4;
+				o--;
+			}
+		} else {
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"RLCA <repetition> allows only non zero positive values\n");
+		}
 	} else {
-		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"RRCA does not need parameter\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"RRCA does not need parameter except if you want repetition\n");
 	}
 }
 void _NEG(struct s_assenv *ae) {
@@ -10326,8 +10356,23 @@ void _LDD(struct s_assenv *ae) {
 		___output(ae,0xA8);
 		ae->nop+=5;
 		ae->tick+=16;
+	} else if (!ae->wl[ae->idx].t && ae->wl[ae->idx+1].t==1) {
+		int o;
+		ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
+		o=RoundComputeExpressionCore(ae,ae->wl[ae->idx+1].w,ae->codeadr,0);
+		if (o>0) {
+			while (o>0) {
+				___output(ae,0xED);
+				___output(ae,0xA8);
+				ae->nop+=5;
+				ae->tick+=16;
+				o--;
+			}
+		} else {
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"LDD minimum count is 1\n");
+		}
 	} else {
-		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"LDD does not need parameter\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"LDD does not need parameter except if you want repetition\n");
 	}
 }
 void _LDDR(struct s_assenv *ae) {
@@ -10346,8 +10391,23 @@ void _LDI(struct s_assenv *ae) {
 		___output(ae,0xA0);
 		ae->nop+=5;
 		ae->tick+=16;
+	} else if (!ae->wl[ae->idx].t && ae->wl[ae->idx+1].t==1) {
+		int o;
+		ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
+		o=RoundComputeExpressionCore(ae,ae->wl[ae->idx+1].w,ae->codeadr,0);
+		if (o>0) {
+			while (o>0) {
+				___output(ae,0xED);
+				___output(ae,0xA0);
+				ae->nop+=5;
+				ae->tick+=16;
+				o--;
+			}
+		} else {
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"LDI minimum count is 1\n");
+		}
 	} else {
-		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"LDI does not need parameter\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"LDI does not need parameter except if you want repetition\n");
 	}
 }
 void _LDIR(struct s_assenv *ae) {
@@ -10415,8 +10475,23 @@ void _OUTD(struct s_assenv *ae) {
 		___output(ae,0xAB);
 		ae->nop+=5;
 		ae->tick+=16;
+	} else if (!ae->wl[ae->idx].t && ae->wl[ae->idx+1].t==1) {
+		int o;
+		ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
+		o=RoundComputeExpressionCore(ae,ae->wl[ae->idx+1].w,ae->codeadr,0);
+		if (o>0) {
+			while (o>0) {
+				___output(ae,0xED);
+				___output(ae,0xAB);
+				ae->nop+=5;
+				ae->tick+=16;
+				o--;
+			}
+		} else {
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"OUTD minimum count is 1\n");
+		}
 	} else {
-		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"OUTD does not need parameter\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"OUTD does not need parameter except if you want repetition\n");
 	}
 }
 void _OTDR(struct s_assenv *ae) {
@@ -10435,8 +10510,23 @@ void _OUTI(struct s_assenv *ae) {
 		___output(ae,0xA3);
 		ae->nop+=5;
 		ae->tick+=16;
+	} else if (!ae->wl[ae->idx].t && ae->wl[ae->idx+1].t==1) {
+		int o;
+		ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
+		o=RoundComputeExpressionCore(ae,ae->wl[ae->idx+1].w,ae->codeadr,0);
+		if (o>0) {
+			while (o>0) {
+				___output(ae,0xED);
+				___output(ae,0xA3);
+				ae->nop+=5;
+				ae->tick+=16;
+				o--;
+			}
+		} else {
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"OUTI minimum count is 1\n");
+		}
 	} else {
-		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"OUTI does not need parameter\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"OUTI does not need parameter except if you want repetition\n");
 	}
 }
 void _OTIR(struct s_assenv *ae) {
@@ -10465,8 +10555,23 @@ void _IND(struct s_assenv *ae) {
 		___output(ae,0xAA);
 		ae->nop+=5;
 		ae->tick+=16;
+	} else if (!ae->wl[ae->idx].t && ae->wl[ae->idx+1].t==1) {
+		int o;
+		ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
+		o=RoundComputeExpressionCore(ae,ae->wl[ae->idx+1].w,ae->codeadr,0);
+		if (o>0) {
+			while (o>0) {
+				___output(ae,0xED);
+				___output(ae,0xAA);
+				ae->nop+=5;
+				ae->tick+=16;
+				o--;
+			}
+		} else {
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"IND minimum count is 1\n");
+		}
 	} else {
-		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"IND does not need parameter\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"IND does not need parameter except if you want repetition\n");
 	}
 }
 void _INDR(struct s_assenv *ae) {
@@ -10485,8 +10590,23 @@ void _INI(struct s_assenv *ae) {
 		___output(ae,0xA2);
 		ae->nop+=5;
 		ae->tick+=16;
+	} else if (!ae->wl[ae->idx].t && ae->wl[ae->idx+1].t==1) {
+		int o;
+		ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
+		o=RoundComputeExpressionCore(ae,ae->wl[ae->idx+1].w,ae->codeadr,0);
+		if (o>0) {
+			while (o>0) {
+				___output(ae,0xED);
+				___output(ae,0xA2);
+				ae->nop+=5;
+				ae->tick+=16;
+				o--;
+			}
+		} else {
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"INI minimum count is 1\n");
+		}
 	} else {
-		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"INI does not need parameter\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"INI does not need parameter except if you want repetition\n");
 	}
 }
 void _INIR(struct s_assenv *ae) {
@@ -10513,8 +10633,22 @@ void _HALT(struct s_assenv *ae) {
 		___output(ae,0x76);
 		ae->nop+=1;
 		ae->tick+=4;
+	} else if (!ae->wl[ae->idx].t && ae->wl[ae->idx+1].t==1) {
+		int o;
+		ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
+		o=RoundComputeExpressionCore(ae,ae->wl[ae->idx+1].w,ae->codeadr,0);
+		if (o>=0) {
+			while (o>0) {
+				___output(ae,0x76);
+				ae->nop+=1;
+				ae->tick+=4;
+				o--;
+			}
+		} else {
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"HALT <repetition> must use posivite value\n");
+		}
 	} else {
-		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"HALT does not need parameter\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"HALT does not need parameter (except if you want repetition)\n");
 	}
 }
 
@@ -10584,6 +10718,8 @@ void _NOP(struct s_assenv *ae) {
 				ae->tick+=4;
 				o--;
 			}
+		} else {
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"NOP <repetition> must use positive value\n");
 		}
 	} else {
 		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"NOP is supposed to be used without parameter or with one optional parameter\n");
@@ -10727,6 +10863,7 @@ void _LD(struct s_assenv *ae) {
 						ae->nop+=5;ae->tick+=19;
 					} else {
 						___output(ae,0x06);
+						EnforceNoAddressingMode(ae->idx+2);
 						PushExpression(ae,ae->idx+2,E_EXPRESSION_V8);
 						ae->nop+=2;ae->tick+=7;
 					}
@@ -10758,6 +10895,7 @@ void _LD(struct s_assenv *ae) {
 						ae->nop+=5;ae->tick+=19;
 					} else {
 						___output(ae,0x0E);
+						EnforceNoAddressingMode(ae->idx+2);
 						PushExpression(ae,ae->idx+2,E_EXPRESSION_V8);
 						ae->nop+=2;ae->tick+=7;
 					}
@@ -10789,6 +10927,7 @@ void _LD(struct s_assenv *ae) {
 						ae->nop+=5;ae->tick+=19;
 					} else {
 						___output(ae,0x16);
+						EnforceNoAddressingMode(ae->idx+2);
 						PushExpression(ae,ae->idx+2,E_EXPRESSION_V8);
 						ae->nop+=2;ae->tick+=7;
 					}
@@ -10820,6 +10959,7 @@ void _LD(struct s_assenv *ae) {
 						ae->nop+=5;ae->tick+=19;
 					} else {
 						___output(ae,0x1E);
+						EnforceNoAddressingMode(ae->idx+2);
 						PushExpression(ae,ae->idx+2,E_EXPRESSION_V8);
 						ae->nop+=2;ae->tick+=7;
 					}
@@ -10837,6 +10977,7 @@ void _LD(struct s_assenv *ae) {
 					default:
 						if (strncmp(ae->wl[ae->idx+2].w,"(IX",3) && strncmp(ae->wl[ae->idx+2].w,"(IY",3)) {
 							___output(ae,0xFD);___output(ae,0x26);
+							EnforceNoAddressingMode(ae->idx+2);
 							PushExpression(ae,ae->idx+2,E_EXPRESSION_V8);
 							ae->nop+=3;ae->tick+=11;
 						} else {
@@ -10856,6 +10997,7 @@ void _LD(struct s_assenv *ae) {
 					default:
 						if (strncmp(ae->wl[ae->idx+2].w,"(IX",3) && strncmp(ae->wl[ae->idx+2].w,"(IY",3)) {
 							___output(ae,0xFD);___output(ae,0x2E);
+							EnforceNoAddressingMode(ae->idx+2);
 							PushExpression(ae,ae->idx+2,E_EXPRESSION_V8);
 							ae->nop+=3;ae->tick+=11;
 						} else {
@@ -10875,6 +11017,7 @@ void _LD(struct s_assenv *ae) {
 					default:
 						if (strncmp(ae->wl[ae->idx+2].w,"(IX",3) && strncmp(ae->wl[ae->idx+2].w,"(IY",3)) {
 							___output(ae,0xDD);___output(ae,0x26);
+							EnforceNoAddressingMode(ae->idx+2);
 							PushExpression(ae,ae->idx+2,E_EXPRESSION_V8);
 							ae->nop+=3;ae->tick+=11;
 						} else {
@@ -10894,6 +11037,7 @@ void _LD(struct s_assenv *ae) {
 					default:
 						if (strncmp(ae->wl[ae->idx+2].w,"(IX",3) && strncmp(ae->wl[ae->idx+2].w,"(IY",3)) {
 							___output(ae,0xDD);___output(ae,0x2E);
+							EnforceNoAddressingMode(ae->idx+2);
 							PushExpression(ae,ae->idx+2,E_EXPRESSION_V8);
 							ae->nop+=3;ae->tick+=11;
 						} else {
@@ -10923,6 +11067,7 @@ void _LD(struct s_assenv *ae) {
 						ae->nop+=5;ae->tick+=19;
 					} else {
 						___output(ae,0x26);
+						EnforceNoAddressingMode(ae->idx+2);
 						PushExpression(ae,ae->idx+2,E_EXPRESSION_V8);
 						ae->nop+=2;ae->tick+=7;
 					}
@@ -10950,6 +11095,7 @@ void _LD(struct s_assenv *ae) {
 						ae->nop+=5;ae->tick+=19;
 					} else {
 						___output(ae,0x2E);
+						EnforceNoAddressingMode(ae->idx+2);
 						PushExpression(ae,ae->idx+2,E_EXPRESSION_V8);
 						ae->nop+=2;ae->tick+=7;
 					}
@@ -21450,6 +21596,7 @@ int RasmAssembleInfo(const char *datain, int lenin, unsigned char **dataout, int
 
 	ae=PreProcessing(NULL,1,datain,lenin,NULL);
 	ret=Assemble(ae,dataout,lenout,debug);
+	debug[0]->warnerr=ae->nberr;
 	return ret;
 }
 
@@ -21496,6 +21643,7 @@ int RasmAssembleInfoParam(const char *datain, int lenin, unsigned char **dataout
 
 	ae=PreProcessing(NULL,1,datain,lenin,param);
 	ret=Assemble(ae,dataout,lenout,debug);
+	debug[0]->warnerr=ae->nberr;
 	return ret;
 }
 
@@ -21575,6 +21723,10 @@ int RasmAssembleInfoParam(const char *datain, int lenin, unsigned char **dataout
 							"mac2 label,45:mac2 glop,10:djnz glop2010:jp label2045"
 							
 #define AUTOTEST_MACROPAR	"macro unemac, param1, param2:defb '{param1}':defb {param2}:mend:unemac grouik,'grouik'"
+
+#define AUTOTEST_ADDRESSING "ld a,(1+1)*1 : ld a,(1+1*1)"
+
+#define AUTOTEST_ADDRLD	"ld b,(5+2) : ld c,(5+2) : ld d,(4*4) : ld e,(6+6) : ld h,(3+7) : ld l,(22)"
 
 #define AUTOTEST_OPCODES "nop::ld bc,#1234::ld (bc),a::inc bc:inc b:dec b:ld b,#12:rlca:ex af,af':add hl,bc:ld a,(bc):dec bc:" \
                          "inc c:dec c:ld c,#12:rrca::djnz $:ld de,#1234:ld (de),a:inc de:inc d:dec d:ld d,#12:rla:jr $:" \
@@ -22644,9 +22796,15 @@ struct s_autotest_keyword autotest_keyword[]={
 	{"ld ly,h",1}, {"ld lx,h",1}, {"ld ly,l",1}, {"ld lx,l",1}, {"ld hy,h",1}, {"ld hx,h",1}, {"ld hy,l",1}, {"ld hx,l",1},
 	{"nop",0},{"nop 2",0},{"nop a",1},{"nop (hl)",1},{"nop nop",1},{"nop grouik",1},
 	{"ldir",0},{"ldir 5",1},{"ldir ldir",1},{"ldir (hl)",1},{"ldir a",1},{"ldir grouik",1},
-	{"ldi",0},{"ldi 5",1},{"ldi ldi",1},{"ldi (hl)",1},{"ldi a",1},{"ldi grouik",1},
+	{"ldi",0},{"ldi 0",1},{"ldi ldi",1},{"ldi (hl)",1},{"ldi a",1},{"ldi grouik",1},
+	{"ldi 5",0},{"grouik=5 : ldi grouik",0},
+	{"ldd 5",0},{"grouik=5 : ldd grouik",0},
+	{"ini 5",0},{"grouik=5 : ini grouik",0},
+	{"ind 5",0},{"grouik=5 : ind grouik",0},
+	{"outi 5",0},{"grouik=5 : outi grouik",0},
+	{"outd 5",0},{"grouik=5 : outd grouik",0},
 	{"lddr",0},{"lddr 5",1},{"lddr lddr",1},{"lddr (hl)",1},{"lddr a",1},{"lddr groudk",1},
-	{"ldd",0},{"ldd 5",1},{"ldd ldd",1},{"ldd (hl)",1},{"ldd a",1},{"ldd groudk",1},
+	{"ldd",0},{"ldd 0",1},{"ldd ldd",1},{"ldd (hl)",1},{"ldd a",1},{"ldd groudk",1},
 	{"jr $",0},{"jr 0",0},{"jr jr",1},{"jr (hl)",1},{"jr a",1},
 	{"jr c,$",0},{"jr c,0",0},{"jr c,jr",1},{"jr c,(hl)",1},{"jr c,a",1},
 	{"jr nc,$",0},{"jr nc,0",0},{"jr nc,jr",1},{"jr nc,(hl)",1},{"jr nc,a",1},
@@ -22719,7 +22877,8 @@ struct s_autotest_keyword autotest_keyword[]={
 	{"di 5",1},{"di di",1},{"di hl",1},{"di a",1},
 	{"ei 5",1},{"ei ei",1},{"ei hl",1},{"ei a",1},
 	{"im",1},{"im 3",1},{"im -1",1},{"im (hl)",1},
-	{"halt 5",1},{"reti 5",1},{"retn 5",1},{"ld i,b",1},{"ld b,i",1},
+	{"halt 5",0},{"reti 5",1},{"retn 5",1},{"ld i,b",1},{"ld b,i",1},
+	{"halt 0",0}, {"halt -1",1},
 
 	{"repeat 5:nop:rend",0},{"repeat 100000:a=5:rend",1},{"repeat -5:nop:rend",1},{"repeat repeat:nop:rend",1},
 	{"macro bidule:nop:mend:bidule",0},{"macro bidule:nop:macro glop:nop:mend:mend:bidule",1},
@@ -23262,6 +23421,11 @@ printf("testing prefix PAGE/PAGESET 3 OK\n");
 	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
 printf("testing UNDEF OK\n");
 
+	ret=RasmAssemble(AUTOTEST_ADDRESSING,strlen(AUTOTEST_ADDRESSING),&opcode,&opcodelen);
+	if (!ret && opcodelen==5 && opcode[0]==0x3E && opcode[2]==0x3A) {} else {printf("Autotest %03d ERROR (addressing mode of LD A)\n",cpt);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing addressing mode discrimination for LD A\n");
+
 	ret=RasmAssemble(AUTOTEST_TAGPRINT,strlen(AUTOTEST_TAGPRINT),&opcode,&opcodelen);
 	if (!ret && opcodelen==1 && opcode[0]==0xC9) {} else {printf("Autotest %03d ERROR (tag inside printed string)\n",cpt);exit(-1);}
 	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
@@ -23455,6 +23619,14 @@ printf("testing BANK tag + proximity labels OK\n");
 	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
 	RasmFreeInfoStruct(debug);
 printf("testing STR end mark OK (thanks to Golem)\n");
+
+
+	memset(&param,0,sizeof(struct s_parameter));
+	param.erronwarn=1;
+	ret=RasmAssembleInfoParam(AUTOTEST_ADDRLD,strlen(AUTOTEST_ADDRLD),&opcode,&opcodelen,&debug,&param);
+	if (ret && debug->nberror==6) {} else {printf("Autotest %03d ERROR (addressing mode checking)\n",cpt);exit(-1);}
+	RasmFreeInfoStruct(debug);
+printf("Testing addressing mode control for LD\n");
 	
 	ret=RasmAssemble(AUTOTEST_STRUCT,strlen(AUTOTEST_STRUCT),&opcode,&opcodelen);
 	if (!ret) {} else {printf("Autotest %03d ERROR (structs)\n",cpt);exit(-1);}

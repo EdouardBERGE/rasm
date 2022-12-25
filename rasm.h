@@ -70,7 +70,7 @@ struct s_debug_symbol {
 };
 struct s_rasm_info {
         struct s_debug_error *error;
-        int nberror,maxerror;
+        int nberror,maxerror,warnerr;
         struct s_debug_symbol *symbol;
         int nbsymbol,maxsymbol;
 	int run,start;
