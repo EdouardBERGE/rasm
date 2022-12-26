@@ -13453,6 +13453,8 @@ void __ROMBANK(struct s_assenv *ae) {
 		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"ROMBANK can be used only with snapshot output\n");
 		return;
 	}
+	ae->remu=1; // force REMU output :)
+
 	if (!ae->wl[ae->idx].t) {
 		if (strcmp(ae->wl[ae->idx+1].w,"LOWER")==0) {
 			rom_select=256;
@@ -24755,6 +24757,7 @@ void Usage(int help)
 		printf("-l  <labelfile> import symbol file (winape,pasmo,rasm)\n");
 		printf("-eb export breakpoints\n");
 		printf("-wu warn for unused symbols (alias, var or label)\n");
+		printf("-remu export super chunk symbols in snapshots\n");
 		printf("SYMBOLS ADDITIONAL OPTIONS:\n");
 		printf("-sl export also local symbol\n");
 		printf("-sv export also variables symbol\n");
