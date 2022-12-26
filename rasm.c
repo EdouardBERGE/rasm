@@ -837,6 +837,7 @@ struct s_assenv {
 	int bankused[BANK_MAX_NUMBER];   /* 16K selected flag */
 	int bankgate[BANK_MAX_NUMBER+1];
 	int setgate[BANK_MAX_NUMBER+1];
+	int rombank[257];
 	int rundefined;
 	/* parsing */
 	struct s_wordlist *wl;
@@ -9452,18 +9453,18 @@ printf("PUSH Orphan PROXIMITY label that cannot be exported [%s]->[%s]\n",ae->wl
 }
 
 
-unsigned char *EncodeSnapshotRLE(unsigned char *memin, int *lenout) {
+unsigned char *EncodeSnapshotRLE(unsigned char *memin, int *lenout, int sizetoencode) {
 	#undef FUNC
 	#define FUNC "EncodeSnapshotRLE"
 	
 	int i,cpt,idx=0;
 	unsigned char *memout;
 	
-	memout=MemMalloc(65536*2);
+	memout=MemMalloc(sizetoencode*2);
 	
-	for (i=0;i<65536;) {
+	for (i=0;i<sizetoencode;) {
 
-		for (cpt=1;cpt<255 && i+cpt<65536;cpt++) if (memin[i]!=memin[i+cpt]) break;
+		for (cpt=1;cpt<255 && i+cpt<sizetoencode;cpt++) if (memin[i]!=memin[i+cpt]) break;
 
 		if (cpt>=3 || memin[i]==0xE5) {
 			memout[idx++]=0xE5;
@@ -9475,10 +9476,10 @@ unsigned char *EncodeSnapshotRLE(unsigned char *memin, int *lenout) {
 		}
 	}
 	if (lenout) *lenout=idx;
-        if (idx<65536) return memout;
+        if (idx<sizetoencode) return memout;
         
         MemFree(memout);
-	*lenout=65536; // means cannot pack
+	*lenout=sizetoencode; // means cannot pack
         return NULL;
 
 }
@@ -13445,6 +13446,36 @@ void __BANK(struct s_assenv *ae) {
 	OverWriteCheck(ae);
 }
 
+void __ROMBANK(struct s_assenv *ae) {
+	int rom_select;
+
+	if (!ae->forcesnapshot) {
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"ROMBANK can be used only with snapshot output\n");
+		return;
+	}
+	if (!ae->wl[ae->idx].t) {
+		if (strcmp(ae->wl[ae->idx+1].w,"LOWER")==0) {
+			rom_select=256;
+			ae->idx++;
+		} else {
+			ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
+			rom_select=RoundComputeExpression(ae,ae->wl[ae->idx+1].w,ae->codeadr,0,0);
+		}
+	} else {
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"usage is ROMBANK <rom number>\n");
+		return;
+	}
+	// check translation table
+	if (!ae->rombank[rom_select]) {
+		// no reference, we allocate a new 'temporary' space for this ROM
+		___new_memory_space(ae);
+		ae->rombank[rom_select]=ae->activebank;
+	} else {
+		// already allocated, just translate ROM number
+		ae->activebank=ae->rombank[rom_select];
+	}
+}
+
 void __BANKSET(struct s_assenv *ae) {
 	struct s_orgzone orgzone={0};
 	int ibank,i;
@@ -14116,7 +14147,13 @@ void __RUN(struct s_assenv *ae) {
 void __BREAKPOINT(struct s_assenv *ae) {
 	struct s_breakpoint breakpoint={0};
 	
-	if (ae->activebank>3) breakpoint.bank=1;
+	if (ae->remu) {
+		breakpoint.bank=ae->activebank;
+	} else {
+		// winape style
+		if (ae->activebank>3) breakpoint.bank=1;
+	}
+
 	if (ae->wl[ae->idx].t) {
 		breakpoint.address=ae->codeadr;
 		ObjectArrayAddDynamicValueConcat((void **)&ae->breakpoint,&ae->ibreakpoint,&ae->maxbreakpoint,&breakpoint,sizeof(struct s_breakpoint));
@@ -17344,6 +17381,7 @@ struct s_asm_keyword instruction[]={
 {"DELAYED_PRINT",0,__DELAYED_PRINT},
 {"FAIL",0,__FAIL},
 {"BREAKPOINT",0,__BREAKPOINT},
+{"ROMBANK",0,__ROMBANK},
 {"BANK",0,__BANK},
 {"BANKSET",0,__BANKSET},
 {"NAMEBANK",0,__NameBANK},
@@ -18876,6 +18914,7 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 						rasm_printf(ae,KWARNING"Warning: No byte were written in snapshot memory\n");
 						if (ae->erronwarn) MaxError(ae);
 					} else {
+						int howmanyrom=0;
 						rasm_printf(ae,KIO"Write snapshot v%d file %s\n",ae->snapshot.version,TMP_filename);
 						
 						/* header */
@@ -18955,7 +18994,7 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 								}
 							} else {
 								/* compression par défaut avec snapshot v3 */
-								rlebank=EncodeSnapshotRLE(packed,&ChunkSize);
+								rlebank=EncodeSnapshotRLE(packed,&ChunkSize,65536);
 								
 								if (bankset>=0 && bankset<=8) {
 									sprintf(ChunkName,"MEM%d",bankset);
@@ -18980,6 +19019,56 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 							}
 						}
 
+						/********************************************************************************
+						 *                      export des ROM dans le snapshot
+						********************************************************************************/
+						noflood=0;
+						for (i=0;i<257;i++) {
+							if (ae->rombank[i]) howmanyrom++;
+						}
+						for (i=0;i<257;i++) {
+							if (ae->rombank[i]) {
+								offset=65536;
+								endoffset=0;
+								for (j=0;j<ae->io;j++) {
+									if (ae->orgzone[j].protect) continue; /* protected zones exclusion */
+									/* bank data may start anywhere (typically #0000 or #C000) */
+									if (ae->orgzone[j].ibank==ae->rombank[i] && ae->orgzone[j].memstart!=ae->orgzone[j].memend) {
+										if (ae->orgzone[j].memstart<offset) offset=ae->orgzone[j].memstart;
+										if (ae->orgzone[j].memend>endoffset) endoffset=ae->orgzone[j].memend;
+									}
+								}
+								if (endoffset-offset>16384) {
+									rasm_printf(ae,KERROR"\nBANK is too big!!!\n");
+									if (!ae->flux) {
+										FileWriteBinaryClose(TMP_filename);
+										FileRemoveIfExists(TMP_filename);
+										FreeAssenv(ae);
+										exit(ABORT_ERROR);
+									} //@@TODO renvoyer erreur quand meme?
+								}
+								if (!noflood || howmanyrom<=4) {
+									if (i<256) rasm_printf(ae,KVERBOSE"WriteSNA ROM %3d of %5d byte%s start at #%04X\n",i,endoffset-offset,endoffset-offset>1?"s":" ",offset); else rasm_printf(ae,KVERBOSE"WriteSNA LOWER   of %5d byte%s start at #%04X\n",endoffset-offset,endoffset-offset>1?"s":" ",offset);
+								} else if (!noflood) {rasm_printf(ae,KVERBOSE"[...]\n");noflood=1;}
+								howmanyrom--;
+
+								memset(packed,0,16384);
+								memcpy(packed,(char*)ae->mem[ae->rombank[i]]+offset,endoffset-offset);
+								rlebank=EncodeSnapshotRLE(packed,&ChunkSize,16384);
+								if (i<256) sprintf(ChunkName,"RM%02X",i); else sprintf(ChunkName,"LOWR");
+								FileWriteBinary(TMP_filename,ChunkName,4);
+								FileWriteBinary(TMP_filename,(char*)&ChunkSize,4);
+								if (rlebank!=NULL) {
+									FileWriteBinary(TMP_filename,(char*)rlebank,ChunkSize);
+									MemFree(rlebank);
+								} else {
+									// write unpacked data
+									FileWriteBinary(TMP_filename,(char*)&packed,ChunkSize);
+								}
+							}
+						}
+
+
 						/**************************************************************
 								snapshot additional chunks in v3+ only
 						**************************************************************/
@@ -18989,13 +19078,13 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 							/* add labels and local labels to breakpoint pool (if any) */
 							for (i=0;i<ae->il;i++) {
 								if (!ae->label[i].name) {
-									if (strncmp(ae->wl[ae->label[i].iw].w,"BRK",3)==0 || strncmp(ae->wl[ae->label[i].iw].w,"@BRK",4)==0 || strstr(ae->wl[ae->label[i].iw].w,".BRK")!=NULL) {
+									if (_internal_strnicmp(ae->wl[ae->label[i].iw].w,"BRK",3)==0 || _internal_strnicmp(ae->wl[ae->label[i].iw].w,"@BRK",4)==0 || _internal_stristr(ae->wl[ae->label[i].iw].w,strlen(ae->wl[ae->label[i].iw].w),".BRK")!=NULL) {
 										breakpoint.address=ae->label[i].ptr;
 										breakpoint.bank=ae->label[i].ibank;
 										ObjectArrayAddDynamicValueConcat((void **)&ae->breakpoint,&ae->ibreakpoint,&ae->maxbreakpoint,&breakpoint,sizeof(struct s_breakpoint));
 									}
 								} else {
-									if (strncmp(ae->label[i].name,"BRK",3)==0 || strncmp(ae->label[i].name,"@BRK",4)==0 || strstr(ae->label[i].name,".BRK")) {
+									if (_internal_strnicmp(ae->label[i].name,"BRK",3)==0 || _internal_strnicmp(ae->label[i].name,"@BRK",4)==0 || _internal_stristr(ae->label[i].name,strlen(ae->label[i].name),".BRK")) {
 										breakpoint.address=ae->label[i].ptr;
 										breakpoint.bank=ae->label[i].ibank;
 										ObjectArrayAddDynamicValueConcat((void **)&ae->breakpoint,&ae->ibreakpoint,&ae->maxbreakpoint,&breakpoint,sizeof(struct s_breakpoint));	
@@ -19014,31 +19103,55 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 								strcpy(remu_output,"REMU    ");
 
 								for (i=0;i<ae->ibreakpoint;i++) {
-									strcat(remu_output,"brk");
-									sprintf(zedigit," %d %d;",ae->breakpoint[i].address,ae->breakpoint[i].bank);
+									int lbankn,isrom;
+									if (ae->breakpoint[i].bank<260) {
+										lbankn=ae->breakpoint[i].bank;
+										isrom=0;
+									} else {
+										int sl;
+										for (sl=0;sl<257;sl++) {
+											if (ae->rombank[sl]==ae->breakpoint[i].bank) {
+												lbankn=sl;
+												isrom=1;
+												break;
+											}
+										}
+									}
+									if (isrom) strcat(remu_output,"rombrk"); else strcat(remu_output,"brk");
+									sprintf(zedigit," %d %d;",ae->breakpoint[i].address,lbankn);
 									strcat(remu_output,zedigit);
 								}
 								for (i=0;i<ae->il;i++) {
-									if (ae->label[i].autorise_export) {
-										if (!ae->label[i].name) {
-											strcat(remu_output,"label ");
-											memset(shortlabel,0,sizeof(shortlabel));
-											strncpy(shortlabel,ae->wl[ae->label[i].iw].w,sizeof(shortlabel)-1);
-											strcat(remu_output,shortlabel);
-											sprintf(zedigit," %d %d;",ae->label[i].ptr,ae->label[i].ibank);
-											strcat(remu_output,zedigit);
-										} else {
-											strcat(remu_output,"label ");
-											memset(shortlabel,0,sizeof(shortlabel));
-											strncpy(shortlabel,ae->label[i].name,sizeof(shortlabel)-1);
-											strcat(remu_output,shortlabel);
-											sprintf(zedigit," %d %d;",ae->label[i].ptr,ae->label[i].ibank);
-											strcat(remu_output,zedigit);
+									int lbankn,isrom;
+									if (ae->label[i].ibank<260) {
+										lbankn=ae->label[i].ibank;
+										isrom=0;
+									} else {
+										int sl;
+										for (sl=0;sl<256;sl++) {
+											if (ae->rombank[sl]==ae->label[i].ibank) {
+												lbankn=sl;
+												isrom=1;
+												break;
+											}
 										}
+									}
+									// distinction ROM/RAM pour les labels
+									if (ae->label[i].autorise_export) {
+										if (isrom) strcat(remu_output,"romlabel "); else strcat(remu_output,"label ");
+										memset(shortlabel,0,sizeof(shortlabel));
+										if (!ae->label[i].name) {
+											strncpy(shortlabel,ae->wl[ae->label[i].iw].w,sizeof(shortlabel)-1);
+										} else {
+											strncpy(shortlabel,ae->label[i].name,sizeof(shortlabel)-1);
+										}
+										strcat(remu_output,shortlabel);
+										sprintf(zedigit," %d %d;",ae->label[i].ptr,lbankn);
+										strcat(remu_output,zedigit);
 									}
 								}
 								// pas d'info sur la bank avec les alias
-								for (i=0;i<ae->ialias;i++) {
+								for (i=2;i<ae->ialias;i++) {
 									int tmpptr;
 									strcat(remu_output,"alias ");
 									memset(shortlabel,0,sizeof(shortlabel));
