@@ -8039,7 +8039,7 @@ char *MakeAMSDOS_name(struct s_assenv *ae, char *reference_filename)
 		amsdos_name[i]=toupper(filename[i]);
 	}
 	/* fill with spaces */
-	for (ia=i;ia<8;ia++) {
+	for (ia=i;ia<11;ia++) {
 		amsdos_name[ia]=0x20;
 	}
 	/* looking for extension */
