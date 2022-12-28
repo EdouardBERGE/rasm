@@ -21081,6 +21081,9 @@ printf("check quotes and repeats\n");
 	ObjectArrayAddDynamicValueConcat((void**)&wordlist,&nbword,&maxword,&curw,sizeof(curw));
 	curw.w=TxtStrDup("IY~0");
 	ObjectArrayAddDynamicValueConcat((void**)&wordlist,&nbword,&maxword,&curw,sizeof(curw));
+	curw.e=12;
+	curw.w=TxtStrDup("RASM_VERSION~"PROGRAM_VERSION);
+	ObjectArrayAddDynamicValueConcat((void**)&wordlist,&nbword,&maxword,&curw,sizeof(curw));
 	curw.e=0;
 
 #if TRACE_PREPRO
