@@ -744,6 +744,12 @@ struct s_breakpoint {
 	int bank;
 };
 
+struct s_comz {
+	int idx;
+	int bank;
+	int address;
+	char *comment;
+};
 
 /*********************************
         S T R U C T U R E S
@@ -985,7 +991,9 @@ struct s_assenv {
 	struct s_rasm_info **retdebug;
 	int debug_total_len;
 	int verbose_assembling;
-	/* delayed print */
+	/* delayed print + comz*/
+	struct s_comz *comz;
+	int icomz,mcomz;
 	int *dprint_idx;
 	int idprint,mdprint;
 	/* OBJ output */
@@ -2786,7 +2794,7 @@ void ___output_set_limit(struct s_assenv *ae,int zelimit)
 	ae->maxptr=limit;
 }
 
-unsigned char *MakeAMSDOSHeader(int run, int minmem, int maxmem, char *amsdos_name) {
+unsigned char *MakeAMSDOSHeader(int run, int minmem, int maxmem, char *amsdos_name, int amsdos_user) {
 	#undef FUNC
 	#define FUNC "MakeAMSDOSHeader"
 	
@@ -2805,7 +2813,7 @@ unsigned char *MakeAMSDOSHeader(int run, int minmem, int maxmem, char *amsdos_na
 	To calculate the checksum, just add byte 00 to byte 66 to each other.
 	*/
 	memset(AmsdosHeader,0,sizeof(AmsdosHeader));
-	AmsdosHeader[0]=0;
+	AmsdosHeader[0]=amsdos_user;
 	memcpy(AmsdosHeader+1,amsdos_name,11);
 
 	AmsdosHeader[18]=2; /* 0 basic 1 basic protege 2 binaire */
@@ -8005,7 +8013,7 @@ int EDSK_getdirid(struct s_edsk_wrapper *curwrap) {
 	}
 	return -1;
 }
-char *MakeAMSDOS_name(struct s_assenv *ae, char *reference_filename)
+char *MakeAMSDOS_name(struct s_assenv *ae, char *reference_filename, int *amsdos_user)
 {
 	#undef FUNC
 	#define FUNC "MakeAMSDOS_name"
@@ -8015,8 +8023,16 @@ char *MakeAMSDOS_name(struct s_assenv *ae, char *reference_filename)
 	int i,ia;
 	char *pp;
 
-	/* remove path */
 	filename=reference_filename;
+	if ((jo=strchr(filename,':'))!=NULL) {
+		*jo=0;
+		*amsdos_user=atoi(reference_filename);
+		filename=jo+1;
+	} else {
+		*amsdos_user=0;
+	}
+
+	/* remove path */
 	while ((jo=strchr(filename,'/'))!=NULL) filename=jo+1;
 	while ((jo=strchr(filename,'\\'))!=NULL) filename=jo+1;
 
@@ -8348,14 +8364,14 @@ int EDSK_addfile(struct s_assenv *ae,char *edskfilename,int facenumber, char *fi
 	int fb[180],rc,idxb;
 	unsigned char *data=NULL;
 	int size=0;
-	int firstblock;
+	int firstblock,amsdos_user;
 
 	curwrap=EDSK_select(ae,edskfilename,facenumber);
 	/* update struct */
 	size=insize+128;
 	data=MemMalloc(size);
-	strcpy(amsdos_name,MakeAMSDOS_name(ae,filename));
-	memcpy(data,MakeAMSDOSHeader(run,offset,offset+insize,amsdos_name),128);
+	strcpy(amsdos_name,MakeAMSDOS_name(ae,filename,&amsdos_user));
+	memcpy(data,MakeAMSDOSHeader(run,offset,offset+insize,amsdos_name,amsdos_user),128);
 	memcpy(data+128,indata,insize);
 	/* overwrite check */
 #if TRACE_EDSK
@@ -8440,7 +8456,7 @@ int EDSK_addfile(struct s_assenv *ae,char *edskfilename,int facenumber, char *fi
 			memcpy(curwrap->entry[ie].filename,amsdos_name,11);
 			curwrap->entry[ie].subcpt=ia;
 			curwrap->entry[ie].rc=0x80;
-			curwrap->entry[ie].user=0;
+			curwrap->entry[ie].user=amsdos_user;
 			ia++;
 			idxb=0;
 		} else {
@@ -8484,7 +8500,7 @@ int EDSK_addfile(struct s_assenv *ae,char *edskfilename,int facenumber, char *fi
 			filesize=0;
 			memcpy(curwrap->entry[ie].filename,amsdos_name,11);
 			curwrap->entry[ie].subcpt=ia;
-			curwrap->entry[ie].user=0;
+			curwrap->entry[ie].user=amsdos_user;
 		}
 	}
 
@@ -8794,7 +8810,7 @@ void __output_CDT(struct s_assenv *ae, char *tapefilename,char *filename,char *m
 	unsigned char *AmsdosHeader;
 	unsigned char head[256];
 	char TZX_header[14];
-	int wrksize,fileload,nbblock=0;
+	int wrksize,fileload,nbblock=0,dummy_user;
 	unsigned char body[65536+128];
 	int flag_h=2560, flag_p=10240, flag_bb, flag_b=1000,i,j,k;
 
@@ -8803,12 +8819,12 @@ void __output_CDT(struct s_assenv *ae, char *tapefilename,char *filename,char *m
 	memcpy(TZX_header,"ZXTape!\032\001\000\040\000\012",13);
 	FileWriteBinary(tapefilename,(char *)TZX_header,13);
 
-	AmsdosHeader=MakeAMSDOSHeader(run,offset,offset+size,MakeAMSDOS_name(ae,filename));
+	AmsdosHeader=MakeAMSDOSHeader(run,offset,offset+size,MakeAMSDOS_name(ae,filename,&dummy_user),dummy_user);
 	memcpy(body,AmsdosHeader,128);
 	wrksize=size;
 
 	memset(head,0,16);
-	strcpy(head,MakeAMSDOS_name(ae,filename));
+	strcpy(head,MakeAMSDOS_name(ae,filename,&dummy_user));
 	head[0x12]=body[0x12];
 	head[0x18]=body[0x40];
 	head[0x19]=body[0x41];
@@ -8861,7 +8877,7 @@ void PopAllSave(struct s_assenv *ae)
 	char *dskfilename;
 	char *filename;
 	int offset,size,run;
-	int i,is,erreur=0,touched;
+	int i,is,erreur=0,touched,dummy_user;
 	
 	for (is=0;is<ae->nbsave;is++) {
 		/* avoid quotes */
@@ -8937,11 +8953,11 @@ void PopAllSave(struct s_assenv *ae)
 			rasm_printf(ae,KIO"Write binary file %s (%d byte%s)\n",filename,size,size>1?"s":"");
 			FileRemoveIfExists(filename);
 			if (ae->save[is].amsdos) {
-				AmsdosHeader=MakeAMSDOSHeader(run,offset,offset+size,MakeAMSDOS_name(ae,filename));
+				AmsdosHeader=MakeAMSDOSHeader(run,offset,offset+size,MakeAMSDOS_name(ae,filename,&dummy_user),dummy_user);
 				FileWriteBinary(filename,(char *)AmsdosHeader,128);
 			} else if (ae->save[is].hobeta) {
 				// HOBETA header is 17 bytes long so i reuse Amsdos buffer and name cleaning
-				AmsdosHeader=MakeHobetaHeader(offset,offset+size,MakeAMSDOS_name(ae,filename));
+				AmsdosHeader=MakeHobetaHeader(offset,offset+size,MakeAMSDOS_name(ae,filename,&dummy_user));
 				FileWriteBinary(filename,(char *)AmsdosHeader,17);
 			}		
 			FileWriteBinary(filename,(char*)ae->mem[ae->save[is].ibank]+offset,size);
@@ -14466,6 +14482,151 @@ void __STOP(struct s_assenv *ae) {
 	ae->stop=1;
 }
 
+void __DELAYED_COMZ(struct s_assenv *ae) {
+	struct s_comz curcomz={0};
+	curcomz.idx=ae->idx;
+	curcomz.bank=ae->activebank;
+	curcomz.address=ae->codeadr;
+	ObjectArrayAddDynamicValueConcat((void **)&ae->comz,&ae->icomz,&ae->mcomz,&curcomz,sizeof(curcomz));
+	/* skip parameters */
+	while (ae->wl[ae->idx].t!=1) {
+		ae->idx++;
+	}
+}
+void __COMZ(struct s_assenv *ae, int icomz) {
+	char *newcomz=NULL;
+	char *concatstr;
+	char immediate[128];
+	int curlen=0;
+
+	ae->codeadr=ae->comz[icomz].address;
+
+	while (ae->wl[ae->idx].t!=1) {
+		if (!StringIsQuote(ae->wl[ae->idx+1].w)) {
+			char *string2print=NULL;
+			int hex=0,bin=0,entier=0;
+			
+			if (strncmp(ae->wl[ae->idx+1].w,"{HEX}",5)==0) {
+				string2print=TxtStrDup(ae->wl[ae->idx+1].w+5);
+				hex=1;
+			} else if (strncmp(ae->wl[ae->idx+1].w,"{HEX2}",6)==0) {
+				string2print=TxtStrDup(ae->wl[ae->idx+1].w+6);
+				hex=2;
+			} else if (strncmp(ae->wl[ae->idx+1].w,"{HEX4}",6)==0) {
+				string2print=TxtStrDup(ae->wl[ae->idx+1].w+6);
+				hex=4;
+			} else if (strncmp(ae->wl[ae->idx+1].w,"{HEX8}",6)==0) {
+				string2print=TxtStrDup(ae->wl[ae->idx+1].w+6);
+				hex=8;
+			} else if (strncmp(ae->wl[ae->idx+1].w,"{BIN}",5)==0) {
+				string2print=TxtStrDup(ae->wl[ae->idx+1].w+5);
+				bin=1;
+			} else if (strncmp(ae->wl[ae->idx+1].w,"{BIN8}",6)==0) {
+				string2print=TxtStrDup(ae->wl[ae->idx+1].w+6);
+				bin=8;
+			} else if (strncmp(ae->wl[ae->idx+1].w,"{BIN16}",7)==0) {
+				string2print=TxtStrDup(ae->wl[ae->idx+1].w+7);
+				bin=16;
+			} else if (strncmp(ae->wl[ae->idx+1].w,"{BIN32}",7)==0) {
+				string2print=TxtStrDup(ae->wl[ae->idx+1].w+7);
+				bin=32;
+			} else if (strncmp(ae->wl[ae->idx+1].w,"{INT}",5)==0) {
+				string2print=TxtStrDup(ae->wl[ae->idx+1].w+5);
+				entier=1;
+			} else if (strncmp(ae->wl[ae->idx+1].w,"{INT",4)==0 && ae->wl[ae->idx+1].w[4] && ae->wl[ae->idx+1].w[5]=='}') {
+				string2print=TxtStrDup(ae->wl[ae->idx+1].w+6);
+				entier=ae->wl[ae->idx+1].w[4]-'0';
+				if (entier<2 || entier>5) {
+					MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"invalid prefix, must be from INT2 to INT5\n");
+					entier=5;
+				}
+			} else {
+				string2print=TxtStrDup(ae->wl[ae->idx+1].w);
+			}
+
+			ExpressionFastTranslate(ae,&string2print,1);
+			if (hex) {
+				int zv;
+				zv=RoundComputeExpressionCore(ae,string2print,ae->codeadr,0);
+				switch (hex) {
+					case 1:
+						if (zv&0xFFFFFF00) {
+							if (zv&0xFFFF0000) {
+								sprintf(immediate,"#%-8.08X ",zv);
+							} else {
+								sprintf(immediate,"#%-4.04X ",zv);
+							}
+						} else {
+							sprintf(immediate,"#%-2.02X ",zv);
+						}
+						break;
+					case 2:sprintf(immediate,"#%-2.02X ",zv);break;
+					case 4:sprintf(immediate,"#%-4.04X ",zv);break;
+					case 8:sprintf(immediate,"#%-8.08X ",zv);break;
+				}
+			} else if (bin) {
+				int zv,d;
+				zv=RoundComputeExpressionCore(ae,string2print,ae->codeadr,0);
+				/* remove useless sign bits */
+				if (bin<32 && (zv&0xFFFF0000)==0xFFFF0000) {
+					zv&=0xFFFF;
+				}
+				switch (bin) {
+					case 1:if (zv&0xFF00) d=15; else d=7;break;
+					case 8:d=7;break;
+					case 16:d=15;break;
+					case 32:d=31;break;
+				}
+				strcpy(immediate,"%");
+				for (;d>=0;d--) {
+					if ((zv>>d)&1) strcat(immediate,"1"); else strcat(immediate,"0");
+				}
+				strcat(immediate," ");
+			} else if (entier) {
+				sprintf(immediate,"%0*d ",entier,(int)RoundComputeExpressionCore(ae,string2print,ae->codeadr,0));
+			} else {
+				sprintf(immediate,"%.2lf ",ComputeExpressionCore(ae,string2print,ae->codeadr,0));
+			}
+			MemFree(string2print);
+
+			// concat immediate
+			curlen+=strlen(immediate)+1;
+			newcomz=realloc(newcomz,curlen);
+			strcat(newcomz,immediate);
+		} else {
+			char *varbuffer;
+			int lm,touched;
+			lm=strlen(ae->wl[ae->idx+1].w)-2;
+			if (lm) {
+				varbuffer=MemMalloc(lm+2);
+				sprintf(varbuffer,"%-*.*s ",lm,lm,ae->wl[ae->idx+1].w+1);
+				/* need to upper case tags */
+				for (lm=touched=0;varbuffer[lm];lm++) {
+					if (varbuffer[lm]=='{') touched++; else if (varbuffer[lm]=='}') touched--; else if (touched) varbuffer[lm]=toupper(varbuffer[lm]);
+				}
+				/* translate tag will check tag consistency */
+				varbuffer=TranslateTag(ae,varbuffer,&touched,1,E_TAGOPTION_REMOVESPACE);
+				varbuffer=TxtReplace(varbuffer,"\\b","\b",0);
+				varbuffer=TxtReplace(varbuffer,"\\v","\v",0);
+				varbuffer=TxtReplace(varbuffer,"\\f","\f",0);
+				varbuffer=TxtReplace(varbuffer,"\\r","\r",0);
+				varbuffer=TxtReplace(varbuffer,"\\n","\n",0);
+				varbuffer=TxtReplace(varbuffer,"\\t","\t",0);
+
+				// concat varbuffer
+				curlen+=strlen(varbuffer)+1;
+				newcomz=realloc(newcomz,curlen);
+				strcat(newcomz,varbuffer);
+				
+				MemFree(varbuffer);
+			}
+		}
+		ae->idx++;
+	}
+	// add string to comz
+	ae->comz[icomz].comment=newcomz;
+}
+
 void __DELAYED_PRINT(struct s_assenv *ae) {
 	IntArrayAddDynamicValueConcat(&ae->dprint_idx,&ae->idprint,&ae->mdprint,ae->idx);
 	/* skip parameters */
@@ -17380,6 +17541,7 @@ struct s_asm_keyword instruction[]={
 {"LIST",0,__LIST},
 {"STOP",0,__STOP},
 {"PRINT",0,__PRINT},
+{"COMZ",0,__DELAYED_COMZ},
 {"DELAYED_PRINT",0,__DELAYED_PRINT},
 {"FAIL",0,__FAIL},
 {"BREAKPOINT",0,__BREAKPOINT},
@@ -18501,11 +18663,15 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 	}
 
 	/*******************************************************************************
-	      d e l a y e d      p r i n t s
+	      d e l a y e d      p r i n t s   &   c o m m e n t s
 	*******************************************************************************/
 	for (i=0;i<ae->idprint;i++) {
 		ae->idx=ae->dprint_idx[i];
 		__PRINT(ae);
+	}
+	for (i=0;i<ae->icomz;i++) {
+		ae->idx=ae->comz[i].idx;
+		__COMZ(ae,i);
 	}
 
 /***************************************************************************************************************************************************************************************
@@ -19100,7 +19266,7 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 								int ilocal=0;
 								unsigned int chunksize;
 
-								remu_output=MemMalloc(ae->ibreakpoint*64+ae->il*256+ae->ialias*256+16);
+								remu_output=MemMalloc(ae->ibreakpoint*64+ae->il*256+ae->ialias*256+16+ae->icomz*256);
 
 								strcpy(remu_output,"REMU    ");
 
@@ -19151,6 +19317,29 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 										sprintf(zedigit," %d %d;",ae->label[i].ptr,lbankn);
 										strcat(remu_output,zedigit);
 									}
+								}
+								// ajout des commentaires
+								for (i=0;i<ae->icomz;i++) {
+									int lbankn,isrom;
+									if (ae->comz[i].bank<260) {
+										lbankn=ae->comz[i].bank;
+										isrom=0;
+									} else {
+										int sl;
+										for (sl=0;sl<256;sl++) {
+											if (ae->rombank[sl]==ae->comz[i].bank) {
+												lbankn=sl;
+												isrom=1;
+												break;
+											}
+										}
+									}
+									if (isrom) strcat(remu_output,"romcomz "); else strcat(remu_output,"comz ");
+									sprintf(zedigit,"%d %d ",ae->comz[i].address,lbankn);
+									strcat(remu_output,zedigit);
+									TxtReplace(ae->comz[i].comment,";",":",0); // enforce format!
+									strcat(remu_output,ae->comz[i].comment);
+									strcat(remu_output,";");
 								}
 								// pas d'info sur la bank avec les alias
 								for (i=2;i<ae->ialias;i++) {
@@ -19465,7 +19654,7 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 						***************************************************************/
 								rasm_printf(ae,KIO"Write binary file %s (%d byte%s)",TMP_filename,maxmem-minmem,maxmem-minmem>1?"s":"");
 								if (ae->amsdos) {
-									AmsdosHeader=MakeAMSDOSHeader(minmem,minmem,maxmem,TMP_filename); //@@TODO
+									AmsdosHeader=MakeAMSDOSHeader(minmem,minmem,maxmem,TMP_filename,0); //@@TODO
 									FileWriteBinary(TMP_filename,(char *)AmsdosHeader,128);
 									rasm_printf(ae," (automatic Amsdos header)\n");
 								} else {
