@@ -62,5 +62,6 @@ BTW there is many other assemblers you could try:
 - VASM http://sun.hasenbraten.de/vasm/
 - SJASM http://xl2s.tk/
 - SJASMPlus https://github.com/sjasmplus/sjasmplus
+- UZ80 http://cngsoft.no-ip.org/uz80.htm
 - PASMO https://pasmo.speccy.org/
 
