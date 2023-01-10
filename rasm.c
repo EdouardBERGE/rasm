@@ -856,7 +856,8 @@ struct s_assenv {
 	char **rawfile; // case export
 	int *rawlen;    // case export
 	int nberr,flux;
-	int fastmatch[256];
+#define INSTRUCTION_MAXLENGTH 14
+	int fastmatch[256][INSTRUCTION_MAXLENGTH];
 	unsigned char charset[256];
 	int maxerr,extended_error,nowarning,erronwarn,utf8enable,freequote;
 	/* ORG tracking */
@@ -1012,7 +1013,7 @@ struct s_assenv {
 *************************************/
 struct s_asm_keyword {
 	char *mnemo;
-	int crc;
+	int crc,length;
 	void (*makemnemo)(struct s_assenv *ae);
 };
 
@@ -1833,8 +1834,7 @@ void StateMachineResizeBuffer(char **ABuf, int idx, int *ASize) {
 	}
 }
 
-int GetCRC(char *label)
-{
+int GetCRC(char *label) {
 	#undef FUNC
 	#define FUNC "GetCRC"
 	int crc=0x12345678;
@@ -1843,6 +1843,18 @@ int GetCRC(char *label)
 	while (label[i]!=0) {
 		crc=(crc<<9)^(crc+label[i++]);
 	}
+	return crc;
+}
+int GetCRCandLength(char *label, int *ilength) {
+	#undef FUNC
+	#define FUNC "GetCRC"
+	int crc=0x12345678;
+	int i=0;
+
+	while (label[i]!=0) {
+		crc=(crc<<9)^(crc+label[i++]);
+	}
+	*ilength=i;
 	return crc;
 }
 
@@ -11785,13 +11797,25 @@ void _SLL(struct s_assenv *ae) {
 			default:			
 				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is SLL (IX+n),reg8\n");
 		}
-		ae->idx++;
-		ae->idx++;
+		ae->idx+=2;
 	} else {
 		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is SLL reg8/(HL)/(IX+n)/(IY+n) or SLL (IX+n),reg8\n");
 	}
 }
 
+void _SRL8(struct s_assenv *ae) {
+	/* on check qu'il y a un ou deux parametres */
+	if (ae->wl[ae->idx+1].t==1) {
+		switch (GetCRC(ae->wl[ae->idx+1].w)) {
+			case CRC_BC:___output(ae,0x48);___output(ae,0x06);___output(ae,0x00);ae->nop+=3;ae->tick+=11;break; /* LD C,B : LD B,0 */
+			case CRC_DE:___output(ae,0x5A);___output(ae,0x16);___output(ae,0x00);ae->nop+=3;ae->tick+=11;break; /* LD E,D : LD D,0 */
+			case CRC_HL:___output(ae,0x6C);___output(ae,0x26);___output(ae,0x00);ae->nop+=3;ae->tick+=11;break; /* LD L,H : LD H,0 */
+			case CRC_IX:___output(ae,0xDD);___output(ae,0x6C);___output(ae,0xDD);___output(ae,0x26);___output(ae,0x00);ae->nop+=5;ae->tick+=19;break; /* LD XL,XH : LD XH,0 */
+			case CRC_IY:___output(ae,0xFD);___output(ae,0x6C);___output(ae,0xFD);___output(ae,0x26);___output(ae,0x00);ae->nop+=5;ae->tick+=19;break; /* LD YL,YH : LD YH,0 */
+			default:MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is SRL8 BC/DE/HL/IX/IY\n");
+		}
+	}
+}
 void _SRL(struct s_assenv *ae) {
 	/* on check qu'il y a un ou deux parametres */
 	if (ae->wl[ae->idx+1].t==1) {
@@ -17412,185 +17436,186 @@ void __TIMESTAMP(struct s_assenv *ae) {
 }
 
 struct s_asm_keyword instruction[]={
-{"LD",0,_LD},
-{"DEC",0,_DEC},
-{"INC",0,_INC},
-{"ADD",0,_ADD},
-{"SUB",0,_SUB},
-{"OR",0,_OR},
-{"AND",0,_AND},
-{"XOR",0,_XOR},
-{"POP",0,_POP},
-{"PUSH",0,_PUSH},
-{"DJNZ",0,_DJNZ},
-{"JR",0,_JR},
-{"JP",0,_JP},
-{"CALL",0,_CALL},
-{"RET",0,_RET},
-{"EX",0,_EX},
-{"ADC",0,_ADC},
-{"SBC",0,_SBC},
-{"EXA",0,_EXA},
-{"EXX",0,_EXX},
-{"CP",0,_CP},
-{"BIT",0,_BIT},
-{"RES",0,_RES},
-{"SET",0,_SET},
-{"IN",0,_IN},
-{"OUT",0,_OUT},
-{"RLC",0,_RLC},
-{"RRC",0,_RRC},
-{"RL",0,_RL},
-{"RR",0,_RR},
-{"SLA",0,_SLA},
-{"SRA",0,_SRA},
-{"SLL",0,_SLL},
-{"SL1",0,_SLL},
-{"SRL",0,_SRL},
-{"RST",0,_RST},
-{"HALT",0,_HALT},
-{"DI",0,_DI},
-{"EI",0,_EI},
-{"NOP",0,_NOP},
-{"DEFF",0,_DEFF},
-{"DEFR",0,_DEFR},
-{"DEFB",0,_DEFB},
-{"DEFM",0,_DEFB},
-{"DF",0,_DEFF},
-{"DR",0,_DEFR},
-{"DM",0,_DEFB},
-{"DB",0,_DEFB},
-{"DEFW",0,_DEFW},
-{"DW",0,_DEFW},
-{"DEFS",0,_DEFS},
-{"DS",0,_DEFS},
-{"STR",0,_STR},
-{"LDI",0,_LDI},
-{"LDIR",0,_LDIR},
-{"OUTI",0,_OUTI},
-{"INI",0,_INI},
-{"RLCA",0,_RLCA},
-{"RRCA",0,_RRCA},
-{"NEG",0,_NEG},
-{"RLA",0,_RLA},
-{"RRA",0,_RRA},
-{"RLD",0,_RLD},
-{"RRD",0,_RRD},
-{"DAA",0,_DAA},
-{"CPL",0,_CPL},
-{"SCF",0,_SCF},
-{"LDD",0,_LDD},
-{"LDDR",0,_LDDR},
-{"CCF",0,_CCF},
-{"OUTD",0,_OUTD},
-{"IND",0,_IND},
-{"RETI",0,_RETI},
-{"RETN",0,_RETN},
-{"IM",0,_IM},
-{"DEFI",0,_DEFI},
-{"CPD",0,_CPD},
-{"CPI",0,_CPI},
-{"CPDR",0,_CPDR},
-{"CPIR",0,_CPIR},
-{"OTDR",0,_OTDR},
-{"OTIR",0,_OTIR},
-{"INDR",0,_INDR},
-{"INIR",0,_INIR},
-{"REPEAT",0,__REPEAT},
-{"STARTINGINDEX",0,__STARTINGINDEX},
-{"REND",0,__REND},
-{"UNTIL",0,__UNTIL},
-{"ORG",0,__ORG},
-{"PROTECT",0,__PROTECT},
-{"WHILE",0,__WHILE},
-{"WEND",0,__WEND},
-{"READ",0,__READ},
-{"INCLUDE",0,__READ}, // anti-label
-{"HEXBIN",0,__HEXBIN},
-{"ALIGN",0,__ALIGN},
-{"CONFINE",0,__CONFINE},
-{"ELSEIFNOT",0,__ELSEIFNOT},
-{"ELSEIF",0,__ELSEIF},
-{"ELSE",0,__ELSE},
-{"IF",0,__IF},
-{"ENDIF",0,__ENDIF},
-{"IFNOT",0,__IFNOT},
-{"IFDEF",0,__IFDEF},
-{"IFNDEF",0,__IFNDEF},
-{"IFUSED",0,__IFUSED},
-{"IFNUSED",0,__IFNUSED},
-{"UNDEF",0,__UNDEF},
-{"CASE",0,__CASE},
-{"BREAK",0,__BREAK},
-{"DEFAULT",0,__DEFAULT},
-{"SWITCH",0,__SWITCH},
-{"ENDSWITCH",0,__ENDSWITCH},
-{"WRITE",0,__WRITE},
-{"CODE",0,__CODE},
-{"NOCODE",0,__NOCODE},
-{"MEMSPACE",0,__MEMSPACE},
-{"MACRO",0,__MACRO},
-{"TICKER",0,__TICKER},
-{"LET",0,__LET},
-{"ASSERT",0,__ASSERT},
-{"CHARSET",0,__CHARSET},
-{"RUN",0,__RUN},
-{"SAVE",0,__SAVE},
-{"BRK",0,__BRK},
-{"NOLIST",0,__NOLIST},
-{"LIST",0,__LIST},
-{"STOP",0,__STOP},
-{"PRINT",0,__PRINT},
-{"COMZ",0,__DELAYED_COMZ},
-{"DELAYED_PRINT",0,__DELAYED_PRINT},
-{"FAIL",0,__FAIL},
-{"BREAKPOINT",0,__BREAKPOINT},
-{"ROMBANK",0,__ROMBANK},
-{"BANK",0,__BANK},
-{"BANKSET",0,__BANKSET},
-{"NAMEBANK",0,__NameBANK},
-{"LIMIT",0,__LIMIT},
-{"LZEXO",0,__LZEXO},
-{"LZX7",0,__LZX7},
-{"LZX0",0,__LZX0},
-{"LZX0B",0,__LZX0B},
-{"LZAPU",0,__LZAPU},
-{"LZSA1",0,__LZSA1},
-{"LZSA2",0,__LZSA2},
-{"LZ4",0,__LZ4},
-{"LZ48",0,__LZ48},
-{"LZ49",0,__LZ49},
-{"LZCLOSE",0,__LZCLOSE},
-{"SNASET",0,__SNASET},
-{"SNAPINIT",0,__SNAPINIT},
-{"CPRINIT",0,__CPRINIT},
-{"BUILDZX",0,__BUILDZX},
-{"BUILDOBJ",0,__BUILDOBJ},
-{"BUILDCPR",0,__BUILDCPR},
-{"BUILDSNA",0,__BUILDSNA},
-{"BUILDROM",0,__BUILDROM},
-{"BUILDTAPE",0,__BUILDTAPE},
-{"SETCPC",0,__SETCPC},
-{"SETCRTC",0,__SETCRTC},
-{"AMSDOS",0,__AMSDOS},
-{"OTD",0,_OUTD},
-{"OTI",0,_OUTI},
-{"SHL",0,_SLA},
-{"SHR",0,_SRL},
-{"STRUCT",0,__STRUCT},
-{"ENDSTRUCT",0,__ENDSTRUCT},
-{"ENDS",0,__ENDSTRUCT},
-{"NOEXPORT",0,__NOEXPORT},
-{"ENOEXPORT",0,__ENOEXPORT},
-{"MODULE",0,__MODULE},
-{"ENDMODULE",0,__ENDMODULE},
-{"TIMESTAMP",0,__TIMESTAMP},
-{"SUMMEM",0,__SUMMEM},
-{"XORMEM",0,__XORMEM},
-{"CIPHERMEM",0,__CIPHERMEM},
-{"EXTERNAL",0,__EXTERNAL},
-{"PROCEDURE",0,__PROCEDURE},
-{"",0,NULL}
+{"LD",0,0,_LD},
+{"DEC",0,0,_DEC},
+{"INC",0,0,_INC},
+{"ADD",0,0,_ADD},
+{"SUB",0,0,_SUB},
+{"OR",0,0,_OR},
+{"AND",0,0,_AND},
+{"XOR",0,0,_XOR},
+{"POP",0,0,_POP},
+{"PUSH",0,0,_PUSH},
+{"DJNZ",0,0,_DJNZ},
+{"JR",0,0,_JR},
+{"JP",0,0,_JP},
+{"CALL",0,0,_CALL},
+{"RET",0,0,_RET},
+{"EX",0,0,_EX},
+{"ADC",0,0,_ADC},
+{"SBC",0,0,_SBC},
+{"EXA",0,0,_EXA},
+{"EXX",0,0,_EXX},
+{"CP",0,0,_CP},
+{"BIT",0,0,_BIT},
+{"RES",0,0,_RES},
+{"SET",0,0,_SET},
+{"IN",0,0,_IN},
+{"OUT",0,0,_OUT},
+{"RLC",0,0,_RLC},
+{"RRC",0,0,_RRC},
+{"RL",0,0,_RL},
+{"RR",0,0,_RR},
+{"SLA",0,0,_SLA},
+{"SRA",0,0,_SRA},
+{"SLL",0,0,_SLL},
+{"SL1",0,0,_SLL},
+{"SRL",0,0,_SRL},
+{"SRL8",0,0,_SRL8},
+{"RST",0,0,_RST},
+{"HALT",0,0,_HALT},
+{"DI",0,0,_DI},
+{"EI",0,0,_EI},
+{"NOP",0,0,_NOP},
+{"DEFF",0,0,_DEFF},
+{"DEFR",0,0,_DEFR},
+{"DEFB",0,0,_DEFB},
+{"DEFM",0,0,_DEFB},
+{"DF",0,0,_DEFF},
+{"DR",0,0,_DEFR},
+{"DM",0,0,_DEFB},
+{"DB",0,0,_DEFB},
+{"DEFW",0,0,_DEFW},
+{"DW",0,0,_DEFW},
+{"DEFS",0,0,_DEFS},
+{"DS",0,0,_DEFS},
+{"STR",0,0,_STR},
+{"LDI",0,0,_LDI},
+{"LDIR",0,0,_LDIR},
+{"OUTI",0,0,_OUTI},
+{"INI",0,0,_INI},
+{"RLCA",0,0,_RLCA},
+{"RRCA",0,0,_RRCA},
+{"NEG",0,0,_NEG},
+{"RLA",0,0,_RLA},
+{"RRA",0,0,_RRA},
+{"RLD",0,0,_RLD},
+{"RRD",0,0,_RRD},
+{"DAA",0,0,_DAA},
+{"CPL",0,0,_CPL},
+{"SCF",0,0,_SCF},
+{"LDD",0,0,_LDD},
+{"LDDR",0,0,_LDDR},
+{"CCF",0,0,_CCF},
+{"OUTD",0,0,_OUTD},
+{"IND",0,0,_IND},
+{"RETI",0,0,_RETI},
+{"RETN",0,0,_RETN},
+{"IM",0,0,_IM},
+{"DEFI",0,0,_DEFI},
+{"CPD",0,0,_CPD},
+{"CPI",0,0,_CPI},
+{"CPDR",0,0,_CPDR},
+{"CPIR",0,0,_CPIR},
+{"OTDR",0,0,_OTDR},
+{"OTIR",0,0,_OTIR},
+{"INDR",0,0,_INDR},
+{"INIR",0,0,_INIR},
+{"REPEAT",0,0,__REPEAT},
+{"STARTINGINDEX",0,0,__STARTINGINDEX},
+{"REND",0,0,__REND},
+{"UNTIL",0,0,__UNTIL},
+{"ORG",0,0,__ORG},
+{"PROTECT",0,0,__PROTECT},
+{"WHILE",0,0,__WHILE},
+{"WEND",0,0,__WEND},
+{"READ",0,0,__READ},
+{"INCLUDE",0,0,__READ}, // anti-label
+{"HEXBIN",0,0,__HEXBIN},
+{"ALIGN",0,0,__ALIGN},
+{"CONFINE",0,0,__CONFINE},
+{"ELSEIFNOT",0,0,__ELSEIFNOT},
+{"ELSEIF",0,0,__ELSEIF},
+{"ELSE",0,0,__ELSE},
+{"IF",0,0,__IF},
+{"ENDIF",0,0,__ENDIF},
+{"IFNOT",0,0,__IFNOT},
+{"IFDEF",0,0,__IFDEF},
+{"IFNDEF",0,0,__IFNDEF},
+{"IFUSED",0,0,__IFUSED},
+{"IFNUSED",0,0,__IFNUSED},
+{"UNDEF",0,0,__UNDEF},
+{"CASE",0,0,__CASE},
+{"BREAK",0,0,__BREAK},
+{"DEFAULT",0,0,__DEFAULT},
+{"SWITCH",0,0,__SWITCH},
+{"ENDSWITCH",0,0,__ENDSWITCH},
+{"WRITE",0,0,__WRITE},
+{"CODE",0,0,__CODE},
+{"NOCODE",0,0,__NOCODE},
+{"MEMSPACE",0,0,__MEMSPACE},
+{"MACRO",0,0,__MACRO},
+{"TICKER",0,0,__TICKER},
+{"LET",0,0,__LET},
+{"ASSERT",0,0,__ASSERT},
+{"CHARSET",0,0,__CHARSET},
+{"RUN",0,0,__RUN},
+{"SAVE",0,0,__SAVE},
+{"BRK",0,0,__BRK},
+{"NOLIST",0,0,__NOLIST},
+{"LIST",0,0,__LIST},
+{"STOP",0,0,__STOP},
+{"PRINT",0,0,__PRINT},
+{"COMZ",0,0,__DELAYED_COMZ},
+{"DELAYED_PRINT",0,0,__DELAYED_PRINT},
+{"FAIL",0,0,__FAIL},
+{"BREAKPOINT",0,0,__BREAKPOINT},
+{"ROMBANK",0,0,__ROMBANK},
+{"BANK",0,0,__BANK},
+{"BANKSET",0,0,__BANKSET},
+{"NAMEBANK",0,0,__NameBANK},
+{"LIMIT",0,0,__LIMIT},
+{"LZEXO",0,0,__LZEXO},
+{"LZX7",0,0,__LZX7},
+{"LZX0",0,0,__LZX0},
+{"LZX0B",0,0,__LZX0B},
+{"LZAPU",0,0,__LZAPU},
+{"LZSA1",0,0,__LZSA1},
+{"LZSA2",0,0,__LZSA2},
+{"LZ4",0,0,__LZ4},
+{"LZ48",0,0,__LZ48},
+{"LZ49",0,0,__LZ49},
+{"LZCLOSE",0,0,__LZCLOSE},
+{"SNASET",0,0,__SNASET},
+{"SNAPINIT",0,0,__SNAPINIT},
+{"CPRINIT",0,0,__CPRINIT},
+{"BUILDZX",0,0,__BUILDZX},
+{"BUILDOBJ",0,0,__BUILDOBJ},
+{"BUILDCPR",0,0,__BUILDCPR},
+{"BUILDSNA",0,0,__BUILDSNA},
+{"BUILDROM",0,0,__BUILDROM},
+{"BUILDTAPE",0,0,__BUILDTAPE},
+{"SETCPC",0,0,__SETCPC},
+{"SETCRTC",0,0,__SETCRTC},
+{"AMSDOS",0,0,__AMSDOS},
+{"OTD",0,0,_OUTD},
+{"OTI",0,0,_OUTI},
+{"SHL",0,0,_SLA},
+{"SHR",0,0,_SRL},
+{"STRUCT",0,0,__STRUCT},
+{"ENDSTRUCT",0,0,__ENDSTRUCT},
+{"ENDS",0,0,__ENDSTRUCT},
+{"NOEXPORT",0,0,__NOEXPORT},
+{"ENOEXPORT",0,0,__ENOEXPORT},
+{"MODULE",0,0,__MODULE},
+{"ENDMODULE",0,0,__ENDMODULE},
+{"TIMESTAMP",0,0,__TIMESTAMP},
+{"SUMMEM",0,0,__SUMMEM},
+{"XORMEM",0,0,__XORMEM},
+{"CIPHERMEM",0,0,__CIPHERMEM},
+{"EXTERNAL",0,0,__EXTERNAL},
+{"PROCEDURE",0,0,__PROCEDURE},
+{"",0,0,NULL}
 };
 
 int IsDirective(char *zeexpression)
@@ -17613,7 +17638,7 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 	struct s_expression curexp={0};
 	struct s_wordlist *wordlist;
 	struct s_label *curlabel;
-	int icrc,curcrc,i,j,k;
+	int icrc,curcrc,i,j,k,ilength;
 	unsigned char *lzdata=NULL;
 	int lzlen,lzshift,input_size;
 	int slzlen,delta;
@@ -17786,8 +17811,7 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 	/* add a fictive expression to simplify test when parsing expressions */
 	ObjectArrayAddDynamicValueConcat((void **)&ae->expression,&ae->ie,&ae->me,&curexp,sizeof(curexp));
 	
-	/* compute CRC for keywords and directives */
-	for (icrc=0;instruction[icrc].mnemo[0];icrc++) instruction[icrc].crc=GetCRC(instruction[icrc].mnemo);
+	/* compute CRC for keywords */
 	for (icrc=0;math_keyword[icrc].mnemo[0];icrc++) math_keyword[icrc].crc=GetCRC(math_keyword[icrc].mnemo);
 
 	if (ae->as80==1 || ae->pasmo) { /* not for UZ80 */
@@ -17847,7 +17871,7 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 	ae->idx=1;
 	if (!ae->verbose_assembling)
 	while (wordlist[ae->idx].t!=2) {
-		curcrc=GetCRC(wordlist[ae->idx].w);
+		curcrc=GetCRCandLength(wordlist[ae->idx].w,&ilength);
 
 		/********************************************************************
 		  c o n d i t i o n n a l    a s s e m b l y    m a n a g e m e n t
@@ -17983,7 +18007,7 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 		  e x e c u t e    i n s t r u c t i o n
 		*****************************************/
 		executed=0;
-		if ((ifast=ae->fastmatch[(int)wordlist[ae->idx].w[0]])!=-1) {
+		if (ilength<INSTRUCTION_MAXLENGTH && (ifast=ae->fastmatch[(int)wordlist[ae->idx].w[0]][ilength])!=-1) {
 			while (instruction[ifast].mnemo[0]==wordlist[ae->idx].w[0]) {
 				if (instruction[ifast].crc==curcrc && strcmp(instruction[ifast].mnemo,wordlist[ae->idx].w)==0) {
 					instruction[ifast].makemnemo(ae);
@@ -18019,9 +18043,7 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 		}
 		ae->idx++; 
 		if (ae->stop) break;
-	}
-
-	else {
+	} else {
 		printf("Bnk|Real|Logic  Bytecode  [Time] Assembly\n");
 		printf("-----------------------------------------\n");
 		while (wordlist[ae->idx].t!=2) {
@@ -18169,7 +18191,7 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 			  e x e c u t e    i n s t r u c t i o n
 			*****************************************/
 			executed=0;
-			if ((ifast=ae->fastmatch[(int)wordlist[ae->idx].w[0]])!=-1) {
+			if (ilength<INSTRUCTION_MAXLENGTH && (ifast=ae->fastmatch[(int)wordlist[ae->idx].w[0]][ilength])!=-1) {
 				while (instruction[ifast].mnemo[0]==wordlist[ae->idx].w[0]) {
 					if (instruction[ifast].crc==curcrc && strcmp(instruction[ifast].mnemo,wordlist[ae->idx].w)==0) {
 #define CRC_REPEAT	0xC9791639
@@ -20244,7 +20266,8 @@ int cmpkeyword(const void * a, const void * b)
 	struct s_asm_keyword *sa,*sb;
 	sa=(struct s_asm_keyword *)a;
 	sb=(struct s_asm_keyword *)b;
-	return strcmp(sa->mnemo,sb->mnemo);
+	// sort on length THEN on alphabetical order
+	if (sa->length!=sb->length) return sa->length-sb->length; else return strcmp(sa->mnemo,sb->mnemo);
 }
 
 struct s_assenv *PreProcessing(char *filename, int flux, const char *datain, int datalen, struct s_parameter *param)
@@ -20644,10 +20667,27 @@ printf("nbbank=%d initialised\n",ae->nbbank);
 	if (original_filename) MemFree(original_filename);
 	
 	if (param) rasm_printf(ae,KAYGREEN"Pre-processing [%s]\n",param->filename);
-	for (nbinstruction=0;instruction[nbinstruction].mnemo[0];nbinstruction++);
+
+	// count instructions and fill crc/length in the dynamic array of RASM instructions
+	for (nbinstruction=0;instruction[nbinstruction].mnemo[0];nbinstruction++) {
+		instruction[nbinstruction].crc=GetCRCandLength(instruction[nbinstruction].mnemo,&instruction[nbinstruction].length);
+		if (instruction[nbinstruction].length>INSTRUCTION_MAXLENGTH) {
+			rasm_printf(ae,"Internal Error, please resize fastmatch length for [%s] with %d\n",instruction[nbinstruction].mnemo,instruction[nbinstruction].length+1);
+			exit(-666);
+		}
+	}
+	// sort them by length then alphabetical order
 	qsort(instruction,nbinstruction,sizeof(struct s_asm_keyword),cmpkeyword);
-	for (i=0;i<256;i++) { ae->fastmatch[i]=-1; }
-	for (i=0;i<nbinstruction;i++) { if (ae->fastmatch[(int)instruction[i].mnemo[0]]==-1) ae->fastmatch[(int)instruction[i].mnemo[0]]=i; } 
+	// init fastmatch table
+	for (i=0;i<256;i++) {
+		for (l=0;l<INSTRUCTION_MAXLENGTH;l++) {
+			ae->fastmatch[i][l]=-1;
+		}
+	}
+	// fill fastmatch table with idx
+	for (i=0;i<nbinstruction;i++) {
+		if (ae->fastmatch[(int)instruction[i].mnemo[0]][instruction[i].length]==-1) ae->fastmatch[(int)instruction[i].mnemo[0]][instruction[i].length]=i;
+	} 
 	for (i=0;CharWord[i];i++) {Automate[((int)CharWord[i])&0xFF]=1;}
 	for (i=0;i<256;i++) {
 		if (((i>='A' && i<='Z') || (i>='0' && i<='9') || i=='@' || i=='_') && !quote_type) AutomatePrepro[i]=1; else AutomatePrepro[i]=0;
@@ -21479,8 +21519,9 @@ printf("macro trigger w=[%s]\n",curw.w);
 								}
 								macro_trigger=0;
 							} else {
-								int keymatched=0;
-								if ((ifast=ae->fastmatch[(int)curw.w[0]])!=-1) {
+								int keymatched=0,wlenot;
+								wlenot=strlen(curw.w);
+								if (wlenot<INSTRUCTION_MAXLENGTH && (ifast=ae->fastmatch[(int)curw.w[0]][wlenot])!=-1) {
 									while (instruction[ifast].mnemo[0]==curw.w[0]) {
 										if (strcmp(instruction[ifast].mnemo,curw.w)==0) {
 											keymatched=1;														
@@ -21653,7 +21694,9 @@ printf("mot precedent=[%s] t=%d\n",wordlist[nbword-1].w,wordlist[nbword-1].t);
 							/* il y avait un mot avant alors on va reorganiser la ligne */
 							/* patch NOT -> SAUF si c'est une directive */
 							int keymatched=0;
-							if ((ifast=ae->fastmatch[(int)wordlist[nbword-1].w[0]])!=-1) {
+							int wlenot;
+							wlenot=strlen(wordlist[nbword-1].w);
+							if (wlenot<INSTRUCTION_MAXLENGTH && (ifast=ae->fastmatch[(int)wordlist[nbword-1].w[0]][wlenot])!=-1) {
 								while (instruction[ifast].mnemo[0]==wordlist[nbword-1].w[0]) {
 									if (strcmp(instruction[ifast].mnemo,wordlist[nbword-1].w)==0) {
 										keymatched=1;														
@@ -22443,6 +22486,9 @@ int RasmAssembleInfoParam(const char *datain, int lenin, unsigned char **dataout
 #define AUTOTEST_ENHANCED_LD3 "ld bc,ix : ld bc,iy : ld de,ix : ld de,iy : ld ix,bc : ld ix,de : ld iy,bc : ld iy,de:"\
 	"ld b,hx : ld c,lx : ld b,hy : ld c,ly : ld d,hx : ld e,lx : ld d,hy : ld e,ly :"\
 	"ld hx,b : ld lx,c : ld hx,d : ld lx,e : ld hy,b : ld ly,c : ld hy,d : ld ly,e"
+
+#define AUTOTEST_ENHANCED_SRL "srl8 bc : srl8 de : srl8 hl : srl8 ix : srl8 iy:"\
+	"ld c,b : ld b,0 : ld e,d : ld d,0 : ld l,h : ld  h,0 : ld xl,xh : ld xh,0 : ld yl,yh : ld yh,0"
 
 #define AUTOTEST_INHIBITION2 "ifdef roudoudou:macro glop bank,page,param:ld a,{bank}:ld hl,{param}{bank}:if {bank}:nop:else:exx:" \
 	"endif::switch {param}:nop:case 4:nop:case {param}:nop:default:nop:break:endswitch:endif:defb 'coucou'"
@@ -24174,6 +24220,11 @@ printf("testing enhanced LD variante OK\n");
 	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
 printf("testing enhanced LD variante OK\n");
 	
+	ret=RasmAssemble(AUTOTEST_ENHANCED_SRL,strlen(AUTOTEST_ENHANCED_SRL),&opcode,&opcodelen);
+	if (!ret && memcmp(opcode,opcode+opcodelen/2,opcodelen/2)==0) {} else {printf("Autotest %03d ERROR (enhanced SRL8)\n",cpt);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing enhanced SRL8 OK\n");
+	
 	ret=RasmAssemble(AUTOTEST_ENHANCED_PUSHPOP,strlen(AUTOTEST_ENHANCED_PUSHPOP),&opcode,&opcodelen);
 	if (!ret && memcmp(opcode,opcode+opcodelen/2,opcodelen/2)==0) {} else {printf("Autotest %03d ERROR (enhanced PUSH/POP/NOP)\n",cpt);MiniDump(opcode,opcodelen);exit(-1);}
 	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
@@ -24251,7 +24302,7 @@ printf("testing snapshot settings OK\n");
 printf("testing page tag with generated label name OK\n");
 
 	ret=RasmAssembleInfo(AUTOTEST_EMBEDDED_ERRORS,strlen(AUTOTEST_EMBEDDED_ERRORS),&opcode,&opcodelen,&debug);
-	if (ret && debug->nberror==2 && debug->nbsymbol==3) {
+	if (ret && debug->nberror==2 && debug->nbsymbol==4) {
 /*		
 		printf("\n");
 		for (i=0;i<debug->nberror;i++) {
@@ -24262,12 +24313,15 @@ printf("testing page tag with generated label name OK\n");
 		}
 */
 		RasmFreeInfoStruct(debug);
-	} else {printf("Autotest %03d ERROR (embedded error struct) err=%d nberr=%d (2) nbsymb=%d (3)\n",cpt,ret,debug->nberror,debug->nbsymbol);MiniDump(opcode,opcodelen);exit(-1);}
+	} else {int inbs;
+		printf("Autotest %03d ERROR (embedded error struct) err=%d nberr=%d (2) nbsymb=%d (4)\n",cpt,ret,debug->nberror,debug->nbsymbol);
+		for (inbs=0;inbs<debug->nbsymbol;inbs++) printf("symb[%d]=[%s]\n",inbs,debug->symbol[inbs].name);
+		MiniDump(opcode,opcodelen);exit(-1);}
 	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
 printf("testing internal error struct OK\n");
 
 	ret=RasmAssembleInfo(AUTOTEST_EMBEDDED_LABELS,strlen(AUTOTEST_EMBEDDED_LABELS),&opcode,&opcodelen,&debug);
-	if (!ret && debug->nbsymbol==3) {
+	if (!ret && debug->nbsymbol==4) {
 		/*
 		printf("\nnbsymbol=%d\n",debug->nbsymbol);
 		for (i=0;i<debug->nbsymbol;i++) {
