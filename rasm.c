@@ -285,6 +285,7 @@ enum e_expression {
 	E_EXPRESSION_3V8,    /* 8 bits value to current address+3 used with LD (IX+n),n */
 	E_EXPRESSION_IV16,   /* 16 bits value to current address+2 */
 	E_EXPRESSION_RST,    /* the offset of RST is translated to the opcode */
+	E_EXPRESSION_RSTC,   /* conditionnal RST */
 	E_EXPRESSION_IM,     /* the interrupt mode is translated to the opcode */
 	E_EXPRESSION_RUN,    /* delayed RUN value */
 	E_EXPRESSION_ZXRUN,  /* delayed RUN value for ZX snapshot */
@@ -885,7 +886,7 @@ struct s_assenv {
 	/* label */
 	struct s_label *label;
 	int il,ml;
-	struct s_crclabel_tree labeltree; /* fast label access */
+	struct s_crclabel_tree *labeltree[65536]; /* fast label access */
 	char *module;
 	int modulen;
 	char module_separator[2];
@@ -916,8 +917,8 @@ struct s_assenv {
 	/* expression dictionnary */
 	struct s_expr_dico *dico;
 	int idic,mdic;
-	struct s_crcdico_tree dicotree; /* fast dico access */
-	struct s_crcused_tree usedtree; /* fast used access */
+	struct s_crcdico_tree *dicotree[65536]; /* fast dico access */
+	struct s_crcused_tree *usedtree[65536]; /* fast used access */
 	/* ticker */
 	struct s_ticker *ticker;
 	int iticker,mticker;
@@ -1306,32 +1307,28 @@ char **_internal_readtextfile(struct s_assenv *ae,char *filename, char replacech
 
         bigbuffer=_internal_readbinaryfile(filename,&file_size);
 
+	// pre-allocate
+	max_lines=file_size/32+10;
+	lines_buffer=MemMalloc((max_lines+1)*sizeof(char **));
+
         while (i<file_size) {
                 while (e<file_size && bigbuffer[e]!=0x0A) {
-                        /* Windows de meeeeeeeerrrdde... */
-                        if (bigbuffer[e]==0x0D) bigbuffer[e]=replacechar;
+                        if (bigbuffer[e]==0x0D) bigbuffer[e]=replacechar; // windows char
                         e++;
                 }
                 if (e<file_size) e++;
-                if (nb_lines>=max_lines) {
-                        max_lines=max_lines*2+10;
-                        lines_buffer=MemRealloc(lines_buffer,(max_lines+1)*sizeof(char **));
-                }
-                lines_buffer[nb_lines]=MemMalloc(e-i+1);
-                memcpy(lines_buffer[nb_lines],bigbuffer+i,e-i);
-                lines_buffer[nb_lines][e-i]=0;
-                if (0)
-                {
-                        int yy;
-                        for (yy=0;lines_buffer[nb_lines][yy];yy++) {
-                                if (lines_buffer[nb_lines][yy]>31) printf("%c",lines_buffer[nb_lines][yy]); else printf("(0x%X)",lines_buffer[nb_lines][yy]);
-                        }
-                        printf("\n");
-                }
-                nb_lines++;
+
+		if (nb_lines>=max_lines) {
+			max_lines=max_lines*2;
+			lines_buffer=MemRealloc(lines_buffer,(max_lines+1)*sizeof(char **));
+		}
+		lines_buffer[nb_lines]=MemMalloc(e-i+1);
+		memcpy(lines_buffer[nb_lines],bigbuffer+i,e-i);
+		lines_buffer[nb_lines][e-i]=0;
+		nb_lines++;
                 i=e;
         }
-        if (!max_lines) {
+        if (!nb_lines) {
                 lines_buffer=MemMalloc(sizeof(char**));
                 lines_buffer[0]=NULL;
         } else {
@@ -1991,9 +1988,9 @@ char *StringLooksLikeDico(struct s_assenv *ae, int *score, char *str)
 	char *retstr=NULL,*tmpstr;
 	int i;
 
-	for (i=0;i<256;i++) {
-		if (ae->dicotree.radix[i]) {
-			tmpstr=StringLooksLikeDicoRecurse(ae->dicotree.radix[i],score,str);
+	for (i=0;i<65536;i++) {
+		if (ae->dicotree[i]) {
+			tmpstr=StringLooksLikeDicoRecurse(ae->dicotree[i],score,str);
 			if (tmpstr!=NULL) retstr=tmpstr;
 		}
 	}
@@ -2917,24 +2914,11 @@ int cmpmacros(const void * a, const void * b)
 int SearchAlias(struct s_assenv *ae, int crc, char *zemot)
 {
     int dw,dm,du,i;
-//printf("SearchAlias [%s] ",zemot);
-	/* inutile de tourner autour du pot pour un si petit nombre */
-	if (ae->ialias<5) {
-		for (i=0;i<ae->ialias;i++) {
-			if (ae->alias[i].crc==crc && strcmp(ae->alias[i].alias,zemot)==0) {
-				ae->alias[i].used++;
-//printf("found\n");
-				return i;
-			}
-		}
-//printf("not found\n");
-		return -1;
-	}
-	
+
 	dw=0;
 	du=ae->ialias-1;
 	while (dw<=du) {
-		dm=(dw+du)/2;
+		dm=(dw+du)>>1;
 		if (ae->alias[dm].crc==crc) {
 			/* chercher le premier de la liste */
 			while (dm>0 && ae->alias[dm-1].crc==crc) dm--;
@@ -2958,20 +2942,10 @@ int SearchMacro(struct s_assenv *ae, int crc, char *zemot)
 {
 	int dw,dm,du,i;
 
-	/* inutile de tourner autour du pot pour un si petit nombre */
-	if (ae->imacro<5) {
-			for (i=0;i<ae->imacro;i++) {
-					if (ae->macro[i].crc==crc && strcmp(ae->macro[i].mnemo,zemot)==0) {
-							return i;
-					}
-			}
-			return -1;
-	}
-	
 	dw=0;
 	du=ae->imacro-1;
 	while (dw<=du) {
-		dm=(dw+du)/2;
+		dm=(dw+du)>>1;
 		if (ae->macro[dm].crc==crc) {
 			/* chercher le premier de la liste */
 			while (dm>0 && ae->macro[dm-1].crc==crc) dm--;
@@ -3047,9 +3021,13 @@ void InsertDicoToTree(struct s_assenv *ae, struct s_expr_dico *dico)
 	#define FUNC "InsertDicoToTree"
 
 	struct s_crcdico_tree *curdicotree;
-	int radix,dek=32;
-
-	curdicotree=&ae->dicotree;
+	int radix,dek=16;
+ 
+	if ((curdicotree=ae->dicotree[(dico->crc>>16)&0xFFFF])==NULL) { //@@FAST
+		curdicotree=MemMalloc(sizeof(struct s_crcdico_tree));
+		memset(curdicotree,0,sizeof(struct s_crcdico_tree));
+		ae->dicotree[(dico->crc>>16)&0xFFFF]=curdicotree;
+	}
 	while (dek) {
 		dek=dek-8;
 		radix=(dico->crc>>dek)&0xFF;
@@ -3128,9 +3106,9 @@ unsigned char *SnapshotDicoTree(struct s_assenv *ae, int *retidx)
 	int idx;
 	int i;
 
-	for (i=0;i<256;i++) {
-		if (ae->dicotree.radix[i]) {
-			SnapshotDicoTreeRecurse(ae->dicotree.radix[i]);
+	for (i=0;i<65536;i++) {
+		if (ae->dicotree[i]) {
+			SnapshotDicoTreeRecurse(ae->dicotree[i]);
 		}
 	}
 	
@@ -3170,9 +3148,9 @@ void WarnLabelTree(struct s_assenv *ae)
 
 	int i;
 
-	for (i=0;i<256;i++) {
-		if (ae->labeltree.radix[i]) {
-			WarnLabelTreeRecurse(ae,ae->labeltree.radix[i]);
+	for (i=0;i<65536;i++) {
+		if (ae->labeltree[i]) {
+			WarnLabelTreeRecurse(ae,ae->labeltree[i]);
 		}
 	}
 }
@@ -3203,9 +3181,9 @@ void WarnDicoTree(struct s_assenv *ae)
 
 	int i;
 
-	for (i=0;i<256;i++) {
-		if (ae->dicotree.radix[i]) {
-			WarnDicoTreeRecurse(ae,ae->dicotree.radix[i]);
+	for (i=0;i<65536;i++) {
+		if (ae->dicotree[i]) {
+			WarnDicoTreeRecurse(ae,ae->dicotree[i]);
 		}
 	}
 }
@@ -3276,15 +3254,15 @@ void ExportDicoTree(struct s_assenv *ae, char *zefile, char *zeformat)
 	int i;
 
 	if (!ae->enforce_symbol_case) {
-		for (i=0;i<256;i++) {
-			if (ae->dicotree.radix[i]) {
-				ExportDicoTreeRecurse(ae->dicotree.radix[i],zefile,zeformat);
+		for (i=0;i<65536;i++) {
+			if (ae->dicotree[i]) {
+				ExportDicoTreeRecurse(ae->dicotree[i],zefile,zeformat);
 			}
 		}
 	} else {
-		for (i=0;i<256;i++) {
-			if (ae->dicotree.radix[i]) {
-				ExportDicoTreeRecurseCase(ae,ae->dicotree.radix[i],zefile,zeformat);
+		for (i=0;i<65536;i++) {
+			if (ae->dicotree[i]) {
+				ExportDicoTreeRecurseCase(ae,ae->dicotree[i],zefile,zeformat);
 			}
 		}
 	}
@@ -3316,14 +3294,10 @@ void FreeDicoTree(struct s_assenv *ae)
 
 	int i;
 
-	for (i=0;i<256;i++) {
-		if (ae->dicotree.radix[i]) {
-			FreeDicoTreeRecurse(ae->dicotree.radix[i]);
+	for (i=0;i<65536;i++) {
+		if (ae->dicotree[i]) {
+			FreeDicoTreeRecurse(ae->dicotree[i]);
 		}
-	}
-	if (ae->dicotree.mdico) {
-		for (i=0;i<ae->dicotree.ndico;i++) MemFree(ae->dicotree.dico[i].name);
-		MemFree(ae->dicotree.dico);
 	}
 }
 struct s_expr_dico *SearchDico(struct s_assenv *ae, char *dico, int crc)
@@ -3332,9 +3306,9 @@ struct s_expr_dico *SearchDico(struct s_assenv *ae, char *dico, int crc)
 	#define FUNC "SearchDico"
 
 	struct s_crcdico_tree *curdicotree;
-	int i,radix,dek=32;
+	int i,radix,dek=16;
 
-	curdicotree=&ae->dicotree;
+	if ((curdicotree=ae->dicotree[(crc>>16)&0xFFFF])==NULL) return NULL; //@@FAST
 
 	while (dek) {
 		dek=dek-8;
@@ -3386,9 +3360,9 @@ int DelDico(struct s_assenv *ae, char *dico, int crc)
 	#define FUNC "DelDico"
 
 	struct s_crcdico_tree *curdicotree;
-	int i,radix,dek=32;
+	int i,radix,dek=16;
 
-	curdicotree=&ae->dicotree;
+	if ((curdicotree=ae->dicotree[(crc>>16)&0xFFFF])==NULL) return 0; //@@FAST
 
 	while (dek) {
 		dek=dek-8;
@@ -3421,9 +3395,14 @@ void InsertUsedToTree(struct s_assenv *ae, char *used, int crc)
 	#define FUNC "InsertUsedToTree"
 
 	struct s_crcused_tree *curusedtree;
-	int radix,dek=32,i;
+	int radix,dek=16,i;
 	
-	curusedtree=&ae->usedtree;
+	if ((curusedtree=ae->usedtree[(crc>>16)&0xFFFF])==NULL) { //@@FAST
+		curusedtree=MemMalloc(sizeof(struct s_crcused_tree));
+		memset(curusedtree,0,sizeof(struct s_crcused_tree));
+		ae->usedtree[(crc>>16)&0xFFFF]=curusedtree;
+	}
+
 	while (dek) {
 		dek=dek-8;
 		radix=(crc>>dek)&0xFF;
@@ -3467,9 +3446,9 @@ void FreeUsedTree(struct s_assenv *ae)
 
 	int i;
 
-	for (i=0;i<256;i++) {
-		if (ae->usedtree.radix[i]) {
-			FreeUsedTreeRecurse(ae->usedtree.radix[i]);
+	for (i=0;i<65536;i++) {
+		if (ae->usedtree[i]) {
+			FreeUsedTreeRecurse(ae->usedtree[i]);
 		}
 	}
 }
@@ -3479,9 +3458,10 @@ int SearchUsed(struct s_assenv *ae, char *used, int crc)
 	#define FUNC "SearchUsed"
 
 	struct s_crcused_tree *curusedtree;
-	int i,radix,dek=32;
+	int i,radix,dek=16;
 
-	curusedtree=&ae->usedtree;
+	if ((curusedtree=ae->usedtree[(crc>>16)&0xFFFF])==NULL) return 0; //@@FAST
+
 	while (dek) {
 		dek=dek-8;
 		radix=(crc>>dek)&0xFF;
@@ -3593,23 +3573,6 @@ int SearchText(struct s_assenv *ae, char *text, int crc)
 
 
 
-
-
-
-
-/*
-struct s_crclabel_tree {
-
-
-
-
-
-struct s_crclabel_tree {
-	struct s_crclabel_tree *radix[256];
-	struct s_label *label;
-	int nlabel,mlabel;
-};
-*/
 void FreeLabelTreeRecurse(struct s_crclabel_tree *lt)
 {
 	#undef FUNC
@@ -3633,12 +3596,12 @@ void FreeLabelTree(struct s_assenv *ae)
 
 	int i;
 
-	for (i=0;i<256;i++) {
-		if (ae->labeltree.radix[i]) {
-			FreeLabelTreeRecurse(ae->labeltree.radix[i]);
+	for (i=0;i<65536;i++) {
+		if (ae->labeltree[i]) {
+			FreeLabelTreeRecurse(ae->labeltree[i]);
 		}
 	}
-	if (ae->labeltree.mlabel) MemFree(ae->labeltree.label);
+	//if (ae->labeltree.mlabel) MemFree(ae->labeltree.label);
 }
 
 struct s_label *SearchLabel(struct s_assenv *ae, char *label, int crc)
@@ -3647,10 +3610,10 @@ struct s_label *SearchLabel(struct s_assenv *ae, char *label, int crc)
 	#define FUNC "SearchLabel"
 
 	struct s_crclabel_tree *curlabeltree;
-	int i,radix,dek=32;
+	int i,radix,dek=16;
 
-//printf("searchLabel [%s]",label);
-	curlabeltree=&ae->labeltree;
+	if ((curlabeltree=ae->labeltree[(crc>>16)&0xFFFF])==NULL) return NULL; //@@FAST
+
 	while (dek) {
 		dek=dek-8;
 		radix=(crc>>dek)&0xFF;
@@ -3658,18 +3621,15 @@ struct s_label *SearchLabel(struct s_assenv *ae, char *label, int crc)
 			curlabeltree=curlabeltree->radix[radix];
 		} else {
 			/* radix not found, label is not in index */
-//printf(" not found\n");
 			return NULL;
 		}
 	}
 	for (i=0;i<curlabeltree->nlabel;i++) {
 		if (!curlabeltree->label[i].name && strcmp(ae->wl[curlabeltree->label[i].iw].w,label)==0) {
 			curlabeltree->label[i].used++;
-//printf(" found (global)\n");
 			return &curlabeltree->label[i];
 		} else if (curlabeltree->label[i].name && strcmp(curlabeltree->label[i].name,label)==0) {
 			curlabeltree->label[i].used++;
-//printf(" found (local or proximity)\n");
 			return &curlabeltree->label[i];
 		}
 	}
@@ -7910,6 +7870,7 @@ void PushExpression(struct s_assenv *ae,int iw,enum e_expression zetype)
 			case E_EXPRESSION_3V8:curexp.ptr=ae->codeadr-3;ae->outputadr++;ae->codeadr++;break;
 			case E_EXPRESSION_IV16:curexp.ptr=ae->codeadr-2;ae->outputadr+=2;ae->codeadr+=2;break;
 			case E_EXPRESSION_RST:curexp.ptr=ae->codeadr;ae->outputadr++;ae->codeadr++;break;
+			case E_EXPRESSION_RSTC:curexp.ptr=ae->codeadr;ae->outputadr++;ae->codeadr++;break;
 			case E_EXPRESSION_IM:curexp.ptr=ae->codeadr-1;ae->outputadr++;ae->codeadr++;break;
 			case E_EXPRESSION_RUN:break;
 			case E_EXPRESSION_ZXRUN:break;
@@ -7943,6 +7904,7 @@ void PushExpression(struct s_assenv *ae,int iw,enum e_expression zetype)
 			case E_EXPRESSION_3V8:ae->outputadr++;ae->codeadr++;break;
 			case E_EXPRESSION_IV16:ae->outputadr+=2;ae->codeadr+=2;break;
 			case E_EXPRESSION_RST:ae->outputadr++;ae->codeadr++;break;
+			case E_EXPRESSION_RSTC:ae->outputadr++;ae->codeadr++;break;
 			case E_EXPRESSION_IM:ae->outputadr++;ae->codeadr++;break;
 			case E_EXPRESSION_RUN:break;
 			case E_EXPRESSION_ZXRUN:break;
@@ -8906,16 +8868,16 @@ void PopAllSave(struct s_assenv *ae)
 #endif
 
 		ae->idx=ae->save[is].ioffset; /* exp hack */
-		ExpressionFastTranslate(ae,&ae->wl[ae->idx].w,0);
+		//ExpressionFastTranslate(ae,&ae->wl[ae->idx].w,0);
 		offset=RoundComputeExpression(ae,ae->wl[ae->idx].w,0,0,0);
 
 		ae->idx=ae->save[is].isize; /* exp hack */
-		ExpressionFastTranslate(ae,&ae->wl[ae->idx].w,0);
+		//ExpressionFastTranslate(ae,&ae->wl[ae->idx].w,0);
 		size=RoundComputeExpression(ae,ae->wl[ae->idx].w,0,0,0);
 
 		ae->idx=ae->save[is].irun; /* exp hack */
 		if (ae->idx) {
-			ExpressionFastTranslate(ae,&ae->wl[ae->idx].w,0);
+			//ExpressionFastTranslate(ae,&ae->wl[ae->idx].w,0);
 			run=RoundComputeExpression(ae,ae->wl[ae->idx].w,0,0,0);
 		} else {
 			run=offset;
@@ -9141,6 +9103,13 @@ void PopAllExpression(struct s_assenv *ae, int crunched_zone)
 						mem[ae->expression[i].wptr]=0;
 				}
 				break;
+			case E_EXPRESSION_RSTC:
+				if (r==0x38) {
+					mem[ae->expression[i].wptr]=0xFF; // +1 sur le saut relatif
+				} else {
+					MakeError(ae,ae->expression[i].iw,GetExpFile(ae,i),ae->wl[ae->expression[i].iw].l,"RST condition,#38 only\n");
+				}
+				break;
 			case E_EXPRESSION_RST:
 				switch (r) {
 					case 0x00:mem[ae->expression[i].wptr]=0xC7;break;
@@ -9197,16 +9166,19 @@ void PopAllExpression(struct s_assenv *ae, int crunched_zone)
 		}	
 	}
 }
-
 void InsertLabelToTree(struct s_assenv *ae, struct s_label *label)
 {
 	#undef FUNC
 	#define FUNC "InsertLabelToTree"
 
 	struct s_crclabel_tree *curlabeltree;
-	int radix,dek=32;
+	int radix,dek=16;
 
-	curlabeltree=&ae->labeltree;
+	if ((curlabeltree=ae->labeltree[(label->crc>>16)&0xFFFF])==NULL) { //@@FAST
+		curlabeltree=MemMalloc(sizeof(struct s_crclabel_tree));
+		memset(curlabeltree,0,sizeof(struct s_crclabel_tree));
+		ae->labeltree[(label->crc>>16)&0xFFFF]=curlabeltree;
+	}
 	while (dek) {
 		dek=dek-8;
 		radix=(label->crc>>dek)&0xFF;
@@ -10293,7 +10265,7 @@ void _RLCA(struct s_assenv *ae) {
 		ae->tick+=4;
 	} else if (!ae->wl[ae->idx].t && ae->wl[ae->idx+1].t==1) {
 		int o;
-		ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
+		//ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
 		o=RoundComputeExpressionCore(ae,ae->wl[ae->idx+1].w,ae->codeadr,0);
 		if (o>0) {
 			while (o>0) {
@@ -10316,7 +10288,7 @@ void _RRCA(struct s_assenv *ae) {
 		ae->tick+=4;
 	} else if (!ae->wl[ae->idx].t && ae->wl[ae->idx+1].t==1) {
 		int o;
-		ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
+		//ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
 		o=RoundComputeExpressionCore(ae,ae->wl[ae->idx+1].w,ae->codeadr,0);
 		if (o>=0) {
 			while (o>0) {
@@ -10387,7 +10359,7 @@ void _LDD(struct s_assenv *ae) {
 		ae->tick+=16;
 	} else if (!ae->wl[ae->idx].t && ae->wl[ae->idx+1].t==1) {
 		int o;
-		ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
+		//ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
 		o=RoundComputeExpressionCore(ae,ae->wl[ae->idx+1].w,ae->codeadr,0);
 		if (o>0) {
 			while (o>0) {
@@ -10422,7 +10394,7 @@ void _LDI(struct s_assenv *ae) {
 		ae->tick+=16;
 	} else if (!ae->wl[ae->idx].t && ae->wl[ae->idx+1].t==1) {
 		int o;
-		ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
+		//ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
 		o=RoundComputeExpressionCore(ae,ae->wl[ae->idx+1].w,ae->codeadr,0);
 		if (o>0) {
 			while (o>0) {
@@ -10506,7 +10478,7 @@ void _OUTD(struct s_assenv *ae) {
 		ae->tick+=16;
 	} else if (!ae->wl[ae->idx].t && ae->wl[ae->idx+1].t==1) {
 		int o;
-		ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
+		//ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
 		o=RoundComputeExpressionCore(ae,ae->wl[ae->idx+1].w,ae->codeadr,0);
 		if (o>0) {
 			while (o>0) {
@@ -10541,7 +10513,7 @@ void _OUTI(struct s_assenv *ae) {
 		ae->tick+=16;
 	} else if (!ae->wl[ae->idx].t && ae->wl[ae->idx+1].t==1) {
 		int o;
-		ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
+		//ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
 		o=RoundComputeExpressionCore(ae,ae->wl[ae->idx+1].w,ae->codeadr,0);
 		if (o>0) {
 			while (o>0) {
@@ -10586,7 +10558,7 @@ void _IND(struct s_assenv *ae) {
 		ae->tick+=16;
 	} else if (!ae->wl[ae->idx].t && ae->wl[ae->idx+1].t==1) {
 		int o;
-		ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
+		//ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
 		o=RoundComputeExpressionCore(ae,ae->wl[ae->idx+1].w,ae->codeadr,0);
 		if (o>0) {
 			while (o>0) {
@@ -10621,7 +10593,7 @@ void _INI(struct s_assenv *ae) {
 		ae->tick+=16;
 	} else if (!ae->wl[ae->idx].t && ae->wl[ae->idx+1].t==1) {
 		int o;
-		ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
+		//ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
 		o=RoundComputeExpressionCore(ae,ae->wl[ae->idx+1].w,ae->codeadr,0);
 		if (o>0) {
 			while (o>0) {
@@ -10664,7 +10636,7 @@ void _HALT(struct s_assenv *ae) {
 		ae->tick+=4;
 	} else if (!ae->wl[ae->idx].t && ae->wl[ae->idx+1].t==1) {
 		int o;
-		ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
+		//ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
 		o=RoundComputeExpressionCore(ae,ae->wl[ae->idx+1].w,ae->codeadr,0);
 		if (o>=0) {
 			while (o>0) {
@@ -10738,7 +10710,7 @@ void _NOP(struct s_assenv *ae) {
 		ae->nop+=1;
 		ae->tick+=4;
 	} else if (!ae->wl[ae->idx].t && ae->wl[ae->idx+1].t==1) {
-		ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
+		//ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
 		o=RoundComputeExpressionCore(ae,ae->wl[ae->idx+1].w,ae->codeadr,0);
 		if (o>=0) {
 			while (o>0) {
@@ -10775,17 +10747,32 @@ void _EI(struct s_assenv *ae) {
 
 void _RST(struct s_assenv *ae) {
 	if (!ae->wl[ae->idx].t && ae->wl[ae->idx+1].t!=2) {
-		if (!strcmp(ae->wl[ae->idx+1].w,"(IY)") || !strcmp(ae->wl[ae->idx+1].w,"(IX)")) {
-			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"RST cannot use IX or IY\n");
+		if (!ae->wl[ae->idx+1].t && ae->wl[ae->idx+2].t==1) { // alias mode
+			switch (GetCRC(ae->wl[ae->idx+1].w)) {
+				case CRC_NZ:___output(ae,0x20);ae->nop+=2;ae->tick+=7;break;
+				case CRC_C:___output(ae,0x38);ae->nop+=2;ae->tick+=7;break;
+				case CRC_Z:___output(ae,0x28);ae->nop+=2;ae->tick+=7;break;
+				case CRC_NC:___output(ae,0x30);ae->nop+=2;ae->tick+=7;break;
+				default:
+					MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Available flags for RST condition,#38 are C,NC,Z,NZ\n");
+			}
+			PushExpression(ae,ae->idx+2,E_EXPRESSION_RSTC);
+			ae->idx+=2;
+		} else if (ae->wl[ae->idx+1].t) {
+			if (!strcmp(ae->wl[ae->idx+1].w,"(IY)") || !strcmp(ae->wl[ae->idx+1].w,"(IX)")) {
+				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"RST cannot use IX or IY\n");
+			} else {
+				/* la valeur du parametre va definir l'opcode du RST */
+				PushExpression(ae,ae->idx+1,E_EXPRESSION_RST);
+			}
+			ae->idx++;
+			ae->nop+=4;
+			ae->tick+=11;
 		} else {
-			/* la valeur du parametre va definir l'opcode du RST */
-			PushExpression(ae,ae->idx+1,E_EXPRESSION_RST);
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"usage is RST address or RST condition,#38\n");
 		}
-		ae->idx++;
-		ae->nop+=4;
-		ae->tick+=11;
 	} else {
-		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"RST need one parameter\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"RST need at least one parameter\n");
 	}
 }
 
@@ -16222,123 +16209,132 @@ void _AudioLoadSample(struct s_assenv *ae, unsigned char *data, unsigned int fil
 
 	unsigned char *subchunk;
 	int subchunksize;
-
-	if (filesize<sizeof(struct s_wav_header)) {
-		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"WAV import - this file is too small to be a valid WAV!\n");
-		return;
-	}
-
-	wav_header=(struct s_wav_header *)data;
+	int brut=0;
 
 #if TRACE_HEXBIN
 printf("AudioLoadSample filesize=%d st=%d normalize=%.2lf\n",filesize,sample_type,normalize);
 #endif
-	if (strncmp(wav_header->ChunkID,"RIFF",4)) {
-		if (strncmp(wav_header->ChunkID,"RIFX",4)) {
-			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"WAV import - unsupported audio sample type (chunkid must be 'RIFF' or 'RIFX')\n");
-			return;
-		} else {
-			bigendian=1;
-		}
-	}
-	if (strncmp(wav_header->Format,"WAVE",4)) {
-		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"[%s:%d] WAV import - unsupported audio sample type (format must be 'WAVE')\n");
-		return;
-	}
-	controlsize=wav_header->SubChunk1Size[0]+wav_header->SubChunk1Size[1]*256+wav_header->SubChunk1Size[2]*65536+wav_header->SubChunk1Size[3]*256*65536;
-	if (controlsize!=16) {
-		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"WAV import - invalid wav chunk size (subchunk1 control)\n");
-		return;
-	}
-	if (strncmp(wav_header->SubChunk1ID,"fmt",3)) {
-		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"WAV import - unsupported audio sample type (subchunk1id must be 'fmt')\n");
-		return;
-	}
 
-#if TRACE_HEXBIN
-printf("AudioLoadSample getsubchunk\n");
-#endif
-	subchunk=(unsigned char *)&wav_header->SubChunk2ID;
-	while (strncmp((char *)subchunk,"data",4)) {
-		subchunksize=8+subchunk[4]+subchunk[5]*256+subchunk[6]*65536+subchunk[7]*256*65536;
-		if (subchunksize>=filesize) {
-			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"WAV import - data subchunk not found\n");
-			return;
-		}
-		subchunk+=subchunksize;
-	}
-	subchunksize=subchunk[4]+subchunk[5]*256+subchunk[6]*65536+subchunk[7]*256*65536;
-	controlsize=subchunksize;
-
-	nbchannel=wav_header->NumChannels[0]+wav_header->NumChannels[1]*256;
-	if (nbchannel<1) {
-		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"WAV import - invalid number of audio channel\n");
-		return;
-	}
-
-	wFormat=wav_header->AudioFormat[0]+wav_header->AudioFormat[1]*256;
-	if (wFormat!=1 && wFormat!=3) {
-		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"WAV import - invalid or unsupported wFormatTag (%04X)\n",wFormat);
-		return;
-	}
-
-	frequency=wav_header->SampleRate[0]+wav_header->SampleRate[1]*256+wav_header->SampleRate[2]*65536+wav_header->SampleRate[3]*256*65536;
-	switch (sample_type) {
-		case AUDIOSAMPLE_DMAA:
-		case AUDIOSAMPLE_DMAB:
-		case AUDIOSAMPLE_DMAC:
-			if (fabs(frequency/15125.0-1.0)>0.2) {
-				if (!ae->nowarning) {
-					rasm_printf(ae,KWARNING"[%s:%d] Warning: WAV sample frequency (%dHz) is very different from 15KHz DMA frequency\n",GetCurrentFile(ae),ae->wl[ae->idx].l,(int)frequency);
-					if (ae->erronwarn) MaxError(ae);
-				}
-			}
-		default:break;
-	}
-
-	bitspersample=wav_header->BitsPerSample[0]+wav_header->BitsPerSample[1]*256;
-#if TRACE_HEXBIN
-printf("AudioLoadSample bitpersample=%d | Format=%s\n",bitspersample,wFormat==1?"PCM":"IEEE Float");
-#endif
-	switch (bitspersample) {
-		case 8:_internal_getsample=__internal_getsample8;break;
-		case 16:if (!bigendian) _internal_getsample=__internal_getsample16little; else _internal_getsample=__internal_getsample16big;break;
-		case 24:if (!bigendian) _internal_getsample=__internal_getsample24little; else _internal_getsample=__internal_getsample24big;break;
-		case 32:if (wFormat==3) {
-				if (!bigendian) {
-						if (_isLittleEndian()) {
-							_internal_getsample=__internal_getsample32littlelittle;
-						} else {
-							_internal_getsample=__internal_getsample32littlebig;
-						}
-					} else {
-						if (_isLittleEndian()) {
-							_internal_getsample=__internal_getsample32biglittle;
-						} else {
-							_internal_getsample=__internal_getsample32bigbig;
-						}
-					}
+	if (filesize>sizeof(struct s_wav_header)) {
+		wav_header=(struct s_wav_header *)data;
+		if (strncmp(wav_header->ChunkID,"RIFF",4)) {
+			if (strncmp(wav_header->ChunkID,"RIFX",4)) {
+				brut=1;
 			} else {
-				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"WAV import - unsupported 32bits PCM\n",wFormat);
+				bigendian=1;
+			}
+		}
+	} else {
+		brut=1;
+	}
+
+	if (!brut) {
+		if (strncmp(wav_header->Format,"WAVE",4)) {
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"[%s:%d] WAV import - unsupported audio sample type (format must be 'WAVE')\n");
+			return;
+		}
+		controlsize=wav_header->SubChunk1Size[0]+wav_header->SubChunk1Size[1]*256+wav_header->SubChunk1Size[2]*65536+wav_header->SubChunk1Size[3]*256*65536;
+		if (controlsize!=16) {
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"WAV import - invalid wav chunk size (subchunk1 control)\n");
+			return;
+		}
+		if (strncmp(wav_header->SubChunk1ID,"fmt",3)) {
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"WAV import - unsupported audio sample type (subchunk1id must be 'fmt')\n");
+			return;
+		}
+
+#if TRACE_HEXBIN
+	printf("AudioLoadSample WAV getsubchunk\n");
+#endif
+		subchunk=(unsigned char *)&wav_header->SubChunk2ID;
+		while (strncmp((char *)subchunk,"data",4)) {
+			subchunksize=8+subchunk[4]+subchunk[5]*256+subchunk[6]*65536+subchunk[7]*256*65536;
+			if (subchunksize>=filesize) {
+				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"WAV import - data subchunk not found\n");
 				return;
 			}
-			break;
-		default:
-			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"WAV import - unsupported bits per sample (%d)\n",bitspersample);
-			return;
-	}
+			subchunk+=subchunksize;
+		}
+		subchunksize=subchunk[4]+subchunk[5]*256+subchunk[6]*65536+subchunk[7]*256*65536;
+		controlsize=subchunksize;
 
-	nbsample=controlsize/nbchannel/(bitspersample/8);
-	if (controlsize+sizeof(struct s_wav_header)>filesize) {
-		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"WAV import - cannot read %d byte%s of audio whereas the file is %d bytes big!\n",controlsize,controlsize>1?"s":"",filesize);
-		return;
-	}
+		nbchannel=wav_header->NumChannels[0]+wav_header->NumChannels[1]*256;
+		if (nbchannel<1) {
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"WAV import - invalid number of audio channel\n");
+			return;
+		}
+
+		wFormat=wav_header->AudioFormat[0]+wav_header->AudioFormat[1]*256;
+		if (wFormat!=1 && wFormat!=3) {
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"WAV import - invalid or unsupported wFormatTag (%04X)\n",wFormat);
+			return;
+		}
+
+		frequency=wav_header->SampleRate[0]+wav_header->SampleRate[1]*256+wav_header->SampleRate[2]*65536+wav_header->SampleRate[3]*256*65536;
+		switch (sample_type) {
+			case AUDIOSAMPLE_DMAA:
+			case AUDIOSAMPLE_DMAB:
+			case AUDIOSAMPLE_DMAC:
+				if (fabs(frequency/15125.0-1.0)>0.2) {
+					if (!ae->nowarning) {
+						rasm_printf(ae,KWARNING"[%s:%d] Warning: WAV sample frequency (%dHz) is very different from 15KHz DMA frequency\n",GetCurrentFile(ae),ae->wl[ae->idx].l,(int)frequency);
+						if (ae->erronwarn) MaxError(ae);
+					}
+				}
+			default:break;
+		}
+
+		bitspersample=wav_header->BitsPerSample[0]+wav_header->BitsPerSample[1]*256;
+#if TRACE_HEXBIN
+	printf("AudioLoadSample bitpersample=%d | Format=%s\n",bitspersample,wFormat==1?"PCM":"IEEE Float");
+#endif
+		switch (bitspersample) {
+			case 8:_internal_getsample=__internal_getsample8;break;
+			case 16:if (!bigendian) _internal_getsample=__internal_getsample16little; else _internal_getsample=__internal_getsample16big;break;
+			case 24:if (!bigendian) _internal_getsample=__internal_getsample24little; else _internal_getsample=__internal_getsample24big;break;
+			case 32:if (wFormat==3) {
+					if (!bigendian) {
+							if (_isLittleEndian()) {
+								_internal_getsample=__internal_getsample32littlelittle;
+							} else {
+								_internal_getsample=__internal_getsample32littlebig;
+							}
+						} else {
+							if (_isLittleEndian()) {
+								_internal_getsample=__internal_getsample32biglittle;
+							} else {
+								_internal_getsample=__internal_getsample32bigbig;
+							}
+						}
+				} else {
+					MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"WAV import - unsupported 32bits PCM\n",wFormat);
+					return;
+				}
+				break;
+			default:
+				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"WAV import - unsupported bits per sample (%d)\n",bitspersample);
+				return;
+		}
+
+		nbsample=controlsize/nbchannel/(bitspersample/8);
+		if (controlsize+sizeof(struct s_wav_header)>filesize) {
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"WAV import - cannot read %d byte%s of audio whereas the file is %d bytes big!\n",controlsize,controlsize>1?"s":"",filesize);
+			return;
+		}
 
 #if TRACE_HEXBIN
-printf("nbsample=%d (sze=%d,chn=%d,bps=%d) st=%d\n",nbsample,controlsize,nbchannel,bitspersample,sample_type);
+	printf("nbsample=%d (sze=%d,chn=%d,bps=%d) st=%d\n",nbsample,controlsize,nbchannel,bitspersample,sample_type);
 #endif
-	
-	idx=subchunk-data;
+		
+		idx=subchunk-data;
+	} else {
+		// lecture brute du fichier car il ne ressemble pas à un WAV :)
+		idx=0;
+		nbchannel=1;
+		nbsample=filesize;
+		_internal_getsample=__internal_getsample8; // 8 bits signés
+	}
+
 	switch (sample_type) {
 		default:
 		case AUDIOSAMPLE_SMP:
@@ -17886,40 +17882,53 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 			}
 			/* when inhibited we are looking only for a IF/IFDEF/IFNOT/IFNDEF/ELSE/ELSEIF/ENDIF or SWITCH/CASE/DEFAULT/ENDSWITCH */
 			if (inhibe) {
-				/* this section does NOT need to be agressively optimized !!! */
-				if (curcrc==CRC_ELSEIF && strcmp(wordlist[ae->idx].w,"ELSEIF")==0) {
-					/* true IF needs to be done ONLY on the active level */
-					if (curii==ae->ii-1) __ELSEIF(ae); else __ELSEIF_light(ae);
-				} else if (curcrc==CRC_ELSE && strcmp(wordlist[ae->idx].w,"ELSE")==0) {
-					__ELSE(ae);
-				} else if (curcrc==CRC_ENDIF && strcmp(wordlist[ae->idx].w,"ENDIF")==0) {
-					__ENDIF(ae);
-				} else if (curcrc==CRC_IF && strcmp(wordlist[ae->idx].w,"IF")==0) {
-					/* as we are inhibited we do not have to truly compute IF */
-					__IF_light(ae);
-				} else if (curcrc==CRC_IFDEF && strcmp(wordlist[ae->idx].w,"IFDEF")==0) {
-					__IFDEF_light(ae);
-				} else if (curcrc==CRC_IFNOT && strcmp(wordlist[ae->idx].w,"IFNOT")==0) {
-					__IFNOT_light(ae);
-				} else if (curcrc==CRC_IFUSED && strcmp(wordlist[ae->idx].w,"IFUSED")==0) {
-					__IFUSED_light(ae);
-				} else if (curcrc==CRC_ELSEIFNOT && strcmp(wordlist[ae->idx].w,"ELSEIFNOT")==0) {
-					if (curii==ae->ii-1) __ELSEIFNOT(ae); else __ELSEIFNOT_light(ae);
-				} else if (curcrc==CRC_IFNUSED && strcmp(wordlist[ae->idx].w,"IFNUSED")==0) {
-					__IFNUSED_light(ae);
-				} else if (curcrc==CRC_IFNDEF && strcmp(wordlist[ae->idx].w,"IFNDEF")==0) {
-					__IFNDEF_light(ae);
-				} else if (curcrc==CRC_SWITCH && strcmp(wordlist[ae->idx].w,"SWITCH")==0) {
-					__SWITCH_light(ae);
-				} else if (curcrc==CRC_CASE && strcmp(wordlist[ae->idx].w,"CASE")==0) {
-					__CASE_light(ae);
-				} else if (curcrc==CRC_ENDSWITCH && strcmp(wordlist[ae->idx].w,"ENDSWITCH")==0) {
-					__ENDSWITCH(ae);
-				} else if (curcrc==CRC_BREAK && strcmp(wordlist[ae->idx].w,"BREAK")==0) {
-					__BREAK_light(ae);
-				} else if (curcrc==CRC_DEFAULT && strcmp(wordlist[ae->idx].w,"DEFAULT")==0) {
-					__DEFAULT_light(ae);
+				switch (ilength) {
+					case 2:if (curcrc==CRC_IF) {
+							/* as we are inhibited we do not have to truly compute IF */
+							__IF_light(ae);
+						}
+					       break;
+					case 4:if (curcrc==CRC_ELSE) {
+							__ELSE(ae);
+						} else if (curcrc==CRC_CASE) {
+							__CASE_light(ae);
+						}
+					       break;
+					case 5:if (curcrc==CRC_ENDIF) {
+							__ENDIF(ae);
+						} else if (curcrc==CRC_BREAK) {
+							__BREAK_light(ae);
+						} else if (curcrc==CRC_IFDEF) {
+							__IFDEF_light(ae);
+						} else if (curcrc==CRC_IFNOT) {
+							__IFNOT_light(ae);
+						}
+					       break;
+					case 6: if (curcrc==CRC_ELSEIF) {
+							/* true IF needs to be done ONLY on the active level */
+							if (curii==ae->ii-1) __ELSEIF(ae); else __ELSEIF_light(ae);
+						} else if (curcrc==CRC_SWITCH) {
+							__SWITCH_light(ae);
+						} else if (curcrc==CRC_IFNDEF) {
+							__IFNDEF_light(ae);
+						} else if (curcrc==CRC_IFUSED) {
+							__IFUSED_light(ae);
+						}
+						break;
+					case 7: if (curcrc==CRC_IFNUSED) {
+							__IFNUSED_light(ae);
+						} else if (curcrc==CRC_DEFAULT) {
+							__DEFAULT_light(ae);
+						}
+						break;
+					case 9: if (curcrc==CRC_ELSEIFNOT) {
+							if (curii==ae->ii-1) __ELSEIFNOT(ae); else __ELSEIFNOT_light(ae);
+						} else if (curcrc==CRC_ENDSWITCH) {
+							__ENDSWITCH(ae);
+						}
+					default:break;
 				}
+				/* this section does NOT need to be agressively optimized !!! */
 				while (wordlist[ae->idx].t==0) ae->idx++;
 				ae->idx++;
 				continue;
@@ -17932,38 +17941,50 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 					}
 				}
 				if (inhibe) {
-					/* this section does NOT need to be agressively optimized !!! */
-					if (curcrc==CRC_CASE && strcmp(wordlist[ae->idx].w,"CASE")==0) {
-						__CASE(ae);
-					} else if (curcrc==CRC_ENDSWITCH && strcmp(wordlist[ae->idx].w,"ENDSWITCH")==0) {
-						__ENDSWITCH(ae);
-					} else if (curcrc==CRC_IF && strcmp(wordlist[ae->idx].w,"IF")==0) {
-						/* as we are inhibited we do not have to truly compute IF */
-						__IF_light(ae);
-					} else if (curcrc==CRC_IFDEF && strcmp(wordlist[ae->idx].w,"IFDEF")==0) {
-						__IFDEF(ae);
-					} else if (curcrc==CRC_IFNOT && strcmp(wordlist[ae->idx].w,"IFNOT")==0) {
-						__IFNOT(ae);
-					} else if (curcrc==CRC_ELSE && strcmp(wordlist[ae->idx].w,"ELSE")==0) {
-						__ELSE(ae);
-					} else if (curcrc==CRC_ENDIF && strcmp(wordlist[ae->idx].w,"ENDIF")==0) {
-						__ENDIF(ae);
-					} else if (curcrc==CRC_ELSEIF && strcmp(wordlist[ae->idx].w,"ELSEIF")==0) {
-						__ELSEIF(ae);
-					} else if (curcrc==CRC_ELSEIFNOT && strcmp(wordlist[ae->idx].w,"ELSEIFNOT")==0) {
-						__ELSEIFNOT(ae);
-					} else if (curcrc==CRC_IFUSED && strcmp(wordlist[ae->idx].w,"IFUSED")==0) {
-						__IFUSED(ae);
-					} else if (curcrc==CRC_IFNUSED && strcmp(wordlist[ae->idx].w,"IFNUSED")==0) {
-						__IFNUSED(ae);
-					} else if (curcrc==CRC_IFNDEF && strcmp(wordlist[ae->idx].w,"IFNDEF")==0) {
-						__IFNDEF(ae);
-					} else if (curcrc==CRC_SWITCH && strcmp(wordlist[ae->idx].w,"SWITCH")==0) {
-						__SWITCH(ae);
-					} else if (curcrc==CRC_BREAK && strcmp(wordlist[ae->idx].w,"BREAK")==0) {
-						__BREAK(ae);
-					} else if (curcrc==CRC_DEFAULT && strcmp(wordlist[ae->idx].w,"DEFAULT")==0) {
-						__DEFAULT(ae);
+					switch (ilength) {
+						case 2:if (curcrc==CRC_IF) {
+								/* as we are inhibited we do not have to truly compute IF */
+								__IF_light(ae);
+							}
+						       break;
+						case 4:if (curcrc==CRC_ELSE) {
+								__ELSE(ae);
+							} else if (curcrc==CRC_CASE) {
+								__CASE(ae);
+							}
+						       break;
+						case 5:if (curcrc==CRC_ENDIF) {
+								__ENDIF(ae);
+							} else if (curcrc==CRC_BREAK) {
+								__BREAK(ae);
+							} else if (curcrc==CRC_IFDEF) {
+								__IFDEF(ae);
+							} else if (curcrc==CRC_IFNOT) {
+								__IFNOT(ae);
+							}
+						       break;
+						case 6: if (curcrc==CRC_ELSEIF) {
+								__ELSEIF(ae);
+							} else if (curcrc==CRC_SWITCH) {
+								__SWITCH(ae);
+							} else if (curcrc==CRC_IFNDEF) {
+								__IFNDEF(ae);
+							} else if (curcrc==CRC_IFUSED) {
+								__IFUSED(ae);
+							}
+							break;
+						case 7: if (curcrc==CRC_IFNUSED) {
+								__IFNUSED(ae);
+							} else if (curcrc==CRC_DEFAULT) {
+								__DEFAULT(ae);
+							}
+							break;
+						case 9: if (curcrc==CRC_ELSEIFNOT) {
+								__ELSEIFNOT(ae);
+							} else if (curcrc==CRC_ENDSWITCH) {
+								__ENDSWITCH(ae);
+							}
+						default:break;
 					}
 					while (wordlist[ae->idx].t==0) ae->idx++;
 					ae->idx++;
@@ -18012,6 +18033,10 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 				if (instruction[ifast].crc==curcrc && strcmp(instruction[ifast].mnemo,wordlist[ae->idx].w)==0) {
 					instruction[ifast].makemnemo(ae);
 					executed=1;
+					// normalement inutile
+					while (!wordlist[ae->idx].t) {
+						ae->idx++;
+					}
 					break;
 				}
 				ifast++;
@@ -18031,16 +18056,13 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 			*********************************************************************/
 			/* neither instruction nor macro executed, this is a label or an assignement */
 			if (wordlist[ae->idx].e) {
-				ExpressionFastTranslate(ae,&wordlist[ae->idx].w,0);
+				if (ae->ir) ExpressionFastTranslate(ae,&wordlist[ae->idx].w,0);
 				ComputeExpression(ae,wordlist[ae->idx].w,ae->codeadr,0,0);
 			} else {
 				PushLabel(ae);
 			}
-		} else {
-			while (!wordlist[ae->idx].t) {
-				ae->idx++;
-			}
 		}
+
 		ae->idx++; 
 		if (ae->stop) break;
 	} else {
@@ -22473,6 +22495,8 @@ int RasmAssembleInfoParam(const char *datain, int lenin, unsigned char **dataout
 
 #define AUTOTEST_REAL	"defr 0,0.5,-0.5,43.375,3.14159265,-0.25,0.9994433,0.9994434,-0.9994433,-0.9994434,0.1234567,1.2345678,0.00007"
 
+#define AUTOTEST_ENHANCED_RST " rst z,#38: rst nz,#38: rst c,#38: rst nc,#38: jr z,$+1: jr nz,$+1: jr c,$+1: jr nc,$+1 "
+
 #define AUTOTEST_ENHANCED_LD	"ld h,(ix+11): ld l,(ix+10): ld h,(iy+21): ld l,(iy+20): ld b,(ix+11): ld c,(ix+10):" \
 			"ld b,(iy+21): ld c,(iy+20): ld d,(ix+11): ld e,(ix+10): ld d,(iy+21): ld e,(iy+20): ld hl,(ix+10): " \
 			"ld hl,(iy+20):ld bc,(ix+10):ld bc,(iy+20): ld de,(ix+10):ld de,(iy+20)"
@@ -23232,6 +23256,9 @@ struct s_autotest_keyword autotest_keyword[]={
 	{"im",1},{"im 3",1},{"im -1",1},{"im (hl)",1},
 	{"halt 5",0},{"reti 5",1},{"retn 5",1},{"ld i,b",1},{"ld b,i",1},
 	{"halt 0",0}, {"halt -1",1},
+	{"rst 0,0",1}, {"rst c,0",1},
+	{"rst 0,0,0",1}, {"rst pe,0x38",1},
+	{"rst (hl)",1}, {"rst z,(ix)",1},
 
 	{"repeat 5:nop:rend",0},{"repeat 100000:a=5:rend",1},{"repeat -5:nop:rend",1},{"repeat repeat:nop:rend",1},
 	{"macro bidule:nop:mend:bidule",0},{"macro bidule:nop:macro glop:nop:mend:mend:bidule",1},
@@ -24204,6 +24231,11 @@ printf("testing var names starting with '_' OK\n");
 	if (!ret && opcodelen==2) {} else {printf("Autotest %03d ERROR (noexport/enoexport)\n",cpt);exit(-1);}
 	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
 printf("testing export/noexport OK\n");
+	
+	ret=RasmAssemble(AUTOTEST_ENHANCED_RST,strlen(AUTOTEST_ENHANCED_RST),&opcode,&opcodelen);
+	if (!ret && memcmp(opcode,opcode+opcodelen/2,opcodelen/2)==0) {} else {printf("Autotest %03d ERROR (enhanced RST)\n",cpt);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing enhanced RST OK\n");
 	
 	ret=RasmAssemble(AUTOTEST_ENHANCED_LD,strlen(AUTOTEST_ENHANCED_LD),&opcode,&opcodelen);
 	if (!ret && memcmp(opcode,opcode+opcodelen/2,opcodelen/2)==0) {} else {printf("Autotest %03d ERROR (enhanced LD)\n",cpt);exit(-1);}
