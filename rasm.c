@@ -11158,6 +11158,9 @@ void _LD(struct s_assenv *ae) {
 					case CRC_BC:___output(ae,0x60);___output(ae,0x69);ae->nop+=2;ae->tick+=8;break;
 					case CRC_DE:___output(ae,0x62);___output(ae,0x6B);ae->nop+=2;ae->tick+=8;break;
 					case CRC_HL:___output(ae,0x64);___output(ae,0x6D);ae->nop+=2;ae->tick+=8;break;
+					case CRC_SP:___output(ae,0x21);___output(ae,0x00);___output(ae,0x00); // LD HL,0
+						    ___output(ae,0x39);                                       // ADD HL,SP
+						    ae->nop+=6;ae->tick+=21;break;
 					default:
 					if (strncmp(ae->wl[ae->idx+2].w,"(IX",3)==0 && (ae->wl[ae->idx+2].w[3]=='+' || ae->wl[ae->idx+2].w[3]=='-')) {
 						/* enhanced LD HL,(IX+nn) */
@@ -22498,8 +22501,10 @@ int RasmAssembleInfoParam(const char *datain, int lenin, unsigned char **dataout
 #define AUTOTEST_ENHANCED_RST " rst z,#38: rst nz,#38: rst c,#38: rst nc,#38: jr z,$+1: jr nz,$+1: jr c,$+1: jr nc,$+1 "
 
 #define AUTOTEST_ENHANCED_LD	"ld h,(ix+11): ld l,(ix+10): ld h,(iy+21): ld l,(iy+20): ld b,(ix+11): ld c,(ix+10):" \
-			"ld b,(iy+21): ld c,(iy+20): ld d,(ix+11): ld e,(ix+10): ld d,(iy+21): ld e,(iy+20): ld hl,(ix+10): " \
-			"ld hl,(iy+20):ld bc,(ix+10):ld bc,(iy+20): ld de,(ix+10):ld de,(iy+20)"
+				"ld b,(iy+21): ld c,(iy+20): ld d,(ix+11): ld e,(ix+10): ld d,(iy+21): ld e,(iy+20): "\
+				" ld hl,sp : "\
+				"ld hl,(ix+10): ld hl,(iy+20):ld bc,(ix+10):ld bc,(iy+20): ld de,(ix+10):ld de,(iy+20): " \
+				" ld hl,0 : add hl,sp"
 
 #define AUTOTEST_ENHANCED_PUSHPOP	"push bc,de,hl,ix,iy,af:pop hl,bc,de,iy,ix,af:nop 2:" \
 				"push bc:push de:push hl:push ix:push iy:push af:"\
