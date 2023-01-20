@@ -11400,11 +11400,29 @@ void _RLC(struct s_assenv *ae) {
 	/* on check qu'il y a un ou deux parametres */
 	if (ae->wl[ae->idx+1].t==1) {
 		switch (GetCRC(ae->wl[ae->idx+1].w)) {
+			case CRC_BC: // SLA B : RL C : RR B : RLC B
+				   ___output(ae,0xCB);___output(ae,0x20);
+				   ___output(ae,0xCB);___output(ae,0x11);
+				   ___output(ae,0xCB);___output(ae,0x18);
+				   ___output(ae,0xCB);___output(ae,0x00);
+				    ae->nop+=8;ae->tick+=32;break;
 			case CRC_B:___output(ae,0xCB);___output(ae,0x0);ae->nop+=2;ae->tick+=8;break;
 			case CRC_C:___output(ae,0xCB);___output(ae,0x1);ae->nop+=2;ae->tick+=8;break;
+			case CRC_DE: // SLA D : RL E : RR D : RLC D
+				   ___output(ae,0xCB);___output(ae,0x22);
+				   ___output(ae,0xCB);___output(ae,0x13);
+				   ___output(ae,0xCB);___output(ae,0x1A);
+				   ___output(ae,0xCB);___output(ae,0x02);
+				    ae->nop+=8;ae->tick+=32;break;
 			case CRC_D:___output(ae,0xCB);___output(ae,0x2);ae->nop+=2;ae->tick+=8;break;
 			case CRC_E:___output(ae,0xCB);___output(ae,0x3);ae->nop+=2;ae->tick+=8;break;
 			case CRC_H:___output(ae,0xCB);___output(ae,0x4);ae->nop+=2;ae->tick+=8;break;
+			case CRC_HL: // SLA H : RL L : RR H : RLC H
+				   ___output(ae,0xCB);___output(ae,0x24);
+				   ___output(ae,0xCB);___output(ae,0x15);
+				   ___output(ae,0xCB);___output(ae,0x1C);
+				   ___output(ae,0xCB);___output(ae,0x04);
+				    ae->nop+=8;ae->tick+=32;break;
 			case CRC_L:___output(ae,0xCB);___output(ae,0x5);ae->nop+=2;ae->tick+=8;break;
 			case CRC_MHL:___output(ae,0xCB);___output(ae,0x6);ae->nop+=4;ae->tick+=15;break;
 			case CRC_A:___output(ae,0xCB);___output(ae,0x7);ae->nop+=2;ae->tick+=8;break;
@@ -11453,10 +11471,28 @@ void _RRC(struct s_assenv *ae) {
 	/* on check qu'il y a un ou deux parametres */
 	if (ae->wl[ae->idx+1].t==1) {
 		switch (GetCRC(ae->wl[ae->idx+1].w)) {
+			case CRC_BC: // SRL B : RR C : RL B : RRC B
+				   ___output(ae,0xCB);___output(ae,0x38);
+				   ___output(ae,0xCB);___output(ae,0x19);
+				   ___output(ae,0xCB);___output(ae,0x10);
+				   ___output(ae,0xCB);___output(ae,0x08);
+				   ae->nop+=8;ae->tick+=32;break;
 			case CRC_B:___output(ae,0xCB);___output(ae,0x8);ae->nop+=2;ae->tick+=8;break;
 			case CRC_C:___output(ae,0xCB);___output(ae,0x9);ae->nop+=2;ae->tick+=8;break;
+			case CRC_DE: // SRL D : RR E : RL D : RRC D
+				   ___output(ae,0xCB);___output(ae,0x3A);
+				   ___output(ae,0xCB);___output(ae,0x1B);
+				   ___output(ae,0xCB);___output(ae,0x12);
+				   ___output(ae,0xCB);___output(ae,0x0A);
+				   ae->nop+=8;ae->tick+=32;break;
 			case CRC_D:___output(ae,0xCB);___output(ae,0xA);ae->nop+=2;ae->tick+=8;break;
 			case CRC_E:___output(ae,0xCB);___output(ae,0xB);ae->nop+=2;ae->tick+=8;break;
+			case CRC_HL: // SRL H : RR L : RL H : RRC H
+				   ___output(ae,0xCB);___output(ae,0x3C);
+				   ___output(ae,0xCB);___output(ae,0x1D);
+				   ___output(ae,0xCB);___output(ae,0x14);
+				   ___output(ae,0xCB);___output(ae,0x0C);
+				   ae->nop+=8;ae->tick+=32;break;
 			case CRC_H:___output(ae,0xCB);___output(ae,0xC);ae->nop+=2;ae->tick+=8;break;
 			case CRC_L:___output(ae,0xCB);___output(ae,0xD);ae->nop+=2;ae->tick+=8;break;
 			case CRC_MHL:___output(ae,0xCB);___output(ae,0xE);ae->nop+=4;ae->tick+=15;break;
@@ -11507,13 +11543,13 @@ void _RL(struct s_assenv *ae) {
 	/* on check qu'il y a un ou deux parametres */
 	if (ae->wl[ae->idx+1].t==1) {
 		switch (GetCRC(ae->wl[ae->idx+1].w)) {
-			case CRC_BC:___output(ae,0xCB);___output(ae,0x10);___output(ae,0xCB);___output(ae,0x11);ae->nop+=4;ae->tick+=16;break;
+			case CRC_BC:___output(ae,0xCB);___output(ae,0x11);___output(ae,0xCB);___output(ae,0x10);ae->nop+=4;ae->tick+=16;break;
 			case CRC_B:___output(ae,0xCB);___output(ae,0x10);ae->nop+=2;ae->tick+=8;break;
 			case CRC_C:___output(ae,0xCB);___output(ae,0x11);ae->nop+=2;ae->tick+=8;break;
-			case CRC_DE:___output(ae,0xCB);___output(ae,0x12);___output(ae,0xCB);___output(ae,0x13);ae->nop+=4;ae->tick+=16;break;
+			case CRC_DE:___output(ae,0xCB);___output(ae,0x13);___output(ae,0xCB);___output(ae,0x12);ae->nop+=4;ae->tick+=16;break;
 			case CRC_D:___output(ae,0xCB);___output(ae,0x12);ae->nop+=2;ae->tick+=8;break;
 			case CRC_E:___output(ae,0xCB);___output(ae,0x13);ae->nop+=2;ae->tick+=8;break;
-			case CRC_HL:___output(ae,0xCB);___output(ae,0x14);___output(ae,0xCB);___output(ae,0x15);ae->nop+=4;ae->tick+=16;break;
+			case CRC_HL:___output(ae,0xCB);___output(ae,0x15);___output(ae,0xCB);___output(ae,0x14);ae->nop+=4;ae->tick+=16;break;
 			case CRC_H:___output(ae,0xCB);___output(ae,0x14);ae->nop+=2;ae->tick+=8;break;
 			case CRC_L:___output(ae,0xCB);___output(ae,0x15);ae->nop+=2;ae->tick+=8;break;
 			case CRC_MHL:___output(ae,0xCB);___output(ae,0x16);ae->nop+=4;ae->tick+=15;break;
@@ -22500,6 +22536,12 @@ int RasmAssembleInfoParam(const char *datain, int lenin, unsigned char **dataout
 
 #define AUTOTEST_ENHANCED_RST " rst z,#38: rst nz,#38: rst c,#38: rst nc,#38: jr z,$+1: jr nz,$+1: jr c,$+1: jr nc,$+1 "
 
+#define AUTOTEST_ENHANCED_SHIFT "RLC BC: RLC DE: RLC HL: RRC BC: RRC DE: RRC HL: RL BC: RL DE: RL HL: RR BC: RR DE: RR HL:"\
+				"SLA B : RL C : RR B : RLC B: SLA D : RL E : RR D : RLC D: SLA H : RL L : RR H : RLC H:"\
+				"SRL B : RR C : RL B : RRC B: SRL D : RR E : RL D : RRC D: SRL H : RR L : RL H : RRC H:"\
+				"RL C : RL B: RL E : RL D: RL L : RL H:"\
+				"RR B : RR C: RR D : RR E: RR H : RR L"
+
 #define AUTOTEST_ENHANCED_LD	"ld h,(ix+11): ld l,(ix+10): ld h,(iy+21): ld l,(iy+20): ld b,(ix+11): ld c,(ix+10):" \
 				"ld b,(iy+21): ld c,(iy+20): ld d,(ix+11): ld e,(ix+10): ld d,(iy+21): ld e,(iy+20): "\
 				" ld hl,sp : "\
@@ -24236,6 +24278,11 @@ printf("testing var names starting with '_' OK\n");
 	if (!ret && opcodelen==2) {} else {printf("Autotest %03d ERROR (noexport/enoexport)\n",cpt);exit(-1);}
 	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
 printf("testing export/noexport OK\n");
+	
+	ret=RasmAssemble(AUTOTEST_ENHANCED_SHIFT,strlen(AUTOTEST_ENHANCED_SHIFT),&opcode,&opcodelen);
+	if (!ret && memcmp(opcode,opcode+opcodelen/2,opcodelen/2)==0) {} else {printf("Autotest %03d ERROR (enhanced RLC/RRC/RL/RR)\n",cpt);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing enhanced shifts OK\n");
 	
 	ret=RasmAssemble(AUTOTEST_ENHANCED_RST,strlen(AUTOTEST_ENHANCED_RST),&opcode,&opcodelen);
 	if (!ret && memcmp(opcode,opcode+opcodelen/2,opcodelen/2)==0) {} else {printf("Autotest %03d ERROR (enhanced RST)\n",cpt);exit(-1);}
