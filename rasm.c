@@ -960,6 +960,7 @@ struct s_assenv {
 	char AutomateHexa[256];
 	struct s_compute_element AutomateElement[256];
 	unsigned char psgtab[256];
+	unsigned char dmatab[256];
 	unsigned char psgfine[256];
 	int noampersand;
 	/* output */
@@ -16211,6 +16212,19 @@ unsigned char * __internal_floatinversion(unsigned char *data) {
 	return bswap;
 }
 
+float __internal_audio_filter(float e) {
+        static float old_old_s=0.0,old_s=0.0,s=0.0;
+        static float old_old_e=0.0,old_e=0.0;
+
+	// bandpass 100Hz / 7800Hz for 15625Hz acquisition
+        s=e*-0.980257+old_old_e*0.980257+old_s*-0.039487+old_old_s*0.960513;
+        old_old_s=old_s;
+        old_s=s;
+        old_old_e=old_e;
+        old_e=e;
+        return s;
+}
+
 int __internal_getsample32bigbig(unsigned char *data, int *idx) {
 	float fsample;
 	int cursample;
@@ -16314,7 +16328,7 @@ printf("AudioLoadSample filesize=%d st=%d normalize=%.2lf\n",filesize,sample_typ
 			case AUDIOSAMPLE_DMAA:
 			case AUDIOSAMPLE_DMAB:
 			case AUDIOSAMPLE_DMAC:
-				if (fabs(frequency/15125.0-1.0)>0.2) {
+				if (fabs(frequency/15600.0-1.0)>0.2) {
 					if (!ae->nowarning) {
 						rasm_printf(ae,KWARNING"[%s:%d] Warning: WAV sample frequency (%dHz) is very different from 15KHz DMA frequency\n",GetCurrentFile(ae),ae->wl[ae->idx].l,(int)frequency);
 						if (ae->erronwarn) MaxError(ae);
@@ -16462,11 +16476,10 @@ printf("AudioLoadSample filesize=%d st=%d normalize=%.2lf\n",filesize,sample_typ
 				for (n=0;n<nbchannel;n++) {
 					accumulator+=_internal_getsample(data,&idx);
 				}
-				/* normalize */
-				cursample=MinMaxInt(floor(((accumulator/nbchannel)*normalize)+0.5)+128,0,255);
-				
+				/* filter + normalize */
+				cursample=MinMaxInt(floor((__internal_audio_filter(accumulator/nbchannel)*normalize)+0.5)+128,0,255);
 				/* PSG levels */
-				samplevalue=ae->psgtab[cursample];
+				samplevalue=ae->dmatab[cursample];
 				
 				if (samplevalue==sampleprevious && i+1<nbsample) {
 					samplerepeat++;
@@ -17816,6 +17829,19 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 	for (i=0;i<72;i++) ae->psgtab[j++]=15;
 	if (j!=256) {
 		rasm_printf(ae,"Internal error with PSG conversion table\n");
+		exit(-44);
+	}
+	/* dma table use an intermediate conversion schema */
+	for (i=j=0;i<29;i++) ae->dmatab[j++]=0;
+	for (i=0;i<15;i++) ae->dmatab[j++]=10;
+	for (i=0;i<20;i++) ae->dmatab[j++]=11;
+	for (i=0;i<27;i++) ae->dmatab[j++]=12;
+	for (i=0;i<37;i++) ae->dmatab[j++]=13;
+	for (i=0;i<53;i++) ae->dmatab[j++]=14;
+	for (i=0;i<75;i++) ae->dmatab[j++]=15;
+
+	if (j!=256) {
+		rasm_printf(ae,"Internal error with DMA conversion table\n");
 		exit(-44);
 	}
 	for (i=j=0;i<1;i++) ae->psgfine[j++]=0;
