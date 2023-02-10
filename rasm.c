@@ -4143,6 +4143,8 @@ int __GETNOP(struct s_assenv *ae,char *oplist, int didx)
 				break;
 			case CRC_DJNZ:
 				// DJNZ is supposed to loop!
+				tick+=4;
+				break;
 			case CRC_CALL:
 				// CALL is supposed to skip!
 			case CRC_JR:
@@ -6012,7 +6014,20 @@ printf("page=%d | ptr=%X ibank=%d\n",page,curlabel->ptr,curlabel->ibank);
 														}
 														break;
 													case 0:
-														curval=curlabel->ibank;
+														if (ae->forcesnapshot && curlabel->ibank>260) {
+															int isr;
+															for (isr=0;isr<256;isr++) {
+																if (ae->rombank[isr]==curlabel->ibank) {
+																	curval=isr;
+																	break;
+																}
+															}
+															if (isr==256) {
+																MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"expression [%s] cannot use BANK - label [%s] is in a temporary space!\n",TradExpression(zeexpression),ae->computectx->varbuffer);
+															}
+														} else {
+															curval=curlabel->ibank;
+														}
 														break;
 													default:MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"INTERNAL ERROR (unknown paging)\n",GetExpFile(ae,didx),GetExpLine(ae,didx));FreeAssenv(ae);exit(-664);
 												}
@@ -6047,7 +6062,22 @@ printf("page=%d | ptr=%X ibank=%d\n",page,curlabel->ptr,curlabel->ibank);
 																	curval=curlabel->ibank;
 																}
 																break;
-															case 0:curval=curlabel->ibank;break;
+															case 0:
+																if (ae->forcesnapshot && curlabel->ibank>260) {
+																	int isr;
+																	for (isr=0;isr<256;isr++) {
+																		if (ae->rombank[isr]==curlabel->ibank) {
+																			curval=isr;
+																			break;
+																		}
+																	}
+																	if (isr==256) {
+																		MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"expression [%s] cannot use BANK - label [%s] is in a temporary space!\n",TradExpression(zeexpression),ae->computectx->varbuffer);
+																	}
+																} else {
+																	curval=curlabel->ibank;
+																}
+																break;
 															default:MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"INTERNAL ERROR (unknown paging)\n");FreeAssenv(ae);exit(-664);
 														}
 													}
@@ -6086,7 +6116,21 @@ printf("stage 2 | page=%d | ptr=%X ibank=%d\n",page,curlabel->ptr,curlabel->iban
 													}
 													break;
 												case 0:
-													curval=curlabel->ibank;
+													// patch to get real ROM number + error message
+													if (ae->forcesnapshot && curlabel->ibank>260) {
+														int isr;
+														for (isr=0;isr<256;isr++) {
+															if (ae->rombank[isr]==curlabel->ibank) {
+																curval=isr;
+																break;
+															}
+														}
+														if (isr==256) {
+															MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"expression [%s] cannot use BANK - label [%s] is in a temporary space!\n",TradExpression(zeexpression),ae->computectx->varbuffer);
+														}
+													} else {
+														curval=curlabel->ibank;
+													}
 													break;
 												default:MakeError(ae,GetExpIdx(ae,didx),GetCurrentFile(ae),ae->wl[ae->idx].l,"INTERNAL ERROR (unknown paging)\n",GetExpFile(ae,didx),GetExpLine(ae,didx));FreeAssenv(ae);exit(-664);
 											}
@@ -10786,7 +10830,7 @@ void _DJNZ(struct s_assenv *ae) {
 		} else {
 			___output(ae,0x10);
 			PushExpression(ae,ae->idx+1,E_EXPRESSION_J8);
-			ae->nop+=3;
+			ae->nop+=4;
 			ae->tick+=13;
 		}
 		ae->idx++;
@@ -19224,6 +19268,9 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 											FreeAssenv(ae);
 											exit(ABORT_ERROR);
 										} //@@TODO renvoyer erreur quand meme?
+									} else if (endoffset-offset<=0) {
+										//rasm_printf(ae,KERROR"\nempty bank with labels inside (probably)\n");
+										continue;
 									}
 									/* banks are gathered in the 64K block */
 									if (offset>0xC000) {
@@ -19323,6 +19370,9 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 										FreeAssenv(ae);
 										exit(ABORT_ERROR);
 									} //@@TODO renvoyer erreur quand meme?
+								} else if (endoffset-offset<=0) {
+									//rasm_printf(ae,KERROR"\nempty ROM with labels inside (probably)\n");
+									continue;
 								}
 								if (!noflood || howmanyrom<=4) {
 									if (i<256) rasm_printf(ae,KVERBOSE"WriteSNA ROM %3d of %5d byte%s start at #%04X\n",i,endoffset-offset,endoffset-offset>1?"s":" ",offset); else rasm_printf(ae,KVERBOSE"WriteSNA LOWER   of %5d byte%s start at #%04X\n",endoffset-offset,endoffset-offset>1?"s":" ",offset);
@@ -22084,6 +22134,11 @@ int RasmAssembleInfoParam(const char *datain, int lenin, unsigned char **dataout
 	return ret;
 }
 
+#define AUTOTEST_BANKROM1   " buildsna: bankset 0: defw {bank}label_in_rom1: defw {bank}label_in_ram1: defw {bank}label_in_rom2: defw {bank}label_in_ram2: "\
+"bank 5: grouik: bank 200: label_in_ram1 nop: bank 201: label_in_ram2: rombank 199: label_in_rom2: rombank 200: label_in_rom1 nop: bank: label_outside nop:"\
+"assert {bank}label_in_rom1=={bank}label_in_ram1: assert {bank}label_in_rom2!={bank}label_in_ram2: assert {bank}label_in_rom1==200: assert {bank}label_in_ram1==200:"\
+"assert {bank}label_in_rom2==199:assert {bank}label_in_ram2==201"
+
 #define AUTOTEST_IS_REGISTER "assert is_register('bc')==1 : assert is_register('d')==1 : assert is_register('e')==1 : assert is_register('z')==0 : assert is_register('rr')==0 : nop "
 
 #define AUTOTEST_ACCENT "defb 'grouiké'"
@@ -23369,7 +23424,7 @@ struct s_autotest_keyword autotest_keyword[]={
 	{"assert getnop('neg')==2 : nop",0}, {"assert getnop('rst')==4 : nop",0}, {"assert getnop('retn')==4 : nop",0}, {"assert getnop('reti')==4 : nop",0},
 	{"assert getnop('rld')==5 : nop",0}, {"assert getnop('rrd')==5 : nop",0}, {"assert getnop('outi')==5 : nop",0}, {"assert getnop('outd')==5 : nop",0},
 	{"assert getnop('ind')==5 : nop",0}, {"assert getnop('ini')==5 : nop",0}, {"assert getnop(\"ret\")==3 : nop",0}, {"assert getnop(\"ret nz\")==2 : nop",0},
-	{"assert getnop(\"djNz\")==3 : nop",0}, {"assert getnop(\"jr\")==3 : nop",0}, {"assert getnop(\"jr nz\")==3 : nop",0}, {"assert getnop(\"jp (ix)\")==2 : nop",0},
+	{"assert getnop(\"djNz\")==4 : nop",0}, {"assert getnop(\"jr\")==3 : nop",0}, {"assert getnop(\"jr nz\")==3 : nop",0}, {"assert getnop(\"jp (ix)\")==2 : nop",0},
 	{"assert getnop(\"jp (iy)\")==2 : nop",0}, {"assert getnop(\"jp (hl)\")==1 : nop",0},
 
 	{"assert getnop(' pop af ' )==3 : nop",0}, {"assert getnop(' pop bc ' )==3 : nop",0}, {"assert getnop(' pop de ' )==3 : nop",0},
@@ -23758,6 +23813,11 @@ printf("testing error code OK\n");
 	if (!ret) {} else {printf("Autotest %03d ERROR (BANK org adr)\n",cpt);exit(-1);}
 	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
 printf("testing BANK/ORG OK\n");
+
+	ret=RasmAssemble(AUTOTEST_BANKROM1,strlen(AUTOTEST_BANKROM1),&opcode,&opcodelen);
+	if (!ret) {} else {printf("Autotest %03d ERROR (BANKROM + bank prefixes)\n",cpt);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing BANKROM+bank tags OK\n");
 
 	ret=RasmAssemble(AUTOTEST_LIMITOK,strlen(AUTOTEST_LIMITOK),&opcode,&opcodelen);
 	if (!ret) {} else {printf("Autotest %03d ERROR (limit ok)\n",cpt);exit(-1);}
