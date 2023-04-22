@@ -71,7 +71,7 @@ BLOCK* zx0_optimize(unsigned char *input_data, int input_size, int skip, int off
     /* start with fake block */
     assign(&last_match[INITIAL_OFFSET], allocate(-1, skip-1, INITIAL_OFFSET, NULL));
 
-    printf("[");
+    //printf("[");
 
     /* process remaining bytes */
     for (index = skip; index < input_size; index++) {
@@ -125,13 +125,13 @@ BLOCK* zx0_optimize(unsigned char *input_data, int input_size, int skip, int off
 
         /* indicate progress */
         if (index*MAX_SCALE/input_size > dots) {
-            printf(".");
-            fflush(stdout);
+            //printf(".");
+            //fflush(stdout);
             dots++;
         }
     }
 
-    printf("]\n");
+    //printf("]\n");
 
     return optimal[input_size-1];
 }
