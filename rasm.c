@@ -22478,6 +22478,13 @@ int RasmAssembleInfoParam(const char *datain, int lenin, unsigned char **dataout
 	return ret;
 }
 
+#define AUTOTEST_REBANK "bank 1: mylabel1 nop: assert {bank}mylabel1==1:"\
+			"bank 2: mylabel2 nop: assert {bank}mylabel2==2:"\
+			"rebank: mylabel3 nop: assert {bank}mylabel3==1:"\
+			"bank: labeltmp: bnktmp={bank}labeltmp:"\
+			"bank: labeltmp2: bnktmp2={bank}labeltmp2: assert bnktmp!=bnktmp2:"\
+			"rebank: labeltmp3: bnktmp3={bank}labeltmp3: assert bnktmp3==bnktmp"
+
 #define AUTOTEST_BANKROM1   " buildsna: bankset 0: defw {bank}label_in_rom1: defw {bank}label_in_ram1: defw {bank}label_in_rom2: defw {bank}label_in_ram2: "\
 "bank 5: grouik: bank 200: label_in_ram1 nop: bank 201: label_in_ram2: rombank 199: label_in_rom2: rombank 200: label_in_rom1 nop: bank: label_outside nop:"\
 "assert {bank}label_in_rom1=={bank}label_in_ram1: assert {bank}label_in_rom2!={bank}label_in_ram2: assert {bank}label_in_rom1==200: assert {bank}label_in_ram1==200:"\
@@ -24152,6 +24159,11 @@ printf("testing ORG relocation OK\n");
 	if (ret) {} else {printf("Autotest %03d ERROR (must return an error code!)\n",cpt);exit(-1);}
 	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
 printf("testing error code OK\n");
+
+	ret=RasmAssemble(AUTOTEST_REBANK,strlen(AUTOTEST_REBANK),&opcode,&opcodelen);
+	if (!ret) {} else {printf("Autotest %03d ERROR (REBANK)\n",cpt);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing REBANK OK\n");
 
 	ret=RasmAssemble(AUTOTEST_BANKORG,strlen(AUTOTEST_BANKORG),&opcode,&opcodelen);
 	if (!ret) {} else {printf("Autotest %03d ERROR (BANK org adr)\n",cpt);exit(-1);}
