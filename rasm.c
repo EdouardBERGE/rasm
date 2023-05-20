@@ -328,7 +328,7 @@ struct s_external {
 	int crc;
 	/* mapping info */
 	struct s_external_mapping *mapping;
-	int nmapping,mmapping;
+	int imapping,mmapping;
 };
 
 struct s_label {
@@ -823,6 +823,22 @@ struct s_poker {
 	int ipoker;
 };
 
+struct s_relocation {
+	int istart,iend; // word idx of the section to be relocated
+	int iorgzone,outputadr,codeadr; // easy to know which mode is used
+	int endoutputadr;
+	int ibank;
+	int ibankcopy; // code will be duplicated in another temporary bank
+	int outputadrcopy;
+	char *module;
+	int iscomplete;
+};
+
+struct s_relocation_write {
+	unsigned short int addr;
+	int w16,wh,wl;
+};
+
 /*******************************************
         G L O B A L     S T R U C T
 *******************************************/
@@ -835,7 +851,7 @@ struct s_assenv {
 	int nbbank,maxbank;
 	int forcetape,forcezx,forcecpr,forceROM,forceROMconcat,bankmode;
 	int amsdos,forcesnapshot,packedbank,extendedCPR,xpr,cprinfo,cprinfo_export,dsksnapshot;
-	int activebank; // current used bank where data/code has to be written | used with outputadr (see ORG tracking)
+	int lastbank,activebank; // current used bank where data/code has to be written | used with outputadr (see ORG tracking)
 	char *cprinfo_filename;
 	struct s_snapshot snapshot;
 	struct s_zxsnapshot zxsnapshot;
@@ -1003,11 +1019,14 @@ struct s_assenv {
 	int buildobj;
 	struct s_external *external;
 	int nexternal,mexternal;
-	int external_mapping_size;
-	struct s_external_mapping *relocation;
-	int nrelocation,mrelocation;
+	int external_mapping_size; // when having external declared, this is where the current "pushed expression size" is given
+	struct s_external_mapping *mapping;
+	int imapping,mmapping;
 	char **procedurename;
 	int nprocedurename,mprocedurename;
+	/* relocation */
+	struct s_relocation *relocation;
+	int irelocation,mrelocation;
 };
 
 /*************************************
@@ -1276,6 +1295,7 @@ unsigned char *LZ48_encode_legacy(unsigned char *data, int length, int *retlengt
 unsigned char *LZ49_encode_legacy(unsigned char *data, int length, int *retlength);
 #define LZ49_crunch LZ49_encode_legacy
 
+void ___new_memory_space(struct s_assenv *ae);
 
 /*
  * optimised reading of text file in one shot
@@ -2905,6 +2925,13 @@ int cmpAmsdosentry(const void * a, const void * b)
 	return memcmp(a,b,32);
 }
 
+int cmprelocation(const void * a, const void * b)
+{
+	struct s_external_mapping *sa,*sb;
+	sa=(struct s_external_mapping *)a;
+	sb=(struct s_external_mapping *)b;
+	if (sa->ptr<sb->ptr) return -1; else return 1;
+}
 int cmpmacros(const void * a, const void * b)
 {
 	struct s_macro *sa,*sb;
@@ -3338,7 +3365,7 @@ struct s_expr_dico *SearchDico(struct s_assenv *ae, char *dico, int crc)
 						for (iex=0;iex<ae->nexternal;iex++) {
 							if (ae->external[iex].crc==crc && strcmp(ae->external[iex].name,dico)==0) {
 	//printf("add mapping for [%s] ptr=%d size=%d\n",dico,mapping.ptr,mapping.size);
-								ObjectArrayAddDynamicValueConcat((void **)&ae->external[iex].mapping,&ae->external[iex].nmapping,&ae->external[iex].mmapping,&mapping,sizeof(mapping));
+								ObjectArrayAddDynamicValueConcat((void **)&ae->external[iex].mapping,&ae->external[iex].imapping,&ae->external[iex].mmapping,&mapping,sizeof(mapping));
 								break;
 							}
 						}
@@ -3625,11 +3652,23 @@ struct s_label *SearchLabel(struct s_assenv *ae, char *label, int crc)
 			return NULL;
 		}
 	}
+
+#define PUSH_LABEL_OBJ		/* outside crunched section of in intermediate section */ \
+				if (ae->buildobj && ae->external_mapping_size==2) \
+				if (ae->lz<1 || ae->lzsection[ae->ilz-1].lzversion==0) { \
+					/* add mapping */ \
+					struct s_external_mapping mapping; \
+					mapping.iorgzone=ae->io-1; mapping.ptr=ae->outputadr; mapping.size=2; mapping.value=curlabeltree->label[i].ptr; \
+					printf("add mapping for label [%s] ptr=%d size=%d value=%d\n",label,mapping.ptr,mapping.size,mapping.value); \
+					ObjectArrayAddDynamicValueConcat((void**)&ae->relocation,&ae->imapping,&ae->mmapping,&mapping,sizeof(mapping)); }
+
 	for (i=0;i<curlabeltree->nlabel;i++) {
 		if (!curlabeltree->label[i].name && strcmp(ae->wl[curlabeltree->label[i].iw].w,label)==0) {
+			//PUSH_LABEL_OBJ;
 			curlabeltree->label[i].used++;
 			return &curlabeltree->label[i];
 		} else if (curlabeltree->label[i].name && strcmp(curlabeltree->label[i].name,label)==0) {
+			//PUSH_LABEL_OBJ;
 			curlabeltree->label[i].used++;
 			return &curlabeltree->label[i];
 		}
@@ -7862,7 +7901,7 @@ void PushExpression(struct s_assenv *ae,int iw,enum e_expression zetype)
 			/* ok mais les labels locaux des macros? */
 
 			/* if external declared then fill some informations */
-			if (ae->nexternal) {
+			if (ae->buildobj) {
 				switch (zetype) {
 					case E_EXPRESSION_0V8:
 					case E_EXPRESSION_V8:
@@ -9053,7 +9092,7 @@ void PopAllExpression(struct s_assenv *ae, int crunched_zone)
 			int iex,jex;
 			mapflag=0;
 			for (iex=0;iex<ae->nexternal;iex++) {
-				for (jex=0;jex<ae->external[iex].nmapping;jex++) {
+				for (jex=0;jex<ae->external[iex].imapping;jex++) {
 					if (ae->expression[i].wptr==ae->external[iex].mapping[jex].ptr) {
 #if TRACE_POPEXPR
 						printf("MAPPING [%s] adr=%d size=%d\n",ae->external[iex].name,ae->expression[i].wptr,ae->external[iex].mapping[jex].size);
@@ -9097,13 +9136,13 @@ void PopAllExpression(struct s_assenv *ae, int crunched_zone)
 			case E_EXPRESSION_J16C:
 				/* buildobj */
 				if (ae->buildobj && !mapflag) {
-					struct s_external_mapping relocation;
+					struct s_external_mapping mapping;
 					//printf("RELOCATION %04X\n",ae->expression[i].wptr);
-					relocation.iorgzone=ae->expression[i].ibank; // bank hack
-					relocation.ptr=ae->expression[i].wptr;
-					relocation.size=2;
-					relocation.value=r&0xFFFF;
-					ObjectArrayAddDynamicValueConcat((void**)&ae->relocation,&ae->nrelocation,&ae->mrelocation,&relocation,sizeof(relocation));
+					mapping.iorgzone=ae->expression[i].ibank; // bank hack
+					mapping.ptr=ae->expression[i].wptr;
+					mapping.size=2;
+					mapping.value=r&0xFFFF;
+					ObjectArrayAddDynamicValueConcat((void**)&ae->mapping,&ae->imapping,&ae->mmapping,&mapping,sizeof(mapping));
 				}
 			case E_EXPRESSION_IV16:
 			case E_EXPRESSION_V16:
@@ -12607,6 +12646,145 @@ void _DEFSTR(struct s_assenv *ae) {
 #undef FUNC
 #define FUNC "Import/Export CORE"
 
+void __RELOCATE(struct s_assenv *ae) {
+	struct s_relocation relocation={0};
+	char str_reloc[128];
+
+	if (ae->wl[ae->idx].t) {
+		if (ae->lz>=0) {
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"RELOCATE directive must not be used inside crunched section\n");
+		}
+		if (ae->ir || ae->iw) {
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"RELOCATE directive must not be used inside loop section\n");
+		}
+		if (ae->nocode) {
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"RELOCATE directive must not be used inside NOCODE section\n");
+		}
+		if (ae->module && ae->modulen) {
+			rasm_printf(ae,KWARNING"[%s:%d] Warning: There is a MODULE defined, and RELOCATE is using module to assemble twice the code and get differences. Current MODULE will be disable at ENDRELOCATE directive\n",GetCurrentFile(ae),ae->wl[ae->idx].l);
+			if (ae->erronwarn) MaxError(ae);
+		}
+
+		relocation.module=ae->module;
+		relocation.istart=ae->idx+1; // section will start right after directive
+		relocation.iorgzone=ae->io;
+		relocation.outputadr=ae->outputadr;
+		relocation.codeadr=ae->codeadr;
+		relocation.ibank=ae->activebank;
+		ObjectArrayAddDynamicValueConcat((void**)&ae->relocation,&ae->irelocation,&ae->mrelocation,&relocation,sizeof(relocation));
+
+		if (ae->modulen || ae->module) {
+			MemFree(ae->module);
+		}
+		// enforce MODULE usage in order to isolate the routine
+	//	sprintf(str_reloc,"XRELOC%dSRC",ae->irelocation);
+	//	ae->modulen=strlen(str_reloc);
+	//	ae->module=TxtStrDup(str_reloc);
+	} else {
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"RELOCATE directive must be used without parameter\n");
+	}
+}
+
+void __ENDRELOCATE(struct s_assenv *ae) {
+	int ir,shiftorg,istart,iend,inhibitshift=1;
+	struct s_wordlist curw={0};
+	char str_reloc[128];
+
+	if (ae->wl[ae->idx].t) {
+		// security check, consistency
+		ir=ae->irelocation-1;
+		if (ir<0 || ae->relocation[ir].iscomplete) {
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"cannot ENDRELOCATE because there was no RELOCATE section opened\n");
+			return;
+		}
+		if (ae->relocation[ir].ibank!=ae->activebank) {
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"cannot ENDRELOCATE because previous RELOCATE was in another BANK\n");
+			return;
+		}
+		if (ae->relocation[ir].iorgzone!=ae->io) {
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"cannot ENDRELOCATE because previous RELOCATE was in another ORG\n");
+			return;
+		}
+		if (ae->outputadr<0xFEFE && ae->codeadr<0xFEFE) {
+			shiftorg=0x102;
+		} else if (ae->relocation[ir].outputadr>0x0101 && ae->relocation[ir].codeadr>0x0101) {
+			shiftorg=-0x102;
+		} else {
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"cannot ENDRELOCATE because the code is too big to be processed and compare (see documentation)\n");
+			return;
+		}
+		if (ae->module!=ae->relocation[ir].module) {
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"cannot ENDRELOCATE because there was a MODULE change. Do not change MODULE during RELOCATE section...\n");
+			return;
+		}
+
+		// allocate a new memory space to duplicate code in it
+		ae->relocation[ir].endoutputadr=ae->outputadr; // cause we need to know how many bytes to control
+		___new_memory_space(ae);
+		ae->relocation[ir].ibankcopy=ae->activebank;
+
+		// close relocation section
+		ae->relocation[ir].iend=ae->idx-1; // close before ENDRELOCATE
+		ae->relocation[ir].outputadrcopy=ae->relocation[ir].outputadr+shiftorg;
+		ae->relocation[ir].iscomplete=1;
+
+		strcpy(ae->wl[ae->idx].w,"REBANK"); // endrelocate must be dismiss
+
+		istart=ae->nbword-1; // old end
+		ae->nbword+=ae->relocation[ir].iend-ae->relocation[ir].istart+1+7;
+		iend=ae->nbword-1; // new end
+		ae->wl=MemRealloc(ae->wl,ae->nbword*sizeof(struct s_wordlist));
+		// shift end of code + duplication of relocation code
+		curw=ae->wl[ae->relocation[ir].istart]; // init struct for file/lines/...
+		curw.t=1;
+		curw.e=0;
+		// BANK             ; temporary memory space
+		// MODULE XRELOC%d  ; unique module ID
+		// ORG %d %d        ; +shift
+		// <duplicated code>
+		// MODULE           ; close module
+		// REBANK           ; switch back to last memory space
+		do {
+			if (istart==ae->relocation[ir].iend && inhibitshift) {
+				switch (inhibitshift) {
+					//case 2: curw.w=TxtStrDup("REBANK"); break;
+					case 1: curw.w=TxtStrDup("MODULE"); break;
+					default:break;
+				}
+				ae->wl[iend]=curw;
+				inhibitshift--;
+				iend--;
+			} else {
+				ae->wl[iend]=ae->wl[istart];
+				iend--;
+				istart--;
+			}
+		} while (istart>=ae->relocation[ir].istart);
+
+		istart=ae->relocation[ir].iend+1;
+		curw.w=TxtStrDup("WillBeSkipped!"); curw.t=1; ae->wl[istart++]=curw;
+		curw.w=TxtStrDup("MODULE"); curw.t=0; ae->wl[istart++]=curw;
+		sprintf(str_reloc,"XRELOC%d",ae->irelocation);
+		curw.w=TxtStrDup(str_reloc); curw.t=1; ae->wl[istart++]=curw;
+		curw.w=TxtStrDup("ORG"); curw.t=0; ae->wl[istart++]=curw;
+		sprintf(str_reloc,"%d",ae->relocation[ir].codeadr+shiftorg);
+		curw.w=TxtStrDup(str_reloc); ae->wl[istart++]=curw;
+		sprintf(str_reloc,"%d",ae->relocation[ir].outputadr+shiftorg);
+		curw.w=TxtStrDup(str_reloc); curw.t=1; ae->wl[istart++]=curw;
+#if 0
+printf("Relocate END ====================================\n");
+for (ir=0;ae->wl[ir].t!=2;ir++) {
+	printf("%s",ae->wl[ir].w);
+	if (!ae->wl[ir].t) printf(" "); else printf("\n");
+}
+printf("-------------------------------------------------\n");
+#endif
+	} else {
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"ENDRELOCATE directive must be used without parameter\n");
+	}
+}
+
+
 // symbol export
 void __SYMBOL(struct s_assenv *ae) {
 }
@@ -12712,10 +12890,17 @@ void __ENOEXPORT(struct s_assenv *ae) {
 }
 
 void __BUILDOBJ(struct s_assenv *ae) {
-	if (!ae->wl[ae->idx].t) {
-		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"BUILDOBJ does not need a parameter\n");
-	}
 	ae->buildobj=1;
+	if (!ae->wl[ae->idx].t) {
+		if (strcmp(ae->wl[ae->idx+1].w,"RELOCATION_TABLE")==0) {
+			ae->buildobj=2;
+			ae->idx++;
+		} else {
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"unknown BUILDOBJ parameter, try BUILDOBJ RELOCATION_TABLE\n");
+		}
+	} else {
+		// pure OBJ output
+	}
 }
 void __BUILDZX(struct s_assenv *ae) {
 	if (!ae->wl[ae->idx].t) {
@@ -13448,6 +13633,7 @@ void ___new_memory_space(struct s_assenv *ae)
 		}
 		__LZCLOSE(ae);
 	}
+	ae->lastbank=ae->activebank; // track last bank used
 	ae->activebank=ae->nbbank;
 	mem=MemMalloc(65536);
 	memset(mem,0,65536);
@@ -13464,10 +13650,42 @@ void ___new_memory_space(struct s_assenv *ae)
 	OverWriteCheck(ae);
 }
 
-void __BANK(struct s_assenv *ae) {
+void ___getbackto_memory_space(struct s_assenv *ae) {
 	struct s_orgzone orgzone={0};
 	int oldcode=0,oldoutput=0;
 	int i;
+	/* try to get an old ORG settings backward */
+	for (i=ae->io-1;i>=0;i--) {
+		if (ae->orgzone[i].ibank==ae->activebank) {
+			oldcode=ae->orgzone[i].memend;
+			oldoutput=ae->orgzone[i].memend;
+			break;
+		}
+	}
+	ae->outputadr=oldoutput;
+	ae->codeadr=oldcode;
+	orgzone.memstart=ae->outputadr;
+	/* legacy */
+	orgzone.ibank=ae->activebank;
+	orgzone.nocode=ae->nocode=0;
+	ObjectArrayAddDynamicValueConcat((void**)&ae->orgzone,&ae->io,&ae->mo,&orgzone,sizeof(orgzone));
+
+	OverWriteCheck(ae);
+}
+
+void __REBANK(struct s_assenv *ae) {
+	if (ae->wl[ae->idx].t) {
+		__internal_UpdateLZBlockIfAny(ae);
+		if (ae->io) {
+			ae->orgzone[ae->io-1].memend=ae->outputadr;
+		}
+		ae->activebank=ae->lastbank;
+		___getbackto_memory_space(ae);
+	} else {
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"REBANK directive has no parameter\n");
+	}
+}
+void __BANK(struct s_assenv *ae) {
 	__internal_UpdateLZBlockIfAny(ae);
 
 	if (ae->io) {
@@ -13491,9 +13709,11 @@ void __BANK(struct s_assenv *ae) {
 				return;
 			}
 			/* switch to next bank! */
+			ae->lastbank=ae->activebank; // track last bank used
 			ae->activebank++;
 		} else {
 			ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
+			ae->lastbank=ae->activebank; // track last bank used
 			ae->activebank=RoundComputeExpression(ae,ae->wl[ae->idx+1].w,ae->codeadr,0,0);
 		}
 		if (ae->forcecpr && (ae->activebank<0 || ae->activebank>31) && !ae->extendedCPR) {
@@ -13538,23 +13758,7 @@ void __BANK(struct s_assenv *ae) {
 		__LZCLOSE(ae);
 	}
 
-	/* try to get an old ORG settings backward */
-	for (i=ae->io-1;i>=0;i--) {
-		if (ae->orgzone[i].ibank==ae->activebank) {
-			oldcode=ae->orgzone[i].memend;
-			oldoutput=ae->orgzone[i].memend;
-			break;
-		}
-	}
-	ae->outputadr=oldoutput;
-	ae->codeadr=oldcode;
-	orgzone.memstart=ae->outputadr;
-	/* legacy */
-	orgzone.ibank=ae->activebank;
-	orgzone.nocode=ae->nocode=0;
-	ObjectArrayAddDynamicValueConcat((void**)&ae->orgzone,&ae->io,&ae->mo,&orgzone,sizeof(orgzone));
-
-	OverWriteCheck(ae);
+	___getbackto_memory_space(ae);
 }
 
 void __ROMBANK(struct s_assenv *ae) {
@@ -13608,6 +13812,7 @@ void __BANKSET(struct s_assenv *ae) {
 	
 	if (ae->wl[ae->idx+1].t!=2) {
 		ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
+		ae->lastbank=ae->activebank; // track last bank used
 		ae->activebank=RoundComputeExpression(ae,ae->wl[ae->idx+1].w,ae->codeadr,0,0);
 		ae->activebank*=4;
 		if (ae->forcesnapshot && (ae->activebank<0 || ae->activebank>=260)) {
@@ -13673,6 +13878,17 @@ void __NameBANK(struct s_assenv *ae) {
 			}
 		}
 		ae->idx+=2;
+	} else if (!ae->wl[ae->idx].t && ae->wl[ae->idx+1].t==1)  {
+		if (!StringIsQuote(ae->wl[ae->idx+1].w)) {
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Syntax is NAMEBANK '<string>'\n");
+		} else {
+			ibank=ae->activebank;
+			if (ibank<0 || ibank>=BANK_MAX_NUMBER) {
+				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"NAMEBANK selection must be from 0 to %d\n",BANK_MAX_NUMBER);
+			} else {
+				ae->iwnamebank[ibank]=ae->idx+1;
+			}
+		}
 	} else {
 		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"NAMEBANK directive need one integer parameter and a string\n");
 	}
@@ -17707,6 +17923,9 @@ struct s_asm_keyword instruction[]={
 {"CIPHERMEM",0,0,__CIPHERMEM},
 {"EXTERNAL",0,0,__EXTERNAL},
 {"PROCEDURE",0,0,__PROCEDURE},
+{"REBANK",0,0,__REBANK},
+{"RELOCATE",0,0,__RELOCATE},
+{"ENDRELOCATE",0,0,__ENDRELOCATE},
 {"",0,0,NULL}
 };
 
@@ -18141,6 +18360,7 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 			while (instruction[ifast].mnemo[0]==wordlist[ae->idx].w[0]) {
 				if (instruction[ifast].crc==curcrc && strcmp(instruction[ifast].mnemo,wordlist[ae->idx].w)==0) {
 					instruction[ifast].makemnemo(ae);
+					wordlist=ae->wl;
 					executed=1;
 					// normalement inutile
 					while (!wordlist[ae->idx].t) {
@@ -18667,7 +18887,7 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 				iorgzone=saveorgzone;
 				do {
 					for (il=0;il<ae->nexternal;il++) {
-						for (jl=0;jl<ae->external[il].nmapping;jl++) {
+						for (jl=0;jl<ae->external[il].imapping;jl++) {
 							if (ae->external[il].mapping[jl].iorgzone==iorgzone && ae->external[il].mapping[jl].ptr>ae->lzsection[i].memstart) {
 				//printf("shift mapping ptr=%d => %d\n",ae->external[il].mapping[jl].ptr,ae->external[il].mapping[jl].ptr+lzshift);
 								ae->external[il].mapping[jl].ptr+=lzshift;
@@ -19740,7 +19960,7 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 						/***************************************************************
 						*      O B J      o u t p u t                                  *
 						***************************************************************/
-							if (ae->buildobj) {
+							if (ae->buildobj==1) {
 								struct s_label *curlabel;
 								char objtmp[1024];
 								int iex,jex;
@@ -19763,7 +19983,7 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 									}
 								}
 								for (i=0;i<ae->nexternal;i++) {
-									for (j=0;j<ae->external[i].nmapping;j++) {
+									for (j=0;j<ae->external[i].imapping;j++) {
 										strcpy(objtmp,"EXTERNAL ");
 										FileWriteBinary(TMP_filename,(char *)objtmp,strlen(objtmp));
 										FileWriteBinary(TMP_filename,(char *)ae->external[i].name,strlen(ae->external[i].name));
@@ -19771,10 +19991,14 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 										FileWriteBinary(TMP_filename,(char *)objtmp,strlen(objtmp));
 									}
 								}
+								/*
+								 * qsort(ae->relocation,ae->nrelocation,sizeof(struct s_external_mapping),cmprelocation);
 								for (i=0;i<ae->nrelocation;i++) {
 									if (ae->relocation[i].value>=minmem && ae->relocation[i].value<maxmem) {
-										sprintf(objtmp,"RELOCATION 0x%04X\n",ae->relocation[i].ptr);
-										FileWriteBinary(TMP_filename,(char *)objtmp,strlen(objtmp));
+										if (i && ae->relocation[i-1].ptr!=ae->relocation[i].ptr) {
+											sprintf(objtmp,"RELOCATION 0x%04X\n",ae->relocation[i].ptr);
+											FileWriteBinary(TMP_filename,(char *)objtmp,strlen(objtmp));
+										}
 									}
 								}
 								for (i=0;i<ae->nrelocation;i++) {
@@ -19784,6 +20008,7 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 										FileWriteBinary(TMP_filename,(char *)objtmp,strlen(objtmp));
 									}
 								}
+								*/
 								sprintf(objtmp,"DATA START=0x%04X LEN=0x%04X\n",minmem,maxmem-minmem);
 								FileWriteBinary(TMP_filename,(char *)objtmp,strlen(objtmp));
 								j=0;
@@ -19826,6 +20051,115 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 									if (ae->amsdos) {
 										FileWriteBinaryClose(TMP_filename);
 									}
+								}
+
+								if (ae->irelocation) {
+									char str_reline[1024];
+									struct s_relocation_write *rwrite=NULL;
+									int nrelocation=0;
+									int rtrig=0;
+
+									sprintf(TMP_filename,"%s.rel",ae->outputfilename);
+									rasm_printf(ae,KIO"Write relocation file %s\n",TMP_filename);
+									FileRemoveIfExists(TMP_filename);
+
+									for (i=0;i<ae->irelocation;i++) {
+										int oa1,oa2,ochk,ob1,ob2;
+
+										sprintf(str_reline,"relocation%d:\n",i);
+										FileWriteBinary(TMP_filename,(char *)str_reline,strlen(str_reline)+1);
+
+										ob1=ae->relocation[i].ibank;
+										ob2=ae->relocation[i].ibankcopy;
+										oa1=ae->relocation[i].outputadr;
+										oa2=ae->relocation[i].outputadrcopy;
+										ochk=ae->relocation[i].endoutputadr-ae->relocation[i].outputadr;
+										// counting every bytes than need to be relocated
+										for (j=0;j<ochk;j++) {
+											switch (abs((unsigned char)ae->mem[ob1][oa1]-(unsigned char)ae->mem[ob2][oa2])) {
+												case 0:break; // equal
+												case 1://printf("H%X\n",oa1);
+												       rwrite=MemRealloc(rwrite,(nrelocation+1)*sizeof(struct s_relocation_write));
+												       memset(&rwrite[nrelocation],0,sizeof(struct s_relocation_write));
+												       rwrite[nrelocation].addr=oa1;
+												       rwrite[nrelocation].wh=1;
+												       nrelocation++;
+													break;
+												case 2://printf("L%X\n",oa1);
+												       rwrite=MemRealloc(rwrite,(nrelocation+1)*sizeof(struct s_relocation_write));
+												       memset(&rwrite[nrelocation],0,sizeof(struct s_relocation_write));
+												       rwrite[nrelocation].addr=oa1;
+												       rwrite[nrelocation].wl=1;
+												       nrelocation++;
+													break;
+												default:printf("Internal error => #%02X #%02X\n",ae->mem[ob1][oa1],ae->mem[ob2][oa2]);
+													break;
+											}
+											oa1++;
+											oa2++;
+										}
+										// gather 16bits writes
+										for (j=0;j<nrelocation-1;j++) {
+											if (rwrite[j].wl && rwrite[j+1].wh && rwrite[j].addr+1==rwrite[j+1].addr) {
+												rwrite[j].w16=1;
+												rwrite[j].wl=0;
+												rwrite[j+1].wh=0;
+											}
+										}
+										// output informations
+										rtrig=0;
+										for (j=0;j<nrelocation;j++) {
+											if (rwrite[j].w16) {
+												if (!rtrig) {
+													sprintf(str_reline,".reloc16 defw #%04X",rwrite[j].addr);
+													FileWriteBinary(TMP_filename,(char *)str_reline,strlen(str_reline)+1);
+													rtrig=1;
+												} else {
+													sprintf(str_reline,",#%04X",rwrite[j].addr);
+													FileWriteBinary(TMP_filename,(char *)str_reline,strlen(str_reline)+1);
+												}
+											}
+										}
+										if (rtrig) {
+											sprintf(str_reline,"\n");
+											FileWriteBinary(TMP_filename,(char *)str_reline,strlen(str_reline)+1);
+										}
+										rtrig=0;
+										for (j=0;j<nrelocation;j++) {
+											if (rwrite[j].wh) {
+												if (!rtrig) {
+													sprintf(str_reline,".reloc8h defw #%04X",rwrite[j].addr);
+													FileWriteBinary(TMP_filename,(char *)str_reline,strlen(str_reline)+1);
+													rtrig=1;
+												} else {
+													sprintf(str_reline,",#%04X",rwrite[j].addr);
+													FileWriteBinary(TMP_filename,(char *)str_reline,strlen(str_reline)+1);
+												}
+											}
+										}
+										if (rtrig) {
+											sprintf(str_reline,"\n");
+											FileWriteBinary(TMP_filename,(char *)str_reline,strlen(str_reline)+1);
+										}
+										rtrig=0;
+										for (j=0;j<nrelocation;j++) {
+											if (rwrite[j].wl) {
+												if (!rtrig) {
+													sprintf(str_reline,".reloc8l defw #%04X",rwrite[j].addr);
+													FileWriteBinary(TMP_filename,(char *)str_reline,strlen(str_reline)+1);
+													rtrig=1;
+												} else {
+													sprintf(str_reline,",#%04X",rwrite[j].addr);
+													FileWriteBinary(TMP_filename,(char *)str_reline,strlen(str_reline)+1);
+												}
+											}
+										}
+										if (rtrig) {
+											sprintf(str_reline,"\n");
+											FileWriteBinary(TMP_filename,(char *)str_reline,strlen(str_reline)+1);
+										}
+									}
+									FileWriteBinaryClose(TMP_filename);
 								}
 							}
 						}
@@ -21969,7 +22303,17 @@ printf("quote start with %c\n",c);
 					if ((w[utidx]>=32 && w[utidx]<127) || w[utidx]=='\t') {
 						// is ok
 					} else {
-						MakeError(ae,0,ae->filename[listing[l].ifile],listing[l].iline,"Invalid char for quoted string\n");
+						char before[16]={0};
+						int bidx=0,backut;
+						backut=utidx;
+						utidx-=15;
+						if (utidx<0) utidx=0;
+						for (;w[utidx];utidx++) {
+							if (w[utidx]>=32 && w[utidx]<127) before[bidx++]=(unsigned char)w[utidx]; else break;
+						}
+
+						MakeError(ae,0,ae->filename[listing[l].ifile],listing[l].iline,"Invalid char for quoted string [%s(%X)}\n",before,w[utidx]);
+						utidx=backut;
 					}
 				}
 			}
@@ -25193,7 +25537,7 @@ void Usage(int help)
 		printf("MISCELLANEOUS:\n");
 		printf("-quick          enable fast mode for ZX0 crunching\n");
 		printf("-cprquiet       do not display ROM detailed informations\n");
-		printf("-map            verbose assembling (prototype)");
+		printf("-map            verbose assembling (prototype)\n");
 		printf("EDSK generation/update:\n");
 		printf("-eo overwrite files on disk if it already exists\n");
 		printf("SNAPSHOT:\n");
