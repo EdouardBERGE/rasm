@@ -7130,6 +7130,9 @@ printf("MakeAlias (2) EXPR=[%s EQU %s]\n",expr,ptr_exp2);
 			if ((ialias=SearchAlias(ae,curalias.crc,curalias.alias))>=0) {
 				MakeError(ae,ae->idx,GetCurrentFile(ae),GetExpLine(ae,0),"Duplicate alias [%s]\n",expr);
 				MemFree(curalias.alias);
+			} else if (SearchLabel(ae,curalias.alias,curalias.crc)) {
+				MakeError(ae,ae->idx,GetCurrentFile(ae),GetExpLine(ae,0),"Alias cannot override existing label [%s]\n",expr);
+				MemFree(curalias.alias);
 			} else if (SearchDico(ae,curalias.alias,curalias.crc)) {
 				MakeError(ae,ae->idx,GetCurrentFile(ae),GetExpLine(ae,0),"Alias cannot override existing variable [%s]\n",expr);
 				MemFree(curalias.alias);
