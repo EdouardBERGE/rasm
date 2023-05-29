@@ -7182,10 +7182,14 @@ printf("***********\n");
 						MakeError(ae,ae->idx,GetCurrentFile(ae),GetExpLine(ae,0),"variable name must begin by a letter or '_' [%s]\n",expr);
 						return 0;
 					} else {
+						char *dblexp;
 						char operatorassignment;
 
 						ptr_exp=expr+idx;
-						v=ComputeExpressionCore(ae,ptr_exp+1,ptr,didx);
+						dblexp=TxtStrDup(ptr_exp+1);
+						// assign need to fasttranslate proximity labels
+						ExpressionFastTranslate(ae,&dblexp,0);
+						v=ComputeExpressionCore(ae,dblexp,ptr,didx);
 						*ptr_exp=0;
 						/* patch operator+assign value */
 						switch (ptr_exp[-1]) {
@@ -22812,6 +22816,8 @@ int RasmAssembleInfoParam(const char *datain, int lenin, unsigned char **dataout
 							
 #define AUTOTEST_PROXIM		"routine:.step1:jp .step2:.step2:jp .step1:deuze:nop:.step1:djnzn .step1:djnz routine.step2"							
 
+#define AUTOTEST_PROXASSIGN	"unglobal:nop:.local1:nop 3:.local2:nop:machin=.local2-.local1:defb machin"
+
 #define AUTOTEST_TAGPRINT	"unevar=12:print 'trucmuche{unevar}':print '{unevar}':print '{unevar}encore','pouet{unevar}{unevar}':ret"
 
 #define AUTOTEST_TAGFOLLOW	"ret:uv=1234567890:unlabel_commeca_{uv} equ pouetpouetpouettroulala:pouetpouetpouettroulala:assert unlabel_commeca_{uv}>0"
@@ -24477,6 +24483,11 @@ printf("testing modules + IFDEF OK\n");
 	if (!ret && opcode[1]==3) {} else {printf("Autotest %03d ERROR (proximity labels)\n",cpt);exit(-1);}
 	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
 printf("testing proximity labels OK\n");
+
+	ret=RasmAssemble(AUTOTEST_PROXASSIGN,strlen(AUTOTEST_PROXASSIGN),&opcode,&opcodelen);
+	if (!ret && opcode[5]==3) {} else {printf("Autotest %03d ERROR (proximity labels usage with variable calculation)\n",cpt);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing proximity labels use with variable calculations OK\n");
 
 	ret=RasmAssembleInfo(AUTOTEST_BANKPROX,strlen(AUTOTEST_BANKPROX),&opcode,&opcodelen,&debug);
 	if (!ret) {} else {printf("Autotest %03d ERROR (BANK tag + proximity labels)\n",cpt);for (i=0;i<debug->nberror;i++) printf("%d -> %s\n",i,debug->error[i].msg);exit(-1);}
