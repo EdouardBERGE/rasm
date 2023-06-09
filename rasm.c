@@ -837,6 +837,7 @@ struct s_relocation {
 struct s_relocation_write {
 	unsigned short int addr;
 	int w16,wh,wl;
+	int dest;
 };
 
 /*******************************************
@@ -4185,7 +4186,7 @@ int __GETNOP(struct s_assenv *ae,char *oplist, int didx)
 				tick+=4;
 				break;
 			case CRC_CALL:
-				// CALL is supposed to skip!
+				// CALL is supposed to skip! (or not...) @@TODO les conditioooooooons
 			case CRC_JR:
 				// JR is supposed to loop!
 				tick+=3;
@@ -20043,6 +20044,7 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 						/***************************************************************
 						*      F I L E    o u t p u t                                  *
 						***************************************************************/
+								// this code is duplicated for DLL output
 								rasm_printf(ae,KIO"Write binary file %s (%d byte%s)",TMP_filename,maxmem-minmem,maxmem-minmem>1?"s":"");
 								if (ae->amsdos) {
 									AmsdosHeader=MakeAMSDOSHeader(minmem,minmem,maxmem,TMP_filename,0); //@@TODO
@@ -20065,6 +20067,12 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 									struct s_relocation_write *rwrite=NULL;
 									int nrelocation=0;
 									int rtrig=0;
+									int curdest;
+									unsigned char *relocbuffer=NULL;
+									int relocsize=0;
+									int *relocdest=NULL;
+									int irelocdest=0,mrelocdest=0;
+									unsigned short int destptr;
 
 									sprintf(TMP_filename,"%s.rel",ae->outputfilename);
 									rasm_printf(ae,KIO"Write relocation file %s\n",TMP_filename);
@@ -20097,6 +20105,8 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 												       memset(&rwrite[nrelocation],0,sizeof(struct s_relocation_write));
 												       rwrite[nrelocation].addr=oa1;
 												       rwrite[nrelocation].wl=1;
+												       rwrite[nrelocation].dest=ae->mem[ob1][oa1];
+												       if (oa1<65535) rwrite[nrelocation].dest+=ae->mem[ob1][oa1+1]<<8;
 												       nrelocation++;
 													break;
 												default:printf("Internal error => #%02X #%02X\n",ae->mem[ob1][oa1],ae->mem[ob2][oa2]);
@@ -20165,6 +20175,93 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 											sprintf(str_reline,"\n");
 											FileWriteBinary(TMP_filename,(char *)str_reline,strlen(str_reline)+1);
 										}
+									}
+									FileWriteBinaryClose(TMP_filename);
+
+
+									/***************************************************************
+									*      Z 8 0   D L L   o u t p u t                             *
+									***************************************************************/
+
+									sprintf(TMP_filename,"%s.zll",ae->outputfilename);
+									FileRemoveIfExists(TMP_filename);
+
+									relocbuffer=malloc(nrelocation*4); // way too much in order to simplify memory handling
+
+									// find first destination
+									curdest=-1;
+									for (i=0;i<nrelocation;i++) {
+										if (rwrite[i].w16) {
+											curdest=rwrite[i].dest;
+											break;
+										}
+									}
+									// output binary info for each destination
+									for (i=0;i<nrelocation && curdest>=0;i++) {
+										// Z80 DLL is only writing 16 bits changes
+
+										// create a counter for this destination
+										IntArrayAddDynamicValueConcat(&relocdest,&irelocdest,&mrelocdest,1);
+
+										for (j=rtrig=0;j<nrelocation;j++) {
+											if (rwrite[j].w16 && rwrite[j].dest==curdest) {
+												if (!rtrig) {
+													printf("trigger label in #%04X dest=#%04X\n",rwrite[j].addr,curdest);
+													rtrig++;
+													relocbuffer[relocsize++]=curdest&0xFF;
+													relocbuffer[relocsize++]=curdest>>8;
+												}
+												relocbuffer[relocsize++]=rwrite[j].addr&0xFF;
+												relocbuffer[relocsize++]=rwrite[j].addr>>8;
+												// hide relocation as we must scan many times
+												rwrite[j].dest=-1;
+												// count this
+												relocdest[irelocdest-1]++;
+											}
+										}
+										printf("%d occurence(s)\n",relocdest[irelocdest-1]);
+										// 16 bits NULL terminator
+										relocbuffer[relocsize++]=0;
+										relocbuffer[relocsize++]=0;
+
+										// is there any other destination left?
+										curdest=-1;
+										for (j=i;j<nrelocation;j++) {
+											if (rwrite[j].w16 && rwrite[j].dest>=0) {
+												curdest=rwrite[j].dest;
+												break;
+											}
+										}
+									}
+									// 16 bits NULL terminator
+									relocbuffer[relocsize++]=0;
+									relocbuffer[relocsize++]=0;
+
+									// relocate the relocation data ^_^
+									for (i=j=0;i<relocsize && j<irelocdest;i+=2) {
+										while (relocdest[j]) {
+											destptr=relocbuffer[i]+(relocbuffer[i+1]<<8)+relocsize+3; // +3 for CALL DLL_INIT
+											relocbuffer[i]=destptr&0xFF;
+											relocbuffer[i+1]=destptr>>8;
+											i+=2;
+											relocdest[j]--;
+										}
+										if (relocbuffer[i] || relocbuffer[i+1]) {
+											printf("relocation table integrity error!\n");
+										}
+										j++;
+									}
+									// finally!
+									rasm_printf(ae,KIO"Write Z80 DLL file %s (%d bytes)\n",TMP_filename,maxmem-minmem+relocsize);
+									FileWriteBinary(TMP_filename,(char*)relocbuffer,relocsize);
+
+									free(relocbuffer);
+									free(relocdest);
+									free(rwrite);
+
+									// append legacy binary output
+									if (maxmem-minmem>0) {
+										FileWriteBinary(TMP_filename,(char*)ae->mem[lastspaceid]+minmem,maxmem-minmem);
 									}
 									FileWriteBinaryClose(TMP_filename);
 								}
