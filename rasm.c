@@ -19435,6 +19435,8 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 							sprintf(TMP_filename,"%s.sna",ae->outputfilename);
 						}
 						FileRemoveIfExists(TMP_filename);
+					} else {
+						sprintf(TMP_filename,"rasmoutput.sna");
 					}
 			
 					// we use part of SNAPSHOT code for emulator in-place output	
@@ -20579,7 +20581,7 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 			}
 			ae->debug.start=minmem;
 		}
-
+		ae->debug.warnerr=ae->nberr;
 	} else {
 		if (!ae->dependencies) rasm_printf(ae,KERROR"%d error%s\n",ae->nberr,ae->nberr>1?"s":"");
 	}
@@ -22531,7 +22533,6 @@ int RasmAssembleInfo(const char *datain, int lenin, unsigned char **dataout, int
 
 	ae=PreProcessing(NULL,1,datain,lenin,NULL);
 	ret=Assemble(ae,dataout,lenout,debug);
-	debug[0]->warnerr=ae->nberr;
 	return ret;
 }
 
@@ -22578,7 +22579,6 @@ int RasmAssembleInfoParam(const char *datain, int lenin, unsigned char **dataout
 
 	ae=PreProcessing(NULL,1,datain,lenin,param);
 	ret=Assemble(ae,dataout,lenout,debug);
-	debug[0]->warnerr=ae->nberr;
 	return ret;
 }
 
@@ -24024,6 +24024,7 @@ void RasmAutotest(void)
 		0x80,0x20,0x84,0xdb,0xff,0x80,0xcd,0x85,0xdb,0xff,0x80,0xc8,0xdd,0xd6,0x7c,0x7d,0x53,0x51,0x06,0x1e,0x81,
 		0xBE,0xF6,0xCC,0x12,0x73};
 
+
 #ifdef RDD
 	printf("\n%d bytes\n",_static_library_memory_used);
 #endif
@@ -25353,7 +25354,6 @@ printf("testing simple extended CPR behaviour OK\n");
 	} else {
 		printf("All internal tests OK => %d tests done\n",ret);
 	}
-
 
 	#ifdef RDD
 	/* private dev lib tools */
