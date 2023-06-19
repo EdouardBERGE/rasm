@@ -8,6 +8,7 @@
 #define TRACE_STRUCT 0
 #define TRACE_EDSK 0
 #define TRACE_LABEL 0
+#define TRACE_ASSEMBLE 0
 
 /***
 Rasm (roudoudou assembler) Z80 assembler
@@ -6017,6 +6018,9 @@ if (didx>0 && didx<ae->ie) {
 		MemFree(dblvarbuffer);
 	} else {
 		curlabel=SearchLabel(ae,ae->computectx->varbuffer+minusptr+bank,crc);
+#if TRACE_LABEL || TRACE_COMPUTE_EXPRESSION
+		if (curlabel) printf("label trouve sans avoir ajouté de MODULE\n");
+#endif
 	}
 }
 
@@ -6302,6 +6306,25 @@ printf("stage 2 | page=%d | ptr=%X ibank=%d\n",page,curlabel->ptr,curlabel->iban
 													} else {
 
 														MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"expression [%s] keyword [%s] not found in variables, labels or aliases\n",TradExpression(zeexpression),ae->computectx->varbuffer+minusptr);
+
+#if TRACE_LABEL || TRACE_COMPUTE_EXPRESSION
+if (!ae->extended_error) {
+	char *lookstr;
+	lookstr=StringLooksLike(ae,ae->computectx->varbuffer+minusptr);
+	if (lookstr) {
+		printf("LooksLike: did you mean [%s] ?\n",lookstr);
+	}
+}
+printf("DUMP des labels\n");
+	for (i=0;i<ae->il;i++) {
+		if (!ae->label[i].name) {
+			printf("%d:%04X %s\n",ae->label[i].ibank,ae->label[i].ptr,ae->wl[ae->label[i].iw].w);
+		} else {
+			printf("%d:%04X %s\n",ae->label[i].ibank,ae->label[i].ptr,ae->label[i].name);
+		}
+	}
+#endif
+
 														if (ae->extended_error) {
 															char *lookstr;
 															lookstr=StringLooksLike(ae,ae->computectx->varbuffer+minusptr);
@@ -7164,6 +7187,9 @@ printf("***********\n");
 		               S E T     V A R
 		*****************************************/
 		case '=':
+#if TRACE_COMPUTE_EXPRESSION
+			printf("SETVAR\n");
+#endif
 			/* patch NOT 
 			 this is a variable assign if there is no other comparison operator after '='
 			 BUT we may have ! which stand for NOT but is also a comparison operator...
@@ -7189,7 +7215,6 @@ printf("***********\n");
 						ptr_exp=expr+idx;
 						dblexp=TxtStrDup(ptr_exp+1);
 						// assign need to fasttranslate proximity labels
-						ExpressionFastTranslate(ae,&dblexp,0);
 						v=ComputeExpressionCore(ae,dblexp,ptr,didx);
 						*ptr_exp=0;
 						/* patch operator+assign value */
@@ -7313,7 +7338,9 @@ void ExpressionFastTranslate(struct s_assenv *ae, char **ptr_expr, int fullrepla
 
 	ivar=0;
 
-//printf("fast [%s]\n",expr);
+#if TRACE_COMPUTE_EXPRESSION
+printf("fast [%s]\n",expr);
+#endif
 
 	while (!ae->AutomateExpressionDecision[((int)expr[idx])&0xFF]) idx++;
 
@@ -7482,7 +7509,9 @@ void ExpressionFastTranslate(struct s_assenv *ae, char **ptr_expr, int fullrepla
 			found_replace=0;
 			/* pour les affectations ou les tests conditionnels on ne remplace pas le dico (pour le Push oui par contre!) */
 			if (fullreplace) {
-//printf("ExpressionFastTranslate (full) => varbuffer=[%s] lz=%d\n",varbuffer,ae->lz);
+#if TRACE_COMPUTE_EXPRESSION
+printf("ExpressionFastTranslate (full) => varbuffer=[%s] lz=%d\n",varbuffer,ae->lz);
+#endif
 				if (varbuffer[0]=='$' && !varbuffer[1]) {
 					if (ae->lz==-1) {
 						#ifdef OS_WIN
@@ -7510,7 +7539,9 @@ void ExpressionFastTranslate(struct s_assenv *ae, char **ptr_expr, int fullrepla
 					curdic=SearchDico(ae,varbuffer,crc);
 					if (curdic) {
 						v=curdic->v;
-//printf("ExpressionFastTranslate (full) -> replace var (%s=%0.1lf)\n",varbuffer,v);
+#if TRACE_COMPUTE_EXPRESSION
+printf("ExpressionFastTranslate (full) -> replace var (%s=%0.1lf)\n",varbuffer,v);
+#endif
 
 						#ifdef OS_WIN
 						snprintf(curval,sizeof(curval)-1,"%lf",v);
@@ -7568,7 +7599,9 @@ void ExpressionFastTranslate(struct s_assenv *ae, char **ptr_expr, int fullrepla
 				if (ae->module) {
 					char *dblvarbuffer;
 // handle module!!!
-//printf("ExpressionFastTranslate SearchAlias inside module => varbuffer=[%s]\n",varbuffer);
+#if TRACE_COMPUTE_EXPRESSION
+printf("ExpressionFastTranslate SearchAlias inside module => varbuffer=[%s]\n",varbuffer);
+#endif
 
 					dblvarbuffer=MemMalloc(strlen(varbuffer)+strlen(ae->module)+2);
 					strcpy(dblvarbuffer,ae->module);
@@ -7617,7 +7650,9 @@ void ExpressionFastTranslate(struct s_assenv *ae, char **ptr_expr, int fullrepla
 				if (varbuffer[0]=='@' && (varbuffer[1]<'0' || varbuffer[1]>'9')) {
 					char *zepoint;
 					lenbuf=strlen(varbuffer);
-//printf("MakeLocalLabel(ae,varbuffer,&dek); (1)\n");
+#if TRACE_COMPUTE_EXPRESSION
+printf("MakeLocalLabel(ae,varbuffer,&dek); (1)\n");
+#endif
 					locallabel=MakeLocalLabel(ae,varbuffer,&dek);
 //printf("exprin =[%s]   rlen=%d dek-lenbuf=%d\n",expr,rlen,dek-lenbuf);
 					/*** le grand remplacement ***/
@@ -7657,7 +7692,9 @@ void ExpressionFastTranslate(struct s_assenv *ae, char **ptr_expr, int fullrepla
 					strncpy(expr+startvar,locallabel,dek);
 					idx+=dek-lenbuf;
 					MemFree(locallabel);
-//printf("exprout=[%s]\n",expr);
+#if TRACE_COMPUTE_EXPRESSION
+printf("exprout=[%s]\n",expr);
+#endif
 
 //@@TODO ajouter une recherche d'alias?
 
@@ -18205,6 +18242,18 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 	while (wordlist[ae->idx].t!=2) {
 		curcrc=GetCRCandLength(wordlist[ae->idx].w,&ilength);
 
+#if TRACE_ASSEMBLE
+		{
+			int insTR=ae->idx;
+			printf("*** NewInstruction : %s",wordlist[ae->idx].w);
+			while (!wordlist[insTR].t) {
+				insTR++;
+				if (insTR==ae->idx+1) printf(" %s",wordlist[insTR].w); else printf(",%s",wordlist[insTR].w);
+			}
+			printf("\n");
+			printf("IR:%d IW:%d II:%d ISW:%d\n",ae->ir,ae->iw,ae->ii,ae->isw);
+		}
+#endif
 		/********************************************************************
 		  c o n d i t i o n n a l    a s s e m b l y    m a n a g e m e n t
 		********************************************************************/
@@ -18393,7 +18442,7 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 			*********************************************************************/
 			/* neither instruction nor macro executed, this is a label or an assignement */
 			if (wordlist[ae->idx].e) {
-				if (ae->ir) ExpressionFastTranslate(ae,&wordlist[ae->idx].w,0);
+				ExpressionFastTranslate(ae,&wordlist[ae->idx].w,0);
 				ComputeExpression(ae,wordlist[ae->idx].w,ae->codeadr,0,0);
 			} else {
 				PushLabel(ae);
@@ -22915,6 +22964,8 @@ int RasmAssembleInfoParam(const char *datain, int lenin, unsigned char **dataout
 
 #define AUTOTEST_PROXASSIGN	"unglobal:nop:.local1:nop 3:.local2:nop:machin=.local2-.local1:defb machin"
 
+#define AUTOTEST_PROXASSIGN2	"repeat 1: @zeflags: repeat 2: add hl,bc: rend: add hl,hl: : loc=@zeflags: : rend"
+
 #define AUTOTEST_TAGPRINT	"unevar=12:print 'trucmuche{unevar}':print '{unevar}':print '{unevar}encore','pouet{unevar}{unevar}':ret"
 
 #define AUTOTEST_TAGFOLLOW	"ret:uv=1234567890:unlabel_commeca_{uv} equ pouetpouetpouettroulala:pouetpouetpouettroulala:assert unlabel_commeca_{uv}>0"
@@ -24586,6 +24637,11 @@ printf("testing proximity labels OK\n");
 	if (!ret && opcode[5]==3) {} else {printf("Autotest %03d ERROR (proximity labels usage with variable calculation)\n",cpt);exit(-1);}
 	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
 printf("testing proximity labels use with variable calculations OK\n");
+
+	ret=RasmAssemble(AUTOTEST_PROXASSIGN2,strlen(AUTOTEST_PROXASSIGN2),&opcode,&opcodelen);
+	if (!ret) {} else {printf("Autotest %03d ERROR (local labels usage within repeat must not suffix twice!)\n",cpt);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing local labels use with variable calculations OK\n");
 
 	ret=RasmAssembleInfo(AUTOTEST_BANKPROX,strlen(AUTOTEST_BANKPROX),&opcode,&opcodelen,&debug);
 	if (!ret) {} else {printf("Autotest %03d ERROR (BANK tag + proximity labels)\n",cpt);for (i=0;i<debug->nberror;i++) printf("%d -> %s\n",i,debug->error[i].msg);exit(-1);}
