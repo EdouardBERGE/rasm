@@ -18455,7 +18455,7 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 		printf("Bnk|Real|Logic  Bytecode  [Time] Assembly\n");
 		printf("-----------------------------------------\n");
 		while (wordlist[ae->idx].t!=2) {
-			curcrc=GetCRC(wordlist[ae->idx].w);
+			curcrc=GetCRCandLength(wordlist[ae->idx].w,&ilength);
 
 			// assembly output progression monitor
 			backnop=ae->nop;
@@ -18636,8 +18636,6 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 									}
 									printf("\n");
 									break;
-
-								case CRC_REND:
 								default:break;
 							}
 						} else {
