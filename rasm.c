@@ -130,9 +130,25 @@ unsigned long __stack = 128 * 1024;
 #define KERROR   "\x1B[31m"
 #define KAYGREEN "\x1B[32m"
 #define KWARNING "\x1B[33m"
-#define KBLUE    "\x1B[34m"
 #define KVERBOSE "\x1B[36m"
 #define KIO      "\x1B[97m"
+
+#define KBOLD      "\e[1m"
+#define KUNDERLINE "\e[4m"
+#define KRED      "\x1B[31m"
+#define KGREEN    "\x1B[32m"
+#define KYELLOW   "\x1B[33m"
+#define KBLUE     "\x1B[34m"
+#define KMAGENTA  "\x1B[35m"
+#define KCYAN     "\x1B[36m"
+#define KLRED     "\x1B[91m"
+#define KLGREEN   "\x1B[92m"
+#define KLYELLOW  "\x1B[93m"
+#define KLBLUE    "\x1B[94m"
+#define KLMAGENTA "\x1B[94m"
+#define KLCYAN    "\x1B[96m"
+#define KLWHITE   "\x1B[97m"
+
 #else
 #define KNORMAL  ""
 #define KERROR   "Error: "
@@ -141,6 +157,21 @@ unsigned long __stack = 128 * 1024;
 #define KBLUE    ""
 #define KVERBOSE ""
 #define KIO      ""
+#define KBOLD      ""
+#define KUNDERLINE ""
+#define KRED      ""
+#define KGREEN    ""
+#define KYELLOW   ""
+#define KBLUE     ""
+#define KMAGENTA  ""
+#define KCYAN     ""
+#define KLRED     ""
+#define KLGREEN   ""
+#define KLYELLOW  ""
+#define KLBLUE    ""
+#define KLMAGENTA ""
+#define KLCYAN    ""
+#define KLWHITE   ""
 #endif
 
 /*******************************************************************
@@ -18452,8 +18483,8 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 		ae->idx++; 
 		if (ae->stop) break;
 	} else {
-		printf("Bnk|Real|Logic  Bytecode  [Time] Assembly\n");
-		printf("-----------------------------------------\n");
+		printf(KLWHITE"Bnk|Real|Logic  Bytecode  [Time] Assembly\n");
+		printf("-----------------------------------------\n"KNORMAL);
 		while (wordlist[ae->idx].t!=2) {
 			curcrc=GetCRCandLength(wordlist[ae->idx].w,&ilength);
 
@@ -18612,11 +18643,11 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 #define CRC_BREAK	0xCD364DDD
 						if (curcrc==CRC_REND) {
 							if (ae->ir) {
-								printf("----- REND ----- ; counter=%d Level %d ",ae->repeat[ae->ir-1].repeat_counter,ae->ir-1);
+								printf(KBOLD"----- "KLWHITE"REND"KNORMAL" "KBOLD"----- ;"KNORMAL" counter=%d Level %d ",ae->repeat[ae->ir-1].repeat_counter,ae->ir-1);
 								if (ae->repeat[ae->ir-1].cpt>1) {
-									printf("will loop again\n");
+									printf(KGREEN"will loop again\n"KNORMAL);
 								} else {
-									printf("end of REPEAT\n");
+									printf(KGREEN"end of REPEAT\n"KNORMAL);
 								}
 							}
 						}
@@ -18628,30 +18659,35 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 							switch (curcrc) {
 								case CRC_REPEAT:
 								case CRC_WHILE:
-									printf("----- ");
+									printf(KBOLD"----- "KLWHITE);
 									printf("%s",wordlist[backidx].w);
 									if (!wordlist[backidx].t) printf(" %s",wordlist[++backidx].w);
 									while (!wordlist[backidx].t) {
 										printf(",%s",wordlist[++backidx].w);
 									}
-									printf("\n");
+									printf("\n"KNORMAL);
 									break;
 								default:break;
 							}
 						} else {
 							if (curcrc==CRC_BANK || backbank!=ae->activebank) {
-								printf(";     BANK\n");
+								printf(KBOLD" "KLWHITE"     %s ",wordlist[backidx].w);
+								if (!wordlist[backidx].t) printf(" %s",wordlist[++backidx].w);
+								while (!wordlist[backidx].t) {
+									printf(",%s",wordlist[++backidx].w);
+								}
+								printf("\n"KNORMAL);
 							} else if (curcrc==CRC_ORG) {
 								printf("                                    ");
-								if (ae->codeadr!=ae->outputadr) printf("ORG #%04X,#%04X",ae->codeadr,ae->outputadr); else printf("ORG #%04X",ae->codeadr);
-								if (ae->activebank<BANK_MAX_NUMBER) printf(" ; bank %d\n",ae->activebank); else printf(" ; in memory workspace %d\n",ae->activebank-BANK_MAX_NUMBER);
+								if (ae->codeadr!=ae->outputadr) printf("ORG "KLGREEN"#%04X,#%04X"KNORMAL,ae->codeadr,ae->outputadr); else printf("ORG "KLGREEN"#%04X"KNORMAL,ae->codeadr);
+								if (ae->activebank<BANK_MAX_NUMBER) printf(KGREEN" ; bank %d\n"KNORMAL,ae->activebank); else printf(KGREEN" ; in memory workspace %d\n"KNORMAL,ae->activebank-BANK_MAX_NUMBER);
 							} else {
 								// memory position
 								iback=backaddr;
 								while (iback+4<ae->outputadr) {
 									if (iback!=backaddr) printf("\n");
-									if (backcode==backaddr) printf("%03X|%04X     | ",backbank>=BANK_MAX_NUMBER?backbank-BANK_MAX_NUMBER:backbank,iback);
-										else printf("%03X|%04X|%04X| ",backbank>=BANK_MAX_NUMBER?backbank-BANK_MAX_NUMBER:backbank,iback,backcode+iback-backaddr);
+									if (backcode==backaddr) printf(KLBLUE"%03X|%04X"KLCYAN"     | ",backbank>=BANK_MAX_NUMBER?backbank-BANK_MAX_NUMBER:backbank,iback);
+										else printf(KLBLUE"%03X|%04X|%04X"KLCYAN"| ",backbank>=BANK_MAX_NUMBER?backbank-BANK_MAX_NUMBER:backbank,iback,backcode+iback-backaddr);
 									printf("%02X ",ae->mem[backbank][iback++]);
 									printf("%02X ",ae->mem[backbank][iback++]);
 									printf("%02X ",ae->mem[backbank][iback++]);
@@ -18659,20 +18695,21 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 								}
 								if (iback<ae->outputadr) {
 									if (iback>backaddr) printf("\n");
-									if (backcode==backaddr) printf("%03X|%04X     | ",backbank>=BANK_MAX_NUMBER?backbank-BANK_MAX_NUMBER:backbank,iback);
-										else printf("%03X|%04X|%04X| ",backbank>=BANK_MAX_NUMBER?backbank-BANK_MAX_NUMBER:backbank,iback,backcode+iback-backaddr);
+									if (backcode==backaddr) printf(KLBLUE"%03X|%04X     "KLCYAN"| ",backbank>=BANK_MAX_NUMBER?backbank-BANK_MAX_NUMBER:backbank,iback);
+										else printf(KLBLUE"%03X|%04X|%04X"KLCYAN"| ",backbank>=BANK_MAX_NUMBER?backbank-BANK_MAX_NUMBER:backbank,iback,backcode+iback-backaddr);
 									while (iback<ae->outputadr) {
 										printf("%02X ",ae->mem[backbank][iback++]);
 									}
 								}
+								printf(KNORMAL);
 								// padding
 								iback=(ae->outputadr-backaddr)&3; if (iback) iback=4-iback; while (iback) {printf("   ");iback--;}
 								// timings
 								if (backnop<ae->nop) {
 									if (ae->forcezx) {
-										printf("[%02d] ",(int)(ae->tick-backtick));
+										printf(KMAGENTA"[%02d] ",(int)(ae->tick-backtick));
 									} else {
-										printf("[%02d] ",(int)(ae->nop-backnop));
+										printf(KMAGENTA"[%02d] ",(int)(ae->nop-backnop));
 									}
 								}
 								// instr
@@ -18680,12 +18717,12 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 									printf("; "); // no op output
 								}
 								// tab instructions (instead of labels)
-								printf("    %s",wordlist[backidx].w);
+								printf(KLWHITE"    %s",wordlist[backidx].w);
 								if (!wordlist[backidx].t) printf(" %s",wordlist[++backidx].w);
 								while (!wordlist[backidx].t) {
 									printf(",%s",wordlist[++backidx].w);
 								}
-								printf("   (L%d:%s)\n",wordlist[backidx-1].l,ae->filename[wordlist[backidx-1].ifile]);
+								printf(KBLUE"   (L%d:%s)\n"KNORMAL,wordlist[backidx-1].l,ae->filename[wordlist[backidx-1].ifile]);
 							}
 						}
 						break;
@@ -18699,7 +18736,7 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 			if (!executed) {
 				/* is it a macro? */
 				if ((ifast=SearchMacro(ae,curcrc,wordlist[ae->idx].w))>=0) {
-					printf("; Macro %s expansion with %d parameter%s\n",wordlist[ae->idx].w,ae->macro[ifast].nbparam,ae->macro[ifast].nbparam>1?"s":"");
+					printf(KGREEN"; Macro %s expansion with %d parameter%s\n"KNORMAL,wordlist[ae->idx].w,ae->macro[ifast].nbparam,ae->macro[ifast].nbparam>1?"s":"");
 					wordlist=__MACRO_EXECUTE(ae,ifast);
 					continue;
 				}
@@ -18716,16 +18753,17 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 						vtrace=ComputeExpression(ae,wordlist[ae->idx].w,ae->codeadr,0,0);
 						if (strchr(wordlist[ae->idx].w,'~')) {
 							char *ctrace=TxtStrDup(wordlist[ae->idx].w);
-							ctrace=TxtReplace(ctrace,"~"," EQU ",0);
-							printf(" %s ; alias definition\n",ctrace);
+							ctrace=TxtReplace(ctrace,"~",KLWHITE" EQU ",0);
+							printf(KLGREEN" %s "KGREEN"; alias definition\n"KNORMAL,ctrace);
 						} else {
-							printf(" %s ; %.2lf | #%04X\n",wordlist[ae->idx].w,vtrace,(int)(floor(vtrace+ae->rough)));
+							printf(KLWHITE" %s ;"KGREEN" %.2lf | #%04X\n"KNORMAL,wordlist[ae->idx].w,vtrace,(int)(floor(vtrace+ae->rough)));
 						}
 					} else {
-						if (backcode==backaddr) printf("%03d|%04X     | ",backbank>=BANK_MAX_NUMBER?backbank-BANK_MAX_NUMBER:backbank,backaddr);
-							else printf("%03d|%04X|%04X| ",backbank>=BANK_MAX_NUMBER?backbank-BANK_MAX_NUMBER:backbank,backaddr,backcode);
+						if (backcode==backaddr) printf(KLBLUE"%03d|%04X"KLCYAN"     | "KNORMAL,backbank>=BANK_MAX_NUMBER?backbank-BANK_MAX_NUMBER:backbank,backaddr);
+							else printf(KLBLUE"%03d|%04X|%04X"KLCYAN"| "KNORMAL,backbank>=BANK_MAX_NUMBER?backbank-BANK_MAX_NUMBER:backbank,backaddr,backcode);
 						if (ae->forcezx) printf(" ");
-						printf("                %s:\n",wordlist[ae->idx].w);
+						// label
+						printf(KLGREEN"                %s:\n"KNORMAL,wordlist[ae->idx].w);
 						PushLabel(ae);
 					}
 				} else {
@@ -21613,7 +21651,7 @@ if (!idx) printf("[%s]\n",listing[l].listing);
 					} else {
 						if (fileok) {
 							#if TRACE_PREPRO
-							rasm_printf(ae,KBLUE"include [%s]\n",filename_toread);
+							rasm_printf(ae,KIO"include [%s]\n",filename_toread);
 							#endif
 							
 							/* lecture */
