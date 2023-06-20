@@ -18483,6 +18483,7 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 		ae->idx++; 
 		if (ae->stop) break;
 	} else {
+		int nooutput,ipadding;
 		printf(KLWHITE"Bnk|Real|Logic  Bytecode  [Time] Assembly\n");
 		printf("-----------------------------------------\n"KNORMAL);
 		while (wordlist[ae->idx].t!=2) {
@@ -18671,7 +18672,7 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 							}
 						} else {
 							if (curcrc==CRC_BANK || backbank!=ae->activebank) {
-								printf(KBOLD" "KLWHITE"     %s ",wordlist[backidx].w);
+								printf(KBOLD" "KLWHITE"      %s ",wordlist[backidx].w);
 								if (!wordlist[backidx].t) printf(" %s",wordlist[++backidx].w);
 								while (!wordlist[backidx].t) {
 									printf(",%s",wordlist[++backidx].w);
@@ -18679,7 +18680,7 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 								printf("\n"KNORMAL);
 							} else if (curcrc==CRC_ORG) {
 								printf("                                    ");
-								if (ae->codeadr!=ae->outputadr) printf("ORG "KLGREEN"#%04X,#%04X"KNORMAL,ae->codeadr,ae->outputadr); else printf("ORG "KLGREEN"#%04X"KNORMAL,ae->codeadr);
+								if (ae->codeadr!=ae->outputadr) printf(KLWHITE"ORG "KLGREEN"#%04X,#%04X"KNORMAL,ae->codeadr,ae->outputadr); else printf(KLWHITE"ORG "KLGREEN"#%04X"KNORMAL,ae->codeadr);
 								if (ae->activebank<BANK_MAX_NUMBER) printf(KGREEN" ; bank %d\n"KNORMAL,ae->activebank); else printf(KGREEN" ; in memory workspace %d\n"KNORMAL,ae->activebank-BANK_MAX_NUMBER);
 							} else {
 								// memory position
@@ -18700,29 +18701,56 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 									while (iback<ae->outputadr) {
 										printf("%02X ",ae->mem[backbank][iback++]);
 									}
+									nooutput=0;
+								} else {
+									nooutput=1;
 								}
 								printf(KNORMAL);
 								// padding
 								iback=(ae->outputadr-backaddr)&3; if (iback) iback=4-iback; while (iback) {printf("   ");iback--;}
 								// timings
+								ipadding=0;
 								if (backnop<ae->nop) {
 									if (ae->forcezx) {
 										printf(KMAGENTA"[%02d] ",(int)(ae->tick-backtick));
 									} else {
 										printf(KMAGENTA"[%02d] ",(int)(ae->nop-backnop));
 									}
+								} else {
+									// padding if there is bytecode
+									if (!nooutput) {
+										printf("     ");
+									}
 								}
 								// instr
 								if (backaddr==ae->outputadr && backbank==ae->activebank) {
-									printf("; "); // no op output
+									//printf("; "); // no op output
+								}
+								if (backaddr==ae->outputadr) {
+									printf("   ");
 								}
 								// tab instructions (instead of labels)
 								printf(KLWHITE"    %s",wordlist[backidx].w);
-								if (!wordlist[backidx].t) printf(" %s",wordlist[++backidx].w);
+								ipadding=4+strlen(wordlist[backidx].w);
+								if (!wordlist[backidx].t) {
+									printf(" %s",wordlist[++backidx].w);
+									ipadding+=1+strlen(wordlist[backidx].w);
+								}
 								while (!wordlist[backidx].t) {
 									printf(",%s",wordlist[++backidx].w);
+									ipadding+=1+strlen(wordlist[backidx].w);
 								}
-								printf(KBLUE"   (L%d:%s)\n"KNORMAL,wordlist[backidx-1].l,ae->filename[wordlist[backidx-1].ifile]);
+
+								// padding if there is bytecode
+								if (!nooutput) {
+									while (ipadding<32) {
+										printf(" ");
+										ipadding++;
+									}
+									printf(KBLUE"   (L%d:%s)\n"KNORMAL,wordlist[backidx-1].l,ae->filename[wordlist[backidx-1].ifile]);
+								} else {
+									printf("\n");
+								}
 							}
 						}
 						break;
@@ -18754,7 +18782,7 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 						if (strchr(wordlist[ae->idx].w,'~')) {
 							char *ctrace=TxtStrDup(wordlist[ae->idx].w);
 							ctrace=TxtReplace(ctrace,"~",KLWHITE" EQU ",0);
-							printf(KLGREEN" %s "KGREEN"; alias definition\n"KNORMAL,ctrace);
+							printf(KLCYAN"             | "KLGREEN"%s "KGREEN"; alias definition\n"KNORMAL,ctrace);
 						} else {
 							printf(KLWHITE" %s ;"KGREEN" %.2lf | #%04X\n"KNORMAL,wordlist[ae->idx].w,vtrace,(int)(floor(vtrace+ae->rough)));
 						}
@@ -25693,83 +25721,82 @@ void Usage(int help)
 	#undef FUNC
 	#define FUNC "Usage"
 	
-	printf("%s - %s\n(c) 2017 Edouard BERGE (use -n option to display all licenses / -autotest for self-testing)\n",RASM_VERSION,RELEASE_NAME);
+	printf(KLWHITE"%s - %s\n(c) 2017 Edouard BERGE (use -n option to display all licenses / -autotest for self-testing)\n",RASM_VERSION,RELEASE_NAME);
 	#ifndef NO_3RD_PARTIES
-	printf("LZ4 (c) Yann Collet / ZX0 & ZX7 (c) Einar Saukas / Exomizer 2 (c) Magnus Lind / LZSA & AP-Ultra (c) Emmanuel Marty\n");
+	printf(KLGREEN"LZ4 (c) Yann Collet / ZX0 & ZX7 (c) Einar Saukas / Exomizer 2 (c) Magnus Lind / LZSA & AP-Ultra (c) Emmanuel Marty\n"KNORMAL);
 	#endif
 	printf("\n");
-	printf("SYNTAX: rasm <inputfile> [options]\n");
+	printf(KLWHITE"SYNTAX:"KNORMAL" rasm <inputfile> [options]\n");
 	printf("\n");
 
 	if (help) {
-		printf("FILENAMES:\n");
-		printf("-oa                      automatic radix from input filename\n");
-		printf("-o  <outputfile radix>   choose a common radix for all files\n");
-		printf("-or <ROM filename(s)>    choose a radix filename for ROM output\n");
-		printf("-ob <binary filename>    choose a full filename for binary output\n");
-		printf("-oc <cartridge filename> choose a full filename for cartridge output\n");
-		printf("-ol <ROM label filename> choose a full filename for ROM label output\n");
-		printf("-oi <snapshot filename>  choose a full filename for snapshot output\n");
-		printf("-os <symbol filename>    choose a full filename for symbol output\n");
-		printf("-ot <tape filename>      choose a full filename for tape output\n");
-		printf("-ok <breakpoint filename>choose a full filename for breakpoint output\n");
-		printf("-I<path>                 set a path for files to read\n");
-		printf("-no                      disable all file output\n");
-		printf("DEPENDENCIES EXPORT:\n");
-		printf("-depend=make             output dependencies on a single line\n");
-		printf("-depend=list             output dependencies as a list\n");
+		printf(KLWHITE"FILENAMES:\n"KNORMAL);
+		printf("-oa              automatic radix from input filename\n");
+		printf("-o  <radix>      choose a common radix for all files\n");
+		printf("-or <filename>   choose a radix filename for ROM output\n");
+		printf("-ob <filename>   choose a full filename for binary output\n");
+		printf("-oc <filename>   choose a full filename for cartridge output\n");
+		printf("-ol <filename>   choose a full filename for ROM label output\n");
+		printf("-oi <filename>   choose a full filename for snapshot output\n");
+		printf("-os <filename>   choose a full filename for symbol output\n");
+		printf("-ot <filename>   choose a full filename for tape output\n");
+		printf("-ok <filename>   choose a full filename for breakpoint output\n");
+		printf("-I<path>         set a path for files to read\n");
+		printf("-no              disable all file output\n");
+		printf(KLWHITE"DEPENDENCIES EXPORT:\n"KNORMAL);
+		printf("-depend=make     output dependencies on a single line\n");
+		printf("-depend=list     output dependencies as a list\n");
 		printf("if 'binary filename' is set then it will be outputed first\n");
-		printf("SYMBOLS EXPORT:\n");
-		printf("-s  export symbols %%s #%%X B%%d (label,adr,cprbank)\n");
-		printf("-sz export symbols with ZX emulator convention\n");
-		printf("-sp export symbols with Pasmo convention\n");
-		printf("-sw export symbols with Winape convention\n");
-		printf("-ss export symbols in the snapshot (SYMB chunk for ACE)\n");
-		printf("-sc <format> export symbols with source code convention\n");
-		printf("-sm export symbol in multiple files (one per bank)\n");
-		printf("-ec export labels with original case\n");
-		printf("-er export ROM labels\n");
-		printf("-l  <labelfile> import symbol file (winape,pasmo,rasm)\n");
-		printf("-eb export breakpoints\n");
-		printf("-wu warn for unused symbols (alias, var or label)\n");
-		printf("-remu export super chunk symbols in snapshots\n");
-		printf("SYMBOLS ADDITIONAL OPTIONS:\n");
-		printf("-sl export also local symbol\n");
-		printf("-sv export also variables symbol\n");
-		printf("-sq export also EQU symbol\n");
-		printf("-sa export all symbols (like -sl -sv -sq option)\n");
+		printf(KLWHITE"SYMBOLS EXPORT:\n"KNORMAL);
+		printf("-s               export symbols %%s #%%X B%%d (label,adr,cprbank)\n");
+		printf("-sz              export symbols with ZX emulator convention\n");
+		printf("-sp              export symbols with Pasmo convention\n");
+		printf("-sw              export symbols with Winape convention\n");
+		printf("-ss              export symbols in the snapshot (SYMB chunk for ACE)\n");
+		printf("-sc <format>     export symbols with source code convention\n");
+		printf("-sm              export symbol in multiple files (one per bank)\n");
+		printf("-ec              export labels with original case\n");
+		printf("-er              export ROM labels\n");
+		printf("-l  <labelfile>  import symbol file (winape,pasmo,rasm)\n");
+		printf("-eb              export breakpoints\n");
+		printf("-wu              warn for unused symbols (alias, var or label)\n");
+		printf(KLWHITE"SYMBOLS ADDITIONAL OPTIONS:\n"KNORMAL);
+		printf("-sl              export also local symbol\n");
+		printf("-sv              export also variables symbol\n");
+		printf("-sq              export also EQU symbol\n");
+		printf("-sa              export all symbols (like -sl -sv -sq option)\n");
 		printf("-Dvariable=value import value for variable\n");
-		printf("COMPATIBILITY:\n");
-		printf("-m     Maxam style calculations\n");
-		printf("-dams  Dams 'dot' label convention\n");
-		printf("-ass   AS80  behaviour mimic\n");
-		printf("-uz    UZ80  behaviour mimic\n");
-		printf("-pasmo PASMO behaviour mimic\n");
-		printf("-amper use ampersand for hex values\n");
-		printf("-msep <separator> set separator for modules\n");
-		printf("-utf8 convert symbols from french or spanish keyboard inside quotes\n");
-		printf("-fq   do not bother with special chars inside quotes\n");
-		printf("MISCELLANEOUS:\n");
-		printf("-quick          enable fast mode for ZX0 crunching\n");
-		printf("-cprquiet       do not display ROM detailed informations\n");
-		printf("-map            verbose assembling (prototype)\n");
-		printf("EDSK generation/update:\n");
-		printf("-eo overwrite files on disk if it already exists\n");
-		printf("SNAPSHOT:\n");
-		printf("-sb export breakpoints in snapshot (BRKS & BRKC chunks)\n");
-		printf("-ss export symbols in the snapshot (SYMB chunk for ACE)\n");
-		printf("-v2 export snapshot version 2 instead of version 3\n");
-		printf("PARSING:\n");
-		printf("-me <value>    set maximum number of error (0 means no limit)\n");
-		printf("-twe           treat warnings as errors\n");
-		printf("-xr            extended error display\n");
-		printf("-w             disable warnings\n");
-		printf("-void          force void usage with macro without parameter\n");
-		printf("-mml           allow macro usage with parameters on multiple lines\n");
+		printf(KLWHITE"COMPATIBILITY:\n"KNORMAL);
+		printf("-m               Maxam style calculations\n");
+		printf("-dams            Dams 'dot' label convention\n");
+		printf("-ass             AS80  behaviour mimic\n");
+		printf("-uz              UZ80  behaviour mimic\n");
+		printf("-pasmo           PASMO behaviour mimic\n");
+		printf("-amper           use ampersand for hex values\n");
+		printf("-msep            <separator> set separator for modules\n");
+		printf("-utf8            convert symbols from french or spanish keyboard inside quotes\n");
+		printf("-fq              do not bother with special chars inside quotes\n");
+		printf(KLWHITE"MISCELLANEOUS:\n"KNORMAL);
+		printf("-quick           enable fast mode for ZX0 crunching\n");
+		printf("-cprquiet        do not display ROM detailed informations\n");
+		printf("-map             display information during early assembling stages\n");
+		printf(KLWHITE"EDSK generation/update:\n"KNORMAL);
+		printf("-eo              overwrite files on disk if it already exists\n");
+		printf(KLWHITE"SNAPSHOT:\n"KNORMAL);
+		printf("-sb              export breakpoints in snapshot (BRKS & BRKC chunks)\n");
+		printf("-ss              export symbols in the snapshot (SYMB chunk for ACE)\n");
+		printf("-v2              export snapshot version 2 instead of version 3\n");
+		printf("-remu            export super chunk symbols in snapshots\n");
+		printf(KLWHITE"PARSING:\n"KNORMAL);
+		printf("-me <value>      set maximum number of error (0 means no limit)\n");
+		printf("-twe             treat warnings as errors\n");
+		printf("-xr              extended error display\n");
+		printf("-w               disable warnings\n");
+		printf("-void            force void usage with macro without parameter\n");
+		printf("-mml             allow macro usage with parameters on multiple lines\n");
 		printf("\n");
 	} else {
-		printf("use option -h for help\n");
-		printf("\n");
+		printf(KLCYAN"use option -h for help\n"KNORMAL);
 	}
 	
 	exit(ABORT_ERROR);
