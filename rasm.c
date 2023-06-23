@@ -144,8 +144,9 @@ unsigned long __stack = 128 * 1024;
 #define KLRED     "\x1B[91m"
 #define KLGREEN   "\x1B[92m"
 #define KLYELLOW  "\x1B[93m"
+#define KLORANGE  "\x1B[38;5;202m"
 #define KLBLUE    "\x1B[94m"
-#define KLMAGENTA "\x1B[94m"
+#define KLMAGENTA "\x1B[95m"
 #define KLCYAN    "\x1B[96m"
 #define KLWHITE   "\x1B[97m"
 
@@ -168,6 +169,7 @@ unsigned long __stack = 128 * 1024;
 #define KLRED     ""
 #define KLGREEN   ""
 #define KLYELLOW  ""
+#define KLORANGE  ""
 #define KLBLUE    ""
 #define KLMAGENTA ""
 #define KLCYAN    ""
@@ -18015,6 +18017,12 @@ int IsDirective(char *zeexpression)
 
 	return 0;
 }
+char *WhichColor(char *content) {
+	if (!strcmp(content,"(C)") || !strcmp(content,"(HL)") || !strcmp(content,"(DE)") || !strcmp(content,"(BC)") || !strcmp(content,"(SP)")) return KLYELLOW;
+	if (!strncmp(content,"(IX",3) || !strncmp(content,"(IY",3)) return KLYELLOW;
+	if (IsRegister(content)) return KLYELLOW;
+	return KLORANGE;
+}
 
 int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s_rasm_info **debug)
 {
@@ -18687,8 +18695,8 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 								iback=backaddr;
 								while (iback+4<ae->outputadr) {
 									if (iback!=backaddr) printf("\n");
-									if (backcode==backaddr) printf(KLBLUE"%03X|%04X"KLCYAN"     | ",backbank>=BANK_MAX_NUMBER?backbank-BANK_MAX_NUMBER:backbank,iback);
-										else printf(KLBLUE"%03X|%04X|%04X"KLCYAN"| ",backbank>=BANK_MAX_NUMBER?backbank-BANK_MAX_NUMBER:backbank,iback,backcode+iback-backaddr);
+									if (backcode==backaddr) printf(KLMAGENTA"%03X|%04X"KLCYAN"     | ",backbank>=BANK_MAX_NUMBER?backbank-BANK_MAX_NUMBER:backbank,iback);
+										else printf(KLMAGENTA"%03X|%04X|%04X"KLCYAN"| ",backbank>=BANK_MAX_NUMBER?backbank-BANK_MAX_NUMBER:backbank,iback,backcode+iback-backaddr);
 									printf("%02X ",ae->mem[backbank][iback++]);
 									printf("%02X ",ae->mem[backbank][iback++]);
 									printf("%02X ",ae->mem[backbank][iback++]);
@@ -18696,8 +18704,8 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 								}
 								if (iback<ae->outputadr) {
 									if (iback>backaddr) printf("\n");
-									if (backcode==backaddr) printf(KLBLUE"%03X|%04X     "KLCYAN"| ",backbank>=BANK_MAX_NUMBER?backbank-BANK_MAX_NUMBER:backbank,iback);
-										else printf(KLBLUE"%03X|%04X|%04X"KLCYAN"| ",backbank>=BANK_MAX_NUMBER?backbank-BANK_MAX_NUMBER:backbank,iback,backcode+iback-backaddr);
+									if (backcode==backaddr) printf(KLMAGENTA"%03X|%04X     "KLCYAN"| ",backbank>=BANK_MAX_NUMBER?backbank-BANK_MAX_NUMBER:backbank,iback);
+										else printf(KLMAGENTA"%03X|%04X|%04X"KLCYAN"| ",backbank>=BANK_MAX_NUMBER?backbank-BANK_MAX_NUMBER:backbank,iback,backcode+iback-backaddr);
 									while (iback<ae->outputadr) {
 										printf("%02X ",ae->mem[backbank][iback++]);
 									}
@@ -18712,9 +18720,9 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 								ipadding=0;
 								if (backnop<ae->nop) {
 									if (ae->forcezx) {
-										printf(KMAGENTA"[%02d] ",(int)(ae->tick-backtick));
+										printf(KGREEN"[%02d] ",(int)(ae->tick-backtick));
 									} else {
-										printf(KMAGENTA"[%02d] ",(int)(ae->nop-backnop));
+										printf(KGREEN"[%02d] ",(int)(ae->nop-backnop));
 									}
 								} else {
 									// padding if there is bytecode
@@ -18730,14 +18738,17 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 									printf("   ");
 								}
 								// tab instructions (instead of labels)
-								printf(KLWHITE"    %s",wordlist[backidx].w);
+								printf(KLYELLOW"    %s",wordlist[backidx].w);
 								ipadding=4+strlen(wordlist[backidx].w);
+								// color must adapt to content here!
 								if (!wordlist[backidx].t) {
-									printf(" %s",wordlist[++backidx].w);
+									backidx++;
+									printf("%s %s",WhichColor(wordlist[backidx].w),wordlist[backidx].w);
 									ipadding+=1+strlen(wordlist[backidx].w);
 								}
 								while (!wordlist[backidx].t) {
-									printf(",%s",wordlist[++backidx].w);
+									backidx++;
+									printf(KLORANGE",%s%s",WhichColor(wordlist[backidx].w),wordlist[backidx].w);
 									ipadding+=1+strlen(wordlist[backidx].w);
 								}
 
@@ -18747,7 +18758,7 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 										printf(" ");
 										ipadding++;
 									}
-									printf(KBLUE"   (L%d:%s)\n"KNORMAL,wordlist[backidx-1].l,ae->filename[wordlist[backidx-1].ifile]);
+									printf(KRED"   (L%d:%s)\n"KNORMAL,wordlist[backidx-1].l,ae->filename[wordlist[backidx-1].ifile]);
 								} else {
 									printf("\n");
 								}
@@ -18781,8 +18792,8 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 						vtrace=ComputeExpression(ae,wordlist[ae->idx].w,ae->codeadr,0,0);
 						if (strchr(wordlist[ae->idx].w,'~')) {
 							char *ctrace=TxtStrDup(wordlist[ae->idx].w);
-							ctrace=TxtReplace(ctrace,"~",KLWHITE" EQU ",0);
-							printf(KLCYAN"             | "KLGREEN"%s "KGREEN"; alias definition\n"KNORMAL,ctrace);
+							ctrace=TxtReplace(ctrace,"~",KLYELLOW" EQU "KLORANGE,0);
+							printf(KLCYAN"             | "KLGREEN"%s\n"KNORMAL,ctrace);
 						} else {
 							printf(KLWHITE" %s ;"KGREEN" %.2lf | #%04X\n"KNORMAL,wordlist[ae->idx].w,vtrace,(int)(floor(vtrace+ae->rough)));
 						}
@@ -18950,8 +18961,9 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 
 				if (input_size<lzlen) {
 					//MakeError(ae,ae->filename[ae->wl[ae->lzsection[i].iw].ifile],ae->wl[ae->lzsection[i].iw].l,"As the LZ section cannot crunch data, Rasm may not guarantee assembled file!\n");
-					rasm_printf(ae,KWARNING"Warning: LZ section is bigger than original\n");
+					rasm_printf(ae,KWARNING"Warning: LZ section is bigger than original, it wont be crunched!\n");
 					if (ae->erronwarn) MaxError(ae);
+					continue;
 				}
 
 				lzshift=lzlen-(ae->lzsection[i].memend-ae->lzsection[i].memstart);
@@ -18974,6 +18986,7 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 					lzmove=ae->orgzone[morgzone].memend-ae->lzsection[i].memend;
 					if (lzmove) {
 						MemMove(ae->mem[ae->lzsection[i].ibank]+ae->lzsection[i].memend+lzshift,ae->mem[ae->lzsection[i].ibank]+ae->lzsection[i].memend,lzmove);
+						memset(ae->mem[ae->lzsection[i].ibank]+ae->lzsection[i].memend+lzshift+lzmove,0,-lzshift);
 					}
 				}
 				memcpy(ae->mem[ae->lzsection[i].ibank]+ae->lzsection[i].memstart,lzdata,lzlen);
