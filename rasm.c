@@ -8,6 +8,7 @@
 #define TRACE_STRUCT 0
 #define TRACE_EDSK 0
 #define TRACE_LABEL 0
+#define TRACE_LZ 0
 #define TRACE_ASSEMBLE 0
 
 /***
@@ -9115,6 +9116,7 @@ void PopAllExpression(struct s_assenv *ae, int crunched_zone)
 	#define FUNC "PopAllExpression"
 	
 	static int first=1;
+	static int lastlz=0;
 	double v;
 	long r;
 	int i,mapflag=0;
@@ -9135,11 +9137,16 @@ void PopAllExpression(struct s_assenv *ae, int crunched_zone)
 	*/
 	if (crunched_zone>=0) {
 		ae->stage=1;
+		if (crunched_zone<lastlz) first=1; // reset optim
+		lastlz=crunched_zone;
 	} else {
 		/* on rescanne tout pour combler les trous */
 		ae->stage=2;
 		first=1;
 	}
+#if TRACE_POPEXPR
+	printf("PopAllExpression crunched_zone=%d first=%d\n",crunched_zone,first);
+#endif
 	
 	for (i=first;i<ae->ie;i++) {
 		/* first compute only crunched expression (0,1,2,3,...) then intermediates and (-1) at the end */
@@ -13421,7 +13428,7 @@ void __LZSA2(struct s_assenv *ae) {
 	ObjectArrayAddDynamicValueConcat((void**)&ae->lzsection,&ae->ilz,&ae->mlz,&curlz,sizeof(curlz));
 }
 void __LZAPU(struct s_assenv *ae) {
-	struct s_lz_section curlz;
+	struct s_lz_section curlz={0};
 	
 	if (!ae->wl[ae->idx].t) {
 		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"LZ directive does not need any parameter\n");
@@ -13448,7 +13455,7 @@ void __LZAPU(struct s_assenv *ae) {
 	ObjectArrayAddDynamicValueConcat((void**)&ae->lzsection,&ae->ilz,&ae->mlz,&curlz,sizeof(curlz));
 }
 void __LZ4(struct s_assenv *ae) {
-	struct s_lz_section curlz;
+	struct s_lz_section curlz={0};
 	
 	if (!ae->wl[ae->idx].t) {
 		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"LZ directive does not need any parameter\n");
@@ -13475,7 +13482,7 @@ void __LZ4(struct s_assenv *ae) {
 	ObjectArrayAddDynamicValueConcat((void**)&ae->lzsection,&ae->ilz,&ae->mlz,&curlz,sizeof(curlz));
 }
 void __LZX0(struct s_assenv *ae) {
-	struct s_lz_section curlz;
+	struct s_lz_section curlz={0};
 
 	if (!ae->wl[ae->idx].t) {
 		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"LZ directive does not need any parameter\n");
@@ -13503,7 +13510,7 @@ void __LZX0(struct s_assenv *ae) {
 	ObjectArrayAddDynamicValueConcat((void**)&ae->lzsection,&ae->ilz,&ae->mlz,&curlz,sizeof(curlz));
 }
 void __LZX0B(struct s_assenv *ae) {
-	struct s_lz_section curlz;
+	struct s_lz_section curlz={0};
 	
 	if (!ae->wl[ae->idx].t) {
 		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"LZ directive does not need any parameter\n");
@@ -13531,7 +13538,7 @@ void __LZX0B(struct s_assenv *ae) {
 	ObjectArrayAddDynamicValueConcat((void**)&ae->lzsection,&ae->ilz,&ae->mlz,&curlz,sizeof(curlz));
 }
 void __LZX7(struct s_assenv *ae) {
-	struct s_lz_section curlz;
+	struct s_lz_section curlz={0};
 	
 	if (!ae->wl[ae->idx].t) {
 		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"LZ directive does not need any parameter\n");
@@ -13558,7 +13565,7 @@ void __LZX7(struct s_assenv *ae) {
 	ObjectArrayAddDynamicValueConcat((void**)&ae->lzsection,&ae->ilz,&ae->mlz,&curlz,sizeof(curlz));
 }
 void __LZEXO(struct s_assenv *ae) {
-	struct s_lz_section curlz;
+	struct s_lz_section curlz={0};
 	
 	if (!ae->wl[ae->idx].t) {
 		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"LZ directive does not need any parameter\n");
@@ -13585,7 +13592,7 @@ void __LZEXO(struct s_assenv *ae) {
 	ObjectArrayAddDynamicValueConcat((void**)&ae->lzsection,&ae->ilz,&ae->mlz,&curlz,sizeof(curlz));
 }
 void __LZ48(struct s_assenv *ae) {
-	struct s_lz_section curlz;
+	struct s_lz_section curlz={0};
 
 	if (!ae->wl[ae->idx].t) {
 		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"LZ directive does not need any parameter\n");
@@ -13606,7 +13613,7 @@ void __LZ48(struct s_assenv *ae) {
 	ObjectArrayAddDynamicValueConcat((void**)&ae->lzsection,&ae->ilz,&ae->mlz,&curlz,sizeof(curlz));
 }
 void __LZ49(struct s_assenv *ae) {
-	struct s_lz_section curlz;
+	struct s_lz_section curlz={0};
 	
 	if (!ae->wl[ae->idx].t) {
 		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"LZ directive does not need any parameter\n");
@@ -13628,7 +13635,7 @@ void __LZ49(struct s_assenv *ae) {
 	ObjectArrayAddDynamicValueConcat((void**)&ae->lzsection,&ae->ilz,&ae->mlz,&curlz,sizeof(curlz));
 }
 void __LZCLOSE(struct s_assenv *ae) {
-	struct s_lz_section curlz;
+	struct s_lz_section curlz={0};
 
 	if (!ae->ilz || ae->lz==-1) {
 		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Cannot close LZ section as it wasn't opened\n");
@@ -16768,10 +16775,10 @@ printf("AudioLoadSample filesize=%d st=%d normalize=%.2lf\n",filesize,sample_typ
 			/***
 				SM4 format has two bits
 				bits -> PSG value
-				  00 ->  0
-				  01 -> 13
-				  10 -> 14
-				  11 -> 15				
+				  00 ->  0 // 0/4
+				  01 -> 10 // 1/4
+				  10 -> 14 // 3/4
+				  11 -> 15 // 4/4			
 			***/
 			/* +3 pour éviter le segfault */
 			for (i=0;i<nbsample+3;i+=4) {
@@ -18169,46 +18176,47 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 		}
 	}
 
-	/* psg conversion */
-	for (i=j=0;i<100;i++) ae->psgtab[j++]=0;
-	for (i=0;i<49;i++) ae->psgtab[j++]=13;
-	for (i=0;i<35;i++) ae->psgtab[j++]=14;
-	for (i=0;i<72;i++) ae->psgtab[j++]=15;
+	/* New PSG packed conversion */
+	for (i=j=0;i<64;i++) ae->psgtab[j++]=0;
+	for (i=0;i<64;i++) ae->psgtab[j++]=10;
+	for (i=0;i<64;i++) ae->psgtab[j++]=14;
+	for (i=0;i<64;i++) ae->psgtab[j++]=15;
 	if (j!=256) {
 		rasm_printf(ae,"Internal error with PSG conversion table\n");
 		exit(-44);
 	}
-	/* dma table use an intermediate conversion schema */
-	for (i=j=0;i<29;i++) ae->dmatab[j++]=0;
-	for (i=0;i<15;i++) ae->dmatab[j++]=10;
-	for (i=0;i<20;i++) ae->dmatab[j++]=11;
-	for (i=0;i<27;i++) ae->dmatab[j++]=12;
-	for (i=0;i<37;i++) ae->dmatab[j++]=13;
-	for (i=0;i<53;i++) ae->dmatab[j++]=14;
-	for (i=0;i<75;i++) ae->dmatab[j++]=15;
+	/* New DMA table use an intermediate conversion schema */
+	for (i=j=0;i<51;i++) ae->dmatab[j++]=0;
+	for (i=0;i<51;i++) ae->dmatab[j++]=10;
+	for (i=0;i<52;i++) ae->dmatab[j++]=12;
+	for (i=0;i<51;i++) ae->dmatab[j++]=14;
+	for (i=0;i<51;i++) ae->dmatab[j++]=15;
 
 	if (j!=256) {
 		rasm_printf(ae,"Internal error with DMA conversion table\n");
 		exit(-44);
 	}
+	/* Raw PSG Levels
+	 * { 0, 231/65535.0, 695/65535.0, 1158/65535.0, 2084/65535.0, 2779/65535.0, 4168/65535.0, 6716/65535.0, 8105/65535.0, 13200/65535.0, 18294/65535.0, 24315/65535.0, 32189/65535.0, 40757/65535.0, 52799/65535.0, 65535.0/65536.0 };
+	 */
 	for (i=j=0;i<1;i++) ae->psgfine[j++]=0;
 	for (i=0;i<1;i++) ae->psgfine[j++]=1;
 	for (i=0;i<1;i++) ae->psgfine[j++]=2;
 	for (i=0;i<2;i++) ae->psgfine[j++]=3;
-	for (i=0;i<2;i++) ae->psgfine[j++]=4;
-	for (i=0;i<2;i++) ae->psgfine[j++]=5;
-	for (i=0;i<3;i++) ae->psgfine[j++]=6;
-	for (i=0;i<4;i++) ae->psgfine[j++]=7;
-	for (i=0;i<7;i++) ae->psgfine[j++]=8;
-	for (i=0;i<9;i++) ae->psgfine[j++]=9;
-	for (i=0;i<13;i++) ae->psgfine[j++]=10;
-	for (i=0;i<19;i++) ae->psgfine[j++]=11;
-	for (i=0;i<27;i++) ae->psgfine[j++]=12;
-	for (i=0;i<37;i++) ae->psgfine[j++]=13;
-	for (i=0;i<53;i++) ae->psgfine[j++]=14;
-	for (i=0;i<75;i++) ae->psgfine[j++]=15;
+	for (i=0;i<3;i++) ae->psgfine[j++]=4;
+	for (i=0;i<4;i++) ae->psgfine[j++]=5;
+	for (i=0;i<5;i++) ae->psgfine[j++]=6;
+	for (i=0;i<6;i++) ae->psgfine[j++]=7;
+	for (i=0;i<9;i++) ae->psgfine[j++]=8;
+	for (i=0;i<18;i++) ae->psgfine[j++]=9;
+	for (i=0;i<20;i++) ae->psgfine[j++]=10;
+	for (i=0;i<24;i++) ae->psgfine[j++]=11;
+	for (i=0;i<30;i++) ae->psgfine[j++]=12;
+	for (i=0;i<34;i++) ae->psgfine[j++]=13;
+	for (i=0;i<48;i++) ae->psgfine[j++]=14;
+	for (i=0;i<50;i++) ae->psgfine[j++]=15;
 	if (j!=256) {
-		rasm_printf(ae,"Internal error with PSG conversion table\n");
+		rasm_printf(ae,"Internal error with PSG conversion table %d != 256\n",j);
 		exit(-44);
 	}
 	/* default var */
@@ -18864,6 +18872,9 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 		 * at this point, there is a lot of expressions (in or outside lz sections)
 		 * to be computed.
 		*/
+#if TRACE_LZ
+		printf("Compute all EQU which are supposed to be statics!\n");
+#endif
 		for (i=0;i<ae->ialias;i++) {
 			char alias_value[128];
 			double v;
@@ -18877,6 +18888,14 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 				ae->alias[i].len=strlen(ae->alias[i].translation);
 			}
 		}
+#if TRACE_LZ
+		for (i=0;i<ae->io;i++) {
+			printf("ORG: B%03d %s#%04X-#%04X InPlace=%d\n",ae->orgzone[i].ibank,ae->orgzone[i].protect?"Protect ":"",ae->orgzone[i].memstart,ae->orgzone[i].memend,ae->orgzone[i].inplace);
+		}
+		for (i=0;i<ae->ilz;i++) {
+			printf("LZ : #%04X-#%04X v=%02d io=%d ibank=%d iexpr=%d ilabel=%d\n",ae->lzsection[i].memstart,ae->lzsection[i].memend,ae->lzsection[i].lzversion,ae->lzsection[i].iorgzone,ae->lzsection[i].ibank,ae->lzsection[i].iexpr,ae->lzsection[i].ilabel);
+		}
+#endif
 
 		for (i=0;i<ae->ilz;i++) {
 			/* on dépile les symboles dans l'ordre mais on ne reloge pas sur les zones intermédiaires ou post-crunched */
