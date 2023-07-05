@@ -6111,8 +6111,20 @@ printf("page=%d | ptr=%X ibank=%d\n",page,curlabel->ptr,curlabel->ibank);
 												}
 											}
 										} else {
-											/* label MUST be intermediate OR in the crunched block */
-											if (ae->lzsection[curlabel->lz].lzversion==0 || (curlabel->iorgzone==ae->expression[didx].iorgzone && curlabel->ibank==ae->expression[didx].ibank && curlabel->lz<=ae->expression[didx].lz)) {
+											int process_label=1;
+
+											// si on est dans une section crunchée, on doit faire un contrôle étendu du scope du label
+											if (ae->lzsection[curlabel->lz].lzversion) {
+												/* label MUST be intermediate OR in the crunched block */
+												//if (curlabel->iorgzone==ae->expression[didx].iorgzone) {
+												if (curlabel->lz<=ae->expression[didx].lz || ae->orgzone[curlabel->iorgzone].inplace==0) {
+													// we can process the label because it's in a previous or the same crunched section
+													// we can process the label because it's in a relocated org section
+												} else {
+													process_label=0;
+												}
+											}
+											if (process_label) {
 												if (!bank) {
 													curval=curlabel->ptr;
 												} else {
