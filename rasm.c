@@ -436,8 +436,8 @@ struct s_lz_section {
 	int iorgzone;
 	int ibank;
 	/* idx backup */
-	int iexpr;
-	int ilabel;
+	int iexpr,ilabel;
+	int iendexpr,iendlabel;
 };
 
 struct s_orgzone {
@@ -6173,7 +6173,8 @@ printf("page=%d | ptr=%X ibank=%d\n",page,curlabel->ptr,curlabel->ibank);
 													}
 												}
 											} else {
-												MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"Label [%s](%d) cannot be computed because it is located after the crunched zone %d\n",ae->computectx->varbuffer,curlabel->lz,ae->expression[didx].lz);
+												MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"Label [%s] evaluation error!\n%s",ae->computectx->varbuffer,
+														!ae->flux?" => the label is located after the crunched section of the expression where it's used\n => the ORG section where the label is defined is 'in place' which means the section may change logical addresses\n":"");
 												curval=0;
 											}
 										}
@@ -9149,8 +9150,8 @@ void PopAllExpression(struct s_assenv *ae, int crunched_zone)
 	*/
 	if (crunched_zone>=0) {
 		ae->stage=1;
-		if (crunched_zone<lastlz) first=1; // reset optim
-		lastlz=crunched_zone;
+		/* start at the very beginning of the crunched zone */
+		first=ae->lzsection[crunched_zone].iexpr;
 	} else {
 		/* on rescanne tout pour combler les trous */
 		ae->stage=2;
@@ -9163,14 +9164,12 @@ void PopAllExpression(struct s_assenv *ae, int crunched_zone)
 	for (i=first;i<ae->ie;i++) {
 		/* first compute only crunched expression (0,1,2,3,...) then intermediates and (-1) at the end */
 		if (crunched_zone>=0) {
-			/* jump over previous crunched or non-crunched zones */
-			if (ae->expression[i].lz<crunched_zone) continue;
-			/* OPTIM: keep index and stop when we are after the current crunched zone */
+			/* stop right after the current crunched zone */
 			if (ae->expression[i].lz>crunched_zone) {
-				first=i;
 				break;
 			}
 		} else {
+			/* eventually we must skip previous computed expression */
 			if (ae->expression[i].lz>=0) continue;
 		}
 
@@ -13398,6 +13397,8 @@ void __LZSA1(struct s_assenv *ae) {
 		FreeAssenv(ae);
 		exit(-5);
 	}
+	curlz.iexpr=ae->ie;
+	curlz.ilabel=ae->il;
 	curlz.version=1;
 	curlz.iw=ae->idx;
 	curlz.iorgzone=ae->io-1;
@@ -13429,6 +13430,8 @@ void __LZSA2(struct s_assenv *ae) {
 		FreeAssenv(ae);
 		exit(-5);
 	}
+	curlz.iexpr=ae->ie;
+	curlz.ilabel=ae->il;
 	curlz.version=2;
 	curlz.iw=ae->idx;
 	curlz.iorgzone=ae->io-1;
@@ -13457,6 +13460,8 @@ void __LZAPU(struct s_assenv *ae) {
 		FreeAssenv(ae);
 		exit(-5);
 	}
+	curlz.iexpr=ae->ie;
+	curlz.ilabel=ae->il;
 	curlz.iw=ae->idx;
 	curlz.iorgzone=ae->io-1;
 	curlz.ibank=ae->activebank;
@@ -13484,6 +13489,8 @@ void __LZ4(struct s_assenv *ae) {
 		FreeAssenv(ae);
 		exit(-5);
 	}
+	curlz.iexpr=ae->ie;
+	curlz.ilabel=ae->il;
 	curlz.iw=ae->idx;
 	curlz.iorgzone=ae->io-1;
 	curlz.ibank=ae->activebank;
@@ -13511,6 +13518,8 @@ void __LZX0(struct s_assenv *ae) {
 		FreeAssenv(ae);
 		exit(-5);
 	}
+	curlz.iexpr=ae->ie;
+	curlz.ilabel=ae->il;
 	curlz.version=MAX_OFFSET_ZX0;
 	curlz.iw=ae->idx;
 	curlz.iorgzone=ae->io-1;
@@ -13539,6 +13548,8 @@ void __LZX0B(struct s_assenv *ae) {
 		FreeAssenv(ae);
 		exit(-5);
 	}
+	curlz.iexpr=ae->ie;
+	curlz.ilabel=ae->il;
 	curlz.version=MAX_OFFSET_ZX0;
 	curlz.iw=ae->idx;
 	curlz.iorgzone=ae->io-1;
@@ -13567,6 +13578,8 @@ void __LZX7(struct s_assenv *ae) {
 		FreeAssenv(ae);
 		exit(-5);
 	}
+	curlz.iexpr=ae->ie;
+	curlz.ilabel=ae->il;
 	curlz.iw=ae->idx;
 	curlz.iorgzone=ae->io-1;
 	curlz.ibank=ae->activebank;
@@ -13594,6 +13607,8 @@ void __LZEXO(struct s_assenv *ae) {
 		FreeAssenv(ae);
 		exit(-5);
 	}
+	curlz.iexpr=ae->ie;
+	curlz.ilabel=ae->il;
 	curlz.iw=ae->idx;
 	curlz.iorgzone=ae->io-1;
 	curlz.ibank=ae->activebank;
@@ -13615,6 +13630,8 @@ void __LZ48(struct s_assenv *ae) {
 		FreeAssenv(ae);
 		exit(-5);
 	}
+	curlz.iexpr=ae->ie;
+	curlz.ilabel=ae->il;
 	curlz.iw=ae->idx;
 	curlz.iorgzone=ae->io-1;
 	curlz.ibank=ae->activebank;
@@ -13637,6 +13654,8 @@ void __LZ49(struct s_assenv *ae) {
 		exit(-5);
 	}
 	
+	curlz.iexpr=ae->ie;
+	curlz.ilabel=ae->il;
 	curlz.iw=ae->idx;
 	curlz.iorgzone=ae->io-1;
 	curlz.ibank=ae->activebank;
@@ -13654,10 +13673,14 @@ void __LZCLOSE(struct s_assenv *ae) {
 		return;
 	}
 	
+	// update end of closed section
 	ae->lzsection[ae->ilz-1].memend=ae->outputadr;
-	ae->lzsection[ae->ilz-1].ilabel=ae->il;
-	ae->lzsection[ae->ilz-1].iexpr=ae->ie;
-	// commentaire
+	ae->lzsection[ae->ilz-1].iendlabel=ae->il;
+	ae->lzsection[ae->ilz-1].iendexpr=ae->ie;
+	// LZCLOSE must track expression and labels as LZSECTION does
+	curlz.iexpr=ae->ie;
+	curlz.ilabel=ae->il;
+
 	curlz.iw=ae->idx;
 	curlz.iorgzone=ae->io-1;
 	curlz.ibank=ae->activebank;
@@ -18998,6 +19021,9 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 				}
 
 				lzshift=lzlen-(ae->lzsection[i].memend-ae->lzsection[i].memstart);
+#if TRACE_LZ
+	printf("===> section %d crunched shift=%d\n",i,lzshift);
+#endif
 
 				/*******************************************************************************
 				  r e l o c a t e   d a t a   u n t i l   n o n   c o n t i g u o u s   O R G
@@ -19025,8 +19051,9 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 				/*******************************************************************
 				  l a b e l    a n d    e x p r e s s i o n    r e l o c a t i o n
 				*******************************************************************/
+
 				/* relocate labels in the same ORG zone AND contiguous ORG when they are "in place" */
-				il=ae->lzsection[i].ilabel;
+				il=ae->lzsection[i].iendlabel;
 				saveorgzone=iorgzone;
 				do {
 					while (il<ae->il && ae->label[il].iorgzone<iorgzone) il++;
@@ -19034,6 +19061,9 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 					while (il<ae->il && ae->label[il].iorgzone==iorgzone) {
 						curlabel=SearchLabel(ae,ae->label[il].iw!=-1?wordlist[ae->label[il].iw].w:ae->label[il].name,ae->label[il].crc);
 						/* CANNOT be NULL */
+#if TRACE_LZ
+			printf("label %s valeur=#%04X shifte vers #%04X\n",ae->label[il].iw!=-1?wordlist[ae->label[il].iw].w:ae->label[il].name,curlabel->ptr,curlabel->ptr+lzshift);
+#endif
 						curlabel->ptr+=lzshift;
 						il++;
 					}
@@ -19064,9 +19094,9 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 
 				/* relocate expressions in the same ORG zone AND contiguous ORG */
 				iorgzone=saveorgzone;
-				il=ae->lzsection[i].iexpr;
+				il=ae->lzsection[i].iendexpr;
 				do {
-					while (il<ae->il && ae->label[il].iorgzone<iorgzone) il++;
+					while (il<ae->ie && ae->expression[il].iorgzone<iorgzone) il++;
 
 					while (il<ae->ie && ae->expression[il].iorgzone==iorgzone) {
 						ae->expression[il].wptr+=lzshift;
@@ -19104,10 +19134,6 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 				/* compute labels and expression outside crunched blocks BUT after crunched */
 				PopAllExpression(ae,i);
 			}
-		}
-		if (ae->ilz) {
-			/* compute expression placed after the last crunched block */
-			PopAllExpression(ae,ae->ilz);
 		}
 		/* compute expression outside crunched blocks */
 		PopAllExpression(ae,-1);
