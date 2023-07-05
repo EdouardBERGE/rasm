@@ -23065,6 +23065,27 @@ int RasmAssembleInfoParam(const char *datain, int lenin, unsigned char **dataout
 				"org $: script2: org #4000,$: lz49: start3: jr end3: defs 100: djnz start3: end3: lzclose: " \
 				"org $: ei: ret "
 
+#define AUTOTEST_LZ004	"org #A000,$:lzx0:ld hl,#EEEE:nop 16:lzclose:org $:ld hl,#EEEE:"\
+			"org #A000,$:lzx0:ld hl,#EEEE:nop 16:lzclose:org $:ld hl,#EEEE:"\
+			"org #A000,$:lzx0:ld hl,#EEEE:nop 16:lzclose:org $:ld hl,#EEEE"
+
+#define AUTOTEST_LZ005	"org #A000,$:module1:lzx0:jp module2:nop 16:lzclose:org $:glop1:"\
+			"org #A000,$:module2:lzx0:jp module3:nop 16:lzclose:org $:glop2:"\
+			"org #A000,$:module3:lzx0:jp module1:nop 16:lzclose:org $:glop3"
+
+
+#define AUTOTEST_LZ006 "org #A000,$:glop1:inside1:module1:lzx0:jp module2:nop 16:lzclose:org $:"\
+			"org #A000,$:glop2:inside2:module2:lzx0:jp module3:nop 16:lzclose:org $:"\
+			"org #A000,$:glop3:inside3:module3:lzx0:jp module1:nop 16:lzclose:org $"
+
+
+#define AUTOTEST_LZ007 "org #A000,$:module1:lzx0:jp module1:jp module2:jp module3:jp module4:lzclose:org $:"\
+			"org #A000,$:module2:lzx0:jp module1:jp module2:jp module3:jp module4:lzclose:org $:"\
+			"org #A000,$:module3:lzx0:jp module1:jp module2:jp module3:jp module4:lzclose:org $:"\
+			"org #A000,$:module4:lzx0:jp module1:jp module2:jp module3:jp module4:lzclose:org $"
+
+
+
 #define AUTOTEST_LZDEFERED	"lz48:defs 20:lzclose:defb $"
 
 
@@ -24539,6 +24560,68 @@ printf("*** multi-LZ segment test disabled as there is no APUltra support for th
 			&& opcode[4]==0x1A && opcode[0x23]==0xFF && opcode[0x24]==0xFB) {} else {printf("Autotest %03d ERROR (LZ segments mixed with ORG)\n",cpt);exit(-1);}
 	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
 printf("testing LZ segment + ORG relocation OK\n");
+
+	ret=RasmAssemble(AUTOTEST_LZ004,strlen(AUTOTEST_LZ004),&opcode,&opcodelen);
+	if (!ret) {
+		int ic;
+		unsigned char pattern[3];
+		pattern[0]=0x21;pattern[1]=pattern[2]=0;
+		for (ic=0;ic<opcodelen-3;ic++) {
+			if (memcmp(opcode+ic,pattern,3)==0) {
+				printf("Autotest %03d ERROR (LZ segments mixed with non LZ must evaluate all expressions)\n",cpt);exit(-1);
+			}
+		}
+	} else {printf("Autotest %03d ERROR (LZ segments mixed with non LZ must evaluate all expressions)\n",cpt);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing LZ segment mixed with non LZ segments OK\n");
+
+	ret=RasmAssemble(AUTOTEST_LZ005,strlen(AUTOTEST_LZ005),&opcode,&opcodelen);
+	if (!ret) {
+		int ic;
+		int sb=opcodelen/3;
+		if (sb*3!=opcodelen) {
+			printf("Autotest %03d ERROR (LZ005) 3 identical LZ sections must be crunched identically (1st test)\n",cpt);exit(-1);
+		}
+		for (ic=0;ic<2;ic++) {
+			if (memcmp(opcode+sb*ic,opcode+sb*ic+sb,sb)!=0) {
+				printf("Autotest %03d ERROR (LZ005) 3 identical LZ sections must be crunched identically (2nd test)\n",cpt);MiniDump(opcode,opcodelen);exit(-1);
+			}
+		}
+	} else {printf("Autotest %03d ERROR (LZ005) crunch 3 identical sections + inter jump in relocated ORG\n",cpt);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing multi-identical LZ sections inside relocated ORG, with jump related to each other OK\n");
+
+	ret=RasmAssemble(AUTOTEST_LZ006,strlen(AUTOTEST_LZ006),&opcode,&opcodelen);
+	if (!ret) {
+		int ic;
+		int sb=opcodelen/3;
+		if (sb*3!=opcodelen) {
+			printf("Autotest %03d ERROR (LZ006) 3 identical LZ sections must be crunched identically (1st test)\n",cpt);MiniDump(opcode,opcodelen);exit(-1);
+		}
+		for (ic=0;ic<2;ic++) {
+			if (memcmp(opcode+sb*ic,opcode+sb*ic+sb,sb)!=0) {
+				printf("Autotest %03d ERROR (LZ006) 3 identical LZ sections must be crunched identically (2nd test)\n",cpt);MiniDump(opcode,opcodelen);exit(-1);
+			}
+		}
+	} else {printf("Autotest %03d ERROR (LZ006) crunch 3 identical sections with 3x more labels than expressions\n",cpt);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+
+	ret=RasmAssemble(AUTOTEST_LZ007,strlen(AUTOTEST_LZ007),&opcode,&opcodelen);
+	if (!ret) {
+		int ic;
+		int sb=opcodelen/4;
+		if (sb*4!=opcodelen) {
+			printf("Autotest %03d ERROR (LZ007) 4 identical LZ sections must be crunched identically (1st test)\n",cpt);MiniDump(opcode,opcodelen);exit(-1);
+		}
+		for (ic=0;ic<3;ic++) {
+			if (memcmp(opcode+sb*ic,opcode+sb*ic+sb,sb)!=0) {
+				printf("Autotest %03d ERROR (LZ007) 4 identical LZ sections must be crunched identically (2nd test)\n",cpt);MiniDump(opcode,opcodelen);exit(-1);
+			}
+		}
+	} else {printf("Autotest %03d ERROR (LZ007) crunch 4 identical sections with 4x more expressions than labels\n",cpt);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+
+
 
 
 	ret=RasmAssemble(AUTOTEST_LZDEFERED,strlen(AUTOTEST_LZDEFERED),&opcode,&opcodelen);
