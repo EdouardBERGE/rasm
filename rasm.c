@@ -25960,7 +25960,7 @@ void Usage(int help)
 	#undef FUNC
 	#define FUNC "Usage"
 	
-	printf(KLWHITE"%s - %s\n(c) 2017 Edouard BERGE (use -n option to display all licenses / -autotest for self-testing)\n",RASM_VERSION,RELEASE_NAME);
+	printf(KLCYAN"%s - "KLMAGENTA"%s"KLWHITE"\n(c) 2017 Edouard BERGE (use -n option to display all licenses / -autotest for self-testing)\n",RASM_VERSION,RELEASE_NAME);
 	#ifndef NO_3RD_PARTIES
 	printf(KLGREEN"LZ4 (c) Yann Collet / ZX0 & ZX7 (c) Einar Saukas / Exomizer 2 (c) Magnus Lind / LZSA & AP-Ultra (c) Emmanuel Marty\n"KNORMAL);
 	#endif
