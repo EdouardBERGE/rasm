@@ -9164,7 +9164,9 @@ void PopAllExpression(struct s_assenv *ae, int crunched_zone)
 		if (crunched_zone>=0) {
 			/* stop right after the current crunched zone */
 			if (ae->expression[i].lz!=crunched_zone) {
+#if TRACE_LZ
 				printf("*break* at %d expression [%s] lz=%d\n",i,ae->expression[i].reference?ae->expression[i].reference:ae->wl[ae->expression[i].iw].w,ae->expression[i].lz);
+#endif
 				break;
 			}
 		} else {
