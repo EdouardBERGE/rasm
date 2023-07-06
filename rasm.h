@@ -74,8 +74,12 @@ struct s_rasm_info {
         struct s_debug_symbol *symbol;
         int nbsymbol,maxsymbol;
 	int run,start;
+	// export snapshot RAM informations to emulator
 	unsigned char *emuram;
 	int lenram;
+	// export snapshot or Cartridhe informations to emulator
+	unsigned char *emurom;
+	int lenrom;
 };
 
 #ifndef INSIDE_RASM
@@ -84,6 +88,7 @@ struct s_rasm_info {
 int RasmAssemble(const char *datain, int lenin, unsigned char **dataout, int *lenout);
 int RasmAssembleInfo(const char *datain, int lenin, unsigned char **dataout, int *lenout, struct s_rasm_info **debug);
 int RasmAssembleInfoIntoRAM(const char *datain, int lenin, struct s_rasm_info **debug, unsigned char *emuram, int ramsize);
+int RasmAssembleInfoIntoRAMROM(const char *datain, int lenin, struct s_rasm_info **debug, unsigned char *emuram, int ramsize, unsigned char *emurom, int romsize);
 int RasmAssembleInfoParam(const char *datain, int lenin, unsigned char **dataout, int *lenout, struct s_rasm_info **debug, struct s_parameter *param);
 void RasmFreeInfoStruct(struct s_rasm_info *debug);
 //};

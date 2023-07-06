@@ -2546,6 +2546,7 @@ void _internal_RasmFreeInfoStruct(struct s_rasm_info *debug)
 		}
 		MemFree(debug->symbol);
 	}
+	memset(debug,0,sizeof(debug));
 }
 
 void RasmFreeInfoStruct(struct s_rasm_info *debug)
@@ -9157,15 +9158,13 @@ void PopAllExpression(struct s_assenv *ae, int crunched_zone)
 		ae->stage=2;
 		first=1;
 	}
-#if TRACE_POPEXPR
-	printf("PopAllExpression crunched_zone=%d first=%d\n",crunched_zone,first);
-#endif
 	
 	for (i=first;i<ae->ie;i++) {
 		/* first compute only crunched expression (0,1,2,3,...) then intermediates and (-1) at the end */
 		if (crunched_zone>=0) {
 			/* stop right after the current crunched zone */
-			if (ae->expression[i].lz>crunched_zone) {
+			if (ae->expression[i].lz!=crunched_zone) {
+				printf("*break* at %d expression [%s] lz=%d\n",i,ae->expression[i].reference?ae->expression[i].reference:ae->wl[ae->expression[i].iw].w,ae->expression[i].lz);
 				break;
 			}
 		} else {
@@ -9345,6 +9344,9 @@ void PopAllExpression(struct s_assenv *ae, int crunched_zone)
 				FreeAssenv(ae);exit(-8);
 		}	
 	}
+#if TRACE_LZ
+	printf("PopAllExpression crunched_zone=%d first=%d end=%d\n",crunched_zone,first,i);
+#endif
 }
 void InsertLabelToTree(struct s_assenv *ae, struct s_label *label)
 {
@@ -13690,6 +13692,7 @@ void __LZCLOSE(struct s_assenv *ae) {
 	ae->lz=ae->ilz;
 	ObjectArrayAddDynamicValueConcat((void**)&ae->lzsection,&ae->ilz,&ae->mlz,&curlz,sizeof(curlz));
 
+	// we never come back to initial state, the end of crunch processing is done via ORG sections and BANK changes
 	//ae->lz=-1;
 }
 
@@ -18924,11 +18927,10 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 			}
 		}
 #if TRACE_LZ
-		for (i=0;i<ae->io;i++) {
-			printf("ORG: B%03d %s#%04X-#%04X InPlace=%d\n",ae->orgzone[i].ibank,ae->orgzone[i].protect?"Protect ":"",ae->orgzone[i].memstart,ae->orgzone[i].memend,ae->orgzone[i].inplace);
-		}
 		for (i=0;i<ae->ilz;i++) {
-			printf("LZ : #%04X-#%04X v=%02d io=%d ibank=%d iexpr=%d ilabel=%d\n",ae->lzsection[i].memstart,ae->lzsection[i].memend,ae->lzsection[i].lzversion,ae->lzsection[i].iorgzone,ae->lzsection[i].ibank,ae->lzsection[i].iexpr,ae->lzsection[i].ilabel);
+			int zio=ae->lzsection[i].iorgzone;
+			printf("ORG: B%03d %s#%04X-#%04X InPlace=%d | ",ae->orgzone[i].ibank,ae->orgzone[i].protect?"Protect ":"",ae->orgzone[i].memstart,ae->orgzone[i].memend,ae->orgzone[i].inplace);
+			printf("LZ : #%04X-#%04X v=%02d ibank=%d iexpr=%d ilabel=%d\n",ae->lzsection[i].memstart,ae->lzsection[i].memend,ae->lzsection[i].lzversion,ae->lzsection[i].ibank,ae->lzsection[i].iexpr,ae->lzsection[i].ilabel);
 		}
 #endif
 
@@ -19469,6 +19471,15 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 						if (ChunkSize) FileWriteBinary(TMP_filename,(char*)ae->mem[i]+offset,ChunkSize);
 						/* ADD zeros until the end of the bank */
 						FileWriteBinary(TMP_filename,(char*)filler,16384-ChunkSize);
+						/*****************************************************
+						         export to memory struct if requested
+						*****************************************************/
+						if (ae->retdebug && ae->debug.emurom && ae->debug.lenrom>=(i+1)*16384) {
+							memcpy(ae->debug.emurom+i*16384,(char*)ae->mem[i]+offset,ChunkSize);
+							if (16384-ChunkSize) memcpy(ae->debug.emurom+i*16384+ChunkSize,(char*)ae->mem[i]+offset,16384-ChunkSize);
+						}
+						/*****************************************************
+						*****************************************************/
 						if (ae->xpr) {
 							char xproutputname[256];
 							sprintf(xproutputname,"xpr%02d.rom",i>>5);
@@ -20832,28 +20843,32 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 	}
 
 	/*********************************************************************
-	 *
-	 * assembling into emulator memory
-	 *
-	 * ******************************************************************/
+	*
+	*     assembling into emulator memory or for testcase purpose
+	*
+	*     this section should be move in snapshot generation to
+	*     avoid code CC
+	*
+	* ******************************************************************/
 	/* get back memory if requested */
 	if (ae->retdebug && ae->debug.emuram && ae->debug.lenram) {
-		int ramidx,ramend,maxbank;
+	       int ramidx,ramend,maxbank;
 
-		maxbank=ae->debug.lenram>>14;
-		ramidx=0;
-		for (i=0;i<maxbank;i+=4) {
-			if (ae->bankset[i>>2]) {
-				if (ramidx+65536<=ae->debug.lenram) ramend=65536; else ramend=ae->debug.lenram-ramidx;
-				for (j=0;j<ramend;j++) {
-					ae->debug.emuram[ramidx++]=ae->mem[i][j];
-				}
-			} else {
-				printf("@@@ simple banking unsupported => todo\n");
-				/* unsupported now => @@TODO */
-			}
-		}
+	       maxbank=ae->debug.lenram>>14;
+	       ramidx=0;
+	       for (i=0;i<maxbank;i+=4) {
+		       if (ae->bankset[i>>2]) {
+			       if (ramidx+65536<=ae->debug.lenram) ramend=65536; else ramend=ae->debug.lenram-ramidx;
+			       for (j=0;j<ramend;j++) {
+				       ae->debug.emuram[ramidx++]=ae->mem[i][j];
+			       }
+		       } else {
+			       printf("@@@ simple banking unsupported => todo\n");
+			       /* unsupported now => @@TODO */
+		       }
+	       }
 	}
+
 
 	FreeAssenv(ae);
 	return ok;
@@ -22719,8 +22734,40 @@ int RasmAssembleInfo(const char *datain, int lenin, unsigned char **dataout, int
 	return ret;
 }
 
-int RasmAssembleInfoIntoRAM(const char *datain, int lenin, struct s_rasm_info **debug, unsigned char *emuram, int ramsize)
-{
+int RasmAssembleInfoIntoRAMROM(const char *datain, int lenin, struct s_rasm_info **debug, unsigned char *emuram, int ramsize, unsigned char *emurom, int romsize) {
+	static int cpt=0;
+	struct s_assenv *ae=NULL;
+	int ret;
+	int i,j,maxbank,ramidx;
+
+	if (datain==NULL && lenin==0) return cpt; else cpt++;
+
+	ae=PreProcessing(NULL,1,datain,lenin,NULL);
+
+	/* extension 4Mo = 256 slots + 4 slots 64K de RAM par défaut => 260 */
+	maxbank=ramsize>>14;
+	for (i=0;i<maxbank;i++) {
+		ramidx=i*16384;
+		for (j=0;j<16384;j++) {
+			ae->mem[i][j+16384*(i&3)]=emuram[ramidx++];
+		}
+	}
+	/* remaining bytes, if any */
+	ramidx=i*16384;
+	for (j=0;j<ramsize-ramidx;j++) {
+		ae->mem[i][j+16384*(i&3)]=emuram[ramidx++];
+	}
+
+	ae->debug.emuram=emuram;
+	ae->debug.lenram=ramsize;
+	ae->debug.emurom=emurom;
+	ae->debug.lenrom=romsize;
+
+	ret=Assemble(ae,NULL,NULL,debug);
+
+	return ret;
+}
+int RasmAssembleInfoIntoRAM(const char *datain, int lenin, struct s_rasm_info **debug, unsigned char *emuram, int ramsize) {
 	static int cpt=0;
 	struct s_assenv *ae=NULL;
 	int ret;
@@ -23084,6 +23131,19 @@ int RasmAssembleInfoParam(const char *datain, int lenin, unsigned char **dataout
 			"org #A000,$:module3:lzx0:jp module1:jp module2:jp module3:jp module4:lzclose:org $:"\
 			"org #A000,$:module4:lzx0:jp module1:jp module2:jp module3:jp module4:lzclose:org $"
 
+#define AUTOTEST_LZ008 "bank 0:nop: org #1000 : ld hl,#EEEE : label1 : jp label1 : jp label2 : jp label3:" \
+"org #2000 : ld hl,#EEEE : label2 : jp label1 : jp label2 : jp label3:"\
+"org #3000 : ld hl,#EEEE : label3 : jp label1 : jp label2 : jp label3:"\
+"bank 1: org #A000,$ : lzx0 : inside0 : jp inside0 : defs 256 : lzclose:ld hl,#EEEE : jp #EEEE:"\
+"org #1000 : ld hl,#EEEE : labelB1 : jp labelB1 : jp labelB2 : jp labelB3: "\
+"org #A000,$ : lzx0 : inside1 : jp inside0 : defs 256 : lzclose:ld hl,#EEEE : jp #EEEE:"\
+"org #2000 : ld hl,#EEEE : labelB2 : jp labelB1 : jp labelB2 : jp labelB3:"\
+"org #A000,$ : lzx0 : inside2 : jp inside0 : defs 256 : lzclose:ld hl,#EEEE : jp #EEEE:"\
+"org #3000 : ld hl,#EEEE : labelB3 : jp labelB1 : jp labelB2 : jp labelB3:"\
+"org #A000,$ : lzx0 : inside3 : jp inside0 : defs 256 : lzclose:ld hl,#EEEE : jp #EEEE:"\
+"bank 2:nop: org #1000 : ld hl,#EEEE : labelC1 : jp labelC1 : jp labelC2 : jp labelC3 : jp labelB1 : jp labelB2 : jp labelB3 : jp label1 : jp label2 : jp label3:"\
+"org #2000 : ld hl,#EEEE : labelC2 : jp labelC1 : jp labelC2 : jp labelC3 : jp labelB1 : jp labelB2 : jp labelB3 : jp label1 : jp label2 : jp label3:"\
+"org #3000 : ld hl,#EEEE : labelC3 : jp labelC1 : jp labelC2 : jp labelC3 : jp labelB1 : jp labelB2 : jp labelB3 : jp label1 : jp label2 : jp label3"
 
 
 #define AUTOTEST_LZDEFERED	"lz48:defs 20:lzclose:defb $"
@@ -24605,6 +24665,7 @@ printf("testing multi-identical LZ sections inside relocated ORG, with jump rela
 		}
 	} else {printf("Autotest %03d ERROR (LZ006) crunch 3 identical sections with 3x more labels than expressions\n",cpt);exit(-1);}
 	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing identical LZ sections with 3x more labels than expressions OK\n");
 
 	ret=RasmAssemble(AUTOTEST_LZ007,strlen(AUTOTEST_LZ007),&opcode,&opcodelen);
 	if (!ret) {
@@ -24620,8 +24681,31 @@ printf("testing multi-identical LZ sections inside relocated ORG, with jump rela
 		}
 	} else {printf("Autotest %03d ERROR (LZ007) crunch 4 identical sections with 4x more expressions than labels\n",cpt);exit(-1);}
 	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing identical LZ sections with 4x more expressions than labels OK\n");
 
 
+	{
+	unsigned char RAMEMU[65536]={0};
+	unsigned char ROMEMU[65536]={0};
+	ret=RasmAssembleInfoIntoRAMROM(AUTOTEST_LZ008,strlen(AUTOTEST_LZ008),&debug,RAMEMU,65536,ROMEMU,65536);
+	if (!ret) {
+		unsigned char optest[3]={0};
+		int ic;
+		for (ic=0;ic<65530;ic++) {
+			optest[0]=0x21;
+			if (memcmp(ROMEMU+ic,optest,3)==0) {
+				printf("Autotest %03d ERROR (LZ008) mixing contiguous sections with many banks => found expressions not evaluated\n",cpt);exit(-1);
+			}
+			optest[0]=0xC3;
+			if (memcmp(ROMEMU+ic,optest,3)==0) {
+				printf("Autotest %03d ERROR (LZ008) mixing contiguous sections with many banks => found expressions not evaluated\n",cpt);exit(-1);
+			}
+		}
+
+	} else {printf("Autotest %03d ERROR (LZ008) mixing contiguous sections with many banks\n",cpt);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+	RasmFreeInfoStruct(debug);
+	}
 
 
 	ret=RasmAssemble(AUTOTEST_LZDEFERED,strlen(AUTOTEST_LZDEFERED),&opcode,&opcodelen);
