@@ -16198,21 +16198,46 @@ void ___org_new(struct s_assenv *ae, int nocode) {
 }
 
 void __ORG(struct s_assenv *ae) {
+	int i,iscrunched;
 	___org_close(ae);
 	
 	if (ae->wl[ae->idx+1].t!=2) {
 		ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
 		ae->codeadr=RoundComputeExpression(ae,ae->wl[ae->idx+1].w,ae->outputadr,0,0);
-		if (ae->codeadr<0 || ae->codeadr>0xFFFF) {
+		if (ae->codeadr<0) {
 			ae->codeadr=0;
 			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"[%s:%d] cannot ORG outside memory!\n");
+		} else if (ae->codeadr>0xFFFF) {
+			iscrunched=0;
+			for (i=ae->ilz-1;i>=0;i--) {
+				if (ae->lzsection[i].ibank==ae->activebank) {
+					iscrunched=1;
+					break;
+				}
+			}
+			if (!iscrunched) {
+				ae->codeadr=0;
+				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"[%s:%d] cannot ORG outside memory!\n");
+			}
 		}
 		if (!ae->wl[ae->idx+1].t && ae->wl[ae->idx+2].t!=2) {
 			ExpressionFastTranslate(ae,&ae->wl[ae->idx+2].w,0);
 			ae->outputadr=RoundComputeExpression(ae,ae->wl[ae->idx+2].w,ae->outputadr,0,0);
-			if (ae->outputadr<0 || ae->outputadr>0xFFFF) {
+			if (ae->outputadr<0) {
 				ae->outputadr=0;
 				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"[%s:%d] cannot ORG outside memory!\n");
+			} else if (ae->outputadr>0xFFFF) {
+				iscrunched=0;
+				for (i=ae->ilz-1;i>=0;i--) {
+					if (ae->lzsection[i].ibank==ae->activebank) {
+						iscrunched=1;
+						break;
+					}
+				}
+				if (!iscrunched) {
+					ae->outputadr=0;
+					MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"[%s:%d] cannot ORG outside memory!\n");
+				}
 			}
 			ae->idx+=2;
 		} else {
