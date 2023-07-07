@@ -8099,10 +8099,34 @@ void PushExpression(struct s_assenv *ae,int iw,enum e_expression zetype)
 		if (ae->outputadr<=ae->maxptr) {  // = compare because done AFTER simili value assignment
 			ObjectArrayAddDynamicValueConcat((void **)&ae->expression,&ae->ie,&ae->me,&curexp,sizeof(curexp));
 		} else {
-			/* to avoid double error message */
-			if (!ae->stop) MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"(PushExpr) output exceed limit %04X\n",ae->maxptr); else MaxError(ae);
-			ae->stop=1;
-			return;
+			int i,iscrunched;
+			iscrunched=0;
+			for (i=ae->ilz-1;i>=0;i--) {
+				if (ae->lzsection[i].ibank==ae->activebank) {
+					iscrunched=1;
+					break;
+				}
+			}
+			if (!iscrunched) {
+				/* to avoid double error message */
+				if (!ae->stop) MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"(PushExpr) output exceed limit %04X\n",ae->maxptr); else MaxError(ae);
+				ae->stop=1;
+				return;
+			} else {
+				// who cares!
+			}
+			if (ae->maxptr&0xFFFF) {
+				rasm_printf(ae,KWARNING"Warning: Specific limits are not applied when using crunched sections, cause memory blocks are moved unpredictably\n");
+				if (ae->erronwarn) MaxError(ae);
+			}
+#if TRACE_LZ
+	printf("**output exceed limit** (PushExpr) extending memory space\n");
+#endif
+			int requested_block=ae->outputadr>>16;
+			ae->mem[ae->activebank]=MemRealloc(ae->mem[ae->activebank],(requested_block+1)*65536);
+			ae->maxptr=(requested_block+1)*65536;
+			// eventually write expression ^_^
+			ObjectArrayAddDynamicValueConcat((void **)&ae->expression,&ae->ie,&ae->me,&curexp,sizeof(curexp));
 		}
 	} else {
 		switch (zetype) {
@@ -23232,6 +23256,9 @@ int RasmAssembleInfoParam(const char *datain, int lenin, unsigned char **dataout
 #define AUTOTEST_LZEXTKO001	"buildcpr: bank 0: org #C000:nop: org #FF00: lzx0: defs 512: lzclose:defs 512: jp #C000"
 #define AUTOTEST_LZEXTKO002	"org #C000:nop: org #FF00: lzx0: defs 512: lzclose:defs 512: jp #C000"
 
+#define AUTOTEST_LZEXTOK005	"buildcpr: bank 0: org #FF00 : org #A000,$ : norecess: lzx0: defs 512: lzclose:org $:defs 64:jp norecess"
+#define AUTOTEST_LZEXTOK006	"buildcpr: bank 0: org #FF00 : org #A000,$ : norecess: lzx0: defs 512,0: lzclose:org $:defs 64:jp norecess"
+
 #define AUTOTEST_LZDEFERED	"lz48:defs 20:lzclose:defb $"
 
 
@@ -24870,6 +24897,14 @@ printf("testing memory overrun with LZ (test 3) OK\n");
 	if (!ret) {} else {printf("Autotest %03d ERROR (LZ overrun test 4)\n",cpt);exit(-1);}
 	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
 printf("testing memory overrun with LZ (test 4) OK\n");
+	ret=RasmAssemble(AUTOTEST_LZEXTOK005,strlen(AUTOTEST_LZEXTOK005),&opcode,&opcodelen);
+	if (!ret) {} else {printf("Autotest %03d ERROR (LZ overrun test 5, with ORG tolerance)\n",cpt);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing memory overrun with LZ (test 5, with ORG tolerance) OK\n");
+	ret=RasmAssemble(AUTOTEST_LZEXTOK006,strlen(AUTOTEST_LZEXTOK006),&opcode,&opcodelen);
+	if (!ret) {} else {printf("Autotest %03d ERROR (LZ overrun test 6, with ORG tolerance + PushExpr)\n",cpt);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing memory overrun with LZ (test 6, with ORG tolerance + PushExpr) OK\n");
 	
 	ret=RasmAssemble(AUTOTEST_LZEXTKO001,strlen(AUTOTEST_LZEXTKO001),&opcode,&opcodelen);
 	if (ret) {} else {printf("Autotest %03d ERROR (LZ overrun failure test 1)\n",cpt);exit(-1);}
