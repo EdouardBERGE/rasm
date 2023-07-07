@@ -8,6 +8,7 @@
 #define TRACE_STRUCT 0
 #define TRACE_EDSK 0
 #define TRACE_LABEL 0
+#define TRACE_ORG 0
 #define TRACE_LZ 0
 #define TRACE_ASSEMBLE 0
 
@@ -882,9 +883,11 @@ struct s_assenv {
 	/* current memory */
 	int maxptr;
 	/* CPR memory */
-	unsigned char **mem;
 	int iwnamebank[BANK_MAX_NUMBER];
+	unsigned char **mem;
 	int nbbank,maxbank;
+	int *memsize;
+	int nbmemsize,maxmemsize;
 	int forcetape,forcezx,forcecpr,forceROM,forceROMconcat,bankmode;
 	int amsdos,forcesnapshot,packedbank,extendedCPR,xpr,cprinfo,cprinfo_export,dsksnapshot;
 	int lastbank,activebank; // current used bank where data/code has to be written | used with outputadr (see ORG tracking)
@@ -1392,7 +1395,7 @@ char **_internal_readtextfile(struct s_assenv *ae,char *filename, char replacech
                 lines_buffer[nb_lines]=NULL;
         }
 
-	if (ae->enforce_symbol_case && replacechar==':') {
+	if (ae && ae->enforce_symbol_case && replacechar==':') {
 		ae->source_bigbuffer=bigbuffer;
 		ae->source_bigbuffer_len=file_size;
 	}
@@ -2797,18 +2800,54 @@ void ___internal_output_disabled(struct s_assenv *ae,unsigned char v)
 	#undef FUNC
 	#define FUNC "fake ___output"
 }
+
+void ___internal_output_extend(struct s_assenv *ae,unsigned char v)
+{
+	/* limit exceededn, second chance if crunched section */
+	int iscrunched=0;
+	int i;
+
+	// limit exceed, are we using crunched sections?
+	for (i=ae->ilz-1;i>=0;i--) {
+		if (ae->lzsection[i].ibank==ae->activebank) {
+			iscrunched=1;
+			break;
+		}
+	}
+
+	if (!iscrunched) {
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"output exceed limit %04X\n",ae->maxptr);
+		ae->stop=1;
+		___output=___internal_output_disabled;
+		return;
+	}
+
+	if (ae->maxptr&0xFFFF) {
+		rasm_printf(ae,KWARNING"Warning: Specific limits are not applied  when using crunched sections, cause memory blocks are moved unpredictably\n");
+		if (ae->erronwarn) MaxError(ae);
+	}
+
+#if TRACE_LZ
+	printf("**output exceed limit** extending memory space\n");
+#endif
+	int requested_block=ae->outputadr>>16;
+	ae->mem[ae->activebank]=MemRealloc(ae->mem[ae->activebank],(requested_block+1)*65536);
+	ae->maxptr=(requested_block+1)*65536;
+	// eventually write byte ^_^
+	ae->mem[ae->activebank][ae->outputadr++]=v;
+	ae->codeadr++;
+
+}
 void ___internal_output(struct s_assenv *ae,unsigned char v)
 {
 	#undef FUNC
 	#define FUNC "___output"
-	
+
 	if (ae->outputadr<ae->maxptr) {
 		ae->mem[ae->activebank][ae->outputadr++]=v;
 		ae->codeadr++;
 	} else {
-		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"output exceed limit %d\n",ae->maxptr);
-		ae->stop=1;
-		___output=___internal_output_disabled;
+		___internal_output_extend(ae,v);
 	}
 }
 void ___internal_output_nocode(struct s_assenv *ae,unsigned char v)
@@ -2833,7 +2872,7 @@ void ___internal_output_nocode(struct s_assenv *ae,unsigned char v)
 		ae->outputadr++;
 		ae->codeadr++;
 	} else {
-		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"output exceed limit %d\n",ae->maxptr);
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"output exceed limit %04X\n",ae->maxptr);
 		ae->stop=1;
 		___output=___internal_output_disabled;
 	}
@@ -8031,6 +8070,7 @@ void PushExpression(struct s_assenv *ae,int iw,enum e_expression zetype)
 			ae->codeadr-=startptr;
 		}
 		/* calcul adresse de reference et post-incrementation pour sauter les data */
+//printf("output=%X\n",ae->outputadr);
 		switch (zetype) {
 			case E_EXPRESSION_J8:curexp.ptr=ae->codeadr-1;ae->outputadr++;ae->codeadr++;break;
 			case E_EXPRESSION_0V8:curexp.ptr=ae->codeadr;ae->outputadr++;ae->codeadr++;break;
@@ -8055,12 +8095,12 @@ void PushExpression(struct s_assenv *ae,int iw,enum e_expression zetype)
 			case E_EXPRESSION_BRS:curexp.ptr=ae->codeadr;break; // minimum syndical
 			default:break;
 		}
-		/* le contrôle n'est pas bon avec les DEFB, DEFW, ...  -> @@TODO */
-		if (ae->outputadr<=ae->maxptr) {
+//printf("output=%X maxptr=%X\n",ae->outputadr,ae->maxptr);
+		if (ae->outputadr<=ae->maxptr) {  // = compare because done AFTER simili value assignment
 			ObjectArrayAddDynamicValueConcat((void **)&ae->expression,&ae->ie,&ae->me,&curexp,sizeof(curexp));
 		} else {
 			/* to avoid double error message */
-			if (!ae->stop) MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"output exceed limit %d\n",ae->maxptr); else MaxError(ae);
+			if (!ae->stop) MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"(PushExpr) output exceed limit %04X\n",ae->maxptr); else MaxError(ae);
 			ae->stop=1;
 			return;
 		}
@@ -8088,9 +8128,9 @@ void PushExpression(struct s_assenv *ae,int iw,enum e_expression zetype)
 			case E_EXPRESSION_ZXSTACK:break;
 			case E_EXPRESSION_BRS:break;
 		}
-		if (ae->outputadr<=ae->maxptr) {
+		if (ae->outputadr<=ae->maxptr) { // = compare because done AFTER simili value assignment
 		} else {
-			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"NOCODE output exceed limit %d\n",ae->maxptr);
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"(PushExpr) NOCODE output exceed limit %04X\n",ae->maxptr);
 			FreeAssenv(ae);exit(3);
 		}
 	}
@@ -13759,10 +13799,11 @@ void ___new_memory_space(struct s_assenv *ae)
 		__LZCLOSE(ae);
 	}
 	ae->lastbank=ae->activebank; // track last bank used
-	ae->activebank=ae->nbbank;
 	mem=MemMalloc(65536);
 	memset(mem,0,65536);
 	ObjectArrayAddDynamicValueConcat((void**)&ae->mem,&ae->nbbank,&ae->maxbank,&mem,sizeof(mem));
+	IntArrayAddDynamicValueConcat(&ae->memsize,&ae->nbmemsize,&ae->maxmemsize,65536);
+	ae->activebank=ae->nbbank-1; ae->maxptr=ae->memsize[ae->activebank]; // inseparable
 
 	ae->outputadr=0;
 	ae->codeadr=0;
@@ -13804,7 +13845,7 @@ void __REBANK(struct s_assenv *ae) {
 		if (ae->io) {
 			ae->orgzone[ae->io-1].memend=ae->outputadr;
 		}
-		ae->activebank=ae->lastbank;
+		ae->activebank=ae->lastbank; ae->maxptr=ae->memsize[ae->activebank]; // inseparable
 		___getbackto_memory_space(ae);
 	} else {
 		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"REBANK directive has no parameter\n");
@@ -13839,7 +13880,7 @@ void __BANK(struct s_assenv *ae) {
 		} else {
 			ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
 			ae->lastbank=ae->activebank; // track last bank used
-			ae->activebank=RoundComputeExpression(ae,ae->wl[ae->idx+1].w,ae->codeadr,0,0);
+			ae->activebank=RoundComputeExpression(ae,ae->wl[ae->idx+1].w,ae->codeadr,0,0); ae->maxptr=ae->memsize[ae->activebank]; // inseparable
 		}
 		if (ae->forcecpr && (ae->activebank<0 || ae->activebank>31) && !ae->extendedCPR) {
 			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"FATAL - Bank selection must be from 0 to 31 in cartridge mode\n");
@@ -13914,7 +13955,7 @@ void __ROMBANK(struct s_assenv *ae) {
 		ae->rombank[rom_select]=ae->activebank;
 	} else {
 		// already allocated, just translate ROM number
-		ae->activebank=ae->rombank[rom_select];
+		ae->activebank=ae->rombank[rom_select]; ae->maxptr=ae->memsize[ae->activebank]; // inseparable
 	}
 }
 
@@ -13938,8 +13979,8 @@ void __BANKSET(struct s_assenv *ae) {
 	if (ae->wl[ae->idx+1].t!=2) {
 		ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
 		ae->lastbank=ae->activebank; // track last bank used
-		ae->activebank=RoundComputeExpression(ae,ae->wl[ae->idx+1].w,ae->codeadr,0,0);
-		ae->activebank*=4;
+		ae->activebank=RoundComputeExpression(ae,ae->wl[ae->idx+1].w,ae->codeadr,0,0); // inseparable particulier (see next line)
+		ae->activebank*=4; ae->maxptr=ae->memsize[ae->activebank]; // inseparable
 		if (ae->forcesnapshot && (ae->activebank<0 || ae->activebank>=260)) {
 			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"FATAL - Bank set selection must be from 0 to 64 in snapshot mode\n");
 			FreeAssenv(ae);
@@ -19141,7 +19182,16 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 		}
 		/* compute expression outside crunched blocks */
 		PopAllExpression(ae,-1);
-	}	
+	}
+	// ORG integrity after crunched sections, must always fit in 64K
+	for (i=0;i<ae->io;i++) {
+#if TRACE_ORG
+		printf("ORG: B%03d %s#%04X-#%04X InPlace=%d\n",ae->orgzone[i].ibank,ae->orgzone[i].protect?"Protect ":"",ae->orgzone[i].memstart,ae->orgzone[i].memend,ae->orgzone[i].inplace);
+#endif
+		if (ae->orgzone[i].memend>0x10000) {
+			MakeError(ae,0,ae->filename[ae->orgzone[i].ifile],ae->orgzone[i].iline,"ORG section is out of 64K!\n");
+		}
+	}
 
 	/*******************************************************************************
 	      p o k e r  
@@ -19241,6 +19291,8 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 		ae->idx=ae->comz[i].idx;
 		__COMZ(ae,i);
 	}
+
+
 
 /***************************************************************************************************************************************************************************************
 ****************************************************************************************************************************************************************************************
@@ -21346,12 +21398,12 @@ printf("init 3\n");
 		mem=MemMalloc(65536);
 		memset(mem,0,65536);
 		ObjectArrayAddDynamicValueConcat((void**)&ae->mem,&ae->nbbank,&ae->maxbank,&mem,sizeof(mem));
+		IntArrayAddDynamicValueConcat(&ae->memsize,&ae->nbmemsize,&ae->maxmemsize,65536);
 	}
 #if TRACE_PREPRO
 printf("nbbank=%d initialised\n",ae->nbbank);
 #endif
-	ae->activebank=BANK_MAX_NUMBER;
-	ae->maxptr=65536;
+	ae->activebank=BANK_MAX_NUMBER; ae->maxptr=ae->memsize[ae->activebank]; // inseparable
 	for (i=0;i<256;i++) { ae->charset[i]=(unsigned char)i; }
 
 	if (param && param->outputfilename) {
@@ -23147,6 +23199,12 @@ int RasmAssembleInfoParam(const char *datain, int lenin, unsigned char **dataout
 "org #2000 : ld hl,#EEEE : labelC2 : jp labelC1 : jp labelC2 : jp labelC3 : jp labelB1 : jp labelB2 : jp labelB3 : jp label1 : jp label2 : jp label3:"\
 "org #3000 : ld hl,#EEEE : labelC3 : jp labelC1 : jp labelC2 : jp labelC3 : jp labelB1 : jp labelB2 : jp labelB3 : jp label1 : jp label2 : jp label3"
 
+#define AUTOTEST_LZEXTOK001	"buildcpr: bank 0: org #FF00: norecess: lzx0: defs 512: lzclose: jr norecess"
+#define AUTOTEST_LZEXTOK002	"org #FF00: norecess: lzx0: defs 512: lzclose: jr norecess"
+#define AUTOTEST_LZEXTOK003	"buildcpr : bank 0 : org #C000 : nop : limit #f000:org #FF00 : norecess : lzx0 : defs 512 : lzclose : jr norecess"
+#define AUTOTEST_LZEXTOK004	"org #C000 : nop : limit #f000:org #FF00 : norecess : lzx0 : defs 512 : lzclose : jr norecess"
+#define AUTOTEST_LZEXTKO001	"buildcpr: bank 0: org #C000:nop: org #FF00: lzx0: defs 512: lzclose:defs 512: jp #C000"
+#define AUTOTEST_LZEXTKO002	"org #C000:nop: org #FF00: lzx0: defs 512: lzclose:defs 512: jp #C000"
 
 #define AUTOTEST_LZDEFERED	"lz48:defs 20:lzclose:defb $"
 
@@ -23240,9 +23298,16 @@ int RasmAssembleInfoParam(const char *datain, int lenin, unsigned char **dataout
 /* test override control between bank and bankset in snapshot mode + temp workspace */
 #define AUTOTEST_BANKSET "buildsna:bank 0:nop:bank 1:nop:bank:nop:bank 2:nop:bank 3:nop:bankset 1:nop:bank 8:nop:bank 9:nop:bank 10:nop:bank 11:nop"
 
-#define AUTOTEST_LIMITOK "org #100:limit #102:nop:limit #103:ld a,0:protect #105,#107:limit #108:xor a:org $+3:inc a" 
+#define AUTOTEST_LIMITOK1	"org #100:limit #102:nop:limit #103:ld a,0"
+#define AUTOTEST_LIMITOK2	"org #100:limit #102:nop:limit #103:nop:nop"
+#define AUTOTEST_LIMITKO1	"limit #100:org #FF:ld a,0"
+#define AUTOTEST_LIMITKO2	"limit #100:org #FF:nop:nop"
 
-#define AUTOTEST_LIMITKO	"limit #100:org #100:add ix,ix"
+#define AUTOTEST_PROTECTOK	"org #100:nop:protect #101,#102:org $+2:inc a" 
+#define AUTOTEST_PROTECTKO1	"org #100:protect #101,#102:nop:nop:org $+1:inc a" 
+#define AUTOTEST_PROTECTKO2	"org #100:nop:protect #101,#102:inc a" 
+#define AUTOTEST_PROTECTKO3	"org #100:protect #101,#102:ld a,0:org $+2:inc a" 
+#define AUTOTEST_PROTECTKO4	"org #100:nop:protect #101,#102:defb 0"
 
 #define AUTOTEST_DEFS "defs 256,0"
 
@@ -24296,6 +24361,23 @@ void RasmAutotest(void)
 #ifdef RDD
 	printf("\n%d bytes\n",_static_library_memory_used);
 #endif
+
+	/* Autotest Rasm integrity */
+	if (FileExists("rasm.c")) {
+		char **rasm;
+		rasm=FileReadLinesRAW(NULL,"rasm.c");
+		for (i=0;rasm[i];i++) {
+			if (strstr(rasm[i],"activebank=") && !strstr(rasm[i],"inseparable")) {
+				printf("Autotest %d ERROR : activebank affectation must update maxptr with bank memsize!\n",cpt); exit(-1);
+			}
+		}
+		cpt++;
+printf("testing rasm source integrity : activebank and maxptr update OK\n");
+
+
+	} else {
+		printf("rasm.c not found, skipping integrity tests\n");
+	}
 	
 	/* Autotest preprocessing */
 	ret=RasmAssemble(AUTOTEST_VIRGULE,strlen(AUTOTEST_VIRGULE),&opcode,&opcodelen);
@@ -24550,20 +24632,57 @@ printf("testing BANK/ORG OK\n");
 	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
 printf("testing BANKROM+bank tags OK\n");
 
-	ret=RasmAssemble(AUTOTEST_LIMITOK,strlen(AUTOTEST_LIMITOK),&opcode,&opcodelen);
+
+	ret=RasmAssemble(AUTOTEST_LIMITOK1,strlen(AUTOTEST_LIMITOK1),&opcode,&opcodelen);
 	if (!ret) {} else {printf("Autotest %03d ERROR (limit ok)\n",cpt);exit(-1);}
 	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
-printf("testing LIMIT 1 OK\n");
+printf("testing LIMIT with expression writes OK\n");
 	
-	ret=RasmAssemble(AUTOTEST_LIMITKO,strlen(AUTOTEST_LIMITKO),&opcode,&opcodelen);
-	if (ret) {} else {printf("Autotest %03d ERROR (out of limit)\n",cpt);exit(-1);}
+	ret=RasmAssemble(AUTOTEST_LIMITOK2,strlen(AUTOTEST_LIMITOK2),&opcode,&opcodelen);
+	if (!ret) {} else {printf("Autotest %03d ERROR (limit ok)\n",cpt);exit(-1);}
 	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
-printf("testing LIMIT 2 OK\n");
+printf("testing LIMIT with opcode writes OK\n");
 	
+	ret=RasmAssemble(AUTOTEST_LIMITKO1,strlen(AUTOTEST_LIMITKO1),&opcode,&opcodelen);
+	if (ret) {} else {printf("Autotest %03d ERROR (out of limit 1)\n",cpt);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing LIMIT failure with expression writes OK\n");
+	
+	ret=RasmAssemble(AUTOTEST_LIMITKO2,strlen(AUTOTEST_LIMITKO2),&opcode,&opcodelen);
+	if (ret) {} else {printf("Autotest %03d ERROR (out of limit 2)\n",cpt);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing LIMIT failure with opcode writes OK\n");
+
+	
+	ret=RasmAssemble(AUTOTEST_PROTECTOK,strlen(AUTOTEST_PROTECTOK),&opcode,&opcodelen);
+	if (!ret) {} else {printf("Autotest %03d ERROR (testing limit of protect zone)\n",cpt);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing PROTECT limits OK\n");
+	
+	ret=RasmAssemble(AUTOTEST_PROTECTKO1,strlen(AUTOTEST_PROTECTKO1),&opcode,&opcodelen);
+	if (ret) {} else {printf("Autotest %03d ERROR (inside protect zone)\n",cpt);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing PROTECT lower bound failure with opcode writes OK\n");
+	
+	ret=RasmAssemble(AUTOTEST_PROTECTKO2,strlen(AUTOTEST_PROTECTKO2),&opcode,&opcodelen);
+	if (ret) {} else {printf("Autotest %03d ERROR (inside protect zone)\n",cpt);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing PROTECT higher bound failure with opcode writes OK\n");
+	
+	ret=RasmAssemble(AUTOTEST_PROTECTKO3,strlen(AUTOTEST_PROTECTKO3),&opcode,&opcodelen);
+	if (ret) {} else {printf("Autotest %03d ERROR (inside protect zone)\n",cpt);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing PROTECT lower bound failure with expression writes OK\n");
+	
+	ret=RasmAssemble(AUTOTEST_PROTECTKO4,strlen(AUTOTEST_PROTECTKO4),&opcode,&opcodelen);
+	if (ret) {} else {printf("Autotest %03d ERROR (inside protect zone)\n",cpt);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing PROTECT higher bound failure with expression writes OK\n");
+
 	ret=RasmAssemble(AUTOTEST_LIMIT03,strlen(AUTOTEST_LIMIT03),&opcode,&opcodelen);
 	if (ret) {} else {printf("Autotest %03d ERROR (limit: negative limit)\n",cpt);exit(-1);}
 	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
-printf("testing inegative LIMIT OK\n");
+printf("testing negative LIMIT OK\n");
 	
 	ret=RasmAssemble(AUTOTEST_LIMIT04,strlen(AUTOTEST_LIMIT04),&opcode,&opcodelen);
 	if (ret) {} else {printf("Autotest %03d ERROR (limit: max limit test)\n",cpt);exit(-1);}
@@ -24708,6 +24827,32 @@ printf("testing identical LZ sections with 4x more expressions than labels OK\n"
 	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
 	RasmFreeInfoStruct(debug);
 	}
+
+	ret=RasmAssemble(AUTOTEST_LZEXTOK001,strlen(AUTOTEST_LZEXTOK001),&opcode,&opcodelen);
+	if (!ret) {} else {printf("Autotest %03d ERROR (LZ overrun test 1)\n",cpt);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing memory overrun with LZ (test 1) OK\n");
+	ret=RasmAssemble(AUTOTEST_LZEXTOK002,strlen(AUTOTEST_LZEXTOK002),&opcode,&opcodelen);
+	if (!ret) {} else {printf("Autotest %03d ERROR (LZ overrun test 2)\n",cpt);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing memory overrun with LZ (test 2) OK\n");
+	ret=RasmAssemble(AUTOTEST_LZEXTOK003,strlen(AUTOTEST_LZEXTOK003),&opcode,&opcodelen);
+	if (!ret) {} else {printf("Autotest %03d ERROR (LZ overrun test 3)\n",cpt);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing memory overrun with LZ (test 3) OK\n");
+	ret=RasmAssemble(AUTOTEST_LZEXTOK004,strlen(AUTOTEST_LZEXTOK004),&opcode,&opcodelen);
+	if (!ret) {} else {printf("Autotest %03d ERROR (LZ overrun test 4)\n",cpt);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing memory overrun with LZ (test 4) OK\n");
+	
+	ret=RasmAssemble(AUTOTEST_LZEXTKO001,strlen(AUTOTEST_LZEXTKO001),&opcode,&opcodelen);
+	if (ret) {} else {printf("Autotest %03d ERROR (LZ overrun failure test 1)\n",cpt);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing memory overrun with LZ (failure test 1) OK\n");
+	ret=RasmAssemble(AUTOTEST_LZEXTKO002,strlen(AUTOTEST_LZEXTKO002),&opcode,&opcodelen);
+	if (ret) {} else {printf("Autotest %03d ERROR (LZ overrun failure test 2)\n",cpt);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing memory overrun with LZ (failure test 2) OK\n");
 
 
 	ret=RasmAssemble(AUTOTEST_LZDEFERED,strlen(AUTOTEST_LZDEFERED),&opcode,&opcodelen);
