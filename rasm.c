@@ -2804,6 +2804,7 @@ void ___internal_output_disabled(struct s_assenv *ae,unsigned char v)
 void ___internal_output_extend(struct s_assenv *ae,unsigned char v)
 {
 	/* limit exceededn, second chance if crunched section */
+	int requested_block;
 	int iscrunched=0;
 	int i;
 
@@ -2830,7 +2831,7 @@ void ___internal_output_extend(struct s_assenv *ae,unsigned char v)
 #if TRACE_LZ
 	printf("**output exceed limit** extending memory space\n");
 #endif
-	int requested_block=ae->outputadr>>16;
+	requested_block=ae->outputadr>>16;
 	ae->mem[ae->activebank]=MemRealloc(ae->mem[ae->activebank],(requested_block+1)*65536);
 	ae->maxptr=(requested_block+1)*65536;
 	// eventually write byte ^_^
@@ -8099,6 +8100,7 @@ void PushExpression(struct s_assenv *ae,int iw,enum e_expression zetype)
 		if (ae->outputadr<=ae->maxptr) {  // = compare because done AFTER simili value assignment
 			ObjectArrayAddDynamicValueConcat((void **)&ae->expression,&ae->ie,&ae->me,&curexp,sizeof(curexp));
 		} else {
+			int requested_block;
 			int i,iscrunched;
 			iscrunched=0;
 			for (i=ae->ilz-1;i>=0;i--) {
@@ -8122,7 +8124,7 @@ void PushExpression(struct s_assenv *ae,int iw,enum e_expression zetype)
 #if TRACE_LZ
 	printf("**output exceed limit** (PushExpr) extending memory space\n");
 #endif
-			int requested_block=ae->outputadr>>16;
+			requested_block=ae->outputadr>>16;
 			ae->mem[ae->activebank]=MemRealloc(ae->mem[ae->activebank],(requested_block+1)*65536);
 			ae->maxptr=(requested_block+1)*65536;
 			// eventually write expression ^_^
