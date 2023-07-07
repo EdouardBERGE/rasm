@@ -19189,7 +19189,8 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 		printf("ORG: B%03d %s#%04X-#%04X InPlace=%d\n",ae->orgzone[i].ibank,ae->orgzone[i].protect?"Protect ":"",ae->orgzone[i].memstart,ae->orgzone[i].memend,ae->orgzone[i].inplace);
 #endif
 		if (ae->orgzone[i].memend>0x10000) {
-			MakeError(ae,0,ae->filename[ae->orgzone[i].ifile],ae->orgzone[i].iline,"ORG section is out of 64K!\n");
+			MakeError(ae,0,ae->filename[ae->orgzone[i].ifile],ae->orgzone[i].iline,"ORG section is overflowing 64K bank by %d byte%s\n",
+					ae->orgzone[i].memend-0x10000,ae->orgzone[i].memend-0x10000>1?"s":"");
 		}
 	}
 
