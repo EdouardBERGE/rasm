@@ -8,7 +8,7 @@ Rasm was designed to be damn FAST and handle HUGE projects. On a modern machine,
 
 - Rasm know how to load&crunch on the fly files when doing INCBIN (including binaries)
 - Rasm is able to assemble and crunch portions of code, and relocate following instructions
-- Rasm can assemble as much code as you want and break the 64K barrier before crunch
+- Rasm can assemble as much code as you want in each memory space and break the 64K barrier before crunch
 - Many crunchers are supported: LZ4, LZ48, LZ49, ZX0, ZX7, Exomizer 2, AP-Ultra, LZSA1, LZSA2
 
 ## Native format
