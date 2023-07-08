@@ -1,8 +1,8 @@
 #define PROGRAM_NAME      "RASM"
-#define PROGRAM_VERSION   "2.0"
+#define PROGRAM_VERSION   "2.1"
 #define PROGRAM_DATE      "xx/07/2023"
 #define PROGRAM_COPYRIGHT "© 2017 BERGE Edouard / roudoudou from Resistance"
-#define RELEASE_NAME      "Blue Hedgehog"
+#define RELEASE_NAME      "Gerieh Yasmana"
 
 #define RASM_VERSION PROGRAM_NAME" v"PROGRAM_VERSION" (build "PROGRAM_DATE")"
 #define RASM_SNAP_VERSION PROGRAM_NAME" v"PROGRAM_VERSION
