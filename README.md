@@ -2,12 +2,13 @@
 
 ## Rasm Z80 assembler
     
-Rasm was designed to be damn FAST and handle HUGE projects. On a modern machine, it can assemble millions of instructions in a blink of an eye. It's almost 30 times faster than the best alternatives.
+Rasm was designed to be damn FAST and handle HUGE projects. On a modern machine, it can assemble millions of instructions in a blink of an eye. It's almost 30 times faster than the best alternatives. 
 
 ## Integrated crunched sections
 
 - Rasm know how to load&crunch on the fly files when doing INCBIN (including binaries)
 - Rasm is able to assemble and crunch portions of code, and relocate following instructions
+- Rasm can assemble as much code as you want and break the 64K barrier before crunch
 - Many crunchers are supported: LZ4, LZ48, LZ49, ZX0, ZX7, Exomizer 2, AP-Ultra, LZSA1, LZSA2
 
 ## Native format
@@ -31,6 +32,7 @@ Rasm was designed to be damn FAST and handle HUGE projects. On a modern machine,
 - ORG checking, unlimited memory workspaces where labels are shared, bank management, structures
 - conditionnal macro, unlimited & embeded loops with local labels, switch/case
 - floating point engine, mathematical functions, ...
+- crunched segments declaration may overflow the 64K limit as much as you want
 
 ## Compatibility for archeology (with old versions of these assemblers)
 
