@@ -472,10 +472,14 @@ unsigned char st1;
 unsigned char st2;
 unsigned short int length;
 unsigned char *data;
+int fakegap; // extragap management
 };
 
 struct s_edsk_track_global_struct  {
+int track,side; // easy display
+int unformated;
 int sectornumber;
+int headersize;
 /* information purpose */
 int sectorsize;
 int gap3length;
@@ -500,6 +504,11 @@ unsigned char extendcounter;
 unsigned char reserved;
 unsigned char rc;
 unsigned char blocks[16];
+};
+
+enum e_putfile_order {
+        ORDER_ID=0,
+        ORDER_PHYSICAL=1
 };
 
 struct s_edsk_wrapper {
@@ -12809,8 +12818,548 @@ void _DEFSTR(struct s_assenv *ae) {
 }
 #endif
 
-#undef FUNC
-#define FUNC "Import/Export CORE"
+//************************************************************************************************************************************
+//************************************************************************************************************************************
+							#undef FUNC
+						#define FUNC "EdskTool CORE"
+//************************************************************************************************************************************
+//************************************************************************************************************************************
+
+void edsktool_MAPTrack(struct s_edsk_track_global_struct *track) {
+        int rlen,gaplen,i,curlen;
+        int s,weak,gap;
+
+        if (track->unformated) {
+                printf("S%dT%02d : Unformated\n",track->side,track->track);
+        } else {
+                printf("S%dT%02d G%02XF%02XS%02d: ",track->side,track->track,track->gap3length,track->fillerbyte,track->sectornumber);
+
+                if (track->gap3length<32) gaplen=0; else
+                if (track->gap3length<96) gaplen=1; else
+                if (track->gap3length<160) gaplen=2; else gaplen=3;
+
+                printf("||"); // track info
+                for (s=0;s<track->sectornumber;s++) {
+                        switch (gaplen) {
+                                case 3:printf("|");
+                                case 2:printf("|");
+                                case 1:printf("|");
+                                default:break;
+                        }
+                        printf("#"); // header
+
+                        switch (track->sector[s].size) {
+                                case 0:curlen=128;break;
+                                case 1:curlen=256;break;
+                                case 2:curlen=512;break;
+                                case 3:curlen=1024;break;
+                                case 4:curlen=2048;break;
+                                case 5:curlen=4096;break;
+                                case 6:curlen=6144;break;
+                                default:curlen=0;break;
+                        }
+                        if (curlen>track->sector[s].length) {
+                                curlen=track->sector[s].length;
+                        }
+
+                        rlen=(curlen+31)/64;
+                        rlen-=2;
+
+                        if (rlen<0) rlen=0;
+                        printf("%02X",track->sector[s].id);
+                        if (rlen>3) {
+                                if (curlen==track->sector[s].length) {
+                                        printf(".s%d.",track->sector[s].size);
+                                } else if (curlen*3<=track->sector[s].length) {
+                                        printf("."KLORANGE"W"KNORMAL"%d.",track->sector[s].size);
+                                        weak=1;
+                                } else {
+                                        printf("."KLBLUE"G"KNORMAL"%d.",track->sector[s].size);
+                                        gap=1;
+                                }
+                                rlen-=4;
+                        }
+                        for (i=0;i<rlen;i++) printf(".");
+                }
+                if (weak && gap) printf(" gap+weak"); else
+                if (weak) printf(" weak"); else
+                if (gap) printf(" gap");
+                printf("\n");
+                weak=gap=0;
+        }
+}
+void edsktool_MAPEDSK(struct s_edsk_global_struct *edsk) {
+        int s,t;
+
+        for (s=0;s<edsk->sidenumber;s++) {
+                for (t=0;t<edsk->tracknumber;t++) {
+                        edsktool_MAPTrack(&edsk->track[t*edsk->sidenumber+s]);
+                }
+        }
+}
+struct s_edsk_global_struct *edsktool_NewEDSK(char *format) {
+        struct s_edsk_global_struct *edsk;
+        int i,t,s;
+
+        edsk=malloc(sizeof(struct s_edsk_global_struct));
+        memset(edsk,0,sizeof(struct s_edsk_global_struct));
+        if (!format) {
+                // empty EDSK
+                return edsk;
+        }
+
+        if (strcmp(format,"DATA")==0 || strcmp(format,"VENDOR")==0) {
+                edsk->tracknumber=42;
+                edsk->sidenumber=1;
+                edsk->track=malloc(sizeof(struct s_edsk_track_global_struct)*edsk->tracknumber*edsk->sidenumber);
+                memset(edsk->track,0,sizeof(struct s_edsk_track_global_struct)*edsk->tracknumber*edsk->sidenumber);
+                for (t=0;t<=39;t++) {
+                        edsk->track[t].track=t;
+                        edsk->track[t].side=0;
+                        edsk->track[t].sectornumber=9;
+                        edsk->track[t].sectorsize=2;
+                        edsk->track[t].gap3length=0x50;
+                        edsk->track[t].fillerbyte=0xE5;
+                        edsk->track[t].sector=malloc(edsk->track[t].sectornumber*sizeof(struct s_edsk_sector_global_struct));
+                        for (s=0;s<9;s++) {
+                                edsk->track[t].sector[s].track=t;
+                                edsk->track[t].sector[s].side=0;
+                                if (strcmp(format,"DATA")==0) edsk->track[t].sector[s].id=0xC1+s; else
+                                if (strcmp(format,"VENDOR")==0) edsk->track[t].sector[s].id=0x41+s;
+                                edsk->track[t].sector[s].size=2;
+                                edsk->track[t].sector[s].st1=0;
+                                edsk->track[t].sector[s].st2=0;
+                                edsk->track[t].sector[s].length=512;
+                                edsk->track[t].sector[s].data=malloc(edsk->track[t].sector[s].length);
+                                for (i=0;i<edsk->track[t].sector[s].length;i++) edsk->track[t].sector[s].data[i]=edsk->track[t].fillerbyte;
+                        }
+                }
+                for (t=40;t<=41;t++) {
+                        edsk->track[t].unformated=1;
+                }
+        } else if (strcmp(format,"DIX")==0) {
+                edsk->tracknumber=42;
+                edsk->sidenumber=1;
+                edsk->track=malloc(sizeof(struct s_edsk_track_global_struct)*edsk->tracknumber*edsk->sidenumber);
+                memset(edsk->track,0,sizeof(struct s_edsk_track_global_struct)*edsk->tracknumber*edsk->sidenumber);
+                for (t=0;t<=39;t++) {
+                        edsk->track[t].track=t;
+                        edsk->track[t].side=0;
+                        edsk->track[t].sectornumber=10;
+                        edsk->track[t].sectorsize=2;
+                        edsk->track[t].gap3length=50;
+                        edsk->track[t].fillerbyte=0xE5;
+                        edsk->track[t].sector=malloc(edsk->track[t].sectornumber*sizeof(struct s_edsk_sector_global_struct));
+                        for (s=0;s<10;s++) {
+                                edsk->track[t].sector[s].track=t;
+                                edsk->track[t].sector[s].side=0;
+                                edsk->track[t].sector[s].id=0xC1+s;
+                                edsk->track[t].sector[s].size=2;
+                                edsk->track[t].sector[s].st1=0;
+                                edsk->track[t].sector[s].st2=0;
+                                edsk->track[t].sector[s].length=512;
+                                edsk->track[t].sector[s].data=malloc(edsk->track[t].sector[s].length);
+                                for (i=0;i<edsk->track[t].sector[s].length;i++) edsk->track[t].sector[s].data[i]=edsk->track[t].fillerbyte;
+                        }
+                }
+                for (t=40;t<=41;t++) {
+                        edsk->track[t].unformated=1;
+                }
+        }
+
+        return edsk;
+}
+
+struct s_edsk_global_struct *edsktool_EDSK_load(char *edskfilename)
+{
+        #undef FUNC
+        #define FUNC "EDSK_load"
+
+        unsigned char header[256];
+        unsigned char *data;
+        int tracknumber,sidenumber,tracksize,disksize;
+        int i,b,s,t,face,curtrack,sectornumber,sectorsize,sectorid,reallength,gap3,filler,ST1,ST2;
+        int currenttrackposition=0,currentsectorposition,tmpcurrentsectorposition;
+        int curblock=0,curoffset=0;
+        int special,is_data,is_vendor,spelocal,ctrlsize;
+        FILE *f;
+        struct s_edsk_global_struct *edsk;
+
+        edsk=edsktool_NewEDSK(NULL);
+
+        f=fopen(edskfilename,"rb");
+        if (!f) {
+                printf(KERROR"Cannot read EDSK header of [%s]!\n",edskfilename);
+                exit(ABORT_ERROR);
+        }
+
+        if (fread((char*)&header,1,0x100,f)!=0x100) {
+                printf(KERROR"Cannot read EDSK header of [%s]!\n",edskfilename);
+                exit(ABORT_ERROR);
+        }
+        if (strncmp((char *)header,"EXTENDED",8)==0) {
+                printf(KIO"opening EDSK [%s] / creator: %-14.14s\n"KNORMAL,edskfilename,header+34);
+                tracknumber=header[34+14];
+                sidenumber=header[34+14+1];
+
+                // not in EDSK tracksize=header[34+14+1+1]+header[34+14+1+1+1]*256;
+                printf("tracks: %d  side:%d\n",tracknumber,sidenumber);
+
+                if (sidenumber<1 || sidenumber>2) {
+                        printf(KERROR"[%s] EDSK format is not supported in update mode (ntrack=%d nside=%d)\n",edskfilename,tracknumber,sidenumber);
+                        exit(ABORT_ERROR);
+                }
+
+                edsk->tracknumber=tracknumber;
+                edsk->sidenumber=sidenumber;
+                edsk->track=malloc(sizeof(struct s_edsk_track_global_struct)*tracknumber*sidenumber);
+                memset(edsk->track,0,sizeof(struct s_edsk_track_global_struct)*tracknumber*sidenumber);
+
+                for (i=disksize=0;i<tracknumber*sidenumber;i++) {
+                        disksize+=header[0x34+i]*256;
+                        edsk->track[i].headersize=header[0x34+i]*256;
+                }
+
+                printf("total track size: %dkb\n",disksize/1024);
+                data=malloc(disksize);
+                memset(data,0,disksize);
+                if ((ctrlsize=fread((char *)data,1,disksize,f))!=disksize) {
+                        printf(KERROR"Cannot read EDSK tracks! expecting %d bytes but read %d bytes\n"KNORMAL,disksize,ctrlsize);
+                        // This is not a fatal Error anymore to allow further analysis
+                }
+
+                for (t=0;t<tracknumber;t++)
+                for (face=0;face<sidenumber;face++) {
+                        int track_sectorsize;
+
+                        curtrack=t*sidenumber+face;
+                        i=currenttrackposition;
+                        currentsectorposition=i+0x100;
+
+                        special=0;
+                        edsk->track[curtrack].track=t;
+                        edsk->track[curtrack].side=face;
+
+                        if (!header[0x34+curtrack]) {
+                                edsk->track[curtrack].unformated=1;
+                        } else {
+                                currenttrackposition+=header[0x34+curtrack]*256;
+                                if (currenttrackposition>ctrlsize) {
+                                        printf(KERROR"Track %d side %d is declared as %04X bytes long but there is only %04X remaining\n"KNORMAL,t,face,header[0x34+curtrack]*256,ctrlsize-(currenttrackposition-header[0x34+curtrack]*256));
+                                }
+
+                                if (strncmp((char *)data+i,"Track-Info\r\n",12)) {
+                                        printf(KERROR"Invalid track information block side %d track %d => Header offset=%d\n",face,t,header[0x34+curtrack]*256);
+                                        exit(ABORT_ERROR);
+                                }
+                                sectornumber=data[i+21];
+                                track_sectorsize=data[i+20];
+                                gap3=data[i+22];
+                                filler=data[i+23];
+
+                                // track info
+                                edsk->track[curtrack].sectornumber=sectornumber;
+                                edsk->track[curtrack].sectorsize=track_sectorsize;
+                                edsk->track[curtrack].gap3length=gap3;
+                                edsk->track[curtrack].fillerbyte=filler;
+                                edsk->track[curtrack].datarate=data[i+18];
+                                edsk->track[curtrack].recordingmode=data[i+19];
+                                // sector structs
+                                edsk->track[curtrack].sector=malloc(sizeof(struct s_edsk_sector_global_struct)*sectornumber);
+                                memset(edsk->track[curtrack].sector,0,sizeof(struct s_edsk_sector_global_struct)*sectornumber);
+
+                                if (track_sectorsize!=2 || sectornumber!=9) {
+                                        special=1;
+                                }
+
+                                //printf("G%02X F%02X NBS=%02d : ",gap3,filler,sectornumber);
+
+                                is_data=is_vendor=0;
+                                for (s=0;s<sectornumber;s++) {
+
+                                        sectorid=data[i+24+8*s+2];
+                                        sectorsize=data[i+24+8*s+3];
+                                        // ST1 & ST2 indicates wrong checksum, ...
+                                        ST1=data[i+24+8*s+4];
+                                        ST2=data[i+24+8*s+5];
+                                        reallength=data[i+24+8*s+6]+data[i+24+8*s+7]*256; /* real length stored */
+
+                                        edsk->track[curtrack].sector[s].track=data[i+24+8*s+0];
+                                        edsk->track[curtrack].sector[s].side=data[i+24+8*s+1];
+                                        edsk->track[curtrack].sector[s].id=sectorid;
+                                        edsk->track[curtrack].sector[s].size=sectorsize;
+                                        edsk->track[curtrack].sector[s].st1=ST1;
+                                        edsk->track[curtrack].sector[s].st2=ST2;
+                                        edsk->track[curtrack].sector[s].length=reallength;
+                                        edsk->track[curtrack].sector[s].data=malloc(reallength);
+
+                                        if (currentsectorposition+reallength>ctrlsize) {
+                                                printf(KERROR"Invalid side %d track %d => sector data of ID %02X outside EDSK!\n",face,t,sectorid);
+                                                exit(ABORT_ERROR);
+                                        } else {
+                                                memcpy(edsk->track[curtrack].sector[s].data,&data[currentsectorposition],reallength);
+                                        }
+                                        currentsectorposition+=reallength;
+                                }
+                        }
+                }
+        } else if (strncmp(header,"MV - CPC",8)==0) {
+                printf("opening legacy DSK [%s] / creator: %-14.14s\n",edskfilename,header+34);
+
+                tracknumber=header[34+14];
+                sidenumber=header[34+14+1];
+                edsk->tracknumber=tracknumber;
+                edsk->sidenumber=sidenumber;
+                tracksize=header[34+14+1+1]+header[34+14+1+1+1]*256;
+
+                printf("tracks: %d sides: %d ",edsk->tracknumber,edsk->sidenumber);
+                printf("track size: %dkb disk size: %dkb\n",tracksize/1024,tracksize*edsk->tracknumber*edsk->sidenumber/1024);
+
+                data=malloc(tracksize*edsk->tracknumber*edsk->sidenumber);
+                if (fread(data,1,tracksize*edsk->tracknumber*edsk->sidenumber,f)!=tracksize*edsk->tracknumber*edsk->sidenumber) {
+                        printf("Cannot read DSK tracks!");
+                        return NULL;
+                }
+
+                edsk->track=malloc(sizeof(struct s_edsk_track_global_struct)*tracknumber*sidenumber);
+                memset(edsk->track,0,sizeof(struct s_edsk_track_global_struct)*tracknumber*sidenumber);
+                for (t=0;t<edsk->tracknumber;t++) {
+                        for (face=0;face<edsk->sidenumber;face++) {
+                                int maxsectorsize;
+                                curtrack=t*edsk->sidenumber+face;
+
+                                i=(t*edsk->sidenumber+face)*tracksize;
+                                if (strncmp(data+i,"Track-Info\r\n",12)) {
+                                        printf("Invalid track information block side %d track %d",face,t);
+                                        return NULL;
+                                }
+                                edsk->track[curtrack].sectornumber=sectornumber=data[i+21];
+                                edsk->track[curtrack].sectorsize=data[i+20];
+                                edsk->track[curtrack].gap3length=data[i+22];
+                                edsk->track[curtrack].fillerbyte=data[i+23];
+                                edsk->track[curtrack].datarate=0;
+                                edsk->track[curtrack].recordingmode=0;
+                                reallength=0;
+                                for (s=0;s<edsk->track[curtrack].sectornumber;s++) {
+                                        switch (data[i+24+8*s+3]) {
+                                                default:
+                                                case 0:if (reallength<128) reallength=128;break;
+                                                case 1:if (reallength<256) reallength=256;break;
+                                                case 2:if (reallength<512) reallength=512;break;
+                                                case 3:if (reallength<1024) reallength=1024;break;
+                                                case 4:if (reallength<2048) reallength=2048;break;
+                                                case 5:if (reallength<4096) reallength=4096;break;
+                                                case 6:if (reallength<0x1800) reallength=0x1800;break;
+                                        }
+                                }
+                                maxsectorsize=reallength;
+				edsk->track[curtrack].sector=malloc(sizeof(struct s_edsk_sector_global_struct)*edsk->track[curtrack].sectornumber);
+                                memset(edsk->track[curtrack].sector,0,sizeof(struct s_edsk_sector_global_struct)*sectornumber);
+                                for (s=0;s<edsk->track[curtrack].sectornumber;s++) {
+                                        edsk->track[curtrack].sector[s].track=data[i+24+8*s];
+                                        edsk->track[curtrack].sector[s].side=data[i+24+8*s+1];
+                                        edsk->track[curtrack].sector[s].id=data[i+24+8*s+2];
+                                        edsk->track[curtrack].sector[s].size=data[i+24+8*s+3];
+                                        edsk->track[curtrack].sector[s].st1=data[i+24+8*s+4];
+                                        edsk->track[curtrack].sector[s].st2=data[i+24+8*s+5];
+
+                                        switch (edsk->track[curtrack].sector[s].size) {
+                                                default:
+                                                case 0:reallength=128;break;
+                                                case 1:reallength=256;break;
+                                                case 2:reallength=512;break;
+                                                case 3:reallength=1024;break;
+                                                case 4:reallength=2048;break;
+                                                case 5:reallength=4096;break;
+                                                case 6:reallength=0x1800;break;
+                                        }
+                                        edsk->track[curtrack].sector[s].length=reallength;
+                                        edsk->track[curtrack].sector[s].data=malloc(reallength);
+                                        memcpy(edsk->track[curtrack].sector[s].data,&data[i+0x100+s*maxsectorsize],reallength);
+                                }
+                        }
+                }
+
+        } else {
+                printf(KERROR"file [%s] is not a valid EDSK floppy image\n",edskfilename);
+                exit(ABORT_ERROR);
+        }
+        fclose(f);
+        return edsk;
+}
+
+void edsktool_EDSK_write_file(struct s_edsk_global_struct *edsk, char *output_filename)
+{
+        unsigned char header[256]={0};
+        unsigned char trackblock[256]={0};
+        unsigned char headertag[25];
+        int tracksize,curtrack;
+        int idblock,blockoffset;
+        int i,t,s,face;
+        FILE *f;
+
+        if (!edsk) return;
+
+        unlink(output_filename);
+        f=fopen(output_filename,"wb");
+        if (!f) {
+                printf(KERROR"Cannot open [%s] for writing EDSK\n"KNORMAL,output_filename);
+                exit(ABORT_ERROR);
+        }
+
+
+        /* écriture header */
+        strcpy((char *)header,"EXTENDED CPC DSK File\r\nDisk-Info\r\n");
+        sprintf(headertag,"%-9.9s","edskt");
+        strcpy((char *)header+0x22,headertag);
+        header[0x30]=edsk->tracknumber;
+        header[0x31]=edsk->sidenumber;
+
+        for (t=0;t<edsk->tracknumber;t++)
+        for (face=0;face<edsk->sidenumber;face++) {
+                curtrack=t*edsk->sidenumber+face;
+                if (edsk->track[curtrack].unformated) {
+                        tracksize=0;
+                } else {
+                        tracksize=256;
+                        for (s=0;s<edsk->track[curtrack].sectornumber;s++) {
+                                tracksize+=edsk->track[curtrack].sector[s].length;
+                        }
+                        if (tracksize&0xFF) tracksize+=256; // adjust high byte value
+                }
+                header[0x34+curtrack]=tracksize>>8;
+        }
+
+        fwrite((char *)header,1,256,f);
+
+        /* écriture des pistes */
+        for (t=0;t<edsk->tracknumber;t++)
+        for (face=0;face<edsk->sidenumber;face++) {
+                curtrack=t*edsk->sidenumber+face;
+
+                if (edsk->track[curtrack].unformated) continue; // no physical information for unformated track
+                strcpy((char *)trackblock,"Track-Info\r\n");
+                trackblock[0x10]=t;
+                trackblock[0x11]=face;
+                trackblock[0x12]=edsk->track[curtrack].datarate;
+                trackblock[0x13]=edsk->track[curtrack].recordingmode;
+                trackblock[0x14]=edsk->track[curtrack].sectorsize;
+                trackblock[0x15]=edsk->track[curtrack].sectornumber;
+                trackblock[0x16]=edsk->track[curtrack].gap3length;
+                trackblock[0x17]=edsk->track[curtrack].fillerbyte;
+
+                for (s=0;s<edsk->track[curtrack].sectornumber;s++) {
+                        trackblock[0x18+s*8+0]=edsk->track[curtrack].sector[s].track;
+                        trackblock[0x18+s*8+1]=edsk->track[curtrack].sector[s].side;
+                        trackblock[0x18+s*8+2]=edsk->track[curtrack].sector[s].id;
+                        trackblock[0x18+s*8+3]=edsk->track[curtrack].sector[s].size;
+                        trackblock[0x18+s*8+4]=edsk->track[curtrack].sector[s].st1;
+                        trackblock[0x18+s*8+5]=edsk->track[curtrack].sector[s].st2;
+                        trackblock[0x18+s*8+6]=edsk->track[curtrack].sector[s].length&0xFF;
+                        trackblock[0x18+s*8+7]=(edsk->track[curtrack].sector[s].length>>8)&0xFF;
+                }
+                fwrite((char *)trackblock,1,256,f);
+
+                tracksize=0;
+                for (s=0;s<edsk->track[curtrack].sectornumber;s++) {
+                        fwrite((char *)edsk->track[curtrack].sector[s].data,1,edsk->track[curtrack].sector[s].length,f);
+                        tracksize+=edsk->track[curtrack].sector[s].length;
+                }
+                // filler
+                if (tracksize&0xFF) {
+                        char filler[256]={0};
+                        tracksize=((tracksize+256)&0xFF00)-tracksize;
+                        fwrite(filler,1,tracksize,f);
+                }
+        }
+        printf(KIO"Write edsk file %s\n",output_filename);
+        fclose(f);
+}
+
+void __edsk_map(struct s_assenv *ae) {
+	if (!ae->wl[ae->idx].t) {
+		char *newfilename;
+		ae->idx++;
+		newfilename=TxtStrDup(ae->wl[ae->idx].w+1); // skip first quote
+		newfilename[strlen(newfilename)-1]=0; // remove last quote
+		edsktool_MAPEDSK(edsktool_EDSK_load(newfilename));
+	} else {
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Usage is : EDSK MAP,'edskfilename'\n");
+	}
+}
+void __edsk_create(struct s_assenv *ae) {
+	if (!ae->wl[ae->idx].t) {
+	} else {
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Usage is : EDSK ,'edskfilename'\n");
+	}
+}
+
+void __edsk_merge(struct s_assenv *ae) {
+	if (!ae->wl[ae->idx].t) {
+	} else {
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Usage is : EDSK ,'edskfilename'\n");
+	}
+}
+
+void __edsk_drop(struct s_assenv *ae) {
+	if (!ae->wl[ae->idx].t) {
+	} else {
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Usage is : EDSK ,'edskfilename'\n");
+	}
+}
+
+void __edsk_add(struct s_assenv *ae) {
+	if (!ae->wl[ae->idx].t) {
+	} else {
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Usage is : EDSK ,'edskfilename'\n");
+	}
+}
+
+void __edsk_resize(struct s_assenv *ae) {
+	if (!ae->wl[ae->idx].t) {
+	} else {
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Usage is : EDSK ,'edskfilename'\n");
+	}
+}
+
+void __edsk_save(struct s_assenv *ae) {
+	if (!ae->wl[ae->idx].t) {
+	} else {
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Usage is : EDSK ,'edskfilename'\n");
+	}
+}
+
+void __EDSK(struct s_assenv *ae) {
+	if (!ae->wl[ae->idx].t) {
+		int cmderr=0,backidx;
+
+		ae->idx++;
+		backidx=ae->idx;
+		// command
+		switch (ae->wl[ae->idx].w[0]) {
+			case 'I':if (strcmp(ae->wl[ae->idx].w,"INFO")==0)	__edsk_map(ae); else cmderr=1;break;
+			case 'C':if (strcmp(ae->wl[ae->idx].w,"CREATE")==0)	__edsk_create(ae); else cmderr=1;break; // nombre de pistes + format éventuel
+			case 'M':if (strcmp(ae->wl[ae->idx].w,"MERGE")==0)	__edsk_merge(ae); else cmderr=1;break;
+			case 'D':if (strcmp(ae->wl[ae->idx].w,"DROP")==0)	__edsk_drop(ae); else cmderr=1;break; // drop track or sector
+			case 'A':if (strcmp(ae->wl[ae->idx].w,"ADD")==0)	__edsk_add(ae); else cmderr=1;break; // add sector
+			case 'R':if (strcmp(ae->wl[ae->idx].w,"RESIZE")==0)	__edsk_resize(ae); else cmderr=1;break; // resize sector
+			case 'S':if (strcmp(ae->wl[ae->idx].w,"SAVE")==0)	__edsk_save(ae); else cmderr=1;break; // use trackload to save files
+			default:cmderr=1;
+		}
+		if (cmderr) {
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"EDSK unknown command [%s] (take a look at the documentation)\n",ae->wl[backidx].w);
+		}
+	} else {
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"EDSK directive must have parameters (take a look at the documentation)\n");
+	}
+}
+
+//************************************************************************************************************************************
+//************************************************************************************************************************************
+							#undef FUNC
+						#define FUNC "Import/Export CORE"
+//************************************************************************************************************************************
+//************************************************************************************************************************************
 
 void __RELOCATE(struct s_assenv *ae) {
 	struct s_relocation relocation={0};
@@ -18143,6 +18692,7 @@ struct s_asm_keyword instruction[]={
 {"REBANK",0,0,__REBANK},
 {"RELOCATE",0,0,__RELOCATE},
 {"ENDRELOCATE",0,0,__ENDRELOCATE},
+{"EDSK",0,0,__EDSK},
 {"",0,0,NULL}
 };
 
