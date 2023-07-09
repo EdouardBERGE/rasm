@@ -1999,7 +1999,7 @@ int StringIsMem(char *w)
 }
 
 
-int StringIsQuote(char *w)
+int StringIsQuote(const char *w)
 {
 	#undef FUNC
 	#define FUNC "StringIsQuote"
@@ -2021,6 +2021,17 @@ int StringIsQuote(char *w)
 		}
 	}
 	return 0;
+}
+
+char *StringRemoveQuotes(struct s_assenv *ae,const char *w) {
+	char *newstr;
+	static char *dummy="NULL";
+	if (StringIsQuote(w)) {
+		newstr=TxtStrDup(w+1);
+		newstr[strlen(newstr)-1]=0;
+	} else {
+		newstr=dummy;
+	}
 }
 char *StringLooksLikeDicoRecurse(struct s_crcdico_tree *lt, int *score, char *str)
 {
@@ -12901,7 +12912,7 @@ struct s_edsk_global_struct *edsktool_NewEDSK(char *format) {
         struct s_edsk_global_struct *edsk;
         int i,t,s;
 
-        edsk=malloc(sizeof(struct s_edsk_global_struct));
+        edsk=MemMalloc(sizeof(struct s_edsk_global_struct));
         memset(edsk,0,sizeof(struct s_edsk_global_struct));
         if (!format) {
                 // empty EDSK
@@ -12911,7 +12922,7 @@ struct s_edsk_global_struct *edsktool_NewEDSK(char *format) {
         if (strcmp(format,"DATA")==0 || strcmp(format,"VENDOR")==0) {
                 edsk->tracknumber=42;
                 edsk->sidenumber=1;
-                edsk->track=malloc(sizeof(struct s_edsk_track_global_struct)*edsk->tracknumber*edsk->sidenumber);
+                edsk->track=MemMalloc(sizeof(struct s_edsk_track_global_struct)*edsk->tracknumber*edsk->sidenumber);
                 memset(edsk->track,0,sizeof(struct s_edsk_track_global_struct)*edsk->tracknumber*edsk->sidenumber);
                 for (t=0;t<=39;t++) {
                         edsk->track[t].track=t;
@@ -12920,7 +12931,7 @@ struct s_edsk_global_struct *edsktool_NewEDSK(char *format) {
                         edsk->track[t].sectorsize=2;
                         edsk->track[t].gap3length=0x50;
                         edsk->track[t].fillerbyte=0xE5;
-                        edsk->track[t].sector=malloc(edsk->track[t].sectornumber*sizeof(struct s_edsk_sector_global_struct));
+                        edsk->track[t].sector=MemMalloc(edsk->track[t].sectornumber*sizeof(struct s_edsk_sector_global_struct));
                         for (s=0;s<9;s++) {
                                 edsk->track[t].sector[s].track=t;
                                 edsk->track[t].sector[s].side=0;
@@ -12930,7 +12941,7 @@ struct s_edsk_global_struct *edsktool_NewEDSK(char *format) {
                                 edsk->track[t].sector[s].st1=0;
                                 edsk->track[t].sector[s].st2=0;
                                 edsk->track[t].sector[s].length=512;
-                                edsk->track[t].sector[s].data=malloc(edsk->track[t].sector[s].length);
+                                edsk->track[t].sector[s].data=MemMalloc(edsk->track[t].sector[s].length);
                                 for (i=0;i<edsk->track[t].sector[s].length;i++) edsk->track[t].sector[s].data[i]=edsk->track[t].fillerbyte;
                         }
                 }
@@ -12940,7 +12951,7 @@ struct s_edsk_global_struct *edsktool_NewEDSK(char *format) {
         } else if (strcmp(format,"DIX")==0) {
                 edsk->tracknumber=42;
                 edsk->sidenumber=1;
-                edsk->track=malloc(sizeof(struct s_edsk_track_global_struct)*edsk->tracknumber*edsk->sidenumber);
+                edsk->track=MemMalloc(sizeof(struct s_edsk_track_global_struct)*edsk->tracknumber*edsk->sidenumber);
                 memset(edsk->track,0,sizeof(struct s_edsk_track_global_struct)*edsk->tracknumber*edsk->sidenumber);
                 for (t=0;t<=39;t++) {
                         edsk->track[t].track=t;
@@ -12949,7 +12960,7 @@ struct s_edsk_global_struct *edsktool_NewEDSK(char *format) {
                         edsk->track[t].sectorsize=2;
                         edsk->track[t].gap3length=50;
                         edsk->track[t].fillerbyte=0xE5;
-                        edsk->track[t].sector=malloc(edsk->track[t].sectornumber*sizeof(struct s_edsk_sector_global_struct));
+                        edsk->track[t].sector=MemMalloc(edsk->track[t].sectornumber*sizeof(struct s_edsk_sector_global_struct));
                         for (s=0;s<10;s++) {
                                 edsk->track[t].sector[s].track=t;
                                 edsk->track[t].sector[s].side=0;
@@ -12958,7 +12969,7 @@ struct s_edsk_global_struct *edsktool_NewEDSK(char *format) {
                                 edsk->track[t].sector[s].st1=0;
                                 edsk->track[t].sector[s].st2=0;
                                 edsk->track[t].sector[s].length=512;
-                                edsk->track[t].sector[s].data=malloc(edsk->track[t].sector[s].length);
+                                edsk->track[t].sector[s].data=MemMalloc(edsk->track[t].sector[s].length);
                                 for (i=0;i<edsk->track[t].sector[s].length;i++) edsk->track[t].sector[s].data[i]=edsk->track[t].fillerbyte;
                         }
                 }
@@ -13012,7 +13023,7 @@ struct s_edsk_global_struct *edsktool_EDSK_load(char *edskfilename)
 
                 edsk->tracknumber=tracknumber;
                 edsk->sidenumber=sidenumber;
-                edsk->track=malloc(sizeof(struct s_edsk_track_global_struct)*tracknumber*sidenumber);
+                edsk->track=MemMalloc(sizeof(struct s_edsk_track_global_struct)*tracknumber*sidenumber);
                 memset(edsk->track,0,sizeof(struct s_edsk_track_global_struct)*tracknumber*sidenumber);
 
                 for (i=disksize=0;i<tracknumber*sidenumber;i++) {
@@ -13021,7 +13032,7 @@ struct s_edsk_global_struct *edsktool_EDSK_load(char *edskfilename)
                 }
 
                 printf("total track size: %dkb\n",disksize/1024);
-                data=malloc(disksize);
+                data=MemMalloc(disksize);
                 memset(data,0,disksize);
                 if ((ctrlsize=fread((char *)data,1,disksize,f))!=disksize) {
                         printf(KERROR"Cannot read EDSK tracks! expecting %d bytes but read %d bytes\n"KNORMAL,disksize,ctrlsize);
@@ -13065,7 +13076,7 @@ struct s_edsk_global_struct *edsktool_EDSK_load(char *edskfilename)
                                 edsk->track[curtrack].datarate=data[i+18];
                                 edsk->track[curtrack].recordingmode=data[i+19];
                                 // sector structs
-                                edsk->track[curtrack].sector=malloc(sizeof(struct s_edsk_sector_global_struct)*sectornumber);
+                                edsk->track[curtrack].sector=MemMalloc(sizeof(struct s_edsk_sector_global_struct)*sectornumber);
                                 memset(edsk->track[curtrack].sector,0,sizeof(struct s_edsk_sector_global_struct)*sectornumber);
 
                                 if (track_sectorsize!=2 || sectornumber!=9) {
@@ -13091,7 +13102,7 @@ struct s_edsk_global_struct *edsktool_EDSK_load(char *edskfilename)
                                         edsk->track[curtrack].sector[s].st1=ST1;
                                         edsk->track[curtrack].sector[s].st2=ST2;
                                         edsk->track[curtrack].sector[s].length=reallength;
-                                        edsk->track[curtrack].sector[s].data=malloc(reallength);
+                                        edsk->track[curtrack].sector[s].data=MemMalloc(reallength);
 
                                         if (currentsectorposition+reallength>ctrlsize) {
                                                 printf(KERROR"Invalid side %d track %d => sector data of ID %02X outside EDSK!\n",face,t,sectorid);
@@ -13115,13 +13126,13 @@ struct s_edsk_global_struct *edsktool_EDSK_load(char *edskfilename)
                 printf("tracks: %d sides: %d ",edsk->tracknumber,edsk->sidenumber);
                 printf("track size: %dkb disk size: %dkb\n",tracksize/1024,tracksize*edsk->tracknumber*edsk->sidenumber/1024);
 
-                data=malloc(tracksize*edsk->tracknumber*edsk->sidenumber);
+                data=MemMalloc(tracksize*edsk->tracknumber*edsk->sidenumber);
                 if (fread(data,1,tracksize*edsk->tracknumber*edsk->sidenumber,f)!=tracksize*edsk->tracknumber*edsk->sidenumber) {
                         printf("Cannot read DSK tracks!");
                         return NULL;
                 }
 
-                edsk->track=malloc(sizeof(struct s_edsk_track_global_struct)*tracknumber*sidenumber);
+                edsk->track=MemMalloc(sizeof(struct s_edsk_track_global_struct)*tracknumber*sidenumber);
                 memset(edsk->track,0,sizeof(struct s_edsk_track_global_struct)*tracknumber*sidenumber);
                 for (t=0;t<edsk->tracknumber;t++) {
                         for (face=0;face<edsk->sidenumber;face++) {
@@ -13153,7 +13164,7 @@ struct s_edsk_global_struct *edsktool_EDSK_load(char *edskfilename)
                                         }
                                 }
                                 maxsectorsize=reallength;
-				edsk->track[curtrack].sector=malloc(sizeof(struct s_edsk_sector_global_struct)*edsk->track[curtrack].sectornumber);
+				edsk->track[curtrack].sector=MemMalloc(sizeof(struct s_edsk_sector_global_struct)*edsk->track[curtrack].sectornumber);
                                 memset(edsk->track[curtrack].sector,0,sizeof(struct s_edsk_sector_global_struct)*sectornumber);
                                 for (s=0;s<edsk->track[curtrack].sectornumber;s++) {
                                         edsk->track[curtrack].sector[s].track=data[i+24+8*s];
@@ -13174,7 +13185,7 @@ struct s_edsk_global_struct *edsktool_EDSK_load(char *edskfilename)
                                                 case 6:reallength=0x1800;break;
                                         }
                                         edsk->track[curtrack].sector[s].length=reallength;
-                                        edsk->track[curtrack].sector[s].data=malloc(reallength);
+                                        edsk->track[curtrack].sector[s].data=MemMalloc(reallength);
                                         memcpy(edsk->track[curtrack].sector[s].data,&data[i+0x100+s*maxsectorsize],reallength);
                                 }
                         }
@@ -13276,6 +13287,40 @@ void edsktool_EDSK_write_file(struct s_edsk_global_struct *edsk, char *output_fi
         fclose(f);
 }
 
+int __edsk_getsidefromname(char *w) {
+	int l;
+	l=strlen(w)-2;
+	if (l<1) return 0;
+	if (w[l]!=':') return 0;
+	switch (w[l+1]) {
+		case 'a':case 'A':case '0':w[l]=0;return 0;break;
+		case 'b':case 'B':case '1':w[l]=0;return 1;break;
+		default:break;
+	}
+	return 0;
+}
+void __edsk_free_side(struct s_assenv *ae,struct s_edsk_global_struct *edsk, int side) {
+	int i,j;
+
+	if (side && !edsk->sidenumber) {
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Invalid EDSK side!\n");
+		return;
+	}
+
+	for (i=0;i<edsk->tracknumber;i++) {
+		if (edsk->track[i*edsk->sidenumber+side].unformated) {
+			// nothing to free
+		} else {
+			for (j=0;j<edsk->track[i*edsk->sidenumber+side].sectornumber;j++) {
+				// free sector data
+				MemFree(edsk->track[i*edsk->sidenumber+side].sector[j].data);
+			}
+			// free sector list
+			MemFree(edsk->track[i*edsk->sidenumber+side].sector);
+		}
+	}
+}
+
 void __edsk_map(struct s_assenv *ae) {
 	if (!ae->wl[ae->idx].t) {
 		char *newfilename;
@@ -13290,42 +13335,85 @@ void __edsk_map(struct s_assenv *ae) {
 void __edsk_create(struct s_assenv *ae) {
 	if (!ae->wl[ae->idx].t) {
 	} else {
-		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Usage is : EDSK ,'edskfilename'\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Usage is : EDSK CREATE,'edskfilename'\n");
 	}
 }
 
 void __edsk_merge(struct s_assenv *ae) {
-	if (!ae->wl[ae->idx].t) {
+	if (!ae->wl[ae->idx].t && !ae->wl[ae->idx+1].t && !ae->wl[ae->idx+2].t && ae->wl[ae->idx+3].t) {
+		struct s_edsk_global_struct *edsk1,*edsk2;
+		char *floppy1,*floppy2,*floppyres;
+		int side1,side2,i,j;
+		// merge data
+                struct s_edsk_track_global_struct *newtracks;
+                int maxtrack;
+
+
+		floppy1=StringRemoveQuotes(ae,ae->wl[ae->idx+1].w);
+		floppy2=StringRemoveQuotes(ae,ae->wl[ae->idx+2].w);
+		floppyres=StringRemoveQuotes(ae,ae->wl[ae->idx+3].w);
+		side1=__edsk_getsidefromname(floppy1);
+		side2=__edsk_getsidefromname(floppy2);
+
+		edsk1=edsktool_EDSK_load(floppy1);
+		edsk2=edsktool_EDSK_load(floppy2);
+                if (side1 && edsk1->sidenumber<2) { MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"floppy image [%s] does not have 2 sides\n",floppy1); return; }
+                if (side2 && edsk2->sidenumber<2) { MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"floppy image [%s] does not have 2 sides\n",floppy2); return; }
+
+                // merged DSK will get the maximum track number
+                if (edsk1->tracknumber>edsk2->tracknumber) maxtrack=edsk1->tracknumber; else maxtrack=edsk2->tracknumber;
+                newtracks=MemMalloc(sizeof(struct s_edsk_track_global_struct)*maxtrack*2);
+                memset(newtracks,0,sizeof(struct s_edsk_track_global_struct)*maxtrack*2);
+                // copy track from requested sides
+                for (i=0;i<edsk1->tracknumber;i++) newtracks[i*2]=edsk1->track[i*edsk1->sidenumber+side1];
+                for (i=0;i<edsk2->tracknumber;i++) newtracks[i*2+1]=edsk2->track[i*edsk2->sidenumber+side2];
+                // new tracks are unformated
+                for (i=edsk1->tracknumber;i<maxtrack;i++) newtracks[i*2].unformated=1;
+                for (i=edsk2->tracknumber;i<maxtrack;i++) newtracks[i*2+1].unformated=1;
+		// free unused sides
+		if (edsk1->sidenumber) __edsk_free_side(ae,edsk1,1-side1);
+		if (edsk2->sidenumber) __edsk_free_side(ae,edsk2,1-side2);
+		MemFree(edsk1->track);
+		MemFree(edsk2->track);
+		edsk1->track=newtracks;
+		edsk1->sidenumber=2;
+		// write merged EDSK
+		edsktool_EDSK_write_file(edsk1,floppyres);
+
+		ae->idx+=3;
+		MemFree(floppy1);
+		MemFree(floppy2);
+		MemFree(floppyres);
 	} else {
-		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Usage is : EDSK ,'edskfilename'\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Usage is : EDSK MERGE,'edskfilename:side','edskfilename:side','output edskfilename'\n");
 	}
 }
 
 void __edsk_drop(struct s_assenv *ae) {
 	if (!ae->wl[ae->idx].t) {
 	} else {
-		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Usage is : EDSK ,'edskfilename'\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Usage is : EDSK DROP,'edskfilename'\n");
 	}
 }
 
 void __edsk_add(struct s_assenv *ae) {
 	if (!ae->wl[ae->idx].t) {
 	} else {
-		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Usage is : EDSK ,'edskfilename'\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Usage is : EDSK ADD,'edskfilename'\n");
 	}
 }
 
 void __edsk_resize(struct s_assenv *ae) {
 	if (!ae->wl[ae->idx].t) {
 	} else {
-		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Usage is : EDSK ,'edskfilename'\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Usage is : EDSK RESIZE,'edskfilename'\n");
 	}
 }
 
 void __edsk_save(struct s_assenv *ae) {
 	if (!ae->wl[ae->idx].t) {
 	} else {
-		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Usage is : EDSK ,'edskfilename'\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Usage is : EDSK SAVE,'edskfilename'\n");
 	}
 }
 
@@ -21038,7 +21126,7 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 									sprintf(TMP_filename,"%s.zll",ae->outputfilename);
 									FileRemoveIfExists(TMP_filename);
 
-									relocbuffer=malloc(nrelocation*4); // way too much in order to simplify memory handling
+									relocbuffer=MemMalloc(nrelocation*4); // way too much in order to simplify memory handling
 
 									// find first destination
 									curdest=-1;
