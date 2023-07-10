@@ -503,14 +503,15 @@ struct s_edsk_location {
 };
 
 enum e_edsk_action {
-	E_EDSK_ACTION_MERGE=0,
+	E_EDSK_ACTION_CREATE=0,
 	E_EDSK_ACTION_READ,
+	E_EDSK_ACTION_MERGE,
 	E_EDSK_ACTION_RESIZE,
 	E_EDSK_ACTION_SAVE,
 	E_EDSK_ACTION_MAP,
 	E_EDSK_ACTION_ADD,
 	E_EDSK_ACTION_DROP,
-	E_EDSK_ACTION_CREATE,
+	E_EDSK_ACTION_UPGRADE,
 	E_EDSK_ACTION_END
 };
 
@@ -13482,6 +13483,10 @@ void __edsk_merge(struct s_assenv *ae, struct s_edsk_action *action) {
 	edsktool_EDSK_write_file(edsk1,floppyres);
 }
 
+void __edsk_upgrade(struct s_assenv *ae, struct s_edsk_action *action) {
+	// load and save, in case of DSK, you will get a fresh EDSK
+	edsktool_EDSK_write_file(edsktool_EDSK_load(action->filename),action->filename2);
+}
 void __edsk_drop(struct s_assenv *ae, struct s_edsk_action *action) {
 	if (!ae->wl[ae->idx].t) {
 	} else {
@@ -13519,7 +13524,9 @@ void __edsk_save(struct s_assenv *ae, struct s_edsk_action *action) {
  *
  * == deferred execution ==
  * EDSK GAPFIX,'filename.dsk',TRACK|ALLTRACKS,<track>
+ * EDSK MAP,'filename.dsk'
  * EDSK MERGE,'filename.dsk:side','filename.dsk:side','outputfilename.dsk'
+ * EDSK UPGRADE,'filename.dsk','outputfilename.dsk'
 ***************************************************************************************************************************/
 void __EDSK(struct s_assenv *ae) {
 	if (!ae->wl[ae->idx].t && !ae->wl[ae->idx+1].t) {
@@ -13538,6 +13545,7 @@ void __EDSK(struct s_assenv *ae) {
 			case 'R':if (strcmp(ae->wl[ae->idx+1].w,"RESIZE")==0)	curaction.action=E_EDSK_ACTION_RESIZE; else // resize sector
 				 if (strcmp(ae->wl[ae->idx+1].w,"READ")==0)	curaction.action=E_EDSK_ACTION_READ; else cmderr=1;break; // read sectors into memory
 			case 'S':if (strcmp(ae->wl[ae->idx+1].w,"SAVE")==0)	curaction.action=E_EDSK_ACTION_SAVE; else cmderr=1;break; // use trackload to save files
+			case 'U':if (strcmp(ae->wl[ae->idx+1].w,"UPGRADE")==0)	curaction.action=E_EDSK_ACTION_UPGRADE; else cmderr=1;break; // use trackload to save files
 			default:cmderr=1;
 		}
 		if (cmderr) {
@@ -13549,6 +13557,8 @@ void __EDSK(struct s_assenv *ae) {
 			case E_EDSK_ACTION_ADD: case E_EDSK_ACTION_CREATE: case E_EDSK_ACTION_DROP: case E_EDSK_ACTION_MAP:
 			case E_EDSK_ACTION_RESIZE: case E_EDSK_ACTION_READ: case E_EDSK_ACTION_SAVE:
 				nbfilename=1;break;
+			case E_EDSK_ACTION_UPGRADE:
+				nbfilename=2;break;
 			case E_EDSK_ACTION_MERGE:
 				nbfilename=3;break;
 			default:MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Internal Error on EDSK action management (1)\n");break;
@@ -13599,6 +13609,7 @@ void __EDSK(struct s_assenv *ae) {
 			case E_EDSK_ACTION_DROP:
 			case E_EDSK_ACTION_SAVE:
 			case E_EDSK_ACTION_ADD:
+			case E_EDSK_ACTION_UPGRADE:
 				ObjectArrayAddDynamicValueConcat((void**)&ae->edsk_action,&ae->nbedskaction,&ae->maxedskaction,&curaction,sizeof(curaction));
 				break;
 			default:MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Internal Error on EDSK action management (2)\n");break;
@@ -13618,6 +13629,7 @@ void PopAllEDSK(struct s_assenv *ae) {
 			case E_EDSK_ACTION_DROP:	__edsk_drop(ae,&ae->edsk_action[i]);break;
 			case E_EDSK_ACTION_SAVE:	__edsk_save(ae,&ae->edsk_action[i]);break;
 			case E_EDSK_ACTION_ADD:		__edsk_add(ae,&ae->edsk_action[i]);break;
+			case E_EDSK_ACTION_UPGRADE:	__edsk_upgrade(ae,&ae->edsk_action[i]);break;
 			default:MakeError(ae,0,"(PopAllEDSK)",0,"internal error during EDSK deferred execution, please report\n");
 				break;
 		}
