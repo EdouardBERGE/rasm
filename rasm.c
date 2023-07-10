@@ -512,6 +512,7 @@ enum e_edsk_action {
 	E_EDSK_ACTION_ADD,
 	E_EDSK_ACTION_DROP,
 	E_EDSK_ACTION_UPGRADE,
+	E_EDSK_ACTION_GAPFIX,
 	E_EDSK_ACTION_END
 };
 
@@ -522,7 +523,7 @@ struct s_edsk_action {
 	int ioffset;
 	int isize;
 	// deferred calculation info
-	int iw;
+	int iw,nbparam;
 	char *filename;
 	char *filename2;
 	char *filename3;
@@ -13459,8 +13460,8 @@ void __edsk_merge(struct s_assenv *ae, struct s_edsk_action *action) {
 
 	edsk1=edsktool_EDSK_load(floppy1);
 	edsk2=edsktool_EDSK_load(floppy2);
-	if (side1 && edsk1->sidenumber<2) { MakeError(ae,0,"(__edsk_merge)",0,"floppy image [%s] does not have 2 sides\n",floppy1); return; }
-	if (side2 && edsk2->sidenumber<2) { MakeError(ae,0,"(__edsk_merge)",0,"floppy image [%s] does not have 2 sides\n",floppy2); return; }
+	if (side1 && edsk1->sidenumber<2) { MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Cannot merge EDSK because floppy image [%s] does not have 2 sides\n",floppy1); return; }
+	if (side2 && edsk2->sidenumber<2) { MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Cannot merge EDSK because floppy image [%s] does not have 2 sides\n",floppy2); return; }
 
 	// merged DSK will get the maximum track number
 	if (edsk1->tracknumber>edsk2->tracknumber) maxtrack=edsk1->tracknumber; else maxtrack=edsk2->tracknumber;
@@ -13481,6 +13482,52 @@ void __edsk_merge(struct s_assenv *ae, struct s_edsk_action *action) {
 	edsk1->sidenumber=2;
 	// write merged EDSK
 	edsktool_EDSK_write_file(edsk1,floppyres);
+}
+
+void __edsk_gapfix(struct s_assenv *ae, struct s_edsk_action *action) {
+	struct s_edsk_global_struct *edsk;
+	int side,i,j,start_track,end_track;
+
+ 	if (action->nbparam<3) {
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Usage is : EDSK GAPFIX,'edskfilename:side',TRACK|ALLTRACKS[,<track>]\n");
+		return;
+	}
+	side=__edsk_get_side_from_name(action->filename);
+	edsk=edsktool_EDSK_load(action->filename);
+	if (side+1>edsk->sidenumber) {
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Cannot GAPFIX EDSK because floppy image [%s] does not have 2 sides!\n",action->filename);
+		return;
+	}
+
+	if (strcmp(ae->wl[action->iw+3].w,"TRACK")==0) {
+		if (action->nbparam>3) {
+			start_track=end_track=RoundComputeExpression(ae,ae->wl[ae->idx+4].w,0,0,0);
+		} else {
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Usage is : EDSK GAPFIX,'edskfilename:side',TRACK,<track number>\n");
+			return;
+		}
+	} else if (strcmp(ae->wl[action->iw+3].w,"ALLTRACKS")==0) {
+		start_track=0;
+		end_track=edsk->tracknumber;
+	}
+	for (i=start_track;i<end_track;i++) {
+		if (edsk->track[i*edsk->sidenumber+side].unformated) {
+			// nothing to do
+		} else {
+			int tracklen=146;
+			for (j=0;j<edsk->track[i*edsk->sidenumber+side].sectornumber;j++) {
+				tracklen+=62+edsk->track[i*edsk->sidenumber+side].sector[j].length+edsk->track[i*edsk->sidenumber+side].gap3length;
+			}
+			if (tracklen>6250) {
+				int gapmod=(tracklen-6250)/edsk->track[i*edsk->sidenumber+side].sectornumber;
+				if (edsk->track[i*edsk->sidenumber+side].gap3length-gapmod>1) {
+					edsk->track[i*edsk->sidenumber+side].gap3length-=gapmod;
+				}
+				rasm_printf(ae,KIO"Fixing GAP track %d of [%s] from %d to %d\n",i,action->filename,edsk->track[i*edsk->sidenumber+side].gap3length+gapmod,edsk->track[i*edsk->sidenumber+side].gap3length);
+			}
+		}
+	}
+	edsktool_EDSK_write_file(edsk,action->filename);
 }
 
 void __edsk_upgrade(struct s_assenv *ae, struct s_edsk_action *action) {
@@ -13540,6 +13587,7 @@ void __EDSK(struct s_assenv *ae) {
 			case 'A':if (strcmp(ae->wl[ae->idx+1].w,"ADD")==0)	curaction.action=E_EDSK_ACTION_ADD; else cmderr=1;break; // add sector
 			case 'C':if (strcmp(ae->wl[ae->idx+1].w,"CREATE")==0)	curaction.action=E_EDSK_ACTION_CREATE; else cmderr=1;break; // nombre de pistes + format éventuel
 			case 'D':if (strcmp(ae->wl[ae->idx+1].w,"DROP")==0)	curaction.action=E_EDSK_ACTION_DROP; else cmderr=1;break; // drop track or sector
+			case 'G':if (strcmp(ae->wl[ae->idx+1].w,"GAPFIX")==0)	curaction.action=E_EDSK_ACTION_GAPFIX; else cmderr=1;break; // fix GAP to fit an ideal track
 			case 'M':if (strcmp(ae->wl[ae->idx+1].w,"MERGE")==0)	curaction.action=E_EDSK_ACTION_MERGE; else // merge edsk
 				 if (strcmp(ae->wl[ae->idx+1].w,"MAP")==0)	curaction.action=E_EDSK_ACTION_MAP; else cmderr=1;break; // map edsk
 			case 'R':if (strcmp(ae->wl[ae->idx+1].w,"RESIZE")==0)	curaction.action=E_EDSK_ACTION_RESIZE; else // resize sector
@@ -13555,7 +13603,7 @@ void __EDSK(struct s_assenv *ae) {
 		// some action need more than one filename
 		switch (curaction.action) {
 			case E_EDSK_ACTION_ADD: case E_EDSK_ACTION_CREATE: case E_EDSK_ACTION_DROP: case E_EDSK_ACTION_MAP:
-			case E_EDSK_ACTION_RESIZE: case E_EDSK_ACTION_READ: case E_EDSK_ACTION_SAVE:
+			case E_EDSK_ACTION_RESIZE: case E_EDSK_ACTION_READ: case E_EDSK_ACTION_SAVE: case E_EDSK_ACTION_GAPFIX:
 				nbfilename=1;break;
 			case E_EDSK_ACTION_UPGRADE:
 				nbfilename=2;break;
@@ -13609,7 +13657,16 @@ void __EDSK(struct s_assenv *ae) {
 			case E_EDSK_ACTION_DROP:
 			case E_EDSK_ACTION_SAVE:
 			case E_EDSK_ACTION_ADD:
+			case E_EDSK_ACTION_GAPFIX:
 			case E_EDSK_ACTION_UPGRADE:
+				while (!ae->wl[ae->idx].t+curaction.nbparam) {
+					curaction.nbparam++;
+				}
+
+				if (curaction.action==E_EDSK_ACTION_GAPFIX && curaction.nbparam==4) {
+					ExpressionFastTranslate(ae,&ae->wl[ae->idx+4].w,1); // track conversion
+				}
+
 				ObjectArrayAddDynamicValueConcat((void**)&ae->edsk_action,&ae->nbedskaction,&ae->maxedskaction,&curaction,sizeof(curaction));
 				break;
 			default:MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Internal Error on EDSK action management (2)\n");break;
@@ -13622,8 +13679,10 @@ void __EDSK(struct s_assenv *ae) {
 void PopAllEDSK(struct s_assenv *ae) {
 	int i;
 	for (i=0;i<ae->nbedskaction;i++) {
+		ae->idx=ae->edsk_action[i].iw; // MakeError hack
 		switch (ae->edsk_action[i].action) {
 			case E_EDSK_ACTION_MAP:		__edsk_map(ae,&ae->edsk_action[i]);break;
+			case E_EDSK_ACTION_GAPFIX:	__edsk_gapfix(ae,&ae->edsk_action[i]);break;
 			case E_EDSK_ACTION_MERGE:	__edsk_merge(ae,&ae->edsk_action[i]);break;
 			case E_EDSK_ACTION_RESIZE:	__edsk_resize(ae,&ae->edsk_action[i]);break;
 			case E_EDSK_ACTION_DROP:	__edsk_drop(ae,&ae->edsk_action[i]);break;
