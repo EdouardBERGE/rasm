@@ -496,6 +496,37 @@ int tracksize; /* DSK legacy */
 struct s_edsk_track_global_struct *track;
 };
 
+struct s_edsk_location {
+	int istrack;
+	int track;
+	int sectorID;
+};
+
+enum e_edsk_action {
+	E_EDSK_ACTION_MERGE=0,
+	E_EDSK_ACTION_READ,
+	E_EDSK_ACTION_RESIZE,
+	E_EDSK_ACTION_SAVE,
+	E_EDSK_ACTION_MAP,
+	E_EDSK_ACTION_ADD,
+	E_EDSK_ACTION_DROP,
+	E_EDSK_ACTION_CREATE,
+	E_EDSK_ACTION_END
+};
+
+struct s_edsk_action {
+	enum e_edsk_action action;
+	// save info
+	int ibank;
+	int ioffset;
+	int isize;
+	// deferred calculation info
+	int iw;
+	char *filename;
+	char *filename2;
+	char *filename3;
+};
+
 struct s_edsk_wrapper_entry {
 unsigned char user;
 unsigned char filename[11];
@@ -1045,6 +1076,8 @@ struct s_assenv {
 	struct s_save *save;
 	int nbsave,maxsave;
 	int current_run_idx;
+	struct s_edsk_action *edsk_action;
+	int nbedskaction,maxedskaction;
 	struct s_edsk_wrapper *edsk_wrapper;
 	int nbedskwrapper,maxedskwrapper;
 	int edskoverwrite;
@@ -2030,8 +2063,9 @@ char *StringRemoveQuotes(struct s_assenv *ae,const char *w) {
 		newstr=TxtStrDup(w+1);
 		newstr[strlen(newstr)-1]=0;
 	} else {
-		newstr=dummy;
+		newstr=TxtStrDup(dummy); // alloc to avoid side effect on error...
 	}
+	return newstr;
 }
 char *StringLooksLikeDicoRecurse(struct s_crcdico_tree *lt, int *score, char *str)
 {
@@ -13287,7 +13321,7 @@ void edsktool_EDSK_write_file(struct s_edsk_global_struct *edsk, char *output_fi
         fclose(f);
 }
 
-int __edsk_getsidefromname(char *w) {
+int __edsk_get_side_from_name(char *w) {
 	int l;
 	l=strlen(w)-2;
 	if (l<1) return 0;
@@ -13320,18 +13354,79 @@ void __edsk_free_side(struct s_assenv *ae,struct s_edsk_global_struct *edsk, int
 		}
 	}
 }
+int __edsk_get_value(char *param, int *zeval) {
+	char *ptr;
+	int idx=1;
+	switch (param[0]) {
+		case '$':
+		case '#':
+		case '&':*zeval=strtol(param+1,&ptr,16);break;
+		case 0:if (param[1]=='x') {
+			       *zeval=strtol(param+1,&ptr,16);
+			       idx=2;
+			} else *zeval=atoi(param);
+			break;
+		default:if (isdigit(param[0])) *zeval=atoi(param); else return -1;
+	}
+	return 0;
+}
+/*********************************************************************************
+ * location is a string defining one or more tracks/sectors
+ * each location definition must be separated by ':' char
+ * interval definition is possible adding +nbtrack at the end
+*********************************************************************************/
+struct s_edsk_location *__edsk_get_location(struct s_assenv *ae,char *location, int *ret_nblocation) {
+	struct s_edsk_location *locations=NULL;
+	struct s_edsk_location curlocation;
+	char **split_location;
+	int nblocation=0,maxlocation=0;
+	int idx=0;
+	int strack,etrack,ssect,esect,lidx,retidx;
 
-void __edsk_map(struct s_assenv *ae) {
+	split_location=TxtSplitWithChar(TxtStrDup(location),':'); // duplicate string to allow repeat!
+
+	while (split_location[idx]) {
+		// state machine
+		memset(&curlocation,0,sizeof(curlocation));
+		strack=etrack=ssect=esect=-1;
+
+		if (split_location[idx][0]=='T' || split_location[idx][0]=='t') {
+			__edsk_get_value(split_location[idx]+1,&strack);
+		} else {
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Location must start with track number prefixed by 'T' (see documentation)\n");
+			*ret_nblocation=0;
+			return NULL;
+		}
+
+		lidx=0;
+		while (split_location[idx][lidx]) {
+			lidx++;
+			retidx=__edsk_get_value(split_location[idx]+lidx,&strack);
+			if (retidx==-1) {
+				// error
+			} else {
+				lidx+=retidx;
+			}
+		}
+		ObjectArrayAddDynamicValueConcat((void**)&locations,&nblocation,&maxlocation,&curlocation,sizeof(curlocation));
+	}
+
+	*ret_nblocation=nblocation;
+	return locations;
+}
+
+
+/********************************************************************************************************
+ *                immediate EDSK actions
+********************************************************************************************************/
+
+void __edsk_read(struct s_assenv *ae) {
 	if (!ae->wl[ae->idx].t) {
-		char *newfilename;
-		ae->idx++;
-		newfilename=TxtStrDup(ae->wl[ae->idx].w+1); // skip first quote
-		newfilename[strlen(newfilename)-1]=0; // remove last quote
-		edsktool_MAPEDSK(edsktool_EDSK_load(newfilename));
 	} else {
-		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Usage is : EDSK MAP,'edskfilename'\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Usage is : EDSK READ,'edskfilename'\n");
 	}
 }
+
 void __edsk_create(struct s_assenv *ae) {
 	if (!ae->wl[ae->idx].t) {
 	} else {
@@ -13339,106 +13434,193 @@ void __edsk_create(struct s_assenv *ae) {
 	}
 }
 
-void __edsk_merge(struct s_assenv *ae) {
-	if (!ae->wl[ae->idx].t && !ae->wl[ae->idx+1].t && !ae->wl[ae->idx+2].t && ae->wl[ae->idx+3].t) {
-		struct s_edsk_global_struct *edsk1,*edsk2;
-		char *floppy1,*floppy2,*floppyres;
-		int side1,side2,i,j;
-		// merge data
-                struct s_edsk_track_global_struct *newtracks;
-                int maxtrack;
+/********************************************************************************************************
+ *                deferred EDSK actions
+********************************************************************************************************/
 
-
-		floppy1=StringRemoveQuotes(ae,ae->wl[ae->idx+1].w);
-		floppy2=StringRemoveQuotes(ae,ae->wl[ae->idx+2].w);
-		floppyres=StringRemoveQuotes(ae,ae->wl[ae->idx+3].w);
-		side1=__edsk_getsidefromname(floppy1);
-		side2=__edsk_getsidefromname(floppy2);
-
-		edsk1=edsktool_EDSK_load(floppy1);
-		edsk2=edsktool_EDSK_load(floppy2);
-                if (side1 && edsk1->sidenumber<2) { MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"floppy image [%s] does not have 2 sides\n",floppy1); return; }
-                if (side2 && edsk2->sidenumber<2) { MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"floppy image [%s] does not have 2 sides\n",floppy2); return; }
-
-                // merged DSK will get the maximum track number
-                if (edsk1->tracknumber>edsk2->tracknumber) maxtrack=edsk1->tracknumber; else maxtrack=edsk2->tracknumber;
-                newtracks=MemMalloc(sizeof(struct s_edsk_track_global_struct)*maxtrack*2);
-                memset(newtracks,0,sizeof(struct s_edsk_track_global_struct)*maxtrack*2);
-                // copy track from requested sides
-                for (i=0;i<edsk1->tracknumber;i++) newtracks[i*2]=edsk1->track[i*edsk1->sidenumber+side1];
-                for (i=0;i<edsk2->tracknumber;i++) newtracks[i*2+1]=edsk2->track[i*edsk2->sidenumber+side2];
-                // new tracks are unformated
-                for (i=edsk1->tracknumber;i<maxtrack;i++) newtracks[i*2].unformated=1;
-                for (i=edsk2->tracknumber;i<maxtrack;i++) newtracks[i*2+1].unformated=1;
-		// free unused sides
-		if (edsk1->sidenumber) __edsk_free_side(ae,edsk1,1-side1);
-		if (edsk2->sidenumber) __edsk_free_side(ae,edsk2,1-side2);
-		MemFree(edsk1->track);
-		MemFree(edsk2->track);
-		edsk1->track=newtracks;
-		edsk1->sidenumber=2;
-		// write merged EDSK
-		edsktool_EDSK_write_file(edsk1,floppyres);
-
-		ae->idx+=3;
-		MemFree(floppy1);
-		MemFree(floppy2);
-		MemFree(floppyres);
-	} else {
-		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Usage is : EDSK MERGE,'edskfilename:side','edskfilename:side','output edskfilename'\n");
-	}
+void __edsk_map(struct s_assenv *ae, struct s_edsk_action *action) {
+	edsktool_MAPEDSK(edsktool_EDSK_load(action->filename));
 }
 
-void __edsk_drop(struct s_assenv *ae) {
+void __edsk_merge(struct s_assenv *ae, struct s_edsk_action *action) {
+	struct s_edsk_global_struct *edsk1,*edsk2;
+	char *floppy1,*floppy2,*floppyres;
+	int side1,side2,i,j;
+	// merge data
+	struct s_edsk_track_global_struct *newtracks;
+	int maxtrack;
+
+	floppy1=action->filename;
+	floppy2=action->filename2;
+	floppyres=action->filename3;
+	side1=__edsk_get_side_from_name(floppy1);
+	side2=__edsk_get_side_from_name(floppy2);
+
+	edsk1=edsktool_EDSK_load(floppy1);
+	edsk2=edsktool_EDSK_load(floppy2);
+	if (side1 && edsk1->sidenumber<2) { MakeError(ae,0,"(__edsk_merge)",0,"floppy image [%s] does not have 2 sides\n",floppy1); return; }
+	if (side2 && edsk2->sidenumber<2) { MakeError(ae,0,"(__edsk_merge)",0,"floppy image [%s] does not have 2 sides\n",floppy2); return; }
+
+	// merged DSK will get the maximum track number
+	if (edsk1->tracknumber>edsk2->tracknumber) maxtrack=edsk1->tracknumber; else maxtrack=edsk2->tracknumber;
+	newtracks=MemMalloc(sizeof(struct s_edsk_track_global_struct)*maxtrack*2);
+	memset(newtracks,0,sizeof(struct s_edsk_track_global_struct)*maxtrack*2);
+	// copy track from requested sides
+	for (i=0;i<edsk1->tracknumber;i++) newtracks[i*2]=edsk1->track[i*edsk1->sidenumber+side1];
+	for (i=0;i<edsk2->tracknumber;i++) newtracks[i*2+1]=edsk2->track[i*edsk2->sidenumber+side2];
+	// new tracks are unformated
+	for (i=edsk1->tracknumber;i<maxtrack;i++) newtracks[i*2].unformated=1;
+	for (i=edsk2->tracknumber;i<maxtrack;i++) newtracks[i*2+1].unformated=1;
+	// free unused sides
+	if (edsk1->sidenumber) __edsk_free_side(ae,edsk1,1-side1);
+	if (edsk2->sidenumber) __edsk_free_side(ae,edsk2,1-side2);
+	MemFree(edsk1->track);
+	MemFree(edsk2->track);
+	edsk1->track=newtracks;
+	edsk1->sidenumber=2;
+	// write merged EDSK
+	edsktool_EDSK_write_file(edsk1,floppyres);
+}
+
+void __edsk_drop(struct s_assenv *ae, struct s_edsk_action *action) {
 	if (!ae->wl[ae->idx].t) {
 	} else {
-		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Usage is : EDSK DROP,'edskfilename'\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Usage is : EDSK DROP,'edskfilename:side','EDSK Location (see documentation)'\n");
 	}
 }
 
-void __edsk_add(struct s_assenv *ae) {
+void __edsk_add(struct s_assenv *ae, struct s_edsk_action *action) {
 	if (!ae->wl[ae->idx].t) {
 	} else {
 		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Usage is : EDSK ADD,'edskfilename'\n");
 	}
 }
 
-void __edsk_resize(struct s_assenv *ae) {
+void __edsk_resize(struct s_assenv *ae, struct s_edsk_action *action) {
 	if (!ae->wl[ae->idx].t) {
 	} else {
 		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Usage is : EDSK RESIZE,'edskfilename'\n");
 	}
 }
 
-void __edsk_save(struct s_assenv *ae) {
+void __edsk_save(struct s_assenv *ae, struct s_edsk_action *action) {
 	if (!ae->wl[ae->idx].t) {
 	} else {
 		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Usage is : EDSK SAVE,'edskfilename'\n");
 	}
 }
 
+/***************************************************************************************************************************
+ * EDSKTool core management
+ *
+ * == immediate execution ==
+ * EDSK CREATE,'filename.dsk',DATA|VENDOR|UNFORMATED,nbtracks
+ * EDSK READ,'filename.dsk','location',PHYSICAL|LOGICAL[,exactsize]
+ *
+ * == deferred execution ==
+ * EDSK GAPFIX,'filename.dsk',TRACK|ALLTRACKS,<track>
+ * EDSK MERGE,'filename.dsk:side','filename.dsk:side','outputfilename.dsk'
+***************************************************************************************************************************/
 void __EDSK(struct s_assenv *ae) {
-	if (!ae->wl[ae->idx].t) {
-		int cmderr=0,backidx;
+	if (!ae->wl[ae->idx].t && !ae->wl[ae->idx+1].t) {
+		struct s_edsk_action curaction={0};
+		int cmderr=0,backidx,nbfilename=1,touched;
+		char *filename[3]={0},*tmpfilename;
+		int i,j,lm;
 
-		ae->idx++;
-		backidx=ae->idx;
-		// command
-		switch (ae->wl[ae->idx].w[0]) {
-			case 'I':if (strcmp(ae->wl[ae->idx].w,"INFO")==0)	__edsk_map(ae); else cmderr=1;break;
-			case 'C':if (strcmp(ae->wl[ae->idx].w,"CREATE")==0)	__edsk_create(ae); else cmderr=1;break; // nombre de pistes + format éventuel
-			case 'M':if (strcmp(ae->wl[ae->idx].w,"MERGE")==0)	__edsk_merge(ae); else cmderr=1;break;
-			case 'D':if (strcmp(ae->wl[ae->idx].w,"DROP")==0)	__edsk_drop(ae); else cmderr=1;break; // drop track or sector
-			case 'A':if (strcmp(ae->wl[ae->idx].w,"ADD")==0)	__edsk_add(ae); else cmderr=1;break; // add sector
-			case 'R':if (strcmp(ae->wl[ae->idx].w,"RESIZE")==0)	__edsk_resize(ae); else cmderr=1;break; // resize sector
-			case 'S':if (strcmp(ae->wl[ae->idx].w,"SAVE")==0)	__edsk_save(ae); else cmderr=1;break; // use trackload to save files
+		// which action?
+		switch (ae->wl[ae->idx+1].w[0]) {
+			case 'A':if (strcmp(ae->wl[ae->idx+1].w,"ADD")==0)	curaction.action=E_EDSK_ACTION_ADD; else cmderr=1;break; // add sector
+			case 'C':if (strcmp(ae->wl[ae->idx+1].w,"CREATE")==0)	curaction.action=E_EDSK_ACTION_CREATE; else cmderr=1;break; // nombre de pistes + format éventuel
+			case 'D':if (strcmp(ae->wl[ae->idx+1].w,"DROP")==0)	curaction.action=E_EDSK_ACTION_DROP; else cmderr=1;break; // drop track or sector
+			case 'M':if (strcmp(ae->wl[ae->idx+1].w,"MERGE")==0)	curaction.action=E_EDSK_ACTION_MERGE; else // merge edsk
+				 if (strcmp(ae->wl[ae->idx+1].w,"MAP")==0)	curaction.action=E_EDSK_ACTION_MAP; else cmderr=1;break; // map edsk
+			case 'R':if (strcmp(ae->wl[ae->idx+1].w,"RESIZE")==0)	curaction.action=E_EDSK_ACTION_RESIZE; else // resize sector
+				 if (strcmp(ae->wl[ae->idx+1].w,"READ")==0)	curaction.action=E_EDSK_ACTION_READ; else cmderr=1;break; // read sectors into memory
+			case 'S':if (strcmp(ae->wl[ae->idx+1].w,"SAVE")==0)	curaction.action=E_EDSK_ACTION_SAVE; else cmderr=1;break; // use trackload to save files
 			default:cmderr=1;
 		}
 		if (cmderr) {
-			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"EDSK unknown command [%s] (take a look at the documentation)\n",ae->wl[backidx].w);
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"EDSK unknown command [%s] (take a look at the documentation)\n",ae->wl[ae->idx+1].w);
+			return;
+		}
+		// some action need more than one filename
+		switch (curaction.action) {
+			case E_EDSK_ACTION_ADD: case E_EDSK_ACTION_CREATE: case E_EDSK_ACTION_DROP: case E_EDSK_ACTION_MAP:
+			case E_EDSK_ACTION_RESIZE: case E_EDSK_ACTION_READ: case E_EDSK_ACTION_SAVE:
+				nbfilename=1;break;
+			case E_EDSK_ACTION_MERGE:
+				nbfilename=3;break;
+			default:MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Internal Error on EDSK action management (1)\n");break;
+		}
+
+		// convert tags
+		for (i=0;i<nbfilename;i++) {
+			// enforce filename is a string!
+			if (!StringIsQuote(ae->wl[ae->idx+2+i].w)) {
+				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"EDSK syntax is : EDSK <COMMAND>,'<EDSK filename>',<parameters>...\n");
+				return;
+			}
+			tmpfilename=TxtStrDup(ae->wl[ae->idx+2+i].w);
+		printf("tmp=%s\n",tmpfilename);
+			/* need to upper case tags */
+			for (lm=touched=0;tmpfilename[lm];lm++) {
+				if (tmpfilename[lm]=='{') touched++; else if (tmpfilename[lm]=='}') touched--; else if (touched) tmpfilename[lm]=toupper(tmpfilename[lm]);
+			}
+		printf("tmp=%s\n",tmpfilename);
+			tmpfilename=TranslateTag(ae,tmpfilename,&touched,1,E_TAGOPTION_REMOVESPACE);
+		printf("tmp=%s\n",tmpfilename);
+			filename[i]=StringRemoveQuotes(ae,tmpfilename);
+		printf("tmp=%s\n",tmpfilename);
+			MemFree(tmpfilename);
+		}
+		curaction.iw=ae->idx;
+		curaction.filename=filename[0];
+		curaction.filename2=filename[1];
+		curaction.filename3=filename[2];
+		curaction.ibank=ae->activebank;
+
+		// translate specific parameters @@TODO
+		/*
+		cursave.ioffset=ae->idx+2;
+		cursave.isize=ae->idx+3;
+		ExpressionFastTranslate(ae,&ae->wl[ae->idx+2].w,1); // si on utilise des variables ça évite la grouille post traitement...
+		ExpressionFastTranslate(ae,&ae->wl[ae->idx+3].w,1); // idem
+		*/
+
+		switch (curaction.action) {
+			// immediate execution
+			case E_EDSK_ACTION_CREATE: __edsk_create(ae);break;
+			case E_EDSK_ACTION_READ: __edsk_read(ae);break;
+			// deferred execution
+			case E_EDSK_ACTION_MAP:
+			case E_EDSK_ACTION_MERGE:
+			case E_EDSK_ACTION_RESIZE:
+			case E_EDSK_ACTION_DROP:
+			case E_EDSK_ACTION_SAVE:
+			case E_EDSK_ACTION_ADD:
+				ObjectArrayAddDynamicValueConcat((void**)&ae->edsk_action,&ae->nbedskaction,&ae->maxedskaction,&curaction,sizeof(curaction));
+				break;
+			default:MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Internal Error on EDSK action management (2)\n");break;
 		}
 	} else {
-		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"EDSK directive must have parameters (take a look at the documentation)\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"EDSK syntax is : EDSK <COMMAND>,'<EDSK filename>',<parameters>... (see documentation)\n");
+	}
+}
+
+void PopAllEDSK(struct s_assenv *ae) {
+	int i;
+	for (i=0;i<ae->nbedskaction;i++) {
+		switch (ae->edsk_action[i].action) {
+			case E_EDSK_ACTION_MAP:		__edsk_map(ae,&ae->edsk_action[i]);break;
+			case E_EDSK_ACTION_MERGE:	__edsk_merge(ae,&ae->edsk_action[i]);break;
+			case E_EDSK_ACTION_RESIZE:	__edsk_resize(ae,&ae->edsk_action[i]);break;
+			case E_EDSK_ACTION_DROP:	__edsk_drop(ae,&ae->edsk_action[i]);break;
+			case E_EDSK_ACTION_SAVE:	__edsk_save(ae,&ae->edsk_action[i]);break;
+			case E_EDSK_ACTION_ADD:		__edsk_add(ae,&ae->edsk_action[i]);break;
+			default:MakeError(ae,0,"(PopAllEDSK)",0,"internal error during EDSK deferred execution, please report\n");
+				break;
+		}
 	}
 }
 
@@ -19992,8 +20174,10 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 	TMP_filename=MemMalloc(PATH_MAX);
 	if (!ae->nberr && !ae->checkmode) {
 		
-		/* enregistrement des fichiers programmes par la commande SAVE */
+		/* enregistrement des fichiers programmes par la directive SAVE */
 		PopAllSave(ae);
+		/* exécution des actions programmées par la directive EDSK */
+		PopAllEDSK(ae);
 	
 		if (ae->nbsave==0 || ae->forcecpr || ae->forcesnapshot || ae->forceROM || ae->forcetape) {
 			/*********************************************
@@ -25557,9 +25741,9 @@ printf("testing memory overrun with LZ (failure test 2) OK\n");
 
 
 	ret=RasmAssemble(AUTOTEST_LZDEFERED,strlen(AUTOTEST_LZDEFERED),&opcode,&opcodelen);
-	if (!ret && opcodelen==7 && opcode[6]==6) {} else {printf("Autotest %03d ERROR (LZ segment + defered $)\n",cpt);exit(-1);}
+	if (!ret && opcodelen==7 && opcode[6]==6) {} else {printf("Autotest %03d ERROR (LZ segment + deferred $)\n",cpt);exit(-1);}
 	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
-printf("testing LZ segment + defered $ OK\n");
+printf("testing LZ segment + deferred $ OK\n");
 	
 #ifndef NO_3RD_PARTIES
 	ret=RasmAssemble(AUTOTEST_LZ4,strlen(AUTOTEST_LZ4),&opcode,&opcodelen);
