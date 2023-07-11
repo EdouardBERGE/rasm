@@ -13422,18 +13422,90 @@ struct s_edsk_location *__edsk_get_location(struct s_assenv *ae,char *location, 
  *                immediate EDSK actions
 ********************************************************************************************************/
 
-void __edsk_read(struct s_assenv *ae) {
+void __edsk_read(struct s_assenv *ae, struct s_edsk_action *action) {
 	if (!ae->wl[ae->idx].t) {
 	} else {
 		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Usage is : EDSK READ,'edskfilename'\n");
 	}
 }
 
-void __edsk_create(struct s_assenv *ae) {
-	if (!ae->wl[ae->idx].t) {
-	} else {
-		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Usage is : EDSK CREATE,'edskfilename'\n");
+void __edsk_create(struct s_assenv *ae, struct s_edsk_action *action) {
+	struct s_edsk_global_struct *edsk;
+	char *format;
+	int nbtrack=42;
+	int nbside,interlaced=0;
+	int i,t,s,sect;
+
+	nbside=__edsk_get_side_from_name(action->filename);
+	switch (nbside) {
+		default:
+		case 0:nbside=1;break;
+		case 1:break;
+		case 2:break;
 	}
+
+	if (action->nbparam<3) {
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Usage is : EDSK CREATE,'edskfilename:nbside',DATA|VENDOR|UNFORMATED[,<nbtrack>|INTERLACED,...\n");
+		return;
+	}
+	// get extra param
+	for (i=4;i<=action->nbparam;i++) {
+		if (strcmp(ae->wl[ae->idx+i].w,"INTERLACED")==0) interlaced=1; else nbtrack=RoundComputeExpression(ae,ae->wl[ae->idx+i].w,ae->outputadr,0,0);
+	}
+
+        if (strcmp(format,"DATA")==0 || strcmp(format,"VENDOR")==0 || strcmp(format,"UNFORMATED")==0) {
+		edsk=MemMalloc(sizeof(struct s_edsk_global_struct));
+		memset(edsk,0,sizeof(struct s_edsk_global_struct));
+
+                edsk->tracknumber=nbtrack;
+                edsk->sidenumber=nbside;
+                edsk->track=MemMalloc(sizeof(struct s_edsk_track_global_struct)*edsk->tracknumber*edsk->sidenumber);
+                memset(edsk->track,0,sizeof(struct s_edsk_track_global_struct)*edsk->tracknumber*edsk->sidenumber);
+
+		if (strcmp(format,"UNFORMATED")==0) {
+			for (s=0;s<nbside;s++)
+			for (t=0;t<nbtrack;t++) {
+				edsk->track[t*nbside+s].unformated=1;
+			}
+		} else {
+			unsigned char data_inline[9]={0xC1,0xC2,0xC3,0xC4,0xC5,0xC6,0xC7,0xC8,0xC9};
+			unsigned char data_inter[9]={0xC1,0xC6,0xC2,0xC7,0xC3,0xC8,0xC4,0xC9,0xC5};
+			unsigned char vendor_inline[9]={0x41,0x42,0x43,0x44,0x45,0x46,0x47,0x48,0x49};
+			unsigned char vendor_inter[9]={0x41,0x46,0x42,0x47,0x43,0x48,0x44,0x49,0x45};
+			unsigned char *sectid;
+
+			if (strcmp(format,"DATA")==0)   if (interlaced) sectid=data_inter; else sectid=data_inline;
+			if (strcmp(format,"VENDOR")==0) if (interlaced) sectid=vendor_inter; else sectid=vendor_inline;
+
+                	for (s=0;s<nbside;s++)
+			for (t=0;t<nbtrack;t++) {
+				edsk->track[t*nbside+s].track=t;
+				edsk->track[t*nbside+s].side=0;
+				edsk->track[t*nbside+s].sectornumber=9;
+				edsk->track[t*nbside+s].sectorsize=2;
+				edsk->track[t*nbside+s].gap3length=0x50;
+				edsk->track[t*nbside+s].fillerbyte=0xE5;
+				edsk->track[t*nbside+s].sector=MemMalloc(edsk->track[t*nbside+s].sectornumber*sizeof(struct s_edsk_sector_global_struct));
+				for (sect=0;sect<9;sect++) {
+					edsk->track[t*nbside+s].sector[sect].track=t;
+					edsk->track[t*nbside+s].sector[sect].side=0;
+					edsk->track[t*nbside+s].sector[sect].id=sectid[sect];
+					edsk->track[t*nbside+s].sector[sect].size=2;
+					edsk->track[t*nbside+s].sector[sect].st1=0;
+					edsk->track[t*nbside+s].sector[sect].st2=0;
+					edsk->track[t*nbside+s].sector[sect].length=512;
+					edsk->track[t*nbside+s].sector[sect].data=MemMalloc(edsk->track[t*nbside+s].sector[sect].length);
+					for (i=0;i<edsk->track[t*nbside+s].sector[sect].length;i++) edsk->track[t*nbside+s].sector[sect].data[i]=edsk->track[t*nbside+s].fillerbyte;
+				}
+			}
+		}
+	} else {
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Usage is : EDSK CREATE,'edskfilename',DATA|VENDOR|UNFORMATED[,nbtrack[,INTERLACED]\n");
+		return;
+	}
+
+	edsktool_EDSK_write_file(edsk,action->filename);
+	rasm_printf(ae,KIO"New EDSK [%s] created\n",action->filename);
 }
 
 /********************************************************************************************************
@@ -13566,7 +13638,7 @@ void __edsk_save(struct s_assenv *ae, struct s_edsk_action *action) {
  * EDSKTool core management
  *
  * == immediate execution ==
- * EDSK CREATE,'filename.dsk',DATA|VENDOR|UNFORMATED,nbtracks
+ * EDSK CREATE,'filename.dsk',DATA|VENDOR|UNFORMATED,nbtracks[,INTERLACED]
  * EDSK READ,'filename.dsk','location',PHYSICAL|LOGICAL[,exactsize]
  *
  * == deferred execution ==
@@ -13646,10 +13718,15 @@ void __EDSK(struct s_assenv *ae) {
 		ExpressionFastTranslate(ae,&ae->wl[ae->idx+3].w,1); // idem
 		*/
 
+		// even the action is deferred, we use the action!
+		while (!ae->wl[ae->idx].t+curaction.nbparam) {
+			curaction.nbparam++;
+		}
+
 		switch (curaction.action) {
 			// immediate execution
-			case E_EDSK_ACTION_CREATE: __edsk_create(ae);break;
-			case E_EDSK_ACTION_READ: __edsk_read(ae);break;
+			case E_EDSK_ACTION_CREATE: __edsk_create(ae,&curaction);break;
+			case E_EDSK_ACTION_READ: __edsk_read(ae,&curaction);break;
 			// deferred execution
 			case E_EDSK_ACTION_MAP:
 			case E_EDSK_ACTION_MERGE:
@@ -13659,10 +13736,6 @@ void __EDSK(struct s_assenv *ae) {
 			case E_EDSK_ACTION_ADD:
 			case E_EDSK_ACTION_GAPFIX:
 			case E_EDSK_ACTION_UPGRADE:
-				while (!ae->wl[ae->idx].t+curaction.nbparam) {
-					curaction.nbparam++;
-				}
-
 				if (curaction.action==E_EDSK_ACTION_GAPFIX && curaction.nbparam==4) {
 					ExpressionFastTranslate(ae,&ae->wl[ae->idx+4].w,1); // track conversion
 				}
