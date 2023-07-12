@@ -13805,7 +13805,7 @@ void __edsk_drop(struct s_assenv *ae, struct s_edsk_action *action) {
 		}
 		// unformated special case
 		if (edsk->track[i*edsk->sidenumber+side].unformated) {
-			rasm_printf(ae,KWARNING"[%s:%d] Warning: Track wasn't formated, nothing to drop!\n",GetCurrentFile(ae),ae->wl[ae->idx].l);
+			rasm_printf(ae,KWARNING"[%s:%d] Warning: Track %d wasn't formated, nothing to drop!\n",GetCurrentFile(ae),ae->wl[ae->idx].l,i);
 			if (ae->erronwarn) MaxError(ae);
 		} else {
 			if (location[iloc].istrack) {
@@ -13817,6 +13817,7 @@ void __edsk_drop(struct s_assenv *ae, struct s_edsk_action *action) {
 				edsk->track[i*edsk->sidenumber+side].unformated=1;
 			} else {
 				// drop sector(s)
+				int wasfound=0;
 				for (j=0;j<edsk->track[i*edsk->sidenumber+side].sectornumber;j++) {
 					if (edsk->track[i*edsk->sidenumber+side].sector[j].id==location[iloc].sectorID) {
 						MemFree(edsk->track[i*edsk->sidenumber+side].sector[j].data);
@@ -13825,7 +13826,11 @@ void __edsk_drop(struct s_assenv *ae, struct s_edsk_action *action) {
 						}
 						edsk->track[i*edsk->sidenumber+side].sectornumber--;
 						if (j) j--; // shoot again
+						wasfound=1;
 					}
+				}
+				if (!wasfound) {
+					MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"EDSK DROP error, sector #%02X track %d not found!\n",location[iloc].sectorID,i);
 				}
 			}
 		}
@@ -13838,6 +13843,7 @@ void __edsk_add(struct s_assenv *ae, struct s_edsk_action *action) {
 	int nblocation,side;
 	int sectorsize;
 	int iloc,i,j,k;
+	int once=0;
 
  	if (action->nbparam!=4) {
 		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Usage is : EDSK ADD,'edskfilename:side','location',<size>\n");
@@ -13882,8 +13888,12 @@ void __edsk_add(struct s_assenv *ae, struct s_edsk_action *action) {
 		}
 		// unformated special case
 		if (edsk->track[i*edsk->sidenumber+side].unformated) {
-			rasm_printf(ae,KWARNING"[%s:%d] Warning: Track wasn't formated, using default track properties\n",GetCurrentFile(ae),ae->wl[ae->idx].l);
-			if (ae->erronwarn) MaxError(ae);
+			if (!once) {
+				// display only once per call
+				rasm_printf(ae,KWARNING"[%s:%d] Warning: Track wasn't formated, using default track properties\n",GetCurrentFile(ae),ae->wl[ae->idx].l);
+				if (ae->erronwarn) MaxError(ae);
+				once=1;
+			}
 			// prep default track
 			edsk->track[i*edsk->sidenumber+side].unformated=0;
 			edsk->track[i*edsk->sidenumber+side].track=i;
