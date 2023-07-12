@@ -13017,7 +13017,7 @@ struct s_edsk_global_struct *edsktool_NewEDSK(char *format) {
         return edsk;
 }
 
-struct s_edsk_global_struct *edsktool_EDSK_load(char *edskfilename)
+struct s_edsk_global_struct *edsktool_EDSK_load(char *edskfilename) //@@TODO faire un mécanisme de cache
 {
         #undef FUNC
         #define FUNC "EDSK_load"
@@ -13335,10 +13335,11 @@ int __edsk_get_side_from_name(char *w) {
 	}
 	return 0;
 }
-void __edsk_free_side(struct s_assenv *ae,struct s_edsk_global_struct *edsk, int side) {
+// side if freed but EDSK is NOT reorganised!!!! _internal use for Merging or global free!
+void __internal_edsk_free_side(struct s_assenv *ae,struct s_edsk_global_struct *edsk, int side) {
 	int i,j;
 
-	if (side && !edsk->sidenumber) {
+	if (side && edsk->sidenumber<2) {
 		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Invalid EDSK side!\n");
 		return;
 	}
@@ -13356,61 +13357,108 @@ void __edsk_free_side(struct s_assenv *ae,struct s_edsk_global_struct *edsk, int
 		}
 	}
 }
-int __edsk_get_value(char *param, int *zeval) {
-	char *ptr;
-	int idx=1;
-	switch (param[0]) {
-		case '$':
-		case '#':
-		case '&':*zeval=strtol(param+1,&ptr,16);break;
-		case 0:if (param[1]=='x') {
-			       *zeval=strtol(param+1,&ptr,16);
-			       idx=2;
-			} else *zeval=atoi(param);
-			break;
-		default:if (isdigit(param[0])) *zeval=atoi(param); else return -1;
-	}
-	return 0;
+void __edsk_free(struct s_assenv *ae,struct s_edsk_global_struct *edsk) {
+	if (edsk->sidenumber>1) __internal_edsk_free_side(ae,edsk,1);
+	__internal_edsk_free_side(ae,edsk,0);
+	MemFree(edsk->track);
+	MemFree(edsk);
 }
+
 /*********************************************************************************
  * location is a string defining one or more tracks/sectors
- * each location definition must be separated by ':' char
- * interval definition is possible adding +nbtrack at the end
+ * split each location with a space
+ * split track from sectors with a :
+ * interval definition is possible with a dash
 *********************************************************************************/
 struct s_edsk_location *__edsk_get_location(struct s_assenv *ae,char *location, int *ret_nblocation) {
 	struct s_edsk_location *locations=NULL;
 	struct s_edsk_location curlocation;
-	char **split_location;
+	char *duploc;
 	int nblocation=0,maxlocation=0;
-	int idx=0;
 	int strack,etrack,ssect,esect,lidx,retidx;
+	// parsing
+	char **split_location;
+	char *split_interval;
+	char *sectorlist;
+	int idxl=0;
+	int itr,isc;
 
-	split_location=TxtSplitWithChar(TxtStrDup(location),':'); // duplicate string to allow repeat!
+	if (!ret_nblocation) return NULL;
 
-	while (split_location[idx]) {
-		// state machine
+	if (location && location[0] && location[1] && StringIsQuote(location)) duploc=TxtStrDup(location+1); else {
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Internal error edsk_get_location, please contact me\n");
+		*ret_nblocation=0;
+		return NULL;
+	}
+	duploc[strlen(duploc)-1]=0;
+	split_location=TxtSplitWithChar(duploc,' '); // split each locations
+
+	while (split_location[idxl]) {
 		memset(&curlocation,0,sizeof(curlocation));
-		strack=etrack=ssect=esect=-1;
-
-		if (split_location[idx][0]=='T' || split_location[idx][0]=='t') {
-			__edsk_get_value(split_location[idx]+1,&strack);
+		// split track from sectors
+		sectorlist=strchr(split_location[idxl],':');
+		if (sectorlist) {
+			*sectorlist=0;
+		}
+		// process track interval
+		if ((split_interval=strchr(split_location[idxl],'-'))!=NULL) {
+			*split_interval=0;
+			strack=RoundComputeExpression(ae,split_location[idxl],0,0,0);
+			*split_interval='-'; // get back to original string
+			etrack=RoundComputeExpression(ae,split_interval+1,0,0,0);
 		} else {
-			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Location must start with track number prefixed by 'T' (see documentation)\n");
+			strack=RoundComputeExpression(ae,split_location[idxl]+1,0,0,0);
+			etrack=strack;
+		}
+		// check
+		if (etrack<strack) {
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Location [%s] interval definition error (see documentation)\n",split_location[idxl]);
 			*ret_nblocation=0;
 			return NULL;
 		}
-
-		lidx=0;
-		while (split_location[idx][lidx]) {
-			lidx++;
-			retidx=__edsk_get_value(split_location[idx]+lidx,&strack);
-			if (retidx==-1) {
-				// error
+		if (sectorlist) {
+			*sectorlist=':'; // get back to original string
+			sectorlist++;
+		}
+		// process sectors if declared
+		if (sectorlist && *sectorlist) {
+			if ((split_interval=strchr(sectorlist,'-'))!=NULL) {
+				*split_interval=0;
+				ssect=RoundComputeExpression(ae,sectorlist,0,0,0);
+				*split_interval='-'; // get back to original string
+				esect=RoundComputeExpression(ae,split_interval+1,0,0,0);
 			} else {
-				lidx+=retidx;
+				ssect=RoundComputeExpression(ae,sectorlist,0,0,0);
+				esect=ssect;
+			}
+			// check
+			if (esect<ssect) {
+				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Location [%s] interval definition error (see documentation)\n",split_location[idxl]);
+				*ret_nblocation=0;
+				return NULL;
+			}
+		} else {
+			// full range!
+			ssect=-1;
+			esect=256;
+		}
+
+		// add locations
+		for (itr=strack;itr<=etrack;itr++) {
+			curlocation.track=itr;
+			if (ssect>=0 && ssect<256 && esect>=0 && esect<256) {
+				curlocation.istrack=0;
+				for (isc=ssect;isc<=esect;isc++) {
+					curlocation.sectorID=isc;
+					ObjectArrayAddDynamicValueConcat((void**)&locations,&nblocation,&maxlocation,&curlocation,sizeof(curlocation));
+				}
+			} else {
+				curlocation.istrack=1;
+				curlocation.sectorID=-1;
+				ObjectArrayAddDynamicValueConcat((void**)&locations,&nblocation,&maxlocation,&curlocation,sizeof(curlocation));
 			}
 		}
-		ObjectArrayAddDynamicValueConcat((void**)&locations,&nblocation,&maxlocation,&curlocation,sizeof(curlocation));
+		idxl++;
 	}
 
 	*ret_nblocation=nblocation;
@@ -13422,18 +13470,94 @@ struct s_edsk_location *__edsk_get_location(struct s_assenv *ae,char *location, 
  *                immediate EDSK actions
 ********************************************************************************************************/
 
-void __edsk_read(struct s_assenv *ae, struct s_edsk_action *action) {
-	if (!ae->wl[ae->idx].t) {
-	} else {
-		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Usage is : EDSK READ,'edskfilename'\n");
+void __edsk_readsect(struct s_assenv *ae, struct s_edsk_action *action) {
+	struct s_edsk_global_struct *edsk;
+	struct s_edsk_location *location;
+	int side,sizetoread,nblocation;
+	int i,t,curtrack,s,j;
+
+	side=__edsk_get_side_from_name(action->filename);
+
+	if (action->nbparam!=4) {
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Usage is : EDSK READSECT,'edskfilename:side',<location>,<sizetoread>   param=%d\n",action->nbparam);
+		return;
 	}
+	// param 3 is location
+	location=__edsk_get_location(ae,ae->wl[ae->idx+3].w,&nblocation);
+	if (!location) {
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"EDSK READSECT error, invalid location!\n");
+		return;
+	}
+	// param 4 is exactsize
+	sizetoread=RoundComputeExpression(ae,ae->wl[ae->idx+4].w,ae->outputadr,0,0);
+	if (sizetoread<1) {
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"EDSK READSECT error, invalid size to read!\n");
+		return;
+	}
+
+	// now we can read the EDSK
+	edsk=edsktool_EDSK_load(action->filename);
+	if (!edsk) {
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"EDSK READSECT error, invalid floppy image!\n");
+		return;
+	}
+
+	if (side+1>edsk->sidenumber) {
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"EDSK READSECT error, cannot read side B as the floppy image does not contain two sides!\n");
+		return;
+	}
+
+	// then read the data!
+	for (i=0;i<nblocation;i++) {
+		if (location[i].track<edsk->tracknumber) {
+			curtrack=t*edsk->sidenumber+side;
+			// check
+			if (edsk->track[curtrack].unformated) {
+				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"EDSK READSECT error, cannot read track %d because it's not formated!\n",location[i].track);
+				return;
+			}
+
+			if (location[i].istrack) {
+				// output every data of the track!
+				for (s=0;s<edsk->track[curtrack].sectornumber;s++) {
+					for (j=0;j<edsk->track[curtrack].sector[s].length && sizetoread;j++) {
+						___output(ae,edsk->track[curtrack].sector[s].data[j]);
+						sizetoread--;
+					}
+				}
+			} else {
+				int sector_was_found=0;
+				for (s=0;s<edsk->track[curtrack].sectornumber;s++) {
+					if (edsk->track[curtrack].sector[s].id==location[i].sectorID) {
+						// output sector data
+						for (j=0;j<edsk->track[curtrack].sector[s].length && sizetoread;j++) {
+							___output(ae,edsk->track[curtrack].sector[s].data[j]);
+							sizetoread--;
+						}
+						// if we break, we wont be able to read multiple sectors with the same ID
+						sector_was_found=1;
+					}
+				}
+				// warn if sector was not found
+				if (!sector_was_found) {
+					rasm_printf(ae,KWARNING"[%s:%d] Warning: EDSK READSECT sector #%02X was not found on track %d\n",GetCurrentFile(ae),ae->wl[ae->idx].l,location[i].sectorID,location[i].track);
+					if (ae->erronwarn) MaxError(ae);
+				}
+			}
+		} else {
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"EDSK READSECT error, cannot read track %d as the floppy image contains only %d track(s)!\n",location[i].track,edsk->tracknumber);
+			return;
+		}
+	}
+	// release edsk
+	__edsk_free(ae,edsk);
 }
 
 void __edsk_create(struct s_assenv *ae, struct s_edsk_action *action) {
 	struct s_edsk_global_struct *edsk;
 	char *format;
 	int nbtrack=42;
-	int nbside,interlaced=0;
+	int nbside,interlaced=0,overwrite=0;
 	int i,t,s,sect;
 
 	nbside=__edsk_get_side_from_name(action->filename);
@@ -13445,12 +13569,14 @@ void __edsk_create(struct s_assenv *ae, struct s_edsk_action *action) {
 	}
 
 	if (action->nbparam<3) {
-		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Usage is : EDSK CREATE,'edskfilename:nbside',DATA|VENDOR|UNFORMATED[,<nbtrack>|INTERLACED,...\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Usage is : EDSK CREATE,'edskfilename:nbside',DATA|VENDOR|UNFORMATED[,<nbtrack>|INTERLACED|OVERWRITE,...\n");
 		return;
 	}
 	// get extra param
 	for (i=4;i<=action->nbparam;i++) {
-		if (strcmp(ae->wl[ae->idx+i].w,"INTERLACED")==0) interlaced=1; else nbtrack=RoundComputeExpression(ae,ae->wl[ae->idx+i].w,ae->outputadr,0,0);
+		if (strcmp(ae->wl[ae->idx+i].w,"INTERLACED")==0) interlaced=1; else 
+		if (strcmp(ae->wl[ae->idx+i].w,"OVERWRITE")==0) overwrite=1; else 
+			nbtrack=RoundComputeExpression(ae,ae->wl[ae->idx+i].w,ae->outputadr,0,0);
 	}
 
         if (strcmp(format,"DATA")==0 || strcmp(format,"VENDOR")==0 || strcmp(format,"UNFORMATED")==0) {
@@ -13500,10 +13626,14 @@ void __edsk_create(struct s_assenv *ae, struct s_edsk_action *action) {
 			}
 		}
 	} else {
-		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Usage is : EDSK CREATE,'edskfilename',DATA|VENDOR|UNFORMATED[,nbtrack[,INTERLACED]\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Usage is : EDSK CREATE,'edskfilename',DATA|VENDOR|UNFORMATED,nbtrack|INTERLACED|OVERWRITE,...\n");
 		return;
 	}
 
+	if (FileExists(action->filename) && !overwrite) {
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Cannot create [%s] as it already exists (you may use OVERWRITE tag)\n");
+		return;
+	}
 	edsktool_EDSK_write_file(edsk,action->filename);
 	rasm_printf(ae,KIO"New EDSK [%s] created\n",action->filename);
 }
@@ -13546,8 +13676,8 @@ void __edsk_merge(struct s_assenv *ae, struct s_edsk_action *action) {
 	for (i=edsk1->tracknumber;i<maxtrack;i++) newtracks[i*2].unformated=1;
 	for (i=edsk2->tracknumber;i<maxtrack;i++) newtracks[i*2+1].unformated=1;
 	// free unused sides
-	if (edsk1->sidenumber) __edsk_free_side(ae,edsk1,1-side1);
-	if (edsk2->sidenumber) __edsk_free_side(ae,edsk2,1-side2);
+	if (edsk1->sidenumber) __internal_edsk_free_side(ae,edsk1,1-side1);
+	if (edsk2->sidenumber) __internal_edsk_free_side(ae,edsk2,1-side2);
 	MemFree(edsk1->track);
 	MemFree(edsk2->track);
 	edsk1->track=newtracks;
@@ -13557,8 +13687,10 @@ void __edsk_merge(struct s_assenv *ae, struct s_edsk_action *action) {
 }
 
 void __edsk_gapfix(struct s_assenv *ae, struct s_edsk_action *action) {
+	struct s_edsk_location *location;
+	int nblocation;
 	struct s_edsk_global_struct *edsk;
-	int side,i,j,start_track,end_track;
+	int side,i,j,iloc;
 
  	if (action->nbparam<3) {
 		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Usage is : EDSK GAPFIX,'edskfilename:side',TRACK|ALLTRACKS[,<track>]\n");
@@ -13573,16 +13705,32 @@ void __edsk_gapfix(struct s_assenv *ae, struct s_edsk_action *action) {
 
 	if (strcmp(ae->wl[action->iw+3].w,"TRACK")==0) {
 		if (action->nbparam>3) {
-			start_track=end_track=RoundComputeExpression(ae,ae->wl[ae->idx+4].w,0,0,0);
+			location=__edsk_get_location(ae,ae->wl[ae->idx+3].w,&nblocation);
+			if (!location) {
+				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"EDSK GAPFIX error, invalid location!\n");
+				return;
+			}
+			//start_track=end_track=RoundComputeExpression(ae,ae->wl[ae->idx+4].w,0,0,0);
 		} else {
-			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Usage is : EDSK GAPFIX,'edskfilename:side',TRACK,<track number>\n");
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Usage is : EDSK GAPFIX,'edskfilename:side',TRACK,<location without sector>\n");
 			return;
 		}
 	} else if (strcmp(ae->wl[action->iw+3].w,"ALLTRACKS")==0) {
-		start_track=0;
-		end_track=edsk->tracknumber;
+		char fullrange[256];
+		sprintf(fullrange,"'0-%d'",edsk->tracknumber);
+		location=__edsk_get_location(ae,fullrange,&nblocation);
 	}
-	for (i=start_track;i<end_track;i++) {
+	for (iloc=0;iloc<nblocation;iloc++) {
+		if (location[iloc].istrack) {
+			rasm_printf(ae,KWARNING"[%s:%d] Warning: EDSK GAPFIX location has sector definition which will be ignored!\n",GetCurrentFile(ae),ae->wl[ae->idx].l);
+			if (ae->erronwarn) MaxError(ae);
+		}
+		i=location[iloc].track;
+		if (i>=edsk->tracknumber) {
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"EDSK GAPFIX error, track %d cannot be fixed as the floppy image has %d track(s)\n",i,edsk->tracknumber);
+			return;
+		}
+
 		if (edsk->track[i*edsk->sidenumber+side].unformated) {
 			// nothing to do
 		} else {
@@ -13639,7 +13787,7 @@ void __edsk_save(struct s_assenv *ae, struct s_edsk_action *action) {
  *
  * == immediate execution ==
  * EDSK CREATE,'filename.dsk',DATA|VENDOR|UNFORMATED,nbtracks[,INTERLACED]
- * EDSK READ,'filename.dsk','location',PHYSICAL|LOGICAL[,exactsize]
+ * EDSK READSECT,'filename.dsk','location',exactsize
  *
  * == deferred execution ==
  * EDSK GAPFIX,'filename.dsk',TRACK|ALLTRACKS,<track>
@@ -13663,8 +13811,8 @@ void __EDSK(struct s_assenv *ae) {
 			case 'M':if (strcmp(ae->wl[ae->idx+1].w,"MERGE")==0)	curaction.action=E_EDSK_ACTION_MERGE; else // merge edsk
 				 if (strcmp(ae->wl[ae->idx+1].w,"MAP")==0)	curaction.action=E_EDSK_ACTION_MAP; else cmderr=1;break; // map edsk
 			case 'R':if (strcmp(ae->wl[ae->idx+1].w,"RESIZE")==0)	curaction.action=E_EDSK_ACTION_RESIZE; else // resize sector
-				 if (strcmp(ae->wl[ae->idx+1].w,"READ")==0)	curaction.action=E_EDSK_ACTION_READ; else cmderr=1;break; // read sectors into memory
-			case 'S':if (strcmp(ae->wl[ae->idx+1].w,"SAVE")==0)	curaction.action=E_EDSK_ACTION_SAVE; else cmderr=1;break; // use trackload to save files
+				 if (strcmp(ae->wl[ae->idx+1].w,"READSECT")==0)	curaction.action=E_EDSK_ACTION_READ; else cmderr=1;break; // read sectors into memory
+			case 'S':if (strcmp(ae->wl[ae->idx+1].w,"SAVESECT")==0)	curaction.action=E_EDSK_ACTION_SAVE; else cmderr=1;break; // use trackload to save files
 			case 'U':if (strcmp(ae->wl[ae->idx+1].w,"UPGRADE")==0)	curaction.action=E_EDSK_ACTION_UPGRADE; else cmderr=1;break; // use trackload to save files
 			default:cmderr=1;
 		}
@@ -13692,16 +13840,12 @@ void __EDSK(struct s_assenv *ae) {
 				return;
 			}
 			tmpfilename=TxtStrDup(ae->wl[ae->idx+2+i].w);
-		printf("tmp=%s\n",tmpfilename);
 			/* need to upper case tags */
 			for (lm=touched=0;tmpfilename[lm];lm++) {
 				if (tmpfilename[lm]=='{') touched++; else if (tmpfilename[lm]=='}') touched--; else if (touched) tmpfilename[lm]=toupper(tmpfilename[lm]);
 			}
-		printf("tmp=%s\n",tmpfilename);
 			tmpfilename=TranslateTag(ae,tmpfilename,&touched,1,E_TAGOPTION_REMOVESPACE);
-		printf("tmp=%s\n",tmpfilename);
 			filename[i]=StringRemoveQuotes(ae,tmpfilename);
-		printf("tmp=%s\n",tmpfilename);
 			MemFree(tmpfilename);
 		}
 		curaction.iw=ae->idx;
@@ -13719,14 +13863,14 @@ void __EDSK(struct s_assenv *ae) {
 		*/
 
 		// even the action is deferred, we use the action!
-		while (!ae->wl[ae->idx].t+curaction.nbparam) {
+		while (!ae->wl[ae->idx+curaction.nbparam].t) {
 			curaction.nbparam++;
 		}
 
 		switch (curaction.action) {
 			// immediate execution
 			case E_EDSK_ACTION_CREATE: __edsk_create(ae,&curaction);break;
-			case E_EDSK_ACTION_READ: __edsk_read(ae,&curaction);break;
+			case E_EDSK_ACTION_READ: __edsk_readsect(ae,&curaction);break;
 			// deferred execution
 			case E_EDSK_ACTION_MAP:
 			case E_EDSK_ACTION_MERGE:
