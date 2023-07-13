@@ -13789,6 +13789,7 @@ void __edsk_gapfix(struct s_assenv *ae, struct s_edsk_action *action) {
 			}
 		}
 	}
+	MemFree(location);
 	edsktool_EDSK_write_file(edsk,action->filename);
 	__edsk_free(ae,edsk);
 }
@@ -13860,6 +13861,7 @@ void __edsk_drop(struct s_assenv *ae, struct s_edsk_action *action) {
 			}
 		}
 	}
+	MemFree(location);
 	edsktool_EDSK_write_file(edsk,action->filename);
 	__edsk_free(ae,edsk);
 }
@@ -13869,9 +13871,9 @@ void __edsk_add(struct s_assenv *ae, struct s_edsk_action *action) {
 	int nblocation,side;
 	int sectorsize;
 	int iloc,i,j,k;
-	int once=0;
+	int once=0,pp;
 
- 	if (action->nbparam!=4) {
+ 	if (action->nbparam<4) {
 		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Usage is : EDSK ADD,'edskfilename:side','location',<size>\n");
 		return;
 	}
@@ -13886,82 +13888,89 @@ void __edsk_add(struct s_assenv *ae, struct s_edsk_action *action) {
 		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Cannot ADD sector/track because floppy image [%s] does not have 2 sides!\n",action->filename);
 		return;
 	}
-	// get location
-	location=__edsk_get_location(ae,ae->wl[ae->idx+3].w,&nblocation);
-	if (!location) {
-		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"EDSK ADD error, invalid location!\n");
-		return;
-	}
-	// get sectorsize
-	sectorsize=RoundComputeExpression(ae,ae->wl[ae->idx+4].w,0,0,0);
-	switch (sectorsize) {
-		case 0:case 1:case 2:case 3:case 4:case 5:case 6:break; // almost regular size
-		case  128:sectorsize=0;break;
-		case  256:sectorsize=1;break;
-		case  512:sectorsize=2;break;
-		case 1024:sectorsize=3;break;
-		case 2048:sectorsize=4;break;
-		case 4096:sectorsize=5;break;
-		default:MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"EDSK error, sector size must be from 0 to 6\n");
-			return;
-	}
 
-	for (iloc=0;iloc<nblocation;iloc++) {
-		if (location[iloc].istrack) {
-			rasm_printf(ae,KWARNING"[%s:%d] Warning: location has sector definition which will be ignored!\n",GetCurrentFile(ae),ae->wl[ae->idx].l);
-			if (ae->erronwarn) MaxError(ae);
-		}
-		i=location[iloc].track;
-		if (i>=edsk->tracknumber) {
-			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"EDSK ADD error, track %d cannot be processed as the floppy image has %d track(s)\n",i,edsk->tracknumber);
+	pp=3;
+
+	while (pp<action->nbparam) {
+		// get location
+		location=__edsk_get_location(ae,ae->wl[ae->idx+pp].w,&nblocation);
+		if (!location) {
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"EDSK ADD error, invalid location!\n");
 			return;
 		}
-		// unformated special case
-		if (edsk->track[i*edsk->sidenumber+side].unformated) {
-			if (!once) {
-				// display only once per call
-				rasm_printf(ae,KWARNING"[%s:%d] Warning: Track wasn't formated, using default track properties\n",GetCurrentFile(ae),ae->wl[ae->idx].l);
+		// get sectorsize
+		sectorsize=RoundComputeExpression(ae,ae->wl[ae->idx+pp+1].w,0,0,0);
+		switch (sectorsize) {
+			case 0:case 1:case 2:case 3:case 4:case 5:case 6:break; // almost regular size
+			case  128:sectorsize=0;break;
+			case  256:sectorsize=1;break;
+			case  512:sectorsize=2;break;
+			case 1024:sectorsize=3;break;
+			case 2048:sectorsize=4;break;
+			case 4096:sectorsize=5;break;
+			default:MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"EDSK error, sector size must be from 0 to 6\n");
+				return;
+		}
+
+		for (iloc=0;iloc<nblocation;iloc++) {
+			if (location[iloc].istrack) {
+				rasm_printf(ae,KWARNING"[%s:%d] Warning: location has sector definition which will be ignored!\n",GetCurrentFile(ae),ae->wl[ae->idx].l);
 				if (ae->erronwarn) MaxError(ae);
-				once=1;
 			}
-			// prep default track
-			edsk->track[i*edsk->sidenumber+side].unformated=0;
-			edsk->track[i*edsk->sidenumber+side].track=i;
-			edsk->track[i*edsk->sidenumber+side].side=0;
-			edsk->track[i*edsk->sidenumber+side].sectorsize=sectorsize;
-			edsk->track[i*edsk->sidenumber+side].gap3length=0x50;
-			edsk->track[i*edsk->sidenumber+side].fillerbyte=0xE5;
-			// track is still empty
-			edsk->track[i*edsk->sidenumber+side].sectornumber=0;
-			edsk->track[i*edsk->sidenumber+side].sector=NULL;
-		}
-		// add sector
-		if (edsk->track[i*edsk->sidenumber+side].sectornumber<32) {
-			edsk->track[i*edsk->sidenumber+side].sectornumber++;
-			edsk->track[i*edsk->sidenumber+side].sector=MemRealloc(edsk->track[i*edsk->sidenumber+side].sector,edsk->track[i*edsk->sidenumber+side].sectornumber*sizeof(struct s_edsk_sector_global_struct));
-			// sector info
-			j=edsk->track[i*edsk->sidenumber+side].sectornumber-1;
-			edsk->track[i*edsk->sidenumber+side].sector[j].track=i;
-			edsk->track[i*edsk->sidenumber+side].sector[j].side=side;
-			edsk->track[i*edsk->sidenumber+side].sector[j].id=location[iloc].sectorID;
-			edsk->track[i*edsk->sidenumber+side].sector[j].size=sectorsize;
-			edsk->track[i*edsk->sidenumber+side].sector[j].st1=0;
-			edsk->track[i*edsk->sidenumber+side].sector[j].st2=0;
-			switch (sectorsize) {
-				case 0:edsk->track[i*edsk->sidenumber+side].sector[j].length=128;break;
-				case 1:edsk->track[i*edsk->sidenumber+side].sector[j].length=256;break;
-				case 2:edsk->track[i*edsk->sidenumber+side].sector[j].length=512;break;
-				case 3:edsk->track[i*edsk->sidenumber+side].sector[j].length=1024;break;
-				case 4:edsk->track[i*edsk->sidenumber+side].sector[j].length=2048;break;
-				case 5:edsk->track[i*edsk->sidenumber+side].sector[j].length=4096;break;
-				default:edsk->track[i*edsk->sidenumber+side].sector[j].length=6250;break; // heavy hexagon sector
+			i=location[iloc].track;
+			if (i>=edsk->tracknumber) {
+				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"EDSK ADD error, track %d cannot be processed as the floppy image has %d track(s)\n",i,edsk->tracknumber);
+				return;
 			}
-			edsk->track[i*edsk->sidenumber+side].sector[j].data=MemMalloc(edsk->track[i*edsk->sidenumber+side].sector[j].length);
-			for (k=0;k<edsk->track[i*edsk->sidenumber+side].sector[j].length;k++) edsk->track[i*edsk->sidenumber+side].sector[j].data[k]=edsk->track[i*edsk->sidenumber+side].fillerbyte;
-		} else {
-			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"EDSK cannot process more than 32 sectors\n");
-			return;
+			// unformated special case
+			if (edsk->track[i*edsk->sidenumber+side].unformated) {
+				if (!once) {
+					// display only once per call
+					rasm_printf(ae,KWARNING"[%s:%d] Warning: Track wasn't formated, using default track properties\n",GetCurrentFile(ae),ae->wl[ae->idx].l);
+					if (ae->erronwarn) MaxError(ae);
+					once=1;
+				}
+				// prep default track
+				edsk->track[i*edsk->sidenumber+side].unformated=0;
+				edsk->track[i*edsk->sidenumber+side].track=i;
+				edsk->track[i*edsk->sidenumber+side].side=0;
+				edsk->track[i*edsk->sidenumber+side].sectorsize=sectorsize;
+				edsk->track[i*edsk->sidenumber+side].gap3length=0x50;
+				edsk->track[i*edsk->sidenumber+side].fillerbyte=0xE5;
+				// track is still empty
+				edsk->track[i*edsk->sidenumber+side].sectornumber=0;
+				edsk->track[i*edsk->sidenumber+side].sector=NULL;
+			}
+			// add sector
+			if (edsk->track[i*edsk->sidenumber+side].sectornumber<32) {
+				edsk->track[i*edsk->sidenumber+side].sectornumber++;
+				edsk->track[i*edsk->sidenumber+side].sector=MemRealloc(edsk->track[i*edsk->sidenumber+side].sector,edsk->track[i*edsk->sidenumber+side].sectornumber*sizeof(struct s_edsk_sector_global_struct));
+				// sector info
+				j=edsk->track[i*edsk->sidenumber+side].sectornumber-1;
+				edsk->track[i*edsk->sidenumber+side].sector[j].track=i;
+				edsk->track[i*edsk->sidenumber+side].sector[j].side=side;
+				edsk->track[i*edsk->sidenumber+side].sector[j].id=location[iloc].sectorID;
+				edsk->track[i*edsk->sidenumber+side].sector[j].size=sectorsize;
+				edsk->track[i*edsk->sidenumber+side].sector[j].st1=0;
+				edsk->track[i*edsk->sidenumber+side].sector[j].st2=0;
+				switch (sectorsize) {
+					case 0:edsk->track[i*edsk->sidenumber+side].sector[j].length=128;break;
+					case 1:edsk->track[i*edsk->sidenumber+side].sector[j].length=256;break;
+					case 2:edsk->track[i*edsk->sidenumber+side].sector[j].length=512;break;
+					case 3:edsk->track[i*edsk->sidenumber+side].sector[j].length=1024;break;
+					case 4:edsk->track[i*edsk->sidenumber+side].sector[j].length=2048;break;
+					case 5:edsk->track[i*edsk->sidenumber+side].sector[j].length=4096;break;
+					default:edsk->track[i*edsk->sidenumber+side].sector[j].length=6250;break; // heavy hexagon sector
+				}
+				edsk->track[i*edsk->sidenumber+side].sector[j].data=MemMalloc(edsk->track[i*edsk->sidenumber+side].sector[j].length);
+				for (k=0;k<edsk->track[i*edsk->sidenumber+side].sector[j].length;k++) edsk->track[i*edsk->sidenumber+side].sector[j].data[k]=edsk->track[i*edsk->sidenumber+side].fillerbyte;
+			} else {
+				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"EDSK cannot process more than 32 sectors\n");
+				return;
+			}
 		}
+		MemFree(location);
+		pp+=2;
 	}
 	edsktool_EDSK_write_file(edsk,action->filename);
 	__edsk_free(ae,edsk);
@@ -13989,6 +13998,7 @@ void __edsk_resize(struct s_assenv *ae, struct s_edsk_action *action) {
 		return;
 	}
 
+		MemFree(location);
 	edsktool_EDSK_write_file(edsk,action->filename);
 	__edsk_free(ae,edsk);
 }
@@ -25708,8 +25718,7 @@ struct s_autotest_keyword autotest_keyword[]={
 	{"edsk    add,'autotest_edsk.dsk','1:#10-0x20',1",0},
 	{"edsk    add,'autotest_edsk.dsk','2:$10-$16',2",0},
 	{"edsk    add,'autotest_edsk.dsk','3:0x10-20',3",0},
-	{"edsk    add,'autotest_edsk.dsk','4:$bb',4",0},
-	{"edsk    add,'autotest_edsk.dsk','5:0xcc',5",0},
+	{"edsk    add,'autotest_edsk.dsk','4:$bB',4,'5:0xCc',5",0}, // multi-add
 	{"edsk    add,'autotest_edsk.dsk','6:#dd',6",0},            // testing minus char
 	{"edsk    add,'autotest_edsk.dsk','7-9:#C1-#C9',2",0},      // testing Amsdos format on multiple tracks
 	{"edsk   drop,'autotest_edsk.dsk','0:16 1-3:#10 4:$bB'",0}, // multi location DROP should be ok
