@@ -12941,11 +12941,11 @@ void edsktool_MAPEDSK(struct s_edsk_global_struct *edsk) {
         int s,t;
 
 	printf("map EDSK : %d side%s %d track%s\n",edsk->sidenumber,edsk->sidenumber==2?"s":"",edsk->tracknumber,edsk->tracknumber>1?"s":"");
-        for (s=0;s<edsk->sidenumber;s++) {
-                for (t=0;t<edsk->tracknumber;t++) {
-                        edsktool_MAPTrack(&edsk->track[t*edsk->sidenumber+s]);
-                }
-        }
+	for (s=0;s<edsk->sidenumber;s++) {
+		for (t=0;t<edsk->tracknumber;t++) {
+			edsktool_MAPTrack(&edsk->track[t*edsk->sidenumber+s]);
+		}
+	}
 }
 struct s_edsk_global_struct *edsktool_NewEDSK(char *format) {
         struct s_edsk_global_struct *edsk;
@@ -13387,7 +13387,7 @@ struct s_edsk_location *__edsk_get_location(struct s_assenv *ae,char *location, 
 	char *split_interval;
 	char *sectorlist;
 	int idxl=0;
-	int itr,isc;
+	int i,itr,isc;
 
 	if (!ret_nblocation) return NULL;
 
@@ -13397,6 +13397,7 @@ struct s_edsk_location *__edsk_get_location(struct s_assenv *ae,char *location, 
 		return NULL;
 	}
 	duploc[strlen(duploc)-1]=0;
+	for (i=0;duploc[i];i++) if (duploc[i]>='a' && duploc[i]<='z') duploc[i]+='A'-'a'; // toupper!
 	split_location=TxtSplitWithChar(duploc,' '); // split each locations
 
 	while (split_location[idxl]) {
@@ -13657,11 +13658,19 @@ void __edsk_create(struct s_assenv *ae, struct s_edsk_action *action) {
 	}
 	edsktool_EDSK_write_file(edsk,action->filename);
 	rasm_printf(ae,KIO"New EDSK [%s] created\n",action->filename);
+	__edsk_free(ae,edsk);
 }
 
 void __edsk_upgrade(struct s_assenv *ae, struct s_edsk_action *action) {
+	struct s_edsk_global_struct *edsk;
 	// load and save, in case of DSK, you will get a fresh EDSK
-	edsktool_EDSK_write_file(edsktool_EDSK_load(action->filename),action->filename2);
+	edsk=edsktool_EDSK_load(action->filename);
+	if (edsk) {
+		edsktool_EDSK_write_file(edsk,action->filename2);
+		__edsk_free(ae,edsk);
+	} else {
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Error loading [%s]\n",action->filename);
+	}
 }
 
 
@@ -13670,7 +13679,14 @@ void __edsk_upgrade(struct s_assenv *ae, struct s_edsk_action *action) {
 ********************************************************************************************************/
 
 void __edsk_map(struct s_assenv *ae, struct s_edsk_action *action) {
-	edsktool_MAPEDSK(edsktool_EDSK_load(action->filename));
+	struct s_edsk_global_struct *edsk;
+	edsk=edsktool_EDSK_load(action->filename);
+	if (edsk) {
+		if (!ae->flux) edsktool_MAPEDSK(edsk);
+		__edsk_free(ae,edsk);
+	} else {
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Error loading [%s]\n",action->filename);
+	}
 }
 
 void __edsk_merge(struct s_assenv *ae, struct s_edsk_action *action) {
@@ -13725,6 +13741,10 @@ void __edsk_gapfix(struct s_assenv *ae, struct s_edsk_action *action) {
 	}
 	side=__edsk_get_side_from_name(action->filename);
 	edsk=edsktool_EDSK_load(action->filename);
+	if (!edsk) {
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Error loading [%s]\n",action->filename);
+		return;
+	}
 	if (side+1>edsk->sidenumber) {
 		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Cannot GAPFIX EDSK because floppy image [%s] does not have 2 sides!\n",action->filename);
 		return;
@@ -13770,6 +13790,7 @@ void __edsk_gapfix(struct s_assenv *ae, struct s_edsk_action *action) {
 		}
 	}
 	edsktool_EDSK_write_file(edsk,action->filename);
+	__edsk_free(ae,edsk);
 }
 
 
@@ -13786,6 +13807,10 @@ void __edsk_drop(struct s_assenv *ae, struct s_edsk_action *action) {
 	// load and check side
 	side=__edsk_get_side_from_name(action->filename);
 	edsk=edsktool_EDSK_load(action->filename);
+	if (!edsk) {
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Error loading [%s]\n",action->filename);
+		return;
+	}
 	if (side+1>edsk->sidenumber) {
 		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Cannot DROP sector/trackbecause floppy image [%s] does not have 2 sides!\n",action->filename);
 		return;
@@ -13836,6 +13861,7 @@ void __edsk_drop(struct s_assenv *ae, struct s_edsk_action *action) {
 		}
 	}
 	edsktool_EDSK_write_file(edsk,action->filename);
+	__edsk_free(ae,edsk);
 }
 void __edsk_add(struct s_assenv *ae, struct s_edsk_action *action) {
 	struct s_edsk_global_struct *edsk;
@@ -13852,6 +13878,10 @@ void __edsk_add(struct s_assenv *ae, struct s_edsk_action *action) {
 	// load and check side
 	side=__edsk_get_side_from_name(action->filename);
 	edsk=edsktool_EDSK_load(action->filename);
+	if (!edsk) {
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Error loading [%s]\n",action->filename);
+		return;
+	}
 	if (side+1>edsk->sidenumber) {
 		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Cannot ADD sector/track because floppy image [%s] does not have 2 sides!\n",action->filename);
 		return;
@@ -13934,6 +13964,7 @@ void __edsk_add(struct s_assenv *ae, struct s_edsk_action *action) {
 		}
 	}
 	edsktool_EDSK_write_file(edsk,action->filename);
+	__edsk_free(ae,edsk);
 }
 
 void __edsk_resize(struct s_assenv *ae, struct s_edsk_action *action) {
@@ -13949,11 +13980,17 @@ void __edsk_resize(struct s_assenv *ae, struct s_edsk_action *action) {
 	// load and check side
 	side=__edsk_get_side_from_name(action->filename);
 	edsk=edsktool_EDSK_load(action->filename);
+	if (!edsk) {
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Error loading [%s]\n",action->filename);
+		return;
+	}
 	if (side+1>edsk->sidenumber) {
 		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Cannot RESIZE sector because floppy image [%s] does not have 2 sides!\n",action->filename);
 		return;
 	}
 
+	edsktool_EDSK_write_file(edsk,action->filename);
+	__edsk_free(ae,edsk);
 }
 
 void __edsk_save(struct s_assenv *ae, struct s_edsk_action *action) {
@@ -25664,7 +25701,29 @@ struct s_autotest_keyword autotest_keyword[]={
 	{"incexo",1},{"inczx7",1},{"incaaa",0}, {"inc",1}, {"incl48",1},{"incl49",1},{"incapu",1},{"inclz4",1},
 	{"incexo'",1},{"inczx7'",1},{"incaaa'",1}, {"inc'",1}, {"incl48'",1},{"incl49'",1},{"incapu'",1},{"inclz4'",1},
 	{"incexb",0}, {"includee",0}, {"incexb'",1}, {"includee'",1}, 
+	/* EDSK core simple tests */
+	{"edsk create,'autotest_edsk.dsk',UNFORMATED,10,OVERWRITE:edsk map,'autotest_edsk.dsk'",0}, // must create EDSK without error + load for map
+	{"edsk create,'autotest_edsk.dsk',UNFORMATED,1",1},            // cannot overwrite EDSK
+	{"edsk    add,'autotest_edsk.dsk','0:16-32',0",0},
+	{"edsk    add,'autotest_edsk.dsk','1:#10-0x20',1",0},
+	{"edsk    add,'autotest_edsk.dsk','2:$10-$16',2",0},
+	{"edsk    add,'autotest_edsk.dsk','3:0x10-20',3",0},
+	{"edsk    add,'autotest_edsk.dsk','4:$bb',4",0},
+	{"edsk    add,'autotest_edsk.dsk','5:0xcc',5",0},
+	{"edsk    add,'autotest_edsk.dsk','6:#dd',6",0},            // testing minus char
+	{"edsk    add,'autotest_edsk.dsk','7-9:#C1-#C9',2",0},      // testing Amsdos format on multiple tracks
+	{"edsk   drop,'autotest_edsk.dsk','0:16 1-3:#10 4:$bB'",0}, // multi location DROP should be ok
+
 	/*
+	 *
+	 * will need to test resize + format then meta review test!
+	 *
+	 *
+	{"",},
+	{"",},
+	{"",},
+	{"",},
+	{"",},
 	{"",},{"",},{"",},{"",},{"",},
 	{"",},{"",},{"",},{"",},{"",},{"",},
 	{"",},{"",},{"",},{"",},{"",},{"",},{"",},{"",},{"",},{"",},{"",},{"",},
@@ -25920,7 +25979,7 @@ printf("testing command line parameter - OK\n");
 
 	MemFree(tmpstr3);FreeFields(tmpsplit);
 	cpt++;
-printf("testing various opcode tests OK\n");
+printf("testing %d various opcode tests OK\n",i);
 
 	idx=0;
 	while (autotest_keyword[idx].keywordtest) {
@@ -25935,7 +25994,7 @@ printf("testing various opcode tests OK\n");
 		idx++;
 	}
 	cpt++;
-printf("testing moar various opcode tests OK\n");
+printf("testing %d moar various opcode tests OK\n",idx);
 
 	{
 		unsigned char RAMEMU[65536*2];
@@ -27197,12 +27256,14 @@ printf("*** LZSA2 and INCLZSA2 tests disabled as there is no LZSA v2 support for
 printf("testing simple extended CPR behaviour OK\n");
 
 
-
+	// remove workfiles
 	FileRemoveIfExists("autotest_include.raw");
 	FileRemoveIfExists("rasmoutput.xpr");
 	FileRemoveIfExists("rasmoutput.cpr");
 	FileRemoveIfExists("rasmoutput.sna");
-	
+	FileRemoveIfExists("autotest_edsk.dsk");
+
+	// each compilation function is counting
 	ret=RasmAssemble(NULL,0,&opcode,&opcodelen)+RasmAssembleInfo(NULL,0,&opcode,&opcodelen,&debug)+RasmAssembleInfoParam(NULL,0,&opcode,&opcodelen,&debug,&param);
 
 	if (sko) {
