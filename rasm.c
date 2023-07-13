@@ -509,7 +509,7 @@ enum e_edsk_action {
 	E_EDSK_ACTION_UPGRADE,
 	E_EDSK_ACTION_MERGE,
 	/* deferred */
-	E_EDSK_ACTION_SAVESECT,
+	E_EDSK_ACTION_WRITESECT,
 	E_EDSK_ACTION_MAP,
 	E_EDSK_ACTION_ADD,
 	E_EDSK_ACTION_DROP,
@@ -14064,11 +14064,75 @@ void __edsk_resize(struct s_assenv *ae, struct s_edsk_action *action) {
 	__edsk_free(ae,edsk);
 }
 
-void __edsk_save(struct s_assenv *ae, struct s_edsk_action *action) {
-	if (!ae->wl[ae->idx].t) {
-	} else {
-		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Usage is : EDSK SAVE,'edskfilename'\n");
+void __edsk_writesect(struct s_assenv *ae, struct s_edsk_action *action) {
+	struct s_edsk_global_struct *edsk;
+	struct s_edsk_location *location;
+	int nblocation,side;
+	int sectorsize;
+	int iloc,i,j,idata;
+	int once=0;
+
+ 	if (action->nbparam!=5) {
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Usage is : EDSK WRITESECT,'edskfilename:side',<offset>,<size>,'location'\n");
+		return;
 	}
+	// check action
+	if (action->ioffset<0 || action->ioffset+action->isize>65536) {
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"EDSK WRITESECT error, invalid offset/size!\n");
+		return;
+	}
+	// load and check side
+	side=__edsk_get_side_from_name(action->filename);
+	edsk=edsktool_EDSK_load(action->filename);
+	if (!edsk) {
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Error loading [%s]\n",action->filename);
+		return;
+	}
+	if (side+1>edsk->sidenumber) {
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Cannot WRITE sector because floppy image [%s] does not have 2 sides!\n",action->filename);
+		return;
+	}
+
+	// get location
+	location=__edsk_get_location(ae,ae->wl[ae->idx+5].w,&nblocation);
+	if (!location) {
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"EDSK WRITESECT error, invalid location!\n");
+		return;
+	}
+
+	for (iloc=0;iloc<nblocation;iloc++) {
+		//FileWriteBinary(filename,(char*)ae->mem[action->ibank]+action->offset,action->size);
+		i=location[iloc].track;
+		if (i>=edsk->tracknumber) {
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"EDSK WRITESECT error, track %d cannot be processed as the floppy image has %d track(s)\n",i,edsk->tracknumber);
+			return;
+		}
+		// unformated special case
+		if (edsk->track[i*edsk->sidenumber+side].unformated) {
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"EDSK WRITESECT error, track %d is not formated\n",i);
+			return;
+		}
+		for (j=0;j<edsk->track[i*edsk->sidenumber+side].sectornumber;j++) {
+			// match ID or resizing whole track
+			if (edsk->track[i*edsk->sidenumber+side].sector[j].id==location[iloc].sectorID || location[iloc].istrack) {
+				idata=0;
+				while (action->isize) {
+					edsk->track[i*edsk->sidenumber+side].sector[j].data[idata++]=ae->mem[action->ibank][action->ioffset++];
+					action->isize--;
+					if (idata==edsk->track[i*edsk->sidenumber+side].sector[j].length) break;
+				}
+			}
+			if (!action->isize) break;
+		}
+	}
+	// final check
+	if (action->isize) {
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"EDSK WRITESECT error, not enough location to store data, there is %d byte%s left\n",action->isize,action->isize>1?"s":"");
+		return;
+	}
+
+	edsktool_EDSK_write_file(edsk,action->filename);
+	__edsk_free(ae,edsk);
 }
 
 /***************************************************************************************************************************
@@ -14090,12 +14154,13 @@ void __edsk_save(struct s_assenv *ae, struct s_edsk_action *action) {
  * EDSK  UPGRADE,'filename.dsk','outputfilename.dsk'
  *
  * == deferred execution ==
- * EDSK GAPFIX,'filename.dsk',TRACK|ALLTRACKS,<track>
- * EDSK    MAP,'filename.dsk'
- * EDSK   DROP,'filename.dsk','location'
- * EDSK    ADD,'filename.dsk','location',<size>,...
- * EDSK RESIZE,'filename.dsk','location',<size>,...
- * EDSK  MERGE,'filename.dsk:side','filename.dsk:side','outputfilename.dsk'
+ * EDSK WRITESECT,'filename.dsk',<start_addr>,<length>,'location'
+ * EDSK    GAPFIX,'filename.dsk',TRACK|ALLTRACKS,<track>
+ * EDSK       MAP,'filename.dsk'
+ * EDSK      DROP,'filename.dsk','location'
+ * EDSK       ADD,'filename.dsk','location',<size>,...
+ * EDSK    RESIZE,'filename.dsk','location',<size>,...
+ * EDSK     MERGE,'filename.dsk:side','filename.dsk:side','outputfilename.dsk'
 ***************************************************************************************************************************/
 void __EDSK(struct s_assenv *ae) {
 	if (!ae->wl[ae->idx].t && !ae->wl[ae->idx+1].t) {
@@ -14114,7 +14179,7 @@ void __EDSK(struct s_assenv *ae) {
 				 if (strcmp(ae->wl[ae->idx+1].w,"MAP")==0)	curaction.action=E_EDSK_ACTION_MAP; else cmderr=1;break; // map edsk
 			case 'R':if (strcmp(ae->wl[ae->idx+1].w,"RESIZE")==0)	curaction.action=E_EDSK_ACTION_RESIZE; else // resize sector
 				 if (strcmp(ae->wl[ae->idx+1].w,"READSECT")==0)	curaction.action=E_EDSK_ACTION_READSECT; else cmderr=1;break; // read sectors into memory
-			case 'S':if (strcmp(ae->wl[ae->idx+1].w,"SAVESECT")==0)	curaction.action=E_EDSK_ACTION_SAVESECT; else cmderr=1;break; // use trackload to save files
+			case 'S':if (strcmp(ae->wl[ae->idx+1].w,"WRITESECT")==0)	curaction.action=E_EDSK_ACTION_WRITESECT; else cmderr=1;break; // use trackload to save files
 			case 'U':if (strcmp(ae->wl[ae->idx+1].w,"UPGRADE")==0)	curaction.action=E_EDSK_ACTION_UPGRADE; else cmderr=1;break; // use trackload to save files
 			default:cmderr=1;
 		}
@@ -14125,7 +14190,7 @@ void __EDSK(struct s_assenv *ae) {
 		// some action need more than one filename
 		switch (curaction.action) {
 			case E_EDSK_ACTION_ADD: case E_EDSK_ACTION_CREATE: case E_EDSK_ACTION_DROP: case E_EDSK_ACTION_MAP:
-			case E_EDSK_ACTION_RESIZE: case E_EDSK_ACTION_READSECT: case E_EDSK_ACTION_SAVESECT: case E_EDSK_ACTION_GAPFIX:
+			case E_EDSK_ACTION_RESIZE: case E_EDSK_ACTION_READSECT: case E_EDSK_ACTION_WRITESECT: case E_EDSK_ACTION_GAPFIX:
 				nbfilename=1;break;
 			case E_EDSK_ACTION_UPGRADE:
 				nbfilename=2;break;
@@ -14179,13 +14244,17 @@ void __EDSK(struct s_assenv *ae) {
 			case E_EDSK_ACTION_MERGE:
 			case E_EDSK_ACTION_RESIZE:
 			case E_EDSK_ACTION_DROP:
-			case E_EDSK_ACTION_SAVESECT:
+			case E_EDSK_ACTION_WRITESECT:
 			case E_EDSK_ACTION_ADD:
 			case E_EDSK_ACTION_GAPFIX:
 				if (curaction.action==E_EDSK_ACTION_GAPFIX && curaction.nbparam==4) {
 					ExpressionFastTranslate(ae,&ae->wl[ae->idx+4].w,1); // track conversion
 				}
-
+				if (curaction.action==E_EDSK_ACTION_WRITESECT && curaction.nbparam>=4) {
+					curaction.ibank=ae->activebank;
+					curaction.ioffset=RoundComputeExpression(ae,ae->wl[ae->idx+3].w,ae->outputadr,0,0);
+					curaction.isize  =RoundComputeExpression(ae,ae->wl[ae->idx+4].w,ae->outputadr,0,0);
+				}
 				ObjectArrayAddDynamicValueConcat((void**)&ae->edsk_action,&ae->nbedskaction,&ae->maxedskaction,&curaction,sizeof(curaction));
 				break;
 			default:MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Internal Error on EDSK action management (2)\n");break;
@@ -14205,7 +14274,7 @@ void PopAllEDSK(struct s_assenv *ae) {
 			case E_EDSK_ACTION_MERGE:	__edsk_merge(ae,&ae->edsk_action[i]);break;
 			case E_EDSK_ACTION_RESIZE:	__edsk_resize(ae,&ae->edsk_action[i]);break;
 			case E_EDSK_ACTION_DROP:	__edsk_drop(ae,&ae->edsk_action[i]);break;
-			case E_EDSK_ACTION_SAVESECT:	__edsk_save(ae,&ae->edsk_action[i]);break;
+			case E_EDSK_ACTION_WRITESECT:	__edsk_writesect(ae,&ae->edsk_action[i]);break;
 			case E_EDSK_ACTION_ADD:		__edsk_add(ae,&ae->edsk_action[i]);break;
 			default:MakeError(ae,0,"(PopAllEDSK)",0,"internal error during EDSK deferred execution, please report\n");
 				break;
