@@ -13763,9 +13763,10 @@ void __edsk_gapfix(struct s_assenv *ae, struct s_edsk_action *action) {
 	}
 
 	for (iloc=0;iloc<nblocation;iloc++) {
-		if (location[iloc].istrack) {
+		if (!location[iloc].istrack) {
 			rasm_printf(ae,KWARNING"[%s:%d] Warning: EDSK GAPFIX location has sector definition which will be ignored!\n",GetCurrentFile(ae),ae->wl[ae->idx].l);
 			if (ae->erronwarn) MaxError(ae);
+			continue;
 		}
 		i=location[iloc].track;
 		if (i>=edsk->tracknumber) {
@@ -13890,7 +13891,6 @@ void __edsk_add(struct s_assenv *ae, struct s_edsk_action *action) {
 	}
 
 	pp=3;
-
 	while (pp<action->nbparam) {
 		// get location
 		location=__edsk_get_location(ae,ae->wl[ae->idx+pp].w,&nblocation);
@@ -13914,8 +13914,9 @@ void __edsk_add(struct s_assenv *ae, struct s_edsk_action *action) {
 
 		for (iloc=0;iloc<nblocation;iloc++) {
 			if (location[iloc].istrack) {
-				rasm_printf(ae,KWARNING"[%s:%d] Warning: location has sector definition which will be ignored!\n",GetCurrentFile(ae),ae->wl[ae->idx].l);
+				rasm_printf(ae,KWARNING"[%s:%d] Warning: location has track definition which will be ignored!\n",GetCurrentFile(ae),ae->wl[ae->idx].l);
 				if (ae->erronwarn) MaxError(ae);
+				continue;
 			}
 			i=location[iloc].track;
 			if (i>=edsk->tracknumber) {
@@ -13980,9 +13981,11 @@ void __edsk_resize(struct s_assenv *ae, struct s_edsk_action *action) {
 	struct s_edsk_global_struct *edsk;
 	struct s_edsk_location *location;
 	int nblocation,side;
-	int iloc,i,j;
+	int sectorsize;
+	int iloc,i,j,pp;
+	int once=0;
 
- 	if (action->nbparam!=4) {
+ 	if (action->nbparam<4) {
 		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Usage is : EDSK RESIZE,'edskfilename:side','location',<newsize>\n");
 		return;
 	}
@@ -13998,7 +14001,65 @@ void __edsk_resize(struct s_assenv *ae, struct s_edsk_action *action) {
 		return;
 	}
 
+	pp=3;
+	while (pp<action->nbparam) {
+		// get location
+		location=__edsk_get_location(ae,ae->wl[ae->idx+pp].w,&nblocation);
+		if (!location) {
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"EDSK ADD error, invalid location!\n");
+			return;
+		}
+		// get sectorsize
+		sectorsize=RoundComputeExpression(ae,ae->wl[ae->idx+pp+1].w,0,0,0);
+		switch (sectorsize) {
+			case 0:case 1:case 2:case 3:case 4:case 5:case 6:break; // almost regular size
+			case  128:sectorsize=0;break;
+			case  256:sectorsize=1;break;
+			case  512:sectorsize=2;break;
+			case 1024:sectorsize=3;break;
+			case 2048:sectorsize=4;break;
+			case 4096:sectorsize=5;break;
+			default:MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"EDSK error, sector size must be from 0 to 6\n");
+				return;
+		}
+
+		for (iloc=0;iloc<nblocation;iloc++) {
+			i=location[iloc].track;
+			if (i>=edsk->tracknumber) {
+				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"EDSK ADD error, track %d cannot be processed as the floppy image has %d track(s)\n",i,edsk->tracknumber);
+				return;
+			}
+			// unformated special case
+			if (edsk->track[i*edsk->sidenumber+side].unformated) {
+				if (!once) {
+					// display only once per call
+					rasm_printf(ae,KWARNING"[%s:%d] Warning: Track wasn't formated, nothing to resize\n",GetCurrentFile(ae),ae->wl[ae->idx].l);
+					if (ae->erronwarn) MaxError(ae);
+					once=1;
+				}
+			} else {
+				for (j=0;j<edsk->track[i*edsk->sidenumber+side].sectornumber;j++) {
+					// match ID or resizing whole track
+					if (edsk->track[i*edsk->sidenumber+side].sector[j].id==location[iloc].sectorID || location[iloc].istrack) {
+						edsk->track[i*edsk->sidenumber+side].sector[j].size=sectorsize;
+						switch (sectorsize) {
+							case 0:edsk->track[i*edsk->sidenumber+side].sector[j].length=128;break;
+							case 1:edsk->track[i*edsk->sidenumber+side].sector[j].length=256;break;
+							case 2:edsk->track[i*edsk->sidenumber+side].sector[j].length=512;break;
+							case 3:edsk->track[i*edsk->sidenumber+side].sector[j].length=1024;break;
+							case 4:edsk->track[i*edsk->sidenumber+side].sector[j].length=2048;break;
+							case 5:edsk->track[i*edsk->sidenumber+side].sector[j].length=4096;break;
+							default:edsk->track[i*edsk->sidenumber+side].sector[j].length=6250;break; // heavy hexagon sector
+						}
+						edsk->track[i*edsk->sidenumber+side].sector[j].data=MemRealloc(edsk->track[i*edsk->sidenumber+side].sector[j].data,edsk->track[i*edsk->sidenumber+side].sector[j].length);
+					}
+				}
+			}
+		}
 		MemFree(location);
+		pp+=2;
+	}
+
 	edsktool_EDSK_write_file(edsk,action->filename);
 	__edsk_free(ae,edsk);
 }
@@ -14013,15 +14074,28 @@ void __edsk_save(struct s_assenv *ae, struct s_edsk_action *action) {
 /***************************************************************************************************************************
  * EDSKTool core management
  *
+ * location is a combination of track with optional sectors
+ * values can ben defined in any base, you may define multiple locations using space as separator
+ * you may define interval of tracks and/or sectors with the dash
+ * examples:
+ * '5'            => track 5
+ * '5:#C2'        => sector #C2 on track 5
+ * '0-5'          => tracks 0 to 5
+ * '0-5:$C2-0xC9' => sector #C2 to sector #C9 on track 0 to track 5
+ * '0:#C1 0:#C3'  => sector #C1 and #C3 on track 0
+ *
  * == immediate execution ==
- * EDSK CREATE,'filename.dsk',DATA|VENDOR|UNFORMATED,nbtracks[,INTERLACED]
- * EDSK READSECT,'filename.dsk','location',exactsize
- * EDSK UPGRADE,'filename.dsk','outputfilename.dsk'
+ * EDSK   CREATE,'filename.dsk',DATA|VENDOR|UNFORMATED,nbtracks[,INTERLACED]
+ * EDSK READSECT,'filename.dsk','location',<exactsize>
+ * EDSK  UPGRADE,'filename.dsk','outputfilename.dsk'
  *
  * == deferred execution ==
  * EDSK GAPFIX,'filename.dsk',TRACK|ALLTRACKS,<track>
- * EDSK MAP,'filename.dsk'
- * EDSK MERGE,'filename.dsk:side','filename.dsk:side','outputfilename.dsk'
+ * EDSK    MAP,'filename.dsk'
+ * EDSK   DROP,'filename.dsk','location'
+ * EDSK    ADD,'filename.dsk','location',<size>,...
+ * EDSK RESIZE,'filename.dsk','location',<size>,...
+ * EDSK  MERGE,'filename.dsk:side','filename.dsk:side','outputfilename.dsk'
 ***************************************************************************************************************************/
 void __EDSK(struct s_assenv *ae) {
 	if (!ae->wl[ae->idx].t && !ae->wl[ae->idx+1].t) {
