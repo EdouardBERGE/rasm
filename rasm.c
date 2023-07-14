@@ -9091,7 +9091,7 @@ void __output_CDT(struct s_assenv *ae, char *tapefilename,char *filename,char *m
 	unsigned char *AmsdosHeader;
 	unsigned char head[256];
 	char TZX_header[14];
-	int wrksize,fileload,nbblock=0,dummy_user;
+	int wrksize,fileload,nbblock=0,dummy_user=0;
 	unsigned char body[65536+128];
 	int flag_h=2560, flag_p=10240, flag_bb, flag_b=1000,i,j,k;
 
@@ -13487,7 +13487,7 @@ void __edsk_readsect(struct s_assenv *ae, struct s_edsk_action *action) {
 	struct s_edsk_global_struct *edsk;
 	struct s_edsk_location *location;
 	int side,sizetoread,nblocation;
-	int i,t,curtrack,s,j;
+	int i,curtrack,s,j;
 
 	side=__edsk_get_side_from_name(action->filename);
 
@@ -13523,7 +13523,7 @@ void __edsk_readsect(struct s_assenv *ae, struct s_edsk_action *action) {
 	// then read the data!
 	for (i=0;i<nblocation;i++) {
 		if (location[i].track<edsk->tracknumber) {
-			curtrack=t*edsk->sidenumber+side;
+			curtrack=location[i].track*edsk->sidenumber+side;
 			// check
 			if (edsk->track[curtrack].unformated) {
 				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"EDSK READSECT error, cannot read track %d because it's not formated!\n",location[i].track);
@@ -25864,7 +25864,7 @@ struct s_autotest_keyword autotest_keyword[]={
 	{"edsk    add,'autotest_edsk.dsk','6:#dd',6",0},            // testing minus char
 	{"edsk    add,'autotest_edsk.dsk','7-9:#C1-#C9',2",0},      // testing Amsdos format on multiple tracks
 	{"edsk   drop,'autotest_edsk.dsk','0:16 1-3:#10 4:$bB'",0}, // multi location DROP should be ok
-	{"bunch: sc=#C1: p=5: repeat 5: repeat 9: defs 256,sc : defs 256,p: sc+=1: rend: p+=1: rend:edsk create,'autotestw.dsk',DATA,OVERWRITE:edsk writesect,'grouikw.dsk',bunch,512*9*5,'5-9:#C1-#C9'",0}, // write sectors
+	{"bunch: sc=#C1: p=5: repeat 5: repeat 9: defs 256,sc : defs 256,p: sc+=1: rend: p+=1: rend:edsk create,'autotestw.dsk',DATA,OVERWRITE:edsk writesect,'autotestw.dsk',bunch,512*9*5,'5-9:#C1-#C9'",0}, // write sectors
 	{"edsk readsect,'autotestw.dsk','5-9:#C1-#C9',512*9*5:sc=#C1:ad=0:p=5: repeat 5: repeat 9:repeat 256:assert peek(ad)==sc:ad+=1:rend:repeat 256:assert peek(ad)==p:ad+=1:rend:sc+=1:rend:p+=1:rend",0}, // enforce sectors were read
 	{"edsk writesect,'autotestw.dsk',0,513,'0:#C1'",1}, // cannot leak sectors
 	/*
