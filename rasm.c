@@ -245,14 +245,15 @@ E_COMPUTE_OPERATION_SET_V=44,
 E_COMPUTE_OPERATION_SET_B=45,
 E_COMPUTE_OPERATION_SOFT2HARD=46,
 E_COMPUTE_OPERATION_HARD2SOFT=47,
+E_COMPUTE_OPERATION_PEEK=48,
 /* string functions */
-E_COMPUTE_OPERATION_GETNOP=48,
-E_COMPUTE_OPERATION_GETTICK=49,
-E_COMPUTE_OPERATION_DURATION=50,
-E_COMPUTE_OPERATION_FILESIZE=51,
-E_COMPUTE_OPERATION_GETSIZE=52,
-E_COMPUTE_OPERATION_IS_REGISTER=53,
-E_COMPUTE_OPERATION_END=54
+E_COMPUTE_OPERATION_GETNOP=49,
+E_COMPUTE_OPERATION_GETTICK=50,
+E_COMPUTE_OPERATION_DURATION=51,
+E_COMPUTE_OPERATION_FILESIZE=52,
+E_COMPUTE_OPERATION_GETSIZE=53,
+E_COMPUTE_OPERATION_IS_REGISTER=54,
+E_COMPUTE_OPERATION_END=55
 };
 
 struct s_compute_element {
@@ -1154,6 +1155,7 @@ struct s_math_keyword math_keyword[]={
 {"S2H_INK",0,E_COMPUTE_OPERATION_SOFT2HARD},
 {"HARD2SOFT_INK",0,E_COMPUTE_OPERATION_HARD2SOFT},
 {"H2S_INK",0,E_COMPUTE_OPERATION_HARD2SOFT},
+{"PEEK",0,E_COMPUTE_OPERATION_PEEK},
 {"GETNOP",0,E_COMPUTE_OPERATION_GETNOP},
 {"GETTICK",0,E_COMPUTE_OPERATION_GETTICK},
 {"DURATION",0,E_COMPUTE_OPERATION_DURATION},
@@ -6559,6 +6561,7 @@ printf("DUMP des labels\n");
 			case E_COMPUTE_OPERATION_SET_B:printf("set_b ");break;
 			case E_COMPUTE_OPERATION_SOFT2HARD:printf("soft2hard ");break;
 			case E_COMPUTE_OPERATION_HARD2SOFT:printf("hard2soft ");break;
+			case E_COMPUTE_OPERATION_PEEK:printf("peek ");break;
 			case E_COMPUTE_OPERATION_GETNOP:printf("getnop ");break;
 			case E_COMPUTE_OPERATION_GETTICK:printf("gettick ");break;
 			case E_COMPUTE_OPERATION_DURATION:printf("duration ");break;
@@ -6688,6 +6691,7 @@ printf("operator string=%X\n",ae->computectx->operatorstack[o2].string);
 			case E_COMPUTE_OPERATION_SET_B:
 			case E_COMPUTE_OPERATION_SOFT2HARD:
 			case E_COMPUTE_OPERATION_HARD2SOFT:
+			case E_COMPUTE_OPERATION_PEEK:
 			case E_COMPUTE_OPERATION_GETNOP:
 			case E_COMPUTE_OPERATION_GETTICK:
 			case E_COMPUTE_OPERATION_DURATION:
@@ -6808,6 +6812,7 @@ printf("final POP string=%X\n",ae->computectx->operatorstack[nboperatorstack+1].
 				case E_COMPUTE_OPERATION_SET_B:if (paccu>0) accu[paccu-1]=MinMaxInt(accu[paccu-1],0,15);break;
 				case E_COMPUTE_OPERATION_SOFT2HARD:if (paccu>0) accu[paccu-1]=__Soft2HardInk(ae,accu[paccu-1],didx);break;
 				case E_COMPUTE_OPERATION_HARD2SOFT:if (paccu>0) accu[paccu-1]=__Hard2SoftInk(ae,accu[paccu-1],didx);break;
+				case E_COMPUTE_OPERATION_PEEK:if (paccu>0) accu[paccu-1]=ae->mem[ae->activebank][(unsigned short int)accu[paccu-1]];break;
 				/* functions with strings */
 				case E_COMPUTE_OPERATION_GETNOP:if (paccu>0) {
 								      int integeridx;
@@ -7057,6 +7062,7 @@ printf("final POP string=%X\n",ae->computectx->operatorstack[nboperatorstack+1].
 				case E_COMPUTE_OPERATION_SET_B:if (paccu>0) accu[paccu-1]=MinMaxInt(accu[paccu-1],0,15);break;
 				case E_COMPUTE_OPERATION_SOFT2HARD:if (paccu>0) accu[paccu-1]=__Soft2HardInk(ae,accu[paccu-1],didx);break;
 				case E_COMPUTE_OPERATION_HARD2SOFT:if (paccu>0) accu[paccu-1]=__Hard2SoftInk(ae,accu[paccu-1],didx);break;
+				case E_COMPUTE_OPERATION_PEEK:if (paccu>0) accu[paccu-1]=ae->mem[ae->activebank][(unsigned short int)accu[paccu-1]];break;
 				/* functions with strings */
 				case E_COMPUTE_OPERATION_GETNOP:if (paccu>0) {
 								      int integeridx;
@@ -14179,8 +14185,8 @@ void __EDSK(struct s_assenv *ae) {
 				 if (strcmp(ae->wl[ae->idx+1].w,"MAP")==0)	curaction.action=E_EDSK_ACTION_MAP; else cmderr=1;break; // map edsk
 			case 'R':if (strcmp(ae->wl[ae->idx+1].w,"RESIZE")==0)	curaction.action=E_EDSK_ACTION_RESIZE; else // resize sector
 				 if (strcmp(ae->wl[ae->idx+1].w,"READSECT")==0)	curaction.action=E_EDSK_ACTION_READSECT; else cmderr=1;break; // read sectors into memory
-			case 'S':if (strcmp(ae->wl[ae->idx+1].w,"WRITESECT")==0)	curaction.action=E_EDSK_ACTION_WRITESECT; else cmderr=1;break; // use trackload to save files
 			case 'U':if (strcmp(ae->wl[ae->idx+1].w,"UPGRADE")==0)	curaction.action=E_EDSK_ACTION_UPGRADE; else cmderr=1;break; // use trackload to save files
+			case 'W':if (strcmp(ae->wl[ae->idx+1].w,"WRITESECT")==0)	curaction.action=E_EDSK_ACTION_WRITESECT; else cmderr=1;break; // use trackload to save files
 			default:cmderr=1;
 		}
 		if (cmderr) {
@@ -25865,12 +25871,16 @@ struct s_autotest_keyword autotest_keyword[]={
 	{"edsk    add,'autotest_edsk.dsk','6:#dd',6",0},            // testing minus char
 	{"edsk    add,'autotest_edsk.dsk','7-9:#C1-#C9',2",0},      // testing Amsdos format on multiple tracks
 	{"edsk   drop,'autotest_edsk.dsk','0:16 1-3:#10 4:$bB'",0}, // multi location DROP should be ok
-
+	{"bunch: sc=#C1: p=5: repeat 5: repeat 9: defs 256,sc : defs 256,p: sc+=1: rend: p+=1: rend:edsk create,'autotestw.dsk',DATA,OVERWRITE:edsk writesect,'grouikw.dsk',bunch,512*9*5,'5-9:#C1-#C9'",0}, // write sectors
+	{"edsk readsect,'autotestw.dsk','5-9:#C1-#C9',512*9*5:sc=#C1:ad=0:p=5: repeat 5: repeat 9:repeat 256:assert peek(ad)==sc:ad+=1:rend:repeat 256:assert peek(ad)==p:ad+=1:rend:sc+=1:rend:p+=1:rend",0}, // enforce sectors were read
+	{"edsk writesect,'autotestw.dsk',0,513,'0:#C1'",1}, // cannot leak sectors
 	/*
 	 *
 	 * will need to test resize + format then meta review test!
 	 *
 	 *
+	{"",},
+	{"",},
 	{"",},
 	{"",},
 	{"",},
@@ -27414,6 +27424,7 @@ printf("testing simple extended CPR behaviour OK\n");
 	FileRemoveIfExists("rasmoutput.cpr");
 	FileRemoveIfExists("rasmoutput.sna");
 	FileRemoveIfExists("autotest_edsk.dsk");
+	FileRemoveIfExists("autotestw.dsk");
 
 	// each compilation function is counting
 	ret=RasmAssemble(NULL,0,&opcode,&opcodelen)+RasmAssembleInfo(NULL,0,&opcode,&opcodelen,&debug)+RasmAssembleInfoParam(NULL,0,&opcode,&opcodelen,&debug,&param);
