@@ -13253,17 +13253,10 @@ void edsktool_EDSK_write_file(struct s_edsk_global_struct *edsk, char *output_fi
         int tracksize,curtrack;
         int idblock,blockoffset;
         int i,t,s,face;
-        FILE *f;
 
         if (!edsk) return;
 
-        unlink(output_filename);
-        f=fopen(output_filename,"wb");
-        if (!f) {
-                printf(KERROR"Cannot open [%s] for writing EDSK\n"KNORMAL,output_filename);
-                exit(ABORT_ERROR);
-        }
-
+	FileRemoveIfExists(output_filename);
 
         /* écriture header */
         strcpy((char *)header,"EXTENDED CPC DSK File\r\nDisk-Info\r\n");
@@ -13287,7 +13280,7 @@ void edsktool_EDSK_write_file(struct s_edsk_global_struct *edsk, char *output_fi
                 header[0x34+curtrack]=tracksize>>8;
         }
 
-        fwrite((char *)header,1,256,f);
+	FileWriteBinary(output_filename,(char*)header,256);
 
         /* écriture des pistes */
         for (t=0;t<edsk->tracknumber;t++)
@@ -13315,24 +13308,24 @@ void edsktool_EDSK_write_file(struct s_edsk_global_struct *edsk, char *output_fi
                         trackblock[0x18+s*8+6]=edsk->track[curtrack].sector[s].length&0xFF;
                         trackblock[0x18+s*8+7]=(edsk->track[curtrack].sector[s].length>>8)&0xFF;
                 }
-                fwrite((char *)trackblock,1,256,f);
+		FileWriteBinary(output_filename,(char*)trackblock,256);
 
                 tracksize=0;
                 for (s=0;s<edsk->track[curtrack].sectornumber;s++) {
-                        fwrite((char *)edsk->track[curtrack].sector[s].data,1,edsk->track[curtrack].sector[s].length,f);
+			FileWriteBinary(output_filename,(char*)edsk->track[curtrack].sector[s].data,edsk->track[curtrack].sector[s].length);
                         tracksize+=edsk->track[curtrack].sector[s].length;
                 }
                 // filler
                 if (tracksize&0xFF) {
                         char filler[256]={0};
                         tracksize=((tracksize+256)&0xFF00)-tracksize;
-                        fwrite(filler,1,tracksize,f);
+			FileWriteBinary(output_filename,(char*)filler,tracksize);
                 }
         }
 #if TRACE_EDSK
         printf(KIO"Write edsk file %s\n",output_filename);
 #endif
-        fclose(f);
+	FileWriteBinaryClose(output_filename);
 }
 
 int __edsk_get_side_from_name(char *w) {
