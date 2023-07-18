@@ -2,7 +2,7 @@
 
 ## Rasm Z80 assembler
     
-Rasm was designed to be damn FAST and handle HUGE projects. On a modern machine, it can assemble millions of instructions in a blink of an eye. It's almost 30 times faster than the best alternatives. 
+Rasm was designed to be damn FAST and handle HUGE projects. On a modern machine, it can assemble millions of instructions in a blink of an eye. It's almost 30 times faster than the best alternatives. Rasm also runs on almost any platform : Linux, MacOS Intel or ARM, Windows 32 bits or 64 bits, MS-DOS and even MorphOS
 
 ## Integrated crunched sections
 
