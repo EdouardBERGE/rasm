@@ -7,6 +7,7 @@
 #define TRACE_MAKEAMSDOSREAL 0
 #define TRACE_STRUCT 0
 #define TRACE_EDSK 0
+#define TRACE_HFE 0
 #define TRACE_LABEL 0
 #define TRACE_ORG 0
 #define TRACE_LZ 0
@@ -460,6 +461,56 @@ struct s_hexbin {
 	int crunch;
 	int version,minmatch;
 };
+
+/**************************************************
+            h f e    m a n a g e m e n t        
+**************************************************/
+
+#define SYNCHRO 256
+
+enum e_hfe_action {
+	E_HFE_ACTION_INIT=0,
+	E_HFE_ACTION_SIDE,
+	E_HFE_ACTION_SETTINGS, // extended settings like bitrate or maxtracksize
+	E_HFE_ACTION_TRACK,
+	E_HFE_ACTION_ADD_TRACK_HEADER,
+	E_HFE_ACTION_ADD_SECTOR,
+	E_HFE_ACTION_ADD_GAP,
+	E_HFE_ACTION_ADD_BYTE,
+	E_HFE_ACTION_START_CRC,
+	E_HFE_ACTION_OUTPUT_CRC,
+	E_HFE_ACTION_CLOSE,
+	E_HFE_ACTION_END
+};
+
+struct s_hfe_action {
+	enum e_hfe_action action;
+	char *filename;
+	int ibank;
+	int ioffset;
+	// deferred calculation info
+	int iw,nbparam;
+	// copie intégrale des paramètres?
+	char **param;
+	int iparam,mparam;
+	// extended sector definition
+	int idcrc_ko;
+	int iddata_ko;
+	int nbidsync;
+	int nbidamsync;
+	int gapsize,presynchrosize,synchrosize;
+};
+
+struct s_hfe_track {
+	unsigned int *data;
+	int idata,mdata;
+};
+struct s_hfe_floppy {
+	struct s_hfe_track *track;
+	int itrack,mtrack;
+	char *filename;
+};
+
 
 /**************************************************
           e d s k    m a n a g e m e n t        
@@ -1081,6 +1132,15 @@ struct s_assenv {
 	struct s_save *save;
 	int nbsave,maxsave;
 	int current_run_idx;
+	/* HFE */
+	struct s_hfe_action *hfe_action;
+	int nbhfeaction,maxhfeaction;
+	int hfeside,hfetrack;
+	unsigned short int hfecrc;
+	struct s_hfe_floppy *hfedisk;
+	int nbhfedisk,maxhfedisk;
+	struct s_hfe_track *hfe; // fast ptr
+	/* EDSK */
 	struct s_edsk_action *edsk_action;
 	int nbedskaction,maxedskaction;
 	struct s_edsk_wrapper *edsk_wrapper;
@@ -2763,6 +2823,19 @@ void FreeAssenv(struct s_assenv *ae)
 		ae->lastglobalalloc=0;
 		ae->lastgloballabel=NULL;
 	}
+	/* EDSK + HFE */
+	for (i=0;i<ae->nbedskaction;i++) {
+		if (ae->edsk_action[i].filename) MemFree(ae->edsk_action[i].filename);
+		if (ae->edsk_action[i].filename2) MemFree(ae->edsk_action[i].filename2);
+		if (ae->edsk_action[i].filename3) MemFree(ae->edsk_action[i].filename3);
+	}
+	if (ae->nbedskaction) MemFree(ae->edsk_action);
+	for (i=0;i<ae->nbhfeaction;i++) {
+		if (ae->hfe_action[i].filename) MemFree(ae->hfe_action[i].filename);
+		for (j=0;j<ae->hfe_action[i].iparam;j++) MemFree(ae->hfe_action[i].param[j]);
+		if (ae->hfe_action[i].param) MemFree(ae->hfe_action[i].param);
+	}
+	if (ae->nbhfeaction) MemFree(ae->hfe_action);
 
 	/* external + mapping */
 	for (i=0;i<ae->nexternal;i++) {
@@ -12868,10 +12941,477 @@ void _DEFSTR(struct s_assenv *ae) {
 		}
 		ae->idx+=2;
 	} else {
-		MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"DEFSTR needs two parameters\n");
+		//MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"DEFSTR needs two parameters\n");
 	}
 }
 #endif
+
+//************************************************************************************************************************************
+//************************************************************************************************************************************
+							#undef FUNC
+						#define FUNC "HFEcreator CORE"
+//************************************************************************************************************************************
+//************************************************************************************************************************************
+
+unsigned short int __internal_CRC16CCITT(unsigned short int zecrc,unsigned char zeval)
+{
+        int i;
+
+    for (i=0; i<8; i++)
+    {
+        if (((zecrc>>8) ^ zeval) & 0x80)
+        {
+                zecrc*=2;
+                zecrc^=0x1021;
+        } else {
+                zecrc*=2;
+        }
+        zeval*=2;
+    }
+        return zecrc;
+}
+
+unsigned char *__internal_make_HFE_header(int ntrack,int nside) {
+	static unsigned char hfe[0x200];
+	int i;
+
+	for (i=0;i<0x200;i++) hfe[i]=0xFF;
+
+	strcpy(hfe,"HXCPICFE");
+
+	hfe[8]=0;  // revision
+	hfe[9]=ntrack;
+	hfe[10]=nside;
+	hfe[11]=0; // track encoding 
+	hfe[12]=0xFA; // bitrate
+	hfe[13]=0x00; // bitrate
+	hfe[14]=0x29; // RPM => 297   => using always regular 300?
+	hfe[15]=0x01; // RPM
+	hfe[16]=6; // CPC interface mode
+	hfe[17]=1; // step...
+	hfe[18]=1;
+	hfe[19]=0; // tracklist offset => 0x200
+	hfe[20]=1; // write protected
+	hfe[21]=0xFF; // single step
+	hfe[22]=0xFF;
+	//
+	hfe[24]=0xFF; // no alternate encoding for track 0
+	//
+	memcpy(hfe+0x1F0," rasm v2+ ",10); // TAG version
+	return hfe;
+}
+
+// HFE is very similar to MFM
+unsigned char *__internal_track_to_HFE(unsigned int *track, int lng) {
+        unsigned char *data;
+        int previous=0,idx,v;
+        int i;
+
+        if (!lng) return NULL;
+
+        data=MemMalloc(2*lng);
+
+        for (i=idx=0;i<lng;i++) {
+                if (track[i]&SYNCHRO) {
+                        switch (track[i]&0xFF) {
+                                // push synchro byte
+                                case 0xC2:data[idx++]=0x4A; data[idx++]=0x24;break; // C2
+                                case 0xA1:data[idx++]=0x22; data[idx++]=0x91;break; // A1
+                                default:printf("unknown synchro byte %02X\n",track[i]);break;
+                        }
+                } else {
+                        v=track[i];
+
+                        // push regular byte
+                        data[idx]=0;
+                        if (v&128) {data[idx]|=2;previous=1;}   else if (previous) {previous=0;} else {data[idx]|=1;}
+                        if (v&64)  {data[idx]|=8;previous=1;}   else if (previous) {previous=0;} else {data[idx]|=4;}
+                        if (v&32)  {data[idx]|=32;previous=1;}  else if (previous) {previous=0;} else {data[idx]|=16;}
+                        if (v&16)  {data[idx]|=128;previous=1;} else if (previous) {previous=0;} else {data[idx]|=64;}
+                        idx++;
+
+                        data[idx]=0;
+                        if (v&8) {data[idx]|=2;previous=1;}   else if (previous) {previous=0;} else {data[idx]|=1;}
+                        if (v&4) {data[idx]|=8;previous=1;}   else if (previous) {previous=0;} else {data[idx]|=4;}
+                        if (v&2) {data[idx]|=32;previous=1;}  else if (previous) {previous=0;} else {data[idx]|=16;}
+                        if (v&1) {data[idx]|=128;previous=1;} else if (previous) {previous=0;} else {data[idx]|=64;}
+                        idx++;
+                }
+        }
+        return data;
+}
+
+void __internal_hfe_resize_track(struct s_assenv *ae) {
+#if TRACE_HFE
+	printf("resize track\n");
+#endif
+	if (ae->hfetrack*2>=ae->hfedisk[ae->nbhfedisk-1].itrack) {
+		struct s_hfe_track hfetrack={0};
+		int i;
+		while (ae->hfedisk[ae->nbhfedisk-1].itrack<2*(ae->hfetrack+1)) {
+			// alloc
+			printf("Alloc empty track\n");
+			ObjectArrayAddDynamicValueConcat((void **)&ae->hfedisk[ae->nbhfedisk-1],&ae->hfedisk[ae->nbhfedisk-1].itrack,&ae->hfedisk[ae->nbhfedisk-1].mtrack,&hfetrack,sizeof(hfetrack));
+		}
+		ae->hfe=&ae->hfedisk[ae->nbhfedisk-1].track[ae->hfetrack*2+ae->hfeside]; // update fast ptr
+	}
+}
+void __hfe_init(struct s_assenv *ae, struct s_hfe_action *hfe_action) {
+	struct s_hfe_floppy hfeflop={0};
+	ae->hfeside=0;
+	ae->hfetrack=0;
+	// remplir une struct HFE par défaut
+	ObjectArrayAddDynamicValueConcat((void **)&ae->hfedisk,&ae->nbhfedisk,&ae->maxhfedisk,&hfeflop,sizeof(hfeflop));
+	ae->hfedisk[ae->nbhfedisk-1].filename=hfe_action->filename;
+	// current pointer
+	__internal_hfe_resize_track(ae);
+}
+void __hfe_side(struct s_assenv *ae, struct s_hfe_action *hfe_action) {
+	ae->hfeside=RoundComputeExpression(ae,hfe_action->param[0],hfe_action->ioffset,0,0);
+	if (ae->hfeside<0 || ae->hfeside>1) {
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is : HFE SIDE,[0|1]\n");
+		ae->hfeside=0;
+	}
+	ae->hfe=&ae->hfedisk[ae->nbhfedisk-1].track[ae->hfetrack*2+ae->hfeside]; // update fast ptr
+}
+void __hfe_track(struct s_assenv *ae, struct s_hfe_action *hfe_action) {
+	ae->hfetrack=RoundComputeExpression(ae,hfe_action->param[0],hfe_action->ioffset,0,0);
+	if (ae->hfetrack<0 || ae->hfetrack>82) {
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is : HFE TRACK,[0 to 82]\n");
+		ae->hfetrack=0;
+	}
+	__internal_hfe_resize_track(ae);
+}
+
+void __hfe_close(struct s_assenv *ae, struct s_hfe_action *hfe_action) {
+	unsigned short int tracklist[256]={0};
+	unsigned int zebyte=0x4E;
+	unsigned char *hfe_header;
+	unsigned char filler[0x100]={0};
+	unsigned char *oname;
+	unsigned char *data0,*data1;
+	int i,j,k,l,blocktrack,tracklen;
+
+	oname=ae->hfedisk[ae->nbhfedisk-1].filename;
+	FileRemoveIfExists(oname);
+	rasm_printf(ae,KIO"Write floppy image file %s\n"KNORMAL,oname);
+
+	// we assume the longest track is the reference for all tracks
+	for (i=tracklen=0;i<ae->hfedisk[ae->nbhfedisk-1].itrack;i++) {
+		if (tracklen<ae->hfedisk[ae->nbhfedisk-1].track[i].idata) tracklen=ae->hfedisk[ae->nbhfedisk-1].track[i].idata;
+	}
+	if (tracklen<6125) {
+		rasm_printf(ae,KWARNING"[%s:%d] Warning: HFE tracklen is too short, adjusting to 6125 bytes which is still below optimal size of 6250 bytes\n",GetCurrentFile(ae),ae->wl[ae->idx].l);
+		if (ae->erronwarn) MaxError(ae);
+		tracklen=6125;
+	}
+	if (tracklen>6400) {
+		if (tracklen>6500) {
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"HFE tracklen is above FDC tolerance for a 300RPM drive!\n");
+			return;
+		} else {
+			rasm_printf(ae,KWARNING"[%s:%d] Warning: HFE tracklen is very highi (%d)\n",GetCurrentFile(ae),ae->wl[ae->idx].l,tracklen);
+			if (ae->erronwarn) MaxError(ae);
+		}
+	}
+#if TRACE_HFE
+	printf("max tracklen is %d\nfilling shortest tracks",tracklen);fflush(stdout);
+#endif
+	// fill shortest track with proper GAP
+	for (i=0;i<ae->hfedisk[ae->nbhfedisk-1].itrack;i++) {
+		int first=0;
+		while (ae->hfedisk[ae->nbhfedisk-1].track[i].idata<tracklen) {
+			if (!first) {
+				first++;
+#if TRACE_HFE
+	printf("adjusting track %d side %d\n",i>>1,i&1);
+#endif
+			}
+			ae->hfe=&ae->hfedisk[ae->nbhfedisk-1].track[i]; // update fast ptr for convenience
+			ObjectArrayAddDynamicValueConcat((void **)&ae->hfe->data,&ae->hfe->idata,&ae->hfe->mdata,&zebyte,sizeof(zebyte));
+		}
+	}
+
+	hfe_header=__internal_make_HFE_header(ae->hfedisk[ae->nbhfedisk-1].itrack>>1,2); // HFE side isn't used by emulators
+	FileWriteBinary(oname,(char*)hfe_header,0x200);
+
+	blocktrack=(tracklen*4)>>9; if ((tracklen*4)&0x1F) blocktrack++;
+#if TRACE_HFE
+	printf("HFE blocks per track=%d\n",blocktrack);
+#endif
+
+	for (i=0;i<(ae->hfedisk[ae->nbhfedisk-1].itrack>>1);i++) {
+		tracklist[i*2]=blocktrack*i+2;
+		tracklist[i*2+1]=tracklen*4;
+	}
+	FileWriteBinary(oname,(char*)tracklist,0x200);
+
+#if TRACE_HFE
+	printf("nbtrack=%d\n",ae->hfedisk[ae->nbhfedisk-1].itrack>>1);
+#endif
+
+	for (j=0;j<ae->hfedisk[ae->nbhfedisk-1].itrack;j+=2) {
+		int lng;
+
+		data0=__internal_track_to_HFE(ae->hfedisk[ae->nbhfedisk-1].track[j+0].data,tracklen);
+		data1=__internal_track_to_HFE(ae->hfedisk[ae->nbhfedisk-1].track[j+1].data,tracklen);
+
+		lng=tracklen*2;
+		i=0;
+		while (lng>=256) {
+			FileWriteBinary(oname,(char*)data0+i,256);
+			FileWriteBinary(oname,(char*)data1+i,256); i+=256;
+			lng-=256;
+		}
+		if (lng) {
+			FileWriteBinary(oname,(char*)data0+i,lng);
+			FileWriteBinary(oname,(char*)filler,256-lng);
+			FileWriteBinary(oname,(char*)data1+i,lng);
+			FileWriteBinary(oname,(char*)filler,256-lng);
+		}
+		MemFree(data0);
+		MemFree(data1);
+	}
+	FileWriteBinaryClose(oname);
+}
+void __hfe_output_crc(struct s_assenv *ae, struct s_hfe_action *hfe_action) {
+	unsigned int zebyte;
+	zebyte=ae->hfecrc>>8;
+	ObjectArrayAddDynamicValueConcat((void **)&ae->hfe->data,&ae->hfe->idata,&ae->hfe->mdata,&zebyte,sizeof(zebyte));
+	zebyte=ae->hfecrc&0xFF;
+	ObjectArrayAddDynamicValueConcat((void **)&ae->hfe->data,&ae->hfe->idata,&ae->hfe->mdata,&zebyte,sizeof(zebyte));
+}
+void __hfe_start_crc(struct s_assenv *ae, struct s_hfe_action *hfe_action) {
+	ae->hfecrc=0xFFFF;
+}
+void __hfe_add_byte(struct s_assenv *ae, struct s_hfe_action *hfe_action) {
+	unsigned int zebyte;
+	int i;
+	for (i=1;i<hfe_action->nbparam;i++) {
+		zebyte=RoundComputeExpression(ae,hfe_action->param[0+i],hfe_action->ioffset,0,0);
+		__internal_CRC16CCITT(ae->hfecrc,zebyte&0xFF);
+		ObjectArrayAddDynamicValueConcat((void **)&ae->hfe->data,&ae->hfe->idata,&ae->hfe->mdata,&zebyte,sizeof(zebyte));
+	}
+}
+void __hfe_add_track_header(struct s_assenv *ae, struct s_hfe_action *hfe_action) {
+	unsigned int zebyte;
+	int i;
+
+	zebyte=0x4E; // GAP4a
+	for (i=0;i<80;i++) ObjectArrayAddDynamicValueConcat((void **)&ae->hfe->data,&ae->hfe->idata,&ae->hfe->mdata,&zebyte,sizeof(zebyte));
+	zebyte=0x00; // VCO SYNC
+	for (i=0;i<12;i++) ObjectArrayAddDynamicValueConcat((void **)&ae->hfe->data,&ae->hfe->idata,&ae->hfe->mdata,&zebyte,sizeof(zebyte));
+	zebyte=0xC2|SYNCHRO; // IAM
+	for (i=0;i<3;i++) ObjectArrayAddDynamicValueConcat((void **)&ae->hfe->data,&ae->hfe->idata,&ae->hfe->mdata,&zebyte,sizeof(zebyte));
+	zebyte=0xFC;
+	ObjectArrayAddDynamicValueConcat((void **)&ae->hfe->data,&ae->hfe->idata,&ae->hfe->mdata,&zebyte,sizeof(zebyte));
+	zebyte=0x4E; // GAP1
+	for (i=0;i<50;i++) ObjectArrayAddDynamicValueConcat((void **)&ae->hfe->data,&ae->hfe->idata,&ae->hfe->mdata,&zebyte,sizeof(zebyte));
+}
+void __hfe_add_sector(struct s_assenv *ae, struct s_hfe_action *hfe_action) {
+	unsigned int zebyte;
+	unsigned short int crc;
+	unsigned char sectorsize;
+	int i,curlen,offset;
+
+	zebyte=0x00; // VCO SYNC
+	for (i=0;i<12;i++) ObjectArrayAddDynamicValueConcat((void **)&ae->hfe->data,&ae->hfe->idata,&ae->hfe->mdata,&zebyte,sizeof(zebyte));
+	zebyte=0xA1|SYNCHRO; // IDAM
+	for (i=0;i<3;i++) ObjectArrayAddDynamicValueConcat((void **)&ae->hfe->data,&ae->hfe->idata,&ae->hfe->mdata,&zebyte,sizeof(zebyte));
+	zebyte=0xFE;
+	ObjectArrayAddDynamicValueConcat((void **)&ae->hfe->data,&ae->hfe->idata,&ae->hfe->mdata,&zebyte,sizeof(zebyte));
+
+	crc=__internal_CRC16CCITT(0xFFFF,0xA1);
+	crc=__internal_CRC16CCITT(crc,0xA1);
+	crc=__internal_CRC16CCITT(crc,0xA1);
+	crc=__internal_CRC16CCITT(crc,0xFE);
+
+	zebyte=RoundComputeExpression(ae,hfe_action->param[0],hfe_action->ioffset,0,0); // track
+	crc=__internal_CRC16CCITT(crc,zebyte);
+	ObjectArrayAddDynamicValueConcat((void **)&ae->hfe->data,&ae->hfe->idata,&ae->hfe->mdata,&zebyte,sizeof(zebyte));
+	zebyte=RoundComputeExpression(ae,hfe_action->param[1],hfe_action->ioffset,0,0); // side
+	crc=__internal_CRC16CCITT(crc,zebyte);
+	ObjectArrayAddDynamicValueConcat((void **)&ae->hfe->data,&ae->hfe->idata,&ae->hfe->mdata,&zebyte,sizeof(zebyte));
+	zebyte=RoundComputeExpression(ae,hfe_action->param[2],hfe_action->ioffset,0,0); // ID
+	crc=__internal_CRC16CCITT(crc,zebyte);
+	ObjectArrayAddDynamicValueConcat((void **)&ae->hfe->data,&ae->hfe->idata,&ae->hfe->mdata,&zebyte,sizeof(zebyte));
+	sectorsize=zebyte=RoundComputeExpression(ae,hfe_action->param[3],hfe_action->ioffset,0,0); // sector size
+	crc=__internal_CRC16CCITT(crc,zebyte);
+	ObjectArrayAddDynamicValueConcat((void **)&ae->hfe->data,&ae->hfe->idata,&ae->hfe->mdata,&zebyte,sizeof(zebyte));
+	zebyte=(crc>>8)&0xFF; // CRC high weight
+	ObjectArrayAddDynamicValueConcat((void **)&ae->hfe->data,&ae->hfe->idata,&ae->hfe->mdata,&zebyte,sizeof(zebyte));
+	zebyte=crc&0xFF; // CRC low weight
+	ObjectArrayAddDynamicValueConcat((void **)&ae->hfe->data,&ae->hfe->idata,&ae->hfe->mdata,&zebyte,sizeof(zebyte));
+
+	// gestion des longueurs à la con
+	switch (sectorsize) {
+		case 0:curlen=128;break;
+		case 1:curlen=256;break;
+		case 2:curlen=512;break;
+		case 3:curlen=1024;break;
+		case 4:curlen=2048;break;
+		case 5:curlen=4096;break;
+		default:MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is : HFE ADD_SECTOR support only sector size lower than 6\n");
+			return;
+	}
+
+	offset=RoundComputeExpression(ae,hfe_action->param[4],hfe_action->ioffset,0,0);
+	if (offset<0 || offset+curlen>65536) {
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is : HFE ADD_SECTOR, sector data is out of memory offset=%d offset+curlen=%d\n",offset,offset+curlen);
+		return;
+	}
+
+	zebyte=0x4E; // GAP 2
+	for (i=0;i<22;i++) ObjectArrayAddDynamicValueConcat((void **)&ae->hfe->data,&ae->hfe->idata,&ae->hfe->mdata,&zebyte,sizeof(zebyte));
+	zebyte=0x00; // VCO SYNC
+	for (i=0;i<12;i++) ObjectArrayAddDynamicValueConcat((void **)&ae->hfe->data,&ae->hfe->idata,&ae->hfe->mdata,&zebyte,sizeof(zebyte));
+	zebyte=0xA1|SYNCHRO; // DAM
+	for (i=0;i<3;i++) ObjectArrayAddDynamicValueConcat((void **)&ae->hfe->data,&ae->hfe->idata,&ae->hfe->mdata,&zebyte,sizeof(zebyte));
+	zebyte=0xFB; // regular DAM
+	ObjectArrayAddDynamicValueConcat((void **)&ae->hfe->data,&ae->hfe->idata,&ae->hfe->mdata,&zebyte,sizeof(zebyte));
+	crc=__internal_CRC16CCITT(0xFFFF,0xA1);
+	crc=__internal_CRC16CCITT(crc,0xA1);
+	crc=__internal_CRC16CCITT(crc,0xA1);
+	crc=__internal_CRC16CCITT(crc,0xFB);
+
+	for (i=0;i<curlen;i++) {
+		zebyte=ae->mem[hfe_action->ibank][offset+i];
+		crc=__internal_CRC16CCITT(crc,zebyte);
+		ObjectArrayAddDynamicValueConcat((void **)&ae->hfe->data,&ae->hfe->idata,&ae->hfe->mdata,&zebyte,sizeof(zebyte));
+	}
+
+	zebyte=(crc>>8)&0xFF; // CRC high weight
+	ObjectArrayAddDynamicValueConcat((void **)&ae->hfe->data,&ae->hfe->idata,&ae->hfe->mdata,&zebyte,sizeof(zebyte));
+	zebyte=crc&0xFF; // CRC low weight
+	ObjectArrayAddDynamicValueConcat((void **)&ae->hfe->data,&ae->hfe->idata,&ae->hfe->mdata,&zebyte,sizeof(zebyte));
+}
+void __hfe_add_gap(struct s_assenv *ae, struct s_hfe_action *hfe_action) {
+	unsigned short int zebyte;
+	int i,bytenumber;
+
+	bytenumber=RoundComputeExpression(ae,hfe_action->param[0],hfe_action->ioffset,0,0);
+	if (bytenumber<1) {
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"GAP size must be greater than zero\n");
+		return;
+	}
+	switch (hfe_action->nbparam) {
+		case 1: // number of bytes for GAP
+			zebyte=0x4E;
+			break;
+		case 2: // number of bytes for GAP | GAP filler
+			zebyte=RoundComputeExpression(ae,hfe_action->param[1],hfe_action->ioffset,0,0);
+			break;
+		default:
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is : HFE ADD_GAP,<gap size>[,<gap filler>]\n");
+			return;
+	}
+	for (i=0;i<bytenumber;i++) {
+		__internal_CRC16CCITT(ae->hfecrc,zebyte&0xFF);
+		ObjectArrayAddDynamicValueConcat((void **)&ae->hfe->data,&ae->hfe->idata,&ae->hfe->mdata,&zebyte,sizeof(zebyte));
+	}
+}
+
+void __HFE(struct s_assenv *ae) {
+	if (!ae->wl[ae->idx].t) {
+		struct s_hfe_action curaction={0};
+		int cmderr=0,backidx,nbparam=1,touched;
+		char *filename[3]={0},*tmpfilename;
+		int i,j,lm;
+
+		// which action?
+		switch (ae->wl[ae->idx+1].w[0]) {
+			case 'A':
+				if (strcmp(ae->wl[ae->idx+1].w,"ADD_BYTE")==0)		curaction.action=E_HFE_ACTION_ADD_BYTE; else
+				if (strcmp(ae->wl[ae->idx+1].w,"ADD_SECTOR")==0)	curaction.action=E_HFE_ACTION_ADD_SECTOR; else
+				if (strcmp(ae->wl[ae->idx+1].w,"ADD_GAP")==0)		curaction.action=E_HFE_ACTION_ADD_GAP; else
+				if (strcmp(ae->wl[ae->idx+1].w,"ADD_TRACK_HEADER")==0)	curaction.action=E_HFE_ACTION_ADD_TRACK_HEADER; else cmderr=1;
+				break;
+			case 'C':if (strcmp(ae->wl[ae->idx+1].w,"CLOSE")==0)	curaction.action=E_HFE_ACTION_CLOSE; else cmderr=1;break;
+			case 'I':if (strcmp(ae->wl[ae->idx+1].w,"INIT")==0)		curaction.action=E_HFE_ACTION_INIT; else cmderr=1;break;
+			case 'O':if (strcmp(ae->wl[ae->idx+1].w,"OUTPUT_CRC")==0)	curaction.action=E_HFE_ACTION_OUTPUT_CRC; else cmderr=1;break;
+			case 'S':
+				if (strcmp(ae->wl[ae->idx+1].w,"START_CRC")==0)	curaction.action=E_HFE_ACTION_START_CRC; else
+				if (strcmp(ae->wl[ae->idx+1].w,"SIDE")==0)		curaction.action=E_HFE_ACTION_SIDE; else cmderr=1;
+				break;
+			case 'T':if (strcmp(ae->wl[ae->idx+1].w,"TRACK")==0)	curaction.action=E_HFE_ACTION_TRACK; else cmderr=1;break;
+			default:cmderr=1;
+		}
+		// some action need more than one filename
+		switch (curaction.action) {
+			case E_HFE_ACTION_ADD_TRACK_HEADER: case E_HFE_ACTION_OUTPUT_CRC:case E_HFE_ACTION_START_CRC:case E_HFE_ACTION_CLOSE:
+				nbparam=1;break;
+			case E_HFE_ACTION_INIT:case E_HFE_ACTION_SIDE:case E_HFE_ACTION_TRACK:case E_HFE_ACTION_ADD_BYTE:
+				nbparam=2;break;
+			case E_HFE_ACTION_ADD_GAP:
+				nbparam=3;break;
+			case E_HFE_ACTION_ADD_SECTOR:
+				nbparam=6;break; // track,side,id,sectorsize,offset (current bank is set)
+			default:MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Internal Error on HFE action management (1)\n");break;
+		}
+		// default struct
+		curaction.iw=ae->idx;
+		curaction.ibank=ae->activebank;
+		curaction.ioffset=ae->outputadr;
+		while (!ae->wl[ae->idx+curaction.nbparam].t) {
+			curaction.nbparam++;
+		}
+		if (curaction.nbparam<nbparam) {
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"not enough parameters for HFE %s! A minimum of %d is requested\n",ae->wl[ae->idx+1].w,nbparam);
+			return;
+		}
+
+		switch (curaction.action) {
+			case E_HFE_ACTION_INIT:
+				// enforce filename is a string!
+				if (!StringIsQuote(ae->wl[ae->idx+2+i].w)) {
+					MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"HFE syntax is : HFE INIT,'filename'\n");
+					return;
+				}
+				tmpfilename=TxtStrDup(ae->wl[ae->idx+2+i].w);
+				/* need to upper case tags */
+				for (lm=touched=0;tmpfilename[lm];lm++) {
+					if (tmpfilename[lm]=='{') touched++; else if (tmpfilename[lm]=='}') touched--; else if (touched) tmpfilename[lm]=toupper(tmpfilename[lm]);
+				}
+				tmpfilename=TranslateTag(ae,tmpfilename,&touched,1,E_TAGOPTION_REMOVESPACE);
+				curaction.filename=StringRemoveQuotes(ae,tmpfilename); // alloc a new string
+			printf("new HFE will be [%s]\n",curaction.filename);
+				MemFree(tmpfilename);
+				break;
+			default:
+				// translate all params except first one because they must be numeric!
+				for (i=1;i<curaction.nbparam;i++) {
+					char *param;
+					param=TxtStrDup(ae->wl[ae->idx+i+1].w);
+					ExpressionFastTranslate(ae,&param,1);
+					ObjectArrayAddDynamicValueConcat((void**)&curaction.param,&curaction.iparam,&curaction.mparam,&param,sizeof(char *));
+				}
+				break;
+		}
+		ObjectArrayAddDynamicValueConcat((void**)&ae->hfe_action,&ae->nbhfeaction,&ae->maxhfeaction,&curaction,sizeof(curaction));
+	} else {
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"HFE syntax is : HFE <COMMAND>[,<parameters>] (see documentation)\n");
+	}
+}
+void PopAllHFE(struct s_assenv *ae) {
+	int i;
+	for (i=0;i<ae->nbhfeaction;i++) {
+		ae->idx=ae->hfe_action[i].iw; // MakeError hack
+		switch (ae->hfe_action[i].action) {
+			case E_HFE_ACTION_ADD_TRACK_HEADER:	__hfe_add_track_header(ae,&ae->hfe_action[i]);break;
+			case E_HFE_ACTION_OUTPUT_CRC:	__hfe_output_crc(ae,&ae->hfe_action[i]);break;
+			case E_HFE_ACTION_START_CRC:	__hfe_start_crc(ae,&ae->hfe_action[i]);break;
+			case E_HFE_ACTION_CLOSE: 		__hfe_close(ae,&ae->hfe_action[i]);break;
+			case E_HFE_ACTION_INIT:			__hfe_init(ae,&ae->hfe_action[i]);break;
+			case E_HFE_ACTION_SIDE:			__hfe_side(ae,&ae->hfe_action[i]);break;
+			case E_HFE_ACTION_TRACK:		__hfe_track(ae,&ae->hfe_action[i]);break;
+			case E_HFE_ACTION_ADD_GAP:		__hfe_add_gap(ae,&ae->hfe_action[i]);break;
+			case E_HFE_ACTION_ADD_BYTE:		__hfe_add_byte(ae,&ae->hfe_action[i]);break;
+			case E_HFE_ACTION_ADD_SECTOR:	__hfe_add_sector(ae,&ae->hfe_action[i]);break;
+			default:MakeError(ae,0,"(PopAllHFE)",0,"internal error during HFE deferred execution, please report\n");
+				break;
+		}
+	}
+}
 
 //************************************************************************************************************************************
 //************************************************************************************************************************************
@@ -19620,6 +20160,7 @@ struct s_asm_keyword instruction[]={
 {"RELOCATE",0,0,__RELOCATE},
 {"ENDRELOCATE",0,0,__ENDRELOCATE},
 {"EDSK",0,0,__EDSK},
+{"HFE",0,0,__HFE},
 {"",0,0,NULL}
 };
 
@@ -20835,6 +21376,7 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 		PopAllSave(ae);
 		/* exécution des actions programmées par la directive EDSK */
 		PopAllEDSK(ae);
+		PopAllHFE(ae);
 	
 		if (ae->nbsave==0 || ae->forcecpr || ae->forcesnapshot || ae->forceROM || ae->forcetape) {
 			/*********************************************
@@ -23665,6 +24207,9 @@ printf("check quotes and repeats\n");
 	ObjectArrayAddDynamicValueConcat((void**)&wordlist,&nbword,&maxword,&curw,sizeof(curw));
 
 	/* pour les calculs d'adresses avec IX et IY on enregistre deux variables bidons du meme nom */
+	curw.e=7;
+	curw.w=TxtStrDup("SYNCHRO~256");
+	ObjectArrayAddDynamicValueConcat((void**)&wordlist,&nbword,&maxword,&curw,sizeof(curw));
 	curw.e=2;
 	curw.w=TxtStrDup("IX~0");
 	ObjectArrayAddDynamicValueConcat((void**)&wordlist,&nbword,&maxword,&curw,sizeof(curw));
@@ -27011,7 +27556,7 @@ printf("testing snapshot settings OK\n");
 printf("testing page tag with generated label name OK\n");
 
 	ret=RasmAssembleInfo(AUTOTEST_EMBEDDED_ERRORS,strlen(AUTOTEST_EMBEDDED_ERRORS),&opcode,&opcodelen,&debug);
-	if (ret && debug->nberror==2 && debug->nbsymbol==4) {
+	if (ret && debug->nberror==2 && debug->nbsymbol==5) {
 /*		
 		printf("\n");
 		for (i=0;i<debug->nberror;i++) {
@@ -27023,14 +27568,14 @@ printf("testing page tag with generated label name OK\n");
 */
 		RasmFreeInfoStruct(debug);
 	} else {int inbs;
-		printf("Autotest %03d ERROR (embedded error struct) err=%d nberr=%d (2) nbsymb=%d (4)\n",cpt,ret,debug->nberror,debug->nbsymbol);
+		printf("Autotest %03d ERROR (embedded error struct) err=%d nberr=%d (2) nbsymb=%d (5)\n",cpt,ret,debug->nberror,debug->nbsymbol);
 		for (inbs=0;inbs<debug->nbsymbol;inbs++) printf("symb[%d]=[%s]\n",inbs,debug->symbol[inbs].name);
 		MiniDump(opcode,opcodelen);exit(-1);}
 	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
 printf("testing internal error struct OK\n");
 
 	ret=RasmAssembleInfo(AUTOTEST_EMBEDDED_LABELS,strlen(AUTOTEST_EMBEDDED_LABELS),&opcode,&opcodelen,&debug);
-	if (!ret && debug->nbsymbol==4) {
+	if (!ret && debug->nbsymbol==5) {
 		/*
 		printf("\nnbsymbol=%d\n",debug->nbsymbol);
 		for (i=0;i<debug->nbsymbol;i++) {
