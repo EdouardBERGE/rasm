@@ -567,6 +567,7 @@ enum e_edsk_action {
 	E_EDSK_ACTION_DROP,
 	E_EDSK_ACTION_RESIZE,
 	E_EDSK_ACTION_GAPFIX,
+	E_EDSK_ACTION_REORDER,
 	E_EDSK_ACTION_END
 };
 
@@ -14395,6 +14396,7 @@ void __edsk_drop(struct s_assenv *ae, struct s_edsk_action *action) {
 						wasfound=1;
 					}
 				}
+				if (!edsk->track[i*edsk->sidenumber+side].sectornumber) edsk->track[i*edsk->sidenumber+side].unformated=1;
 				if (!wasfound) {
 					MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"EDSK DROP error, sector #%02X track %d not found!\n",location[iloc].sectorID,i);
 				}
@@ -14565,7 +14567,7 @@ void __edsk_resize(struct s_assenv *ae, struct s_edsk_action *action) {
 		for (iloc=0;iloc<nblocation;iloc++) {
 			i=location[iloc].track;
 			if (i>=edsk->tracknumber) {
-				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"EDSK ADD error, track %d cannot be processed as the floppy image has %d track(s)\n",i,edsk->tracknumber);
+				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"EDSK REORDER error, track %d cannot be processed as the floppy image has %d track(s)\n",i,edsk->tracknumber);
 				return;
 			}
 			// unformated special case
@@ -14591,6 +14593,90 @@ void __edsk_resize(struct s_assenv *ae, struct s_edsk_action *action) {
 							default:edsk->track[i*edsk->sidenumber+side].sector[j].length=6250;break; // heavy hexagon sector
 						}
 						edsk->track[i*edsk->sidenumber+side].sector[j].data=MemRealloc(edsk->track[i*edsk->sidenumber+side].sector[j].data,edsk->track[i*edsk->sidenumber+side].sector[j].length);
+					}
+				}
+			}
+		}
+		MemFree(location);
+		pp+=2;
+	}
+
+	edsktool_EDSK_write_file(edsk,action->filename);
+	__edsk_free(ae,edsk);
+}
+
+void __edsk_reorder(struct s_assenv *ae, struct s_edsk_action *action) {
+	struct s_edsk_global_struct *edsk;
+	struct s_edsk_location *location;
+	int nblocation,side;
+	int newposition;
+	int iloc,i,j,k,pp;
+	int once=0;
+
+ 	if (action->nbparam<4) {
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Usage is : EDSK REORDER,'edskfilename:side','location',<new position>\n");
+		return;
+	}
+	// load and check side
+	side=__edsk_get_side_from_name(action->filename);
+	edsk=edsktool_EDSK_load(action->filename);
+	if (!edsk) {
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Error loading [%s]\n",action->filename);
+		return;
+	}
+	if (side+1>edsk->sidenumber) {
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Cannot RESIZE sector because floppy image [%s] does not have 2 sides!\n",action->filename);
+		return;
+	}
+
+	pp=3;
+	while (pp<action->nbparam) {
+		// get location
+		location=__edsk_get_location(ae,ae->wl[ae->idx+pp].w,&nblocation);
+		if (!location) {
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"EDSK ADD error, invalid location!\n");
+			return;
+		}
+		// get new position
+		newposition=RoundComputeExpression(ae,ae->wl[ae->idx+pp+1].w,0,0,0);
+
+		for (iloc=0;iloc<nblocation;iloc++) {
+			i=location[iloc].track;
+			if (i>=edsk->tracknumber) {
+				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"EDSK REORDER error, track %d cannot be processed as the floppy image has %d track(s)\n",i,edsk->tracknumber);
+				return;
+			}
+			if (location[iloc].istrack) {
+				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"EDSK REORDER error, location cannot be a track without sector!\n");
+				return;
+			}
+			// unformated special case
+			if (edsk->track[i*edsk->sidenumber+side].unformated) {
+				if (!once) {
+					// display only once per call
+					rasm_printf(ae,KWARNING"[%s:%d] Warning: Track wasn't formated, nothing to reorder\n",GetCurrentFile(ae),ae->wl[ae->idx].l);
+					if (ae->erronwarn) MaxError(ae);
+					once=1;
+				}
+			} else {
+				for (j=0;j<edsk->track[i*edsk->sidenumber+side].sectornumber;j++) {
+					// match ID
+					if (edsk->track[i*edsk->sidenumber+side].sector[j].id==location[iloc].sectorID) {
+						struct s_edsk_sector_global_struct cursect;
+						cursect=edsk->track[i*edsk->sidenumber+side].sector[j];
+						if (newposition<j) {
+							// shift from newposition to j
+							for (k=j-1;k>=newposition;k--) {
+								edsk->track[i*edsk->sidenumber+side].sector[k+1]=edsk->track[i*edsk->sidenumber+side].sector[k];
+							}
+							edsk->track[i*edsk->sidenumber+side].sector[newposition]=cursect;
+						} else if (newposition>j) {
+							// shift from j to newposition
+							for (k=j+1;k<=newposition;k++) {
+								edsk->track[i*edsk->sidenumber+side].sector[k-1]=edsk->track[i*edsk->sidenumber+side].sector[k];
+							}
+							edsk->track[i*edsk->sidenumber+side].sector[newposition]=cursect;
+						}
 					}
 				}
 			}
@@ -14699,6 +14785,7 @@ void __edsk_writesect(struct s_assenv *ae, struct s_edsk_action *action) {
  * EDSK      DROP,'filename.dsk','location'
  * EDSK       ADD,'filename.dsk','location',<size>,...
  * EDSK    RESIZE,'filename.dsk','location',<size>,...
+ * EDSK   REORDER,'filename.dsk','location',position,...
  * EDSK     MERGE,'filename.dsk:side','filename.dsk:side','outputfilename.dsk'
 ***************************************************************************************************************************/
 void __EDSK(struct s_assenv *ae) {
@@ -14717,6 +14804,7 @@ void __EDSK(struct s_assenv *ae) {
 			case 'M':if (strcmp(ae->wl[ae->idx+1].w,"MERGE")==0)	curaction.action=E_EDSK_ACTION_MERGE; else // merge edsk
 				 if (strcmp(ae->wl[ae->idx+1].w,"MAP")==0)	curaction.action=E_EDSK_ACTION_MAP; else cmderr=1;break; // map edsk
 			case 'R':if (strcmp(ae->wl[ae->idx+1].w,"RESIZE")==0)	curaction.action=E_EDSK_ACTION_RESIZE; else // resize sector
+				 if (strcmp(ae->wl[ae->idx+1].w,"REORDER")==0)	curaction.action=E_EDSK_ACTION_REORDER; else // change sector position
 				 if (strcmp(ae->wl[ae->idx+1].w,"READSECT")==0)	curaction.action=E_EDSK_ACTION_READSECT; else cmderr=1;break; // read sectors into memory
 			case 'U':if (strcmp(ae->wl[ae->idx+1].w,"UPGRADE")==0)	curaction.action=E_EDSK_ACTION_UPGRADE; else cmderr=1;break; // use trackload to save files
 			case 'W':if (strcmp(ae->wl[ae->idx+1].w,"WRITESECT")==0)	curaction.action=E_EDSK_ACTION_WRITESECT; else cmderr=1;break; // use trackload to save files
@@ -14728,7 +14816,7 @@ void __EDSK(struct s_assenv *ae) {
 		}
 		// some action need more than one filename
 		switch (curaction.action) {
-			case E_EDSK_ACTION_ADD: case E_EDSK_ACTION_CREATE: case E_EDSK_ACTION_DROP: case E_EDSK_ACTION_MAP:
+			case E_EDSK_ACTION_ADD: case E_EDSK_ACTION_CREATE: case E_EDSK_ACTION_DROP: case E_EDSK_ACTION_MAP: case E_EDSK_ACTION_REORDER:
 			case E_EDSK_ACTION_RESIZE: case E_EDSK_ACTION_READSECT: case E_EDSK_ACTION_WRITESECT: case E_EDSK_ACTION_GAPFIX:
 				nbfilename=1;break;
 			case E_EDSK_ACTION_UPGRADE:
@@ -14782,6 +14870,7 @@ void __EDSK(struct s_assenv *ae) {
 			case E_EDSK_ACTION_MAP:
 			case E_EDSK_ACTION_MERGE:
 			case E_EDSK_ACTION_RESIZE:
+			case E_EDSK_ACTION_REORDER:
 			case E_EDSK_ACTION_DROP:
 			case E_EDSK_ACTION_WRITESECT:
 			case E_EDSK_ACTION_ADD:
@@ -14812,6 +14901,7 @@ void PopAllEDSK(struct s_assenv *ae) {
 			case E_EDSK_ACTION_GAPFIX:	__edsk_gapfix(ae,&ae->edsk_action[i]);break;
 			case E_EDSK_ACTION_MERGE:	__edsk_merge(ae,&ae->edsk_action[i]);break;
 			case E_EDSK_ACTION_RESIZE:	__edsk_resize(ae,&ae->edsk_action[i]);break;
+			case E_EDSK_ACTION_REORDER:	__edsk_reorder(ae,&ae->edsk_action[i]);break;
 			case E_EDSK_ACTION_DROP:	__edsk_drop(ae,&ae->edsk_action[i]);break;
 			case E_EDSK_ACTION_WRITESECT:	__edsk_writesect(ae,&ae->edsk_action[i]);break;
 			case E_EDSK_ACTION_ADD:		__edsk_add(ae,&ae->edsk_action[i]);break;
@@ -15446,6 +15536,7 @@ void __BUILDSNA(struct s_assenv *ae) {
 	}
 	if (!ae->forcecpr && !ae->forcetape && !ae->forcezx && !ae->forceROM) {
 		ae->forcesnapshot=1;
+		ae->remu=1;
 	} else {
 		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Cannot select snapshot output when already in ZX/ROM/cartridge/tape output\n");
 	}
@@ -15946,7 +16037,7 @@ void __BANK(struct s_assenv *ae) {
 			exit(2);
 		}
 		/* bankset control */
-		if (ae->forcesnapshot && ae->bankset[ae->activebank/4]) {
+		if (ae->forcesnapshot && ae->bankset[ae->activebank>>2]) {
 			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Cannot BANK %d was already select by a previous BANKSET %d\n",ae->activebank,(int)ae->activebank/4);
 			ae->idx++;
 			return;
@@ -22024,6 +22115,10 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 											strncpy(shortlabel,ae->label[i].name,sizeof(shortlabel)-1);
 										}
 										strcat(remu_output,shortlabel);
+										if (!isrom) {
+											// RAM can be gathered
+											if (ae->bankset[lbankn>>2]) lbankn+=(ae->label[i].ptr>>14);
+										}
 										sprintf(zedigit," %d %d;",ae->label[i].ptr,lbankn);
 										strcat(remu_output,zedigit);
 									}
