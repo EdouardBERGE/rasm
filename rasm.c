@@ -15355,6 +15355,7 @@ void __SNAPINIT(struct s_assenv *ae) {
 	if (!ae->forcecpr && !ae->forcetape && !ae->forceROM) {
 		// automatic BUILDSNA
 		ae->forcesnapshot=1;
+		ae->remu=1;
 	}
 
 	if (!ae->wl[ae->idx].t) {
@@ -16108,6 +16109,7 @@ void __BANKSET(struct s_assenv *ae) {
 		ae->orgzone[ae->io-1].memend=ae->outputadr;
 	}
 	ae->bankmode=1;
+	ae->remu=1;
 	
 	if (ae->wl[ae->idx+1].t!=2) {
 		ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
@@ -20272,6 +20274,135 @@ char *WhichColor(char *content) {
 	return KLORANGE;
 }
 
+unsigned char * _internal_export_REMU(struct s_assenv *ae, unsigned int *rchksize) {
+	unsigned char *remu_output=NULL;
+	char zedigit[128];
+	char shortlabel[64];
+	int ilocal=0,i;
+	unsigned int chunksize;
+
+	remu_output=MemMalloc(ae->ibreakpoint*64+ae->il*256+ae->ialias*256+16+ae->icomz*256);
+
+	strcpy(remu_output,"REMU    ");
+
+	for (i=0;i<ae->ibreakpoint;i++) {
+		int lbankn,isrom;
+		if (!ae->export_sna) {
+			if (ae->breakpoint[i].bank<256) {
+				lbankn=ae->breakpoint[i].bank;
+				isrom=1;
+			} else {
+				lbankn=-1; // we cannot know which memory bank
+				isrom=0;
+			}
+		} else { // Snapshot use first banks as RAM!
+			if (ae->breakpoint[i].bank<260) {
+				lbankn=ae->breakpoint[i].bank;
+				isrom=0;
+			} else {
+				int sl;
+				for (sl=0;sl<257;sl++) {
+					if (ae->rombank[sl]==ae->breakpoint[i].bank) {
+						lbankn=sl;
+						isrom=1;
+						break;
+					}
+				}
+			}
+		}
+		if (isrom) strcat(remu_output,"rombrk"); else strcat(remu_output,"brk");
+		sprintf(zedigit," %d %d;",ae->breakpoint[i].address,lbankn);
+		strcat(remu_output,zedigit);
+	}
+	for (i=0;i<ae->il;i++) {
+		int lbankn,isrom;
+		if (!ae->export_sna) {
+			if (ae->label[i].ibank<256) {
+				lbankn=ae->label[i].ibank;
+				isrom=1;
+			} else {
+				lbankn=-1; // we cannot know which memory bank
+				isrom=0;
+			}
+		} else {
+			if (ae->label[i].ibank<260) {
+				lbankn=ae->label[i].ibank;
+				isrom=0;
+			} else {
+				int sl;
+				for (sl=0;sl<256;sl++) {
+					if (ae->rombank[sl]==ae->label[i].ibank) {
+						lbankn=sl;
+						isrom=1;
+						break;
+					}
+				}
+			}
+		}
+		// distinction ROM/RAM pour les labels
+		if (ae->label[i].autorise_export) {
+			if (isrom) strcat(remu_output,"romlabel "); else strcat(remu_output,"label ");
+			memset(shortlabel,0,sizeof(shortlabel));
+			if (!ae->label[i].name) {
+				strncpy(shortlabel,ae->wl[ae->label[i].iw].w,sizeof(shortlabel)-1);
+			} else {
+				strncpy(shortlabel,ae->label[i].name,sizeof(shortlabel)-1);
+			}
+			strcat(remu_output,shortlabel);
+			if (!isrom) {
+				// RAM can be gathered
+				if (ae->bankset[lbankn>>2]) lbankn+=(ae->label[i].ptr>>14);
+			}
+			sprintf(zedigit," %d %d;",ae->label[i].ptr,lbankn);
+			strcat(remu_output,zedigit);
+		}
+	}
+	// ajout des commentaires
+	for (i=0;i<ae->icomz;i++) {
+		int lbankn,isrom;
+		if (ae->comz[i].bank<260) {
+			lbankn=ae->comz[i].bank;
+			isrom=0;
+		} else {
+			int sl;
+			for (sl=0;sl<256;sl++) {
+				if (ae->rombank[sl]==ae->comz[i].bank) {
+					lbankn=sl;
+					isrom=1;
+					break;
+				}
+			}
+		}
+		if (isrom) strcat(remu_output,"romcomz "); else strcat(remu_output,"comz ");
+		sprintf(zedigit,"%d %d ",ae->comz[i].address,lbankn);
+		strcat(remu_output,zedigit);
+		TxtReplace(ae->comz[i].comment,";",":",0); // enforce format!
+		strcat(remu_output,ae->comz[i].comment);
+		strcat(remu_output,";");
+	}
+	// pas d'info sur la bank avec les alias
+	for (i=2;i<ae->ialias;i++) {
+		int tmpptr;
+		strcat(remu_output,"alias ");
+		memset(shortlabel,0,sizeof(shortlabel));
+		strncpy(shortlabel,ae->alias[i].alias,sizeof(shortlabel)-1);
+		strcat(remu_output,shortlabel);
+		tmpptr=RoundComputeExpression(ae,ae->alias[i].translation,0,0,0);
+		sprintf(zedigit," %d;",tmpptr);
+		strcat(remu_output,zedigit);
+	}
+	chunksize=strlen(remu_output)-8;
+	remu_output[4]=chunksize&0xFF;
+	remu_output[5]=(chunksize>>8)&0xFF;
+	remu_output[6]=(chunksize>>16)&0xFF;
+	remu_output[7]=(chunksize>>24)&0xFF;
+
+	//FileWriteBinary(TMP_filename,(char*)remu_output,chunksize+8); // 8 bytes for the chunk header
+	//MemFree(remu_output);
+	*rchksize=chunksize;
+	return remu_output;
+}
+
 int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s_rasm_info **debug)
 {
 	#undef FUNC
@@ -22062,106 +22193,8 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 							}
 							if (ae->remu) {
 								unsigned char *remu_output=NULL;
-								char zedigit[128];
-								char shortlabel[64];
-								int ilocal=0;
 								unsigned int chunksize;
-
-								remu_output=MemMalloc(ae->ibreakpoint*64+ae->il*256+ae->ialias*256+16+ae->icomz*256);
-
-								strcpy(remu_output,"REMU    ");
-
-								for (i=0;i<ae->ibreakpoint;i++) {
-									int lbankn,isrom;
-									if (ae->breakpoint[i].bank<260) {
-										lbankn=ae->breakpoint[i].bank;
-										isrom=0;
-									} else {
-										int sl;
-										for (sl=0;sl<257;sl++) {
-											if (ae->rombank[sl]==ae->breakpoint[i].bank) {
-												lbankn=sl;
-												isrom=1;
-												break;
-											}
-										}
-									}
-									if (isrom) strcat(remu_output,"rombrk"); else strcat(remu_output,"brk");
-									sprintf(zedigit," %d %d;",ae->breakpoint[i].address,lbankn);
-									strcat(remu_output,zedigit);
-								}
-								for (i=0;i<ae->il;i++) {
-									int lbankn,isrom;
-									if (ae->label[i].ibank<260) {
-										lbankn=ae->label[i].ibank;
-										isrom=0;
-									} else {
-										int sl;
-										for (sl=0;sl<256;sl++) {
-											if (ae->rombank[sl]==ae->label[i].ibank) {
-												lbankn=sl;
-												isrom=1;
-												break;
-											}
-										}
-									}
-									// distinction ROM/RAM pour les labels
-									if (ae->label[i].autorise_export) {
-										if (isrom) strcat(remu_output,"romlabel "); else strcat(remu_output,"label ");
-										memset(shortlabel,0,sizeof(shortlabel));
-										if (!ae->label[i].name) {
-											strncpy(shortlabel,ae->wl[ae->label[i].iw].w,sizeof(shortlabel)-1);
-										} else {
-											strncpy(shortlabel,ae->label[i].name,sizeof(shortlabel)-1);
-										}
-										strcat(remu_output,shortlabel);
-										if (!isrom) {
-											// RAM can be gathered
-											if (ae->bankset[lbankn>>2]) lbankn+=(ae->label[i].ptr>>14);
-										}
-										sprintf(zedigit," %d %d;",ae->label[i].ptr,lbankn);
-										strcat(remu_output,zedigit);
-									}
-								}
-								// ajout des commentaires
-								for (i=0;i<ae->icomz;i++) {
-									int lbankn,isrom;
-									if (ae->comz[i].bank<260) {
-										lbankn=ae->comz[i].bank;
-										isrom=0;
-									} else {
-										int sl;
-										for (sl=0;sl<256;sl++) {
-											if (ae->rombank[sl]==ae->comz[i].bank) {
-												lbankn=sl;
-												isrom=1;
-												break;
-											}
-										}
-									}
-									if (isrom) strcat(remu_output,"romcomz "); else strcat(remu_output,"comz ");
-									sprintf(zedigit,"%d %d ",ae->comz[i].address,lbankn);
-									strcat(remu_output,zedigit);
-									TxtReplace(ae->comz[i].comment,";",":",0); // enforce format!
-									strcat(remu_output,ae->comz[i].comment);
-									strcat(remu_output,";");
-								}
-								// pas d'info sur la bank avec les alias
-								for (i=2;i<ae->ialias;i++) {
-									int tmpptr;
-									strcat(remu_output,"alias ");
-									memset(shortlabel,0,sizeof(shortlabel));
-									strncpy(shortlabel,ae->alias[i].alias,sizeof(shortlabel)-1);
-									strcat(remu_output,shortlabel);
-									tmpptr=RoundComputeExpression(ae,ae->alias[i].translation,0,0,0);
-									sprintf(zedigit," %d;",tmpptr);
-									strcat(remu_output,zedigit);
-								}
-								chunksize=strlen(remu_output)-8;
-								remu_output[4]=chunksize&0xFF;
-								remu_output[5]=(chunksize>>8)&0xFF;
-								remu_output[6]=(chunksize>>16)&0xFF;
-								remu_output[7]=(chunksize>>24)&0xFF;
+								remu_output=_internal_export_REMU(ae,&chunksize);
 								FileWriteBinary(TMP_filename,(char*)remu_output,chunksize+8); // 8 bytes for the chunk header
 								MemFree(remu_output);
 							}
@@ -22718,6 +22751,18 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 		  S Y M B O L   E X P O R T
 		*****************************
 		****************************/
+		if (ae->remu && !ae->export_sna) {
+#define MAKE_REMU_NAME if (ae->symbol_name) {sprintf(TMP_filename,"%s",ae->symbol_name);} else {sprintf(TMP_filename,"%s.rasm",ae->outputfilename);}
+			unsigned char *remu_output=NULL;
+			unsigned int chunksize;
+			remu_output=_internal_export_REMU(ae,&chunksize);
+			MAKE_REMU_NAME
+			FileRemoveIfExists(TMP_filename);
+			rasm_printf(ae,KIO"Write RASM symbol files %s\n",TMP_filename);
+			FileWriteBinary(TMP_filename,(char*)remu_output+8,chunksize); // 8 bytes for the chunk header
+			FileWriteBinaryClose(TMP_filename);
+			MemFree(remu_output);
+		}
 		if (ae->export_sym && !ae->export_sna) {
 			char *SymbolFileName;
 			SymbolFileName=MemMalloc(PATH_MAX);
@@ -28355,6 +28400,7 @@ void Usage(int help)
 		printf("-eb              export breakpoints\n");
 		printf("-wu              warn for unused symbols (alias, var or label)\n");
 		printf(KLWHITE"SYMBOLS ADDITIONAL OPTIONS:\n"KNORMAL);
+		printf("-rasm            export super symbols file for ACE-DL\n");
 		printf("-sl              export also local symbol\n");
 		printf("-sv              export also variables symbol\n");
 		printf("-sq              export also EQU symbol\n");
@@ -28380,7 +28426,6 @@ void Usage(int help)
 		printf("-sb              export breakpoints in snapshot (BRKS & BRKC chunks)\n");
 		printf("-ss              export symbols in the snapshot (SYMB chunk for ACE)\n");
 		printf("-v2              export snapshot version 2 instead of version 3\n");
-		printf("-remu            export super chunk symbols in snapshots\n");
 		printf(KLWHITE"PARSING:\n"KNORMAL);
 		printf("-me <value>      set maximum number of error (0 means no limit)\n");
 		printf("-twe             treat warnings as errors\n");
@@ -28640,7 +28685,7 @@ int ParseOptions(char **argv,int argc, struct s_parameter *param)
 		param->pasmo=1;
 	} else if (strcmp(argv[i],"-cprquiet")==0) {
 		param->cprinfo=0;
-	} else if (strcmp(argv[i],"-remu")==0) {
+	} else if (strcmp(argv[i],"-rasm")==0) {
 		param->remu=1;
 	} else if (strcmp(argv[i],"-ass")==0) {
 		param->as80=1;
