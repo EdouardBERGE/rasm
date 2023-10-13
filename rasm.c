@@ -588,8 +588,8 @@ struct s_edsk_wrapper_entry {
 unsigned char user;
 unsigned char filename[11];
 unsigned char subcpt;
-unsigned char extendcounter;
 unsigned char reserved;
+unsigned char extendcounter;
 unsigned char rc;
 unsigned char blocks[16];
 };
@@ -8715,7 +8715,7 @@ int EDSK_addfile(struct s_assenv *ae,char *edskfilename,int facenumber, char *fi
 
 	struct s_edsk_wrapper *curwrap=NULL;
 	char amsdos_name[12]={0};
-	int j,i,ia,ib,ie,filesize,idxdata;
+	int j,i,ia,mia,ib,ie,filesize,idxdata;
 	int fb[180],rc,idxb;
 	unsigned char *data=NULL;
 	int size=0;
@@ -8756,7 +8756,7 @@ int EDSK_addfile(struct s_assenv *ae,char *edskfilename,int facenumber, char *fi
 	for (i=0;i<curwrap->nbentry;i++) {
 		if (curwrap->entry[i].rc!=0xE5 && curwrap->entry[i].rc!=0) {
 			/* entry found, compute number of blocks to read */
-			rc=curwrap->entry[i].rc/8;
+			rc=curwrap->entry[i].rc>>3; // no rounding!
 			if (curwrap->entry[i].rc%8) rc++; /* adjust value */
 			/* mark as used */
 			for (j=0;j<rc;j++) {
@@ -8768,7 +8768,7 @@ int EDSK_addfile(struct s_assenv *ae,char *edskfilename,int facenumber, char *fi
 	firstblock=-1;
 	filesize=size;
 	idxdata=0;
-	ia=0;
+	ia=mia=0;
 
 #if TRACE_EDSK
 	printf("Writing [%s] size=%d\n",amsdos_name,size);
@@ -8810,9 +8810,10 @@ int EDSK_addfile(struct s_assenv *ae,char *edskfilename,int facenumber, char *fi
 #endif
 			memcpy(curwrap->entry[ie].filename,amsdos_name,11);
 			curwrap->entry[ie].subcpt=ia;
+			curwrap->entry[ie].extendcounter=mia;
 			curwrap->entry[ie].rc=0x80;
 			curwrap->entry[ie].user=amsdos_user;
-			ia++;
+			ia++;if (ia>31) {ia=0;mia++;}
 			idxb=0;
 		} else {
 			/* last entry */
@@ -8855,6 +8856,7 @@ int EDSK_addfile(struct s_assenv *ae,char *edskfilename,int facenumber, char *fi
 			filesize=0;
 			memcpy(curwrap->entry[ie].filename,amsdos_name,11);
 			curwrap->entry[ie].subcpt=ia;
+			curwrap->entry[ie].extendcounter=mia;
 			curwrap->entry[ie].user=amsdos_user;
 		}
 	}
