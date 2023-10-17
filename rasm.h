@@ -1,7 +1,7 @@
 #define PROGRAM_NAME      "RASM"
 #define PROGRAM_VERSION   "2.1"
-#define PROGRAM_DATE      "xx/07/2023"
-#define PROGRAM_COPYRIGHT "© 2017 BERGE Edouard / roudoudou from Resistance"
+#define PROGRAM_DATE      "xx/10/2023"
+#define PROGRAM_COPYRIGHT "© 2017 BERGE Edouard / roudoudou from Praline"
 #define RELEASE_NAME      "Gerieh Yasmana"
 
 #define RASM_VERSION PROGRAM_NAME" v"PROGRAM_VERSION" (build "PROGRAM_DATE")"
