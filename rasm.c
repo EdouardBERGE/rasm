@@ -28394,6 +28394,7 @@ void Usage(int help)
 		printf("-depend=list     output dependencies as a list\n");
 		printf("if 'binary filename' is set then it will be outputed first\n");
 		printf(KLWHITE"SYMBOLS EXPORT:\n"KNORMAL);
+		printf("-rasm            export super symbols file for ACE-DL\n");
 		printf("-s               export symbols %%s #%%X B%%d (label,adr,cprbank)\n");
 		printf("-sz              export symbols with ZX emulator convention\n");
 		printf("-sp              export symbols with Pasmo convention\n");
@@ -28407,7 +28408,6 @@ void Usage(int help)
 		printf("-eb              export breakpoints\n");
 		printf("-wu              warn for unused symbols (alias, var or label)\n");
 		printf(KLWHITE"SYMBOLS ADDITIONAL OPTIONS:\n"KNORMAL);
-		printf("-rasm            export super symbols file for ACE-DL\n");
 		printf("-sl              export also local symbol\n");
 		printf("-sv              export also variables symbol\n");
 		printf("-sq              export also EQU symbol\n");
