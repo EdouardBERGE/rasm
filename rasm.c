@@ -371,6 +371,7 @@ struct s_external {
 
 struct s_label {
 	char *name;   /* is alloced for local repeat or struct OR generated global -> in this case iw=-1 */
+	int localsize;
 	int iw;       /* index of the word of label name */
 	int crc;      /* crc of the label name */
 	int ptr;      /* "physical" address */
@@ -2709,6 +2710,7 @@ void FreeAssenv(struct s_assenv *ae)
 			} else {
 				/* les labels locaux et générés */
 				debug_symbol.name=TxtStrDup(ae->label[i].name);
+				if (ae->label[i].localsize) debug_symbol.name[ae->label[i].localsize]=0;
 				debug_symbol.v=ae->label[i].ptr;
 				ObjectArrayAddDynamicValueConcat((void**)&ae->debug.symbol,&ae->debug.nbsymbol,&ae->debug.maxsymbol,&debug_symbol,sizeof(struct s_debug_symbol));
 			}
@@ -9724,6 +9726,7 @@ void PushLabel(struct s_assenv *ae)
 #endif
 			curlabel.iw=-1;
 			curlabel.local=1;
+			curlabel.localsize=strlen(varbuffer);
 			curlabel.name=MakeLocalLabel(ae,varbuffer,NULL);  MemFree(varbuffer);
 			curlabel.crc=GetCRC(curlabel.name);
 
@@ -20282,6 +20285,7 @@ unsigned char * _internal_export_REMU(struct s_assenv *ae, unsigned int *rchksiz
 	char shortlabel[64];
 	int ilocal=0,i;
 	unsigned int chunksize;
+	int localcpt=0;
 
 	remu_output=MemMalloc(ae->ibreakpoint*64+ae->il*256+ae->ialias*256+16+ae->icomz*256);
 
@@ -20348,6 +20352,7 @@ unsigned char * _internal_export_REMU(struct s_assenv *ae, unsigned int *rchksiz
 			if (!ae->label[i].name) {
 				strncpy(shortlabel,ae->wl[ae->label[i].iw].w,sizeof(shortlabel)-1);
 			} else {
+				if (ae->label[i].localsize && ae->label[i].name[ae->label[i].localsize]!='_') sprintf(&ae->label[i].name[ae->label[i].localsize],"_%x",localcpt++);
 				strncpy(shortlabel,ae->label[i].name,sizeof(shortlabel)-1);
 			}
 			strcat(remu_output,shortlabel);
@@ -21660,7 +21665,7 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 
 							if (ae->label[i].name[0]=='@') {
 								// remove radix
-								while (ae->label[i].name[ilen]!='R') ilen--;
+								ilen=ae->label[i].localsize;
 								ae->label[i].name[ilen]=0;
 							}
 
@@ -28944,7 +28949,6 @@ void GetParametersFromCommandLine(int argc, char **argv, struct s_parameter *par
 		i+=ParseOptions(&argv[i],argc-i,param);
 
 	if (!param->filename) Usage(0);
-	if (param->export_local && !param->export_sym) Usage(1); // à revoir?
 }
 
 /*
