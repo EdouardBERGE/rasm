@@ -13369,11 +13369,11 @@ void __HFE(struct s_assenv *ae) {
 		switch (curaction.action) {
 			case E_HFE_ACTION_INIT:
 				// enforce filename is a string!
-				if (!StringIsQuote(ae->wl[ae->idx+2+i].w)) {
+				if (!StringIsQuote(ae->wl[ae->idx+2].w)) {
 					MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"HFE syntax is : HFE INIT,'filename'\n");
 					return;
 				}
-				tmpfilename=TxtStrDup(ae->wl[ae->idx+2+i].w);
+				tmpfilename=TxtStrDup(ae->wl[ae->idx+2].w);
 				/* need to upper case tags */
 				for (lm=touched=0;tmpfilename[lm];lm++) {
 					if (tmpfilename[lm]=='{') touched++; else if (tmpfilename[lm]=='}') touched--; else if (touched) tmpfilename[lm]=toupper(tmpfilename[lm]);
@@ -20288,12 +20288,12 @@ unsigned char * _internal_export_REMU(struct s_assenv *ae, unsigned int *rchksiz
 	int localcpt=0;
 
 	remu_output=MemMalloc(ae->ibreakpoint*64+ae->il*256+ae->ialias*256+16+ae->icomz*256);
-
+printf("export_sna=%d\n",ae->export_sna);
 	strcpy(remu_output,"REMU    ");
 
 	for (i=0;i<ae->ibreakpoint;i++) {
 		int lbankn,isrom;
-		if (!ae->export_sna) {
+		if (!ae->forcesnapshot) {
 			if (ae->breakpoint[i].bank<256) {
 				lbankn=ae->breakpoint[i].bank;
 				isrom=1;
@@ -20322,7 +20322,7 @@ unsigned char * _internal_export_REMU(struct s_assenv *ae, unsigned int *rchksiz
 	}
 	for (i=0;i<ae->il;i++) {
 		int lbankn,isrom;
-		if (!ae->export_sna) {
+		if (!ae->forcesnapshot) {
 			if (ae->label[i].ibank<256) {
 				lbankn=ae->label[i].ibank;
 				isrom=1;
@@ -22758,7 +22758,7 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 		  S Y M B O L   E X P O R T
 		*****************************
 		****************************/
-		if (ae->remu && !ae->export_sna) {
+		if (ae->remu && !ae->forcesnapshot) {
 #define MAKE_REMU_NAME if (ae->symbol_name) {sprintf(TMP_filename,"%s",ae->symbol_name);} else {sprintf(TMP_filename,"%s.rasm",ae->outputfilename);}
 			unsigned char *remu_output=NULL;
 			unsigned int chunksize;
