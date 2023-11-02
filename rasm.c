@@ -382,7 +382,7 @@ struct s_label {
 	/* errmsg */
 	int fileidx;
 	int fileline;
-	int autorise_export,backidx;
+	int autorise_export,backidx,local_export;
 	int used;
 };
 
@@ -1122,7 +1122,7 @@ struct s_assenv {
 	int export_var,export_equ;
 	int export_sna,export_snabrk,remu;
 	int export_brk,export_tape;
-	int autorise_export;
+	int autorise_export,local_export;
 	char *flexible_export;
 	char *breakpoint_name;
 	char *symbol_name;
@@ -9598,7 +9598,8 @@ void PushLabelLight(struct s_assenv *ae, struct s_label *curlabel) {
 		MemFree(curlabel->name);
 	} else {
 		curlabel->backidx=ae->il;
-		curlabel->autorise_export=ae->autorise_export&(!ae->getstruct);
+		curlabel->local_export=ae->local_export;
+		curlabel->autorise_export=ae->autorise_export&(!ae->getstruct); // do not export label in struct declaration!
 		ObjectArrayAddDynamicValueConcat((void **)&ae->label,&ae->il,&ae->ml,curlabel,sizeof(struct s_label));
 		InsertLabelToTree(ae,curlabel);
 	}				
@@ -9837,6 +9838,7 @@ printf("PUSH Orphan PROXIMITY label that cannot be exported [%s]->[%s]\n",ae->wl
 //printf("PushLabel(%s) name=%s crc=%X lz=%d\n",curlabel.name,curlabel.name?curlabel.name:"null",curlabel.crc,curlabel.lz);
 		curlabel.fileidx=ae->wl[ae->idx].ifile;
 		curlabel.fileline=ae->wl[ae->idx].l;
+		curlabel.local_export=ae->local_export;
 		curlabel.autorise_export=ae->autorise_export&(!ae->getstruct);
 		curlabel.backidx=ae->il;
 		ObjectArrayAddDynamicValueConcat((void **)&ae->label,&ae->il,&ae->ml,&curlabel,sizeof(curlabel));
@@ -15118,7 +15120,39 @@ void __internal_UpdateLZBlockIfAny(struct s_assenv *ae) {
 void __AMSDOS(struct s_assenv *ae) {
 	ae->amsdos=1;
 }
+// local/global is dedicated to labels only, instead of noexport/enoexport
+void __internal_LOCAL(struct s_assenv *ae, int localval) {
+	struct s_label *curlabel;
+	struct s_expr_dico *curdic;
+	int ialias,crc,freeflag;
+	char *localname;
 
+	if (ae->wl[ae->idx].t) {
+		/* without parameter enable/disable export */
+		ae->local_export=localval;
+	} else while (!ae->wl[ae->idx].t) {
+		ae->idx++;
+		freeflag=0;
+	
+		/* local label */	
+		if (ae->wl[ae->idx].w[0]=='.' && ae->lastgloballabel) {
+			localname=MemMalloc(strlen(ae->wl[ae->idx].w)+1+ae->lastgloballabellen);
+			sprintf(localname,"%s%s",ae->lastgloballabel,ae->wl[ae->idx].w);
+			freeflag=1;
+		} else {
+			localname=ae->wl[ae->idx].w;
+		}
+		crc=GetCRC(localname);
+
+		if ((curlabel=SearchLabel(ae,localname,crc))!=NULL) {
+			curlabel->local_export=localval;
+			ae->label[curlabel->backidx].local_export=localval;
+		} else {
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"LABEL directive did not found [%s] in labels\n",ae->wl[ae->idx].w);
+		}
+		if (freeflag) MemFree(localname);
+	}
+}
 void __internal_EXPORT(struct s_assenv *ae, int exportval) {
 	struct s_label *curlabel;
 	struct s_expr_dico *curdic;
@@ -15164,6 +15198,28 @@ void __NOEXPORT(struct s_assenv *ae) {
 }
 void __ENOEXPORT(struct s_assenv *ae) {
 	__internal_EXPORT(ae,1);
+}
+void __LABEL(struct s_assenv *ae) {
+	if (ae->wl[ae->idx].t) {
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"usage is LABEL [NOEXPORT|EXPORT|LOCAL|GLOBAL[<label>,<label>,...]]\n");
+	} else {
+		if (strcmp(ae->wl[ae->idx+1].w,"NOEXPORT")==0) {
+			ae->idx++;
+			__internal_EXPORT(ae,0);
+		} else if (strcmp(ae->wl[ae->idx+1].w,"EXPORT")==0) {
+			ae->idx++;
+			__internal_EXPORT(ae,1);
+		} else if (strcmp(ae->wl[ae->idx+1].w,"LOCAL")==0) {
+			ae->idx++;
+			__internal_LOCAL(ae,1);
+		} else if (strcmp(ae->wl[ae->idx+1].w,"GLOBAL")==0) {
+			ae->idx++;
+			__internal_LOCAL(ae,0);
+		} else {
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"usage is LABEL [NOEXPORT|EXPORT|LOCAL|GLOBAL[<label>,<label>,...]]\n");
+			while (!ae->wl[ae->idx].t) ae->idx++;
+		}
+	}
 }
 
 void __BUILDOBJ(struct s_assenv *ae) {
@@ -20244,6 +20300,7 @@ struct s_asm_keyword instruction[]={
 {"STRUCT",0,0,__STRUCT},
 {"ENDSTRUCT",0,0,__ENDSTRUCT},
 {"ENDS",0,0,__ENDSTRUCT},
+{"LABEL",0,0,__LABEL},
 {"NOEXPORT",0,0,__NOEXPORT},
 {"ENOEXPORT",0,0,__ENOEXPORT},
 {"MODULE",0,0,__MODULE},
@@ -20288,7 +20345,6 @@ unsigned char * _internal_export_REMU(struct s_assenv *ae, unsigned int *rchksiz
 	int localcpt=0;
 
 	remu_output=MemMalloc(ae->ibreakpoint*64+ae->il*256+ae->ialias*256+16+ae->icomz*256);
-printf("export_sna=%d\n",ae->export_sna);
 	strcpy(remu_output,"REMU    ");
 
 	for (i=0;i<ae->ibreakpoint;i++) {
@@ -20336,7 +20392,7 @@ printf("export_sna=%d\n",ae->export_sna);
 				isrom=0;
 			} else {
 				int sl;
-				for (sl=0;sl<256;sl++) {
+				for (sl=0;sl<=256;sl++) { // 256 ROM + lower
 					if (ae->rombank[sl]==ae->label[i].ibank) {
 						lbankn=sl;
 						isrom=1;
@@ -20345,6 +20401,9 @@ printf("export_sna=%d\n",ae->export_sna);
 				}
 			}
 		}
+		// overload location with local/global
+		if (ae->label[i].local_export) {isrom=0;lbankn=0;}
+
 		// distinction ROM/RAM pour les labels
 		if (ae->label[i].autorise_export) {
 			if (isrom) strcat(remu_output,"romlabel "); else strcat(remu_output,"label ");
