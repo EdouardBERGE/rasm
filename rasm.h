@@ -1,10 +1,11 @@
 #define PROGRAM_NAME      "RASM"
 #define PROGRAM_VERSION   "2.1"
+#define PROGRAM_SUBVERSION   ".2"
 #define PROGRAM_DATE      "xx/10/2023"
 #define PROGRAM_COPYRIGHT "© 2017 BERGE Edouard / roudoudou from Praline"
 #define RELEASE_NAME      "Gerieh Yasmana"
 
-#define RASM_VERSION PROGRAM_NAME" v"PROGRAM_VERSION" (build "PROGRAM_DATE")"
+#define RASM_VERSION PROGRAM_NAME" v"PROGRAM_VERSION""PROGRAM_SUBVERSION" (build "PROGRAM_DATE")"
 #define RASM_SNAP_VERSION PROGRAM_NAME" v"PROGRAM_VERSION
 
 struct s_parameter {
