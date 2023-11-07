@@ -2998,12 +2998,19 @@ void ___internal_output_nocode(struct s_assenv *ae,unsigned char v)
 			int irs,irsf;
 			irs=ae->irasmstruct-1;
 			irsf=ae->rasmstruct[irs].irasmstructfield-1;
-			
-			/* ajouter les data du flux au champ de la structure */			
-			ObjectArrayAddDynamicValueConcat((void**)&ae->rasmstruct[irs].rasmstructfield[irsf].data,
-				&ae->rasmstruct[irs].rasmstructfield[irsf].idata,
-				&ae->rasmstruct[irs].rasmstructfield[irsf].mdata,
-				&v,sizeof(unsigned char));
+			if (irsf>=0) {
+#if TRACE_STRUCT
+	printf("output_nocode irs=%d irsf=%d idata=%d\n",irs,irsf,ae->rasmstruct[irs].rasmstructfield[irsf].idata);
+#endif
+				/* ajouter les data du flux au champ de la structure */			
+				ObjectArrayAddDynamicValueConcat((void**)&ae->rasmstruct[irs].rasmstructfield[irsf].data,
+					&ae->rasmstruct[irs].rasmstructfield[irsf].idata,
+					&ae->rasmstruct[irs].rasmstructfield[irsf].mdata,
+					&v,sizeof(unsigned char));
+			} else {
+				rasm_printf(ae,KWARNING"[%s:%d] Warning: Structure field has no reference, did you forget a label?\n",GetCurrentFile(ae),ae->wl[ae->idx].l);
+				if (ae->erronwarn) MaxError(ae);
+			}
 		}
 		
 		ae->outputadr++;
@@ -6130,8 +6137,16 @@ double ComputeExpressionCore(struct s_assenv *ae,char *original_zeexpression,int
 								page=3;
 								/* obligé de recalculer le CRC */
 								crc=GetCRC(ae->computectx->varbuffer+minusptr+bank);
+								curval=-1;
+								/* search in structures aliases */
+								for (i=0;i<ae->irasmstructalias;i++) {
+									if (ae->rasmstructalias[i].crc==crc && strcmp(ae->rasmstructalias[i].name,ae->computectx->varbuffer+minusptr+bank)==0) {
+										curval=ae->rasmstructalias[i].size;
+										break;
+									}
+								}
 								/* search in structures prototypes and subfields */
-								for (i=0;i<ae->irasmstruct;i++) {
+								if (curval==-1) for (i=0;i<ae->irasmstruct;i++) {
 									if (ae->rasmstruct[i].crc==crc && strcmp(ae->rasmstruct[i].name,ae->computectx->varbuffer+minusptr+bank)==0) {
 										curval=ae->rasmstruct[i].size;
 										break;
@@ -6146,14 +6161,7 @@ double ComputeExpressionCore(struct s_assenv *ae,char *original_zeexpression,int
 									}
 								}
 
-								if (i==ae->irasmstruct) {
-									/* search in structures aliases */
-									for (i=0;i<ae->irasmstructalias;i++) {
-										if (ae->rasmstructalias[i].crc==crc && strcmp(ae->rasmstructalias[i].name,ae->computectx->varbuffer+minusptr+bank)==0) {
-											curval=ae->rasmstructalias[i].size+ae->rasmstructalias[i].ptr;
-											break;
-										}
-									}
+								if (curval==-1) {
 									if (i==ae->irasmstructalias) {
 										MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"cannot SIZEOF unknown structure [%s]!\n",ae->computectx->varbuffer+minusptr+bank);
 										curval=0;
@@ -8111,7 +8119,7 @@ printf("exprout=[%s]\n",expr);
 				}
 			}
 			/* unknown symbol -> add to used symbol pool */
-			if (!found_replace) {
+			if (!found_replace && ae->AutomateValidLabelFirst[varbuffer[0]&0xFF]) {
 				InsertUsedToTree(ae,varbuffer,crc);
 			}
 		}
@@ -9714,7 +9722,7 @@ void PushLabel(struct s_assenv *ae)
 		curlabel.crc=GetCRC(curlabel.name);
 		curlabel.ptr=ae->codeadr;
 #if TRACE_STRUCT
-	printf("pushLabel (struct) [%X] [%s]\n",curlabel.ptr,curlabel.name);
+	printf("pushLabel (struct) [%X] [%s]   irstructfield=%d / cur idata=%d\n",curlabel.ptr,curlabel.name,ae->rasmstruct[ae->irasmstruct-1].irasmstructfield,ae->rasmstruct[ae->irasmstruct-1].rasmstructfield[ae->rasmstruct[ae->irasmstruct-1].irasmstructfield-1].idata);
 #endif
 	} else {
 		/**************************************************
@@ -16035,6 +16043,10 @@ void ___getbackto_memory_space(struct s_assenv *ae) {
 }
 
 void __REBANK(struct s_assenv *ae) {
+	if (ae->getstruct==1) {
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"You cannot change BANK inside a structure declaration\n");
+		return;
+	}
 	if (ae->wl[ae->idx].t) {
 		__internal_UpdateLZBlockIfAny(ae);
 		if (ae->io) {
@@ -16047,6 +16059,10 @@ void __REBANK(struct s_assenv *ae) {
 	}
 }
 void __BANK(struct s_assenv *ae) {
+	if (ae->getstruct==1) {
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"You cannot change BANK inside a structure declaration\n");
+		return;
+	}
 	__internal_UpdateLZBlockIfAny(ae);
 
 	if (ae->io) {
@@ -16125,6 +16141,10 @@ void __BANK(struct s_assenv *ae) {
 void __ROMBANK(struct s_assenv *ae) {
 	int rom_select;
 
+	if (ae->getstruct==1) {
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"You cannot change BANK inside a structure declaration\n");
+		return;
+	}
 	if (!ae->forcesnapshot) {
 		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"ROMBANK can be used only with snapshot output\n");
 		return;
@@ -16157,6 +16177,11 @@ void __ROMBANK(struct s_assenv *ae) {
 void __BANKSET(struct s_assenv *ae) {
 	struct s_orgzone orgzone={0};
 	int ibank,i;
+
+	if (ae->getstruct==1) {
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"You cannot change BANK inside a structure declaration\n");
+		return;
+	}
 
 	__internal_UpdateLZBlockIfAny(ae);
 
@@ -16435,6 +16460,11 @@ void __MACRO(struct s_assenv *ae) {
 	char *referentfilename,*zeparam;
 	int refidx,idx,getparam=1;
 	struct s_wordlist curwl;
+
+	if (ae->getstruct==1) {
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Please, why define a MACRO inside a structure declaration?\n");
+		return;
+	}
 	
 	if (!ae->wl[ae->idx].t && ae->wl[ae->idx+1].t!=2) {
 		/* get the name */
@@ -17891,6 +17921,10 @@ void __IFUSED(struct s_assenv *ae) {
 	int rexpr,crc;
 	
 	if (!ae->wl[ae->idx].t && ae->wl[ae->idx+1].t==1) {
+		if (!ae->AutomateValidLabelFirst[((int)ae->wl[ae->idx+1].w[0])&0xFF]) {
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"IFUSED argument must be a variable or a label\n");
+			return;
+		}
 		crc=GetCRC(ae->wl[ae->idx+1].w);
 		if ((SearchDico(ae,ae->wl[ae->idx+1].w,crc))!=NULL) {
 			rexpr=1;
@@ -18395,6 +18429,10 @@ void ___org_new(struct s_assenv *ae, int nocode) {
 
 void __ORG(struct s_assenv *ae) {
 	int i,iscrunched;
+	if (ae->getstruct==1) {
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"You cannot ORG inside a structure declaration\n");
+		return;
+	}
 	___org_close(ae);
 	
 	if (ae->wl[ae->idx+1].t!=2) {
@@ -18450,6 +18488,10 @@ void __ORG(struct s_assenv *ae) {
 	if (ae->outputadr==ae->codeadr) ae->orgzone[ae->io-1].inplace=1;
 }
 void __NOCODE(struct s_assenv *ae) {
+	if (ae->getstruct==1) {
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"You cannot NOCODE inside a structure declaration\n");
+		return;
+	}
 	if (ae->wl[ae->idx].t==1) {
 		___org_close(ae);
 		ae->codeadrbackup=ae->codeadr;
@@ -18460,6 +18502,10 @@ void __NOCODE(struct s_assenv *ae) {
 	}
 }
 void __CODE(struct s_assenv *ae) {
+	if (ae->getstruct==1) {
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"You cannot CODE inside a structure declaration\n");
+		return;
+	}
 	if (!ae->wl[ae->idx].t) {
 		if (strcmp(ae->wl[ae->idx+1].w,"SKIP")==0) {
 			___org_close(ae);
@@ -18530,9 +18576,6 @@ void __STRUCT(struct s_assenv *ae) {
 				s t r u c t u r e     i n s e r t i o n
 			**************************************************/
 			int nbelem=1;
-#if TRACE_STRUCT
-printf("structure insertion\n");
-#endif
 			/* insert struct param1 in memory with name param2 */
 			crc=GetCRC(ae->wl[ae->idx+1].w);
 			/* look for existing struct */
@@ -18540,7 +18583,7 @@ printf("structure insertion\n");
 				if (ae->rasmstruct[irs].crc==crc && strcmp(ae->rasmstruct[irs].name,ae->wl[ae->idx+1].w)==0) break;
 			}
 			if (irs==ae->irasmstruct) {
-				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Unknown STRUCT %s\n",ae->wl[ae->idx+1].w);
+				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Unknown STRUCT %s to insert\n",ae->wl[ae->idx+1].w);
 			} else {
 				/* create alias for sizeof */
 				if (!ae->getstruct) {
@@ -18551,7 +18594,7 @@ printf("structure insertion\n");
 					}
 				} else {
 #if TRACE_STRUCT
-printf("struct [%s] inside struct\n",ae->wl[ae->idx+2].w);
+printf("***** structure insertion inside struct [%s] inside struct ***\n",ae->wl[ae->idx+2].w);
 #endif
 					/* struct inside struct */
 					rasmstructalias.name=MemMalloc(strlen(ae->rasmstruct[ae->irasmstruct-1].name)+2+strlen(ae->wl[ae->idx+2].w));
@@ -18575,7 +18618,7 @@ printf("structalias [%s] ptr=%d size=%d\n",rasmstructalias.name,rasmstructalias.
 				}
 				rasmstructalias.nbelem=nbelem;
 #if TRACE_STRUCT
-printf("EVOL 119 - tableau! %d elem(s)\n",nbelem);
+printf("EVOL 119 - tableau! %d elem%s\n",nbelem,nbelem>1?"s":"");
 #endif
 				ObjectArrayAddDynamicValueConcat((void **)&ae->rasmstructalias,&ae->irasmstructalias,&ae->mrasmstructalias,&rasmstructalias,sizeof(rasmstructalias));
 				
@@ -18597,16 +18640,13 @@ printf("EVOL 119 - tableau! %d elem(s)\n",nbelem);
 						curlabel.crc=GetCRC(curlabel.name);
 						PushLabelLight(ae,&curlabel);
 					}
-				}
-
-				/* first field is in fact the very beginning of the structure */
-				if (ae->getstruct) {
+					/* first field is in fact the very beginning of the structure */
 					rasmstructfield.name=TxtStrDup(ae->wl[ae->idx+2].w);
 					rasmstructfield.offset=ae->codeadr;
 					ObjectArrayAddDynamicValueConcat((void **)&ae->rasmstruct[ae->irasmstruct-1].rasmstructfield,
 							&ae->rasmstruct[ae->irasmstruct-1].irasmstructfield,&ae->rasmstruct[ae->irasmstruct-1].mrasmstructfield,
 							&rasmstructfield,sizeof(rasmstructfield));
-				}				
+				}
 				
 				/* create subfields */
 #if TRACE_STRUCT
@@ -18652,16 +18692,12 @@ printf("pushLight [%s] %d:%X\n",curlabel.name,curlabel.ibank,curlabel.ptr);
 				/* is there any filler in the declaration? */
 				localsize=0;
 
-				/* déterminer si on est en remplissage par défaut ou remplissage surchargé */
-
-
-
-
+#if 0
 
 #if TRACE_STRUCT
 printf("struct new behaviour (scan for %d fields)\n",ae->rasmstruct[irs].irasmstructfield);
 #endif
-#if 0
+				/* déterminer si on est en remplissage par défaut ou remplissage surchargé */
 				for (i=0;i<ae->rasmstruct[irs].irasmstructfield;i++) {
 
 					if (!ae->wl[ae->idx+2+i].t || i+1>=ae->rasmstruct[irs].irasmstructfield) {
@@ -18695,17 +18731,33 @@ printf("*break*\n");
 				}
 #endif
 
-				/* (LEGACY)  filler, on balance des zéros */
+				/* (LEGACY) filler, on balance des zéros en attendant d'avoir la complétion par init */
 #if TRACE_STRUCT
 printf("struct (almost) legacy filler from %d to %d-1\n",localsize,ae->rasmstruct[irs].size);
 #endif
 				while (nbelem) {
-					for (i=cursize=0;i<ae->rasmstruct[irs].irasmstructfield && cursize<localsize;i++) {
+#if 0
+					cursize=localsize;
+					for (i=0;i<ae->rasmstruct[irs].irasmstructfield;i++) {
 						cursize+=ae->rasmstruct[irs].rasmstructfield[i].size;
 					}
-					for (;i<ae->rasmstruct[irs].irasmstructfield;i++) {
+					#if TRACE_STRUCT
+					printf("cursize to insert = %d\n",cursize);
+					#endif
+#endif
+
+#if TRACE_STRUCT
+	printf("nbfield=%d\n",ae->rasmstruct[irs].irasmstructfield);
+#endif
+					for (i=0;i<ae->rasmstruct[irs].irasmstructfield;i++) {
+#if TRACE_STRUCT
+	printf("  field[%d] stored data=%d size=%d\n",i,ae->rasmstruct[irs].rasmstructfield[i].idata,ae->rasmstruct[irs].rasmstructfield[i].size);
+#endif
 						for (j=0;j<ae->rasmstruct[irs].rasmstructfield[i].idata;j++) {
 							___output(ae,ae->rasmstruct[irs].rasmstructfield[i].data[j]);
+						}
+						for (;j<ae->rasmstruct[irs].rasmstructfield[i].size;j++) {
+							___output(ae,0);
 						}
 					}
 					nbelem--;
@@ -18751,16 +18803,26 @@ void __ENDSTRUCT(struct s_assenv *ae) {
 #endif
 			newlen=strlen(ae->rasmstruct[ae->irasmstruct-1].name)+2;
 			if (ae->rasmstruct[ae->irasmstruct-1].irasmstructfield) {
+				// use difference from field to another
+#if TRACE_STRUCT
+	printf("nbfields=%d\n",ae->rasmstruct[ae->irasmstruct-1].irasmstructfield);
+#endif
 				for (i=0;i<ae->rasmstruct[ae->irasmstruct-1].irasmstructfield-1;i++) {
 					ae->rasmstruct[ae->irasmstruct-1].rasmstructfield[i].size=ae->rasmstruct[ae->irasmstruct-1].rasmstructfield[i+1].offset-ae->rasmstruct[ae->irasmstruct-1].rasmstructfield[i].offset;
 					ae->rasmstruct[ae->irasmstruct-1].rasmstructfield[i].fullname=MemMalloc(newlen+strlen(ae->rasmstruct[ae->irasmstruct-1].rasmstructfield[i].name));
 					sprintf(ae->rasmstruct[ae->irasmstruct-1].rasmstructfield[i].fullname,"%s.%s",ae->rasmstruct[ae->irasmstruct-1].name,ae->rasmstruct[ae->irasmstruct-1].rasmstructfield[i].name);
 					ae->rasmstruct[ae->irasmstruct-1].rasmstructfield[i].crc=GetCRC(ae->rasmstruct[ae->irasmstruct-1].rasmstructfield[i].fullname);
+#if TRACE_STRUCT
+	printf("[%s] size=%d\n",ae->rasmstruct[ae->irasmstruct-1].rasmstructfield[i].fullname,ae->rasmstruct[ae->irasmstruct-1].rasmstructfield[i].size);
+#endif
 				}
 				ae->rasmstruct[ae->irasmstruct-1].rasmstructfield[i].size=ae->rasmstruct[ae->irasmstruct-1].size-ae->rasmstruct[ae->irasmstruct-1].rasmstructfield[i].offset;
 				ae->rasmstruct[ae->irasmstruct-1].rasmstructfield[i].fullname=MemMalloc(newlen+strlen(ae->rasmstruct[ae->irasmstruct-1].rasmstructfield[i].name));
 				sprintf(ae->rasmstruct[ae->irasmstruct-1].rasmstructfield[i].fullname,"%s.%s",ae->rasmstruct[ae->irasmstruct-1].name,ae->rasmstruct[ae->irasmstruct-1].rasmstructfield[i].name);
 				ae->rasmstruct[ae->irasmstruct-1].rasmstructfield[i].crc=GetCRC(ae->rasmstruct[ae->irasmstruct-1].rasmstructfield[i].fullname);
+#if TRACE_STRUCT
+	printf("[%s] size=%d (last one)\n",ae->rasmstruct[ae->irasmstruct-1].rasmstructfield[i].fullname,ae->rasmstruct[ae->irasmstruct-1].rasmstructfield[i].size);
+#endif
 			} else {
 				rasm_printf(ae,KWARNING"[%s:%d] Warning: empty structure [%s]\n",GetCurrentFile(ae),ae->wl[ae->idx].l,curlabel.name);
 				if (ae->erronwarn) MaxError(ae);
@@ -18796,6 +18858,10 @@ void __ENDSTRUCT(struct s_assenv *ae) {
 }
 
 void __MEMSPACE(struct s_assenv *ae) {
+	if (ae->getstruct==1) {
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"You cannot MEMSPACE inside a structure declaration\n");
+		return;
+	}
 	if (ae->wl[ae->idx].t) {
 		___new_memory_space(ae);
 	} else {
@@ -26618,12 +26684,27 @@ struct s_autotest_keyword autotest_keyword[]={
 	{"bunch: sc=#C1: p=5: repeat 5: repeat 9: defs 256,sc : defs 256,p: sc+=1: rend: p+=1: rend:edsk create,'autotestw.dsk',DATA,OVERWRITE:edsk writesect,'autotestw.dsk',bunch,512*9*5,'5-9:#C1-#C9'",0}, // write sectors
 	{"edsk readsect,'autotestw.dsk','5-9:#C1-#C9',512*9*5:sc=#C1:ad=0:p=5: repeat 5: repeat 9:repeat 256:assert peek(ad)==sc:ad+=1:rend:repeat 256:assert peek(ad)==p:ad+=1:rend:sc+=1:rend:p+=1:rend",0}, // enforce sectors were read
 	{"edsk writesect,'autotestw.dsk',0,513,'0:#C1'",1}, // cannot leak sectors
+	{"struct ecran: unlabel defb: bank defb: endstruct: struct ecran unecran ",1}, // cannot BANK in struct declaration
+	{"struct ecran: unlabel defb: rombank defb: endstruct: struct ecran unecran ",1}, // cannot ROMBANK in struct declaration
+	{"struct ecran: unlabel defb: bankset defb: endstruct: struct ecran unecran ",1}, // cannot BANKSET in struct declaration
+	{"struct ecran: unlabel defb: macro grouik : defb: endstruct: struct ecran unecran ",1}, // cannot MACRO in struct declaration
+	{"struct ecran: defb: endstruct: struct ecran unecran ",0}, // rasm must not CRASH when there is no label before a byte define output
+	{"struct s1 : lab1 defw : lab2 defw : endstruct : assert {sizeof}s1==4 : nop",0}, // sizeof simple struct
+	{"struct s1 : lab1 defw : lab2 defw : endstruct : assert {sizeof}s1.lab1==2 : nop",0}, // sizeof first field
+	{"struct s1 : lab1 defw : lab2 defw : endstruct : assert {sizeof}s1.lab2==2 : nop",0}, // sizeof last field
+	{"struct s1 : lab1 defw : lab2 defw : endstruct : assert s1.lab1==0 : nop",0}, // offset first field
+	{"struct s1 : lab1 defw : lab2 defw : endstruct : assert s1.lab2==2 : nop",0}, // offset last field
+	{"struct s1 : lab1 defw : lab2 defw : endstruct : struct s2 : lab1 defw : lab2 defw : endstruct : struct metas : struct s1 ss1 : struct s2 ss2 : endstruct : "\
+	"assert {sizeof}metas==8 : nop",0}, // sizeof imbricated level 1 struct
+	{"struct s1 : lab1 defw : lab2 defw : endstruct : struct s2 : lab1 defw : lab2 defw : endstruct : struct metas : struct s1 ss1 : struct s2 ss2 : endstruct : "\
+	"assert {sizeof}metas.ss1==4 : nop",0}, // sizeof substruct in imbricated level 1 struct
+	{"struct s1 : lab1 defw : lab2 defw : endstruct : struct s2 : lab1 defw : lab2 defw : endstruct : struct metas : struct s1 ss1 : struct s2 ss2 : endstruct : "\
+	"assert {sizeof}metas.ss2==4 : nop",0}, // sizeof last substruct in imbricated level 1 struct
 	/*
 	 *
 	 * will need to test resize + format then meta review test!
 	 *
 	 *
-	{"",},
 	{"",},
 	{"",},
 	{"",},
@@ -27429,7 +27510,7 @@ printf("testing STR end mark OK (thanks to Golem)\n");
 	ret=RasmAssembleInfoParam(AUTOTEST_ADDRLD,strlen(AUTOTEST_ADDRLD),&opcode,&opcodelen,&debug,&param);
 	if (ret && debug->nberror==6) {} else {printf("Autotest %03d ERROR (addressing mode checking)\n",cpt);exit(-1);}
 	RasmFreeInfoStruct(debug);
-printf("Testing addressing mode control for LD\n");
+printf("Testing addressing mode control for LD OK\n");
 	
 	ret=RasmAssemble(AUTOTEST_STRUCT,strlen(AUTOTEST_STRUCT),&opcode,&opcodelen);
 	if (!ret) {} else {printf("Autotest %03d ERROR (structs)\n",cpt);exit(-1);}

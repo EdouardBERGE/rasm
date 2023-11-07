@@ -3,7 +3,7 @@ EXEC=rasm.exe
 
 CFLAGS=-lm -lrt -march=native -o $(EXEC)
 CFLAGS_OPT = $(CFLAGS) -O2
-CFLAGS_DBG = $(CFLAGS) -g -pthread -lefence
+CFLAGS_DBG = $(CFLAGS) -O0 -g -pthread
 CFLAGS_3RD = $(CFLAGS) -g -pthread -DNO_3RD_PARTIES
 
 SRC_APUDIR=./apultra-master/src
@@ -105,6 +105,9 @@ prod:
 
 	$(CC) rasm.c $(CFLAGS_OPT) $(APU_OBJ) $(LZSA_OBJ) $(ZX0_OBJ)
 	strip $(EXEC)
+
+reloadd:
+	$(CC) rasm.c $(CFLAGS_DBG) $(APU_OBJ) $(LZSA_OBJ) $(ZX0_OBJ)
 
 reload:
 	$(CC) rasm.c $(CFLAGS_OPT) $(APU_OBJ) $(LZSA_OBJ) $(ZX0_OBJ)
