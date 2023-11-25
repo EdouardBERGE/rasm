@@ -14307,7 +14307,7 @@ void __edsk_gapfix(struct s_assenv *ae, struct s_edsk_action *action) {
 	// get track interval
 	if (strcmp(ae->wl[action->iw+3].w,"ALLTRACKS")==0) {
 		char fullrange[256];
-		sprintf(fullrange,"'0-%d'",edsk->tracknumber);
+		sprintf(fullrange,"'0-%d'",edsk->tracknumber-1);
 		location=__edsk_get_location(ae,fullrange,&nblocation);
 	} else {
 		location=__edsk_get_location(ae,ae->wl[ae->idx+3].w,&nblocation);
