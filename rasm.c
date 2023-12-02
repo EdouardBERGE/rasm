@@ -12342,28 +12342,10 @@ void _BIT(struct s_assenv *ae) {
 			}
 			ae->idx+=2;
 		} else if (!ae->wl[ae->idx+1].t && !ae->wl[ae->idx+2].t && ae->wl[ae->idx+3].t==1) {
-			if (strncmp(ae->wl[ae->idx+2].w,"(IX",3)==0) {
-				___output(ae,0xDD);
-			} else if (strncmp(ae->wl[ae->idx+2].w,"(IY",3)==0) {
-				___output(ae,0xFD);
-			} else {
-				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is BIT (IX+n),reg8\n");
-			}
-			___output(ae,0xCB);
-			switch (GetCRC(ae->wl[ae->idx+3].w)) {
-				case CRC_B:PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x0+o);ae->nop+=6;ae->tick+=20;break;
-				case CRC_C:PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x1+o);ae->nop+=6;ae->tick+=20;break;
-				case CRC_D:PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x2+o);ae->nop+=6;ae->tick+=20;break;
-				case CRC_E:PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x3+o);ae->nop+=6;ae->tick+=20;break;
-				case CRC_H:PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x4+o);ae->nop+=6;ae->tick+=20;break;
-				case CRC_L:PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x5+o);ae->nop+=6;ae->tick+=20;break;
-				case CRC_A:PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x7+o);ae->nop+=6;ae->tick+=20;break;
-				default:			
-					MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is BIT n,(IX+n),reg8\n");
-			}
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"there is no syntax BIT (IX+n),reg8\n");
 			ae->idx+=3;
 		} else {
-			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is BIT n,reg8/(HL)/(IX+n)[,reg8]/(IY+n)[,reg8]\n");
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is BIT n,reg8/(HL)/(IX+n)[,reg8]/(IY+n)\n");
 		}
 	}
 }
@@ -13059,14 +13041,13 @@ unsigned char *__internal_track_to_HFE(unsigned int *track, int lng) {
 
 void __internal_hfe_resize_track(struct s_assenv *ae) {
 #if TRACE_HFE
-	printf("resize track\n");
+	printf("resize track up to %d\n",ae->hfetrack);
 #endif
 	if (ae->hfetrack*2>=ae->hfedisk[ae->nbhfedisk-1].itrack) {
 		struct s_hfe_track hfetrack={0};
 		int i;
 		while (ae->hfedisk[ae->nbhfedisk-1].itrack<2*(ae->hfetrack+1)) {
 			// alloc
-			printf("Alloc empty track\n");
 			ObjectArrayAddDynamicValueConcat((void **)&ae->hfedisk[ae->nbhfedisk-1],&ae->hfedisk[ae->nbhfedisk-1].itrack,&ae->hfedisk[ae->nbhfedisk-1].mtrack,&hfetrack,sizeof(hfetrack));
 		}
 		ae->hfe=&ae->hfedisk[ae->nbhfedisk-1].track[ae->hfetrack*2+ae->hfeside]; // update fast ptr
@@ -13084,6 +13065,9 @@ void __hfe_init(struct s_assenv *ae, struct s_hfe_action *hfe_action) {
 }
 void __hfe_side(struct s_assenv *ae, struct s_hfe_action *hfe_action) {
 	ae->hfeside=RoundComputeExpression(ae,hfe_action->param[0],hfe_action->ioffset,0,0);
+#if TRACE_HFE
+	printf("switch HFE current side to %d\n",ae->hfeside);
+#endif
 	if (ae->hfeside<0 || ae->hfeside>1) {
 		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is : HFE SIDE,[0|1]\n");
 		ae->hfeside=0;
@@ -13097,6 +13081,7 @@ void __hfe_track(struct s_assenv *ae, struct s_hfe_action *hfe_action) {
 		ae->hfetrack=0;
 	}
 	__internal_hfe_resize_track(ae);
+	ae->hfe=&ae->hfedisk[ae->nbhfedisk-1].track[ae->hfetrack*2+ae->hfeside]; // update fast ptr
 }
 
 void __hfe_close(struct s_assenv *ae, struct s_hfe_action *hfe_action) {
@@ -13107,10 +13092,10 @@ void __hfe_close(struct s_assenv *ae, struct s_hfe_action *hfe_action) {
 	unsigned char *oname;
 	unsigned char *data0,*data1;
 	int i,j,k,l,blocktrack,tracklen;
+	int first=0;
 
 	oname=ae->hfedisk[ae->nbhfedisk-1].filename;
 	FileRemoveIfExists(oname);
-	rasm_printf(ae,KIO"Write floppy image file %s\n"KNORMAL,oname);
 
 	// we assume the longest track is the reference for all tracks
 	for (i=tracklen=0;i<ae->hfedisk[ae->nbhfedisk-1].itrack;i++) {
@@ -13123,7 +13108,7 @@ void __hfe_close(struct s_assenv *ae, struct s_hfe_action *hfe_action) {
 	}
 	if (tracklen>6400) {
 		if (tracklen>6500) {
-			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"HFE tracklen is above FDC tolerance for a 300RPM drive!\n");
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"HFE tracklen is above FDC tolerance for a 300RPM drive! (tracklen=%d)\n",tracklen);
 			return;
 		} else {
 			rasm_printf(ae,KWARNING"[%s:%d] Warning: HFE tracklen is very highi (%d)\n",GetCurrentFile(ae),ae->wl[ae->idx].l,tracklen);
@@ -13134,32 +13119,34 @@ void __hfe_close(struct s_assenv *ae, struct s_hfe_action *hfe_action) {
 	printf("max tracklen is %d\nfilling shortest tracks",tracklen);fflush(stdout);
 #endif
 	// fill shortest track with proper GAP
-	for (i=0;i<ae->hfedisk[ae->nbhfedisk-1].itrack;i++) {
-		int first=0;
-		while (ae->hfedisk[ae->nbhfedisk-1].track[i].idata<tracklen) {
-			if (!first) {
-				first++;
-#if TRACE_HFE
-	printf("adjusting track %d side %d\n",i>>1,i&1);
-#endif
-			}
-			ae->hfe=&ae->hfedisk[ae->nbhfedisk-1].track[i]; // update fast ptr for convenience
+	zebyte=0x4E;
+	for (i=0;i<(ae->hfedisk[ae->nbhfedisk-1].itrack>>1);i++) {
+		int maxlen;
+		maxlen=ae->hfedisk[ae->nbhfedisk-1].track[i*2].idata;
+		if (ae->hfedisk[ae->nbhfedisk-1].track[i*2+1].idata>maxlen) maxlen=ae->hfedisk[ae->nbhfedisk-1].track[i*2+1].idata;
+
+		// upgrade shortest track to the longest
+		ae->hfe=&ae->hfedisk[ae->nbhfedisk-1].track[i*2]; // update fast ptr for convenience
+		while (ae->hfedisk[ae->nbhfedisk-1].track[i*2].idata<maxlen) {
 			ObjectArrayAddDynamicValueConcat((void **)&ae->hfe->data,&ae->hfe->idata,&ae->hfe->mdata,&zebyte,sizeof(zebyte));
 		}
+		ae->hfe=&ae->hfedisk[ae->nbhfedisk-1].track[i*2+1]; // update fast ptr for convenience
+		while (ae->hfedisk[ae->nbhfedisk-1].track[i*2+1].idata<maxlen) {
+			ObjectArrayAddDynamicValueConcat((void **)&ae->hfe->data,&ae->hfe->idata,&ae->hfe->mdata,&zebyte,sizeof(zebyte));
+		}
+		// blocktrack list
+		blocktrack=(tracklen*4)>>9; if ((tracklen*4)&0x1F) blocktrack++;
+		tracklist[i*2]=blocktrack*i+2;
+		tracklist[i*2+1]=tracklen*4;
 	}
 
 	hfe_header=__internal_make_HFE_header(ae->hfedisk[ae->nbhfedisk-1].itrack>>1,2); // HFE side isn't used by emulators
 	FileWriteBinary(oname,(char*)hfe_header,0x200);
 
-	blocktrack=(tracklen*4)>>9; if ((tracklen*4)&0x1F) blocktrack++;
 #if TRACE_HFE
 	printf("HFE blocks per track=%d\n",blocktrack);
 #endif
 
-	for (i=0;i<(ae->hfedisk[ae->nbhfedisk-1].itrack>>1);i++) {
-		tracklist[i*2]=blocktrack*i+2;
-		tracklist[i*2+1]=tracklen*4;
-	}
 	FileWriteBinary(oname,(char*)tracklist,0x200);
 
 #if TRACE_HFE
@@ -13168,6 +13155,9 @@ void __hfe_close(struct s_assenv *ae, struct s_hfe_action *hfe_action) {
 
 	for (j=0;j<ae->hfedisk[ae->nbhfedisk-1].itrack;j+=2) {
 		int lng;
+
+		ae->hfe=&ae->hfedisk[ae->nbhfedisk-1].track[j]; // update fast ptr for convenience
+		tracklen=ae->hfe->idata;
 
 		data0=__internal_track_to_HFE(ae->hfedisk[ae->nbhfedisk-1].track[j+0].data,tracklen);
 		data1=__internal_track_to_HFE(ae->hfedisk[ae->nbhfedisk-1].track[j+1].data,tracklen);
@@ -13189,6 +13179,7 @@ void __hfe_close(struct s_assenv *ae, struct s_hfe_action *hfe_action) {
 		MemFree(data1);
 	}
 	FileWriteBinaryClose(oname);
+	rasm_printf(ae,KIO"Write floppy image file %s\n"KNORMAL,oname);
 }
 void __hfe_output_crc(struct s_assenv *ae, struct s_hfe_action *hfe_action) {
 	unsigned int zebyte;
@@ -13213,6 +13204,9 @@ void __hfe_add_track_header(struct s_assenv *ae, struct s_hfe_action *hfe_action
 	unsigned int zebyte;
 	int i;
 
+#if TRACE_HFE
+	printf("add HFE track header\n");
+#endif
 	zebyte=0x4E; // GAP4a
 	for (i=0;i<80;i++) ObjectArrayAddDynamicValueConcat((void **)&ae->hfe->data,&ae->hfe->idata,&ae->hfe->mdata,&zebyte,sizeof(zebyte));
 	zebyte=0x00; // VCO SYNC
@@ -13229,6 +13223,10 @@ void __hfe_add_sector(struct s_assenv *ae, struct s_hfe_action *hfe_action) {
 	unsigned short int crc;
 	unsigned char sectorsize;
 	int i,curlen,offset;
+
+#if TRACE_HFE
+	printf("add HFE sector (tracksize=%d)\n",ae->hfe->idata);
+#endif
 
 	zebyte=0x00; // VCO SYNC
 	for (i=0;i<12;i++) ObjectArrayAddDynamicValueConcat((void **)&ae->hfe->data,&ae->hfe->idata,&ae->hfe->mdata,&zebyte,sizeof(zebyte));
@@ -13311,10 +13309,10 @@ void __hfe_add_gap(struct s_assenv *ae, struct s_hfe_action *hfe_action) {
 		return;
 	}
 	switch (hfe_action->nbparam) {
-		case 1: // number of bytes for GAP
+		case 2: // number of bytes for GAP
 			zebyte=0x4E;
 			break;
-		case 2: // number of bytes for GAP | GAP filler
+		case 3: // number of bytes for GAP | GAP filler
 			zebyte=RoundComputeExpression(ae,hfe_action->param[1],hfe_action->ioffset,0,0);
 			break;
 		default:
@@ -13359,7 +13357,7 @@ void __HFE(struct s_assenv *ae) {
 			case E_HFE_ACTION_INIT:case E_HFE_ACTION_SIDE:case E_HFE_ACTION_TRACK:case E_HFE_ACTION_ADD_BYTE:
 				nbparam=2;break;
 			case E_HFE_ACTION_ADD_GAP:
-				nbparam=3;break;
+				nbparam=2;break; // filler optional
 			case E_HFE_ACTION_ADD_SECTOR:
 				nbparam=6;break; // track,side,id,sectorsize,offset (current bank is set)
 			default:MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Internal Error on HFE action management (1)\n");break;
@@ -25373,8 +25371,8 @@ int RasmAssembleInfoParam(const char *datain, int lenin, unsigned char **dataout
                          "sll (ix+#12),h:sll (ix+#12),l:sll (ix+#12):sll (ix+#12),a:srl (ix+#12),b:srl (ix+#12),c:" \
                          "srl (ix+#12),d:srl (ix+#12),e:srl (ix+#12),h:srl (ix+#12),l:srl (ix+#12):srl (ix+#12),a::" \
                          "bit 0,(ix+#12):bit 1,(ix+#12):bit 2,(ix+#12):bit 3,(ix+#12):bit 4,(ix+#12):bit 5,(ix+#12):" \
-                         "bit 6,(ix+#12):bit 7,(ix+#12):bit 0,(ix+#12),d:bit 1,(ix+#12),b:bit 2,(ix+#12),c:bit 3,(ix+#12),d:" \
-                         "bit 4,(ix+#12),e:bit 5,(ix+#12),h:bit 6,(ix+#12),l:bit 7,(ix+#12),a:::res 0,(ix+#12),b:" \
+                         "bit 6,(ix+#12):bit 7,(ix+#12):bit 0,(ix+#12):bit 1,(ix+#12):bit 2,(ix+#12):bit 3,(ix+#12):" \
+                         "bit 4,(ix+#12):bit 5,(ix+#12):bit 6,(ix+#12):bit 7,(ix+#12):res 0,(ix+#12),b:" \
                          "res 0,(ix+#12),c:res 0,(ix+#12),d:res 0,(ix+#12),e:res 0,(ix+#12),h:res 0,(ix+#12),l:res 0,(ix+#12):" \
                          "res 0,(ix+#12),a::res 1,(ix+#12),b:res 1,(ix+#12),c:res 1,(ix+#12),d:res 1,(ix+#12),e:" \
                          "res 1,(ix+#12),h:res 1,(ix+#12),l:res 1,(ix+#12):res 1,(ix+#12),a::res 2,(ix+#12),b:" \
@@ -25894,8 +25892,8 @@ int RasmAssembleInfoParam(const char *datain, int lenin, unsigned char **dataout
 "assert v25==getnop('and a : and b : and c : and #44 : and (hl) : and xl : and (ix+20)'):"\
 "ticker start,v26 : or a : or b : or c : or #44 : or (hl) : or xl : or (ix+20) : ticker stop,v26:"\
 "assert v26==getnop('or a : or b : or c : or #44 : or (hl) : or xl : or (ix+20)'):"\
-"ticker start,v27 : bit 0,a : bit 1,b : bit 2,c : bit 3,d : bit 4,(hl) : bit 5,(ix+0) : bit 6,(ix+0),e  : ticker stop,v27:"\
-"assert v27==getnop('bit 0,a : bit 1,b : bit 2,c : bit 3,d : bit 4,(hl) : bit 5,(ix+0) : bit 6,(ix+0),e'):"\
+"ticker start,v27 : bit 0,a : bit 1,b : bit 2,c : bit 3,d : bit 4,(hl) : bit 5,(ix+0) : bit 6,(ix-2)  : ticker stop,v27:"\
+"assert v27==getnop('bit 0,a : bit 1,b : bit 2,c : bit 3,d : bit 4,(hl) : bit 5,(ix+0) : bit 6,(ixi-2)'):"\
 "ticker start,v28 : res 0,a : res 1,b : res 2,c : res 3,d : res 4,(hl) : res 5,(ix+0) : res 6,(ix+0),e  : ticker stop,v28:"\
 "assert v28==getnop('res 0,a : res 1,b : res 2,c : res 3,d : res 4,(hl) : res 5,(ix+0) : res 6,(ix+0),e'):"\
 "ticker start,v29 : set 0,a : set 1,b : set 2,c : set 3,d : set 4,(hl) : set 5,(ix+0) : set 6,(ix+0),e  : ticker stop,v29:"\
@@ -25958,8 +25956,8 @@ int RasmAssembleInfoParam(const char *datain, int lenin, unsigned char **dataout
 "assert v25==gettick('and a : and b : and c : and #44 : and (hl) : and xl : and (ix+20)'):"\
 "ticker start,v26 : or a : or b : or c : or #44 : or (hl) : or xl : or (ix+20) : ticker stopzx,v26:"\
 "assert v26==gettick('or a : or b : or c : or #44 : or (hl) : or xl : or (ix+20)'):"\
-"ticker start,v27 : bit 0,a : bit 1,b : bit 2,c : bit 3,d : bit 4,(hl) : bit 5,(ix+0) : bit 6,(ix+0),e  : ticker stopzx,v27:"\
-"assert v27==gettick('bit 0,a : bit 1,b : bit 2,c : bit 3,d : bit 4,(hl) : bit 5,(ix+0) : bit 6,(ix+0),e'):"\
+"ticker start,v27 : bit 0,a : bit 1,b : bit 2,c : bit 3,d : bit 4,(hl) : bit 5,(ix+0) : bit 6,(ix-7)  : ticker stopzx,v27:"\
+"assert v27==gettick('bit 0,a : bit 1,b : bit 2,c : bit 3,d : bit 4,(hl) : bit 5,(ix+0) : bit 6,(ix-7)'):"\
 "ticker start,v28 : res 0,a : res 1,b : res 2,c : res 3,d : res 4,(hl) : res 5,(ix+0) : res 6,(ix+0),e  : ticker stopzx,v28:"\
 "assert v28==gettick('res 0,a : res 1,b : res 2,c : res 3,d : res 4,(hl) : res 5,(ix+0) : res 6,(ix+0),e'):"\
 "ticker start,v29 : set 0,a : set 1,b : set 2,c : set 3,d : set 4,(hl) : set 5,(ix+0) : set 6,(ix+0),e  : ticker stopzx,v29:"\
@@ -26152,11 +26150,7 @@ int RasmAssembleInfoParam(const char *datain, int lenin, unsigned char **dataout
 ":bank:srl (ix+#12),l:assert $==getsize('srl (ix+#12),l'):bank:srl (ix+#12):assert $==getsize('srl (ix+#12)'):bank:srl (ix+#12),a:assert $==getsize('srl (ix+#12),a')" \
 ":bank:bit 0,(ix+#12):assert $==getsize('bit 0,(ix+#12)'):bank:bit 1,(ix+#12):assert $==getsize('bit 1,(ix+#12)'):bank:bit 2,(ix+#12):assert $==getsize('bit 2,(ix+#12)')" \
 ":bank:bit 3,(ix+#12):assert $==getsize('bit 3,(ix+#12)'):bank:bit 4,(ix+#12):assert $==getsize('bit 4,(ix+#12)'):bank:bit 5,(ix+#12):assert $==getsize('bit 5,(ix+#12)')" \
-":bank:bit 6,(ix+#12):assert $==getsize('bit 6,(ix+#12)'):bank:bit 7,(ix+#12):assert $==getsize('bit 7,(ix+#12)'):bank:bit 0,(ix+#12),d:assert $==getsize('bit 0,(ix+#12),d')" \
-":bank:bit 1,(ix+#12),b:assert $==getsize('bit 1,(ix+#12),b'):bank:bit 2,(ix+#12),c:assert $==getsize('bit 2,(ix+#12),c'):bank:bit 3,(ix+#12),d:assert $==getsize('bit 3,(ix+#12),d')" \
-":bank:bit 4,(ix+#12),e:assert $==getsize('bit 4,(ix+#12),e'):bank:bit 5,(ix+#12),h:assert $==getsize('bit 5,(ix+#12),h'):bank:bit 6,(ix+#12),l:assert $==getsize('bit 6,(ix+#12),l')" \
-":bank:bit 7,(ix+#12),a:assert $==getsize('bit 7,(ix+#12),a'):bank:res 0,(ix+#12),b:assert $==getsize('res 0,(ix+#12),b'):bank:res 0,(ix+#12),c:assert $==getsize('res 0,(ix+#12),c')" \
-":bank:res 0,(ix+#12),d:assert $==getsize('res 0,(ix+#12),d'):bank:res 0,(ix+#12),e:assert $==getsize('res 0,(ix+#12),e'):bank:res 0,(ix+#12),h:assert $==getsize('res 0,(ix+#12),h')" \
+":bank:bit 6,(ix+#12):assert $==getsize('bit 6,(ix+#12)'):bank:bit 7,(ix+#12):assert $==getsize('bit 7,(ix+#12)'):bank" \
 ":bank:res 0,(ix+#12),l:assert $==getsize('res 0,(ix+#12),l'):bank:res 0,(ix+#12):assert $==getsize('res 0,(ix+#12)'):bank:res 0,(ix+#12),a:assert $==getsize('res 0,(ix+#12),a')" \
 ":bank:res 1,(ix+#12),b:assert $==getsize('res 1,(ix+#12),b'):bank:res 1,(ix+#12),c:assert $==getsize('res 1,(ix+#12),c'):bank:res 1,(ix+#12),d:assert $==getsize('res 1,(ix+#12),d')" \
 ":bank:res 1,(ix+#12),e:assert $==getsize('res 1,(ix+#12),e'):bank:res 1,(ix+#12),h:assert $==getsize('res 1,(ix+#12),h'):bank:res 1,(ix+#12),l:assert $==getsize('res 1,(ix+#12),l')" \
@@ -26497,9 +26491,9 @@ struct s_autotest_keyword autotest_keyword[]={
 	{"djnz (ix)",1},{"djnz (iy)",1},{"djnz (bc)",1},{"djnz bc",1},{"djnz ix",1},{"djnz iy",1},{"djnz hl",1},
 	{"push",1},{"push push",1},{"push pop",1},{"push af'",1},{"push (ix)",1},{"push (hl)",1},{"push (#1234)",1},{"push #1234",1},
 	{"pop",1},{"pop pop",1},{"pop push",1},{"pop af'",1},{"pop (ix)",1},{"pop (hl)",1},{"pop (#1234)",1},{"pop #1234",1},
-	{"set -1,a",1},{"set 9,a",1},{"set 0,xh",1},{"set 0,ix",1},{"set 0",1},{"set",1},{"set set",1},{"set 0,a,a",1},{"set 0,(ix+0),xh",1},
-	{"bit -1,a",1},{"bit 9,a",1},{"bit 0,xh",1},{"bit 0,ix",1},{"bit 0",1},{"bit",1},{"bit bit",1},{"bit 0,a,a",1},{"bit 0,(ix+0),xh",1},
-	{"res -1,a",1},{"res 9,a",1},{"res 0,xh",1},{"res 0,ix",1},{"res 0",1},{"res",1},{"res res",1},{"res 0,a,a",1},{"res 0,(ix+0),xh",1},
+	{"set -1,a",1},{"set 9,a",1},{"set 0,xh",1},{"set 0,ix",1},{"set 0",1},{"set",1},{"set set",1},{"set 0,a,a",1},{"set 0,(ix+0),xh",1},{"set 7,(ix+5),h",0},{"set 8,(ix+5),h",1},{"set -1,(ix+5),h",1},
+	{"bit -1,a",1},{"bit 9,a",1},{"bit 0,xh",1},{"bit 0,ix",1},{"bit 0",1},{"bit",1},{"bit bit",1},{"bit 0,a,a",1},{"bit 0,(ix+0),xh",1},{"bit 7,(ix+5),h",1},{"bit -1,(ix+5),h",1},{"bit 8,(ix+5)",1},
+	{"res -1,a",1},{"res 9,a",1},{"res 0,xh",1},{"res 0,ix",1},{"res 0",1},{"res",1},{"res res",1},{"res 0,a,a",1},{"res 0,(ix+0),xh",1},{"res 7,(ix+5),h",0},{"res -1,(ix+5),h",1},{"res 8,(ix+5),h",1},
 	{"srl",1},{"srl srl",1},{"srl hl",0}, /* srl hl is a kind of macro */
 	{"rld a",1},{"rld (hl)",1},{"rld rld",1},{"rld 5",1},{"rld (ix)",1},
 	{"rrd a",1},{"rrd (hl)",1},{"rrd rrd",1},{"rrd 5",1},{"rrd (ix)",1},
@@ -26555,7 +26549,7 @@ struct s_autotest_keyword autotest_keyword[]={
 	{"assert getnop('bit 0,a')==2 : nop",0}, {"assert getnop('bit 2,a')==2 : nop",0}, {"assert getnop('bit 5,a')==2 : nop",0},
 	{"assert getnop('bit 0,b')==2 : nop",0}, {"assert getnop('bit 0,c')==2 : nop",0}, {"assert getnop('bit 0,d')==2 : nop",0},
 	{"assert getnop('bit 0,e')==2 : nop",0}, {"assert getnop('bit 0,h')==2 : nop",0}, {"assert getnop('bit 0,l')==2 : nop",0},
-	{"assert getnop('bit 0,(hl)')==3 : nop",0}, {"assert getnop('bit 1,(ix+12),d')==6 : nop",0}, {"assert getnop('bit 3,(iy-34),h')==6 : nop",0},
+	{"assert getnop('bit 0,(hl)')==3 : nop",0}, {"assert getnop('bit 1,(ix+12)')==6 : nop",0}, {"assert getnop('bit 3,(iy-34)')==6 : nop",0},
 	{"assert getnop(\"ex af,af' \")==1 : nop",0}, {"assert getnop('ex hl,de ')==1 : nop",0}, {"assert getnop('ex de,hl ')==1 : nop",0},
 	{"assert getnop('ex (sp),hl')==6 : nop",0}, {"assert getnop('ex (sp),ix ')==7 : nop",0}, {"assert getnop('ex (sp),iy ')==7 : nop",0},
 
