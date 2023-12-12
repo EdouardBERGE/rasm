@@ -392,7 +392,7 @@ struct s_alias {
 	char *translation;
 	int crc,len,autorise_export;
 	int iw,lz;
-	int used;
+	int used,fromstruct;
 	/* v1.5 */
 	int ptr;
 	float v;
@@ -20521,7 +20521,11 @@ unsigned char * _internal_export_REMU(struct s_assenv *ae, unsigned int *rchksiz
 		strncpy(shortlabel,ae->alias[i].alias,sizeof(shortlabel)-1);
 		strcat(remu_output,shortlabel);
 		tmpptr=RoundComputeExpression(ae,ae->alias[i].translation,0,0,0);
-		sprintf(zedigit," %d;",tmpptr);
+		if (ae->alias[i].fromstruct) {
+			sprintf(zedigit," %d idx;",tmpptr);
+		} else {
+			sprintf(zedigit," %d;",tmpptr);
+		}
 		strcat(remu_output,zedigit);
 	}
 	chunksize=strlen(remu_output)-8;
@@ -21746,6 +21750,7 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 					curalias.len=strlen(curalias.translation);
 					curalias.autorise_export=1;
 					curalias.iw=ae->label[i].iw;
+					curalias.fromstruct=1; // ACE debug related
 					ae->label[i].ibank=0;//
 					ObjectArrayAddDynamicValueConcat((void**)&ae->alias,&ae->ialias,&ae->malias,&curalias,sizeof(curalias));
 				}
