@@ -383,6 +383,7 @@ struct s_label {
 	int fileidx;
 	int fileline;
 	int autorise_export,backidx,local_export;
+	int make_alias;
 	int used;
 };
 
@@ -8745,7 +8746,7 @@ int EDSK_addfile(struct s_assenv *ae,char *edskfilename,int facenumber, char *fi
 	for (i=0;i<curwrap->nbentry;i++) {
 		if (!strncmp((char *)curwrap->entry[i].filename,amsdos_name,11)) {
 			if (!ae->edskoverwrite) {
-				MakeError(ae,0,NULL,0,"Error - Cannot save [%s] in edsk [%s] with overwrite disabled as the file already exists\n",amsdos_name,edskfilename);
+				MakeError(ae,0,NULL,0,"Error - Cannot save [%s] in edsk [%s] with overwrite disabled as the file already exists (use -eo command line option)\n",amsdos_name,edskfilename);
 				MemFree(data);
 				return 0;
 			} else {
@@ -9608,6 +9609,7 @@ void PushLabelLight(struct s_assenv *ae, struct s_label *curlabel) {
 		curlabel->backidx=ae->il;
 		curlabel->local_export=ae->local_export;
 		curlabel->autorise_export=ae->autorise_export&(!ae->getstruct); // do not export label in struct declaration!
+		curlabel->make_alias=ae->getstruct;
 		ObjectArrayAddDynamicValueConcat((void **)&ae->label,&ae->il,&ae->ml,curlabel,sizeof(struct s_label));
 		InsertLabelToTree(ae,curlabel);
 	}				
@@ -9721,6 +9723,7 @@ void PushLabel(struct s_assenv *ae)
 		/* legacy */
 		curlabel.crc=GetCRC(curlabel.name);
 		curlabel.ptr=ae->codeadr;
+		curlabel.make_alias=1;
 #if TRACE_STRUCT
 	printf("pushLabel (struct) [%X] [%s]   irstructfield=%d / cur idata=%d\n",curlabel.ptr,curlabel.name,ae->rasmstruct[ae->irasmstruct-1].irasmstructfield,ae->rasmstruct[ae->irasmstruct-1].rasmstructfield[ae->rasmstruct[ae->irasmstruct-1].irasmstructfield-1].idata);
 #endif
@@ -18785,7 +18788,6 @@ void __ENDSTRUCT(struct s_assenv *ae) {
 	} else {
 		if (ae->getstruct) {
 			ae->rasmstruct[ae->irasmstruct-1].size=ae->codeadr;
-			ae->getstruct=0;
 
 			/* SIZEOF like Vasm with struct name */
 			curlabel.name=TxtStrDup(ae->rasmstruct[ae->irasmstruct-1].name);
@@ -18794,6 +18796,7 @@ void __ENDSTRUCT(struct s_assenv *ae) {
 			curlabel.ptr=ae->rasmstruct[ae->irasmstruct-1].size;
 			//curlabel.fileidx wont be used
 			PushLabelLight(ae,&curlabel);
+			ae->getstruct=0; // because we need to export structure size as Alias!
 			
 			/* compute size for each field */
 #if TRACE_STRUCT
@@ -20469,7 +20472,7 @@ unsigned char * _internal_export_REMU(struct s_assenv *ae, unsigned int *rchksiz
 		if (ae->label[i].local_export) {isrom=0;lbankn=0;}
 
 		// distinction ROM/RAM pour les labels
-		if (ae->label[i].autorise_export) {
+		if (ae->label[i].autorise_export && !ae->label[i].make_alias) {
 			if (isrom) strcat(remu_output,"romlabel "); else strcat(remu_output,"label ");
 			memset(shortlabel,0,sizeof(shortlabel));
 			if (!ae->label[i].name) {
@@ -21729,6 +21732,25 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 		/* exécution des actions programmées par la directive EDSK */
 		PopAllEDSK(ae);
 		PopAllHFE(ae);
+
+		// Alias hack for structure fields info
+		if (ae->export_equ || ae->remu) {
+			for (i=0;i<ae->il;i++) {
+				if (ae->label[i].make_alias) {
+					struct s_alias curalias={0};
+					curalias.alias=TxtStrDup(ae->label[i].name);
+					curalias.crc=ae->label[i].crc;
+					//curalias.ptr=ae->label[i].ptr;
+					//curalias.lz=ae->label[i].lz;
+					curalias.translation=MemMalloc(16); sprintf(curalias.translation,"%d",ae->label[i].ptr);
+					curalias.len=strlen(curalias.translation);
+					curalias.autorise_export=1;
+					curalias.iw=ae->label[i].iw;
+					ae->label[i].ibank=0;//
+					ObjectArrayAddDynamicValueConcat((void**)&ae->alias,&ae->ialias,&ae->malias,&curalias,sizeof(curalias));
+				}
+			}
+		}
 	
 		if (ae->nbsave==0 || ae->forcecpr || ae->forcesnapshot || ae->forceROM || ae->forcetape) {
 			/*********************************************
@@ -21773,7 +21795,7 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 				int ilocal=0;
 
 				for (i=0;i<ae->il;i++) {
-					if (ae->label[i].autorise_export) {
+					if (ae->label[i].autorise_export && !ae->label[i].make_alias) {
 						if (!ae->label[i].name) {
 							if ((casefound=_internal_stristr(ae->rawfile[ae->label[i].fileidx],ae->rawlen[ae->label[i].fileidx],ae->wl[ae->label[i].iw].w))!=NULL) {
 								memcpy(ae->wl[ae->label[i].iw].w,casefound,strlen(ae->wl[ae->label[i].iw].w));
@@ -22406,7 +22428,7 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 								strcpy((char *)symbchunk,"SYMB");
 
 								for (i=0;i<ae->il;i++) {
-									if (ae->label[i].autorise_export) {
+									if (ae->label[i].autorise_export && !ae->label[i].make_alias) {
 										if (!ae->label[i].name) {
 											symbol_len=strlen(ae->wl[ae->label[i].iw].w);
 											if (symbol_len>255) symbol_len=255;
@@ -22922,7 +22944,7 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 				case 5:
 					/* ZX export */
 					for (i=0;i<ae->il;i++) {
-						if (ae->label[i].autorise_export) {
+						if (ae->label[i].autorise_export && !ae->label[i].make_alias) {
 							if (ae->export_multisym) {
 								if (ae->symbol_name) {
 									sprintf(TMP_filename,"%s.bank%d",ae->symbol_name,ae->label[i].ibank);
@@ -22960,7 +22982,7 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 				case 4:
 					/* flexible */
 					for (i=0;i<ae->il;i++) {
-						if (ae->label[i].autorise_export) {
+						if (ae->label[i].autorise_export && !ae->label[i].make_alias) {
 							if (ae->export_multisym) {
 								if (ae->symbol_name) {
 									sprintf(TMP_filename,"%s.bank%d",ae->symbol_name,ae->label[i].ibank);
@@ -22998,7 +23020,7 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 				case 3:
 					/* Winape */
 					for (i=0;i<ae->il;i++) {
-						if (ae->label[i].autorise_export) {
+						if (ae->label[i].autorise_export && !ae->label[i].make_alias) {
 							if (ae->export_multisym) {
 								if (ae->symbol_name) {
 									sprintf(TMP_filename,"%s.bank%d",ae->symbol_name,ae->label[i].ibank);
@@ -23035,7 +23057,7 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 				case 2:
 					/* pasmo */
 					for (i=0;i<ae->il;i++) {
-						if (ae->label[i].autorise_export) {
+						if (ae->label[i].autorise_export && !ae->label[i].make_alias) {
 							if (ae->export_multisym) {
 								if (ae->symbol_name) {
 									sprintf(TMP_filename,"%s.bank%d",ae->symbol_name,ae->label[i].ibank);
@@ -23072,7 +23094,7 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 				case 1:
 					/* Rasm */
 					for (i=0;i<ae->il;i++) {
-						if (ae->label[i].autorise_export) {
+						if (ae->label[i].autorise_export && !ae->label[i].make_alias) {
 							if (ae->export_multisym) {
 								if (ae->symbol_name) {
 									sprintf(TMP_filename,"%s.bank%d",ae->symbol_name,ae->label[i].ibank);
