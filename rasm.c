@@ -369,6 +369,12 @@ struct s_external {
 	int imapping,mmapping;
 };
 
+struct s_memory_localisation {
+	int physical;
+	int logical;
+	int rom; // RAM:0 ROM:1
+};
+
 struct s_label {
 	char *name;   /* is alloced for local repeat or struct OR generated global -> in this case iw=-1 */
 	int localsize;
@@ -1021,6 +1027,8 @@ struct s_assenv {
 	struct s_orgzone *orgzone;         // each ORG is monitored to avoid conflicts
 	int io,mo;
 	int deadend;
+	struct s_memory_localisation *memory_localisation;
+	int imemory_localisation,mmemory_localisation;
 	/* Struct */
 	struct s_rasmstruct *rasmstruct;
 	int irasmstruct,mrasmstruct;
@@ -16042,7 +16050,32 @@ void ___getbackto_memory_space(struct s_assenv *ae) {
 
 	OverWriteCheck(ae);
 }
-
+void __LOCALISATION(struct s_assenv *ae) {
+	struct s_memory_localisation mloc={0};
+	if (!ae->wl[ae->idx].t && !ae->wl[ae->idx+1].t) {
+		if (strcmp(ae->wl[ae->idx+1].w,"RAM")==0) {
+			// already zeroed
+		} else if (strcmp(ae->wl[ae->idx+1].w,"ROM")==0) {
+			mloc.rom=1;
+		} else {
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Usage is: LOCALISATION [the word 'RAM' or 'ROM'],[the 16K page number| the word 'LOWER']\n");
+			return;
+		}
+		if (strcmp(ae->wl[ae->idx+2].w,"LOWER")==0) {
+			mloc.logical=256;
+			ae->idx++;
+		} else {
+			ExpressionFastTranslate(ae,&ae->wl[ae->idx+2].w,0);
+			mloc.logical=RoundComputeExpression(ae,ae->wl[ae->idx+2].w,ae->codeadr,0,0);
+		}
+		mloc.physical=ae->activebank;
+		ae->remu=1; // si c'est pas fait, on force :)
+		ObjectArrayAddDynamicValueConcat((void**)&ae->memory_localisation,&ae->imemory_localisation,&ae->mmemory_localisation,&mloc,sizeof(struct s_memory_localisation));
+	} else {
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Usage is: LOCALISATION [RAM|ROM],[16K page number|LOWER]\n");
+		return;
+	}
+}
 void __REBANK(struct s_assenv *ae) {
 	if (ae->getstruct==1) {
 		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"You cannot change BANK inside a structure declaration\n");
@@ -20379,6 +20412,7 @@ struct s_asm_keyword instruction[]={
 {"EXTERNAL",0,0,__EXTERNAL},
 {"PROCEDURE",0,0,__PROCEDURE},
 {"REBANK",0,0,__REBANK},
+{"LOCALISATION",0,0,__LOCALISATION},
 {"RELOCATE",0,0,__RELOCATE},
 {"ENDRELOCATE",0,0,__ENDRELOCATE},
 {"EDSK",0,0,__EDSK},
@@ -20407,7 +20441,7 @@ unsigned char * _internal_export_REMU(struct s_assenv *ae, unsigned int *rchksiz
 	unsigned char *remu_output=NULL;
 	char zedigit[128];
 	char shortlabel[64];
-	int ilocal=0,i;
+	int ilocal=0,i,m;
 	unsigned int chunksize;
 	int localcpt=0;
 
@@ -20416,18 +20450,21 @@ unsigned char * _internal_export_REMU(struct s_assenv *ae, unsigned int *rchksiz
 
 	for (i=0;i<ae->ibreakpoint;i++) {
 		int lbankn,isrom;
+
 		if (!ae->forcesnapshot) {
 			if (ae->breakpoint[i].bank<256) {
 				lbankn=ae->breakpoint[i].bank;
 				isrom=1;
 			} else {
 				lbankn=-1; // we cannot know which memory bank
-				isrom=0;
+				isrom=0;   // unless we found a mapping
+				for (m=0;m<ae->imemory_localisation;m++) if (ae->memory_localisation[m].physical==ae->breakpoint[i].bank) {lbankn=ae->memory_localisation[m].logical;isrom=ae->memory_localisation[m].rom;break;}
 			}
 		} else { // Snapshot use first banks as RAM!
 			if (ae->breakpoint[i].bank<260) {
 				lbankn=ae->breakpoint[i].bank;
 				isrom=0;
+				for (m=0;m<ae->imemory_localisation;m++) if (ae->memory_localisation[m].physical==ae->breakpoint[i].bank) {lbankn=ae->memory_localisation[m].logical;isrom=ae->memory_localisation[m].rom;break;}
 			} else {
 				int sl;
 				for (sl=0;sl<257;sl++) {
@@ -20452,11 +20489,13 @@ unsigned char * _internal_export_REMU(struct s_assenv *ae, unsigned int *rchksiz
 			} else {
 				lbankn=-1; // we cannot know which memory bank
 				isrom=0;
+				for (m=0;m<ae->imemory_localisation;m++) if (ae->memory_localisation[m].physical==ae->label[i].ibank) {lbankn=ae->memory_localisation[m].logical;isrom=ae->memory_localisation[m].rom;break;}
 			}
 		} else {
 			if (ae->label[i].ibank<260) {
 				lbankn=ae->label[i].ibank;
 				isrom=0;
+				for (m=0;m<ae->imemory_localisation;m++) if (ae->memory_localisation[m].physical==ae->label[i].ibank) {lbankn=ae->memory_localisation[m].logical;isrom=ae->memory_localisation[m].rom;break;}
 			} else {
 				int sl;
 				for (sl=0;sl<=256;sl++) { // 256 ROM + lower
