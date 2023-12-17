@@ -23147,11 +23147,11 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 								}
 							}
 							if (!ae->label[i].name) {
-								sprintf(symbol_line,"%s #%X B%d\n",ae->wl[ae->label[i].iw].w,ae->label[i].ptr,ae->label[i].ibank>31?0:ae->label[i].ibank);
+								sprintf(symbol_line,"%s #%X B%d L\n",ae->wl[ae->label[i].iw].w,ae->label[i].ptr,ae->label[i].ibank>31?0:ae->label[i].ibank);
 								FileWriteLine(TMP_filename,symbol_line);
 							} else {
 								if (ae->export_local || !ae->label[i].local) {
-									sprintf(symbol_line,"%s #%X B%d\n",ae->label[i].name,ae->label[i].ptr,ae->label[i].ibank>31?0:ae->label[i].ibank);
+									sprintf(symbol_line,"%s #%X B%d L\n",ae->label[i].name,ae->label[i].ptr,ae->label[i].ibank>31?0:ae->label[i].ibank);
 									FileWriteLine(TMP_filename,symbol_line);
 								}
 							}
@@ -23160,12 +23160,13 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 					MAKE_SYMBOL_NAME
 					if (ae->export_var) {
 						/* var are part of fast tree search structure */
-						ExportDicoTree(ae,TMP_filename,"%s #%X B0\n");
+						ExportDicoTree(ae,TMP_filename,"%s #%X B0 V\n");
 					}
 					if (ae->export_equ) {
 						for (i=0;i<ae->ialias;i++) {
 							if (strcmp(ae->alias[i].alias,"IX") && strcmp(ae->alias[i].alias,"IY") && ae->alias[i].autorise_export) {
-								sprintf(symbol_line,"%s #%X B0\n",ae->alias[i].alias,RoundComputeExpression(ae,ae->alias[i].translation,0,-ae->alias[i].iw,0));
+								if (ae->alias[i].fromstruct) sprintf(symbol_line,"%s #%X B0 I\n",ae->alias[i].alias,RoundComputeExpression(ae,ae->alias[i].translation,0,-ae->alias[i].iw,0));
+								else sprintf(symbol_line,"%s #%X B0 A\n",ae->alias[i].alias,RoundComputeExpression(ae,ae->alias[i].translation,0,-ae->alias[i].iw,0));
 								FileWriteLine(TMP_filename,symbol_line);
 							}
 						}
