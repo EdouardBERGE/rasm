@@ -18785,13 +18785,11 @@ printf("struct (almost) legacy filler from %d to %d-1\n",localsize,ae->rasmstruc
 #endif
 					for (i=0;i<ae->rasmstruct[irs].irasmstructfield;i++) {
 #if TRACE_STRUCT
-	printf("  field[%d] stored data=%d size=%d\n",i,ae->rasmstruct[irs].rasmstructfield[i].idata,ae->rasmstruct[irs].rasmstructfield[i].size);
+	printf("  field[%d] stored nbdata=%d fullsize=%d\n",i,ae->rasmstruct[irs].rasmstructfield[i].idata,ae->rasmstruct[irs].rasmstructfield[i].size);
 #endif
 						for (j=0;j<ae->rasmstruct[irs].rasmstructfield[i].idata;j++) {
 							___output(ae,ae->rasmstruct[irs].rasmstructfield[i].data[j]);
-						}
-						for (;j<ae->rasmstruct[irs].rasmstructfield[i].size;j++) {
-							___output(ae,0);
+							printf("insert data j=%d\n",j);
 						}
 					}
 					nbelem--;
@@ -25539,6 +25537,9 @@ int RasmAssembleInfoParam(const char *datain, int lenin, unsigned char **dataout
 #define AUTOTEST_STRUCT2	"struct bite: preums defb 0: deuze defw 1: troize defs 10: endstruct:" \
 				" if {sizeof}bite.preums!=1 || {sizeof}bite.deuze!=2 || {sizeof}bite.troize!=10: stop: endif: nop "
 
+#define AUTOTEST_STRUCT3	"struct COORD: x   db #77: y   db #78: endstruct: struct COORD obj_coord, 5: struct st1:"\
+				"  ch1 defw #0201: ch2 defb #03: endstruct: struct metast1: struct st1 pr1: struct st1 pr2: endstruct: struct metast1 bigst "
+
 #define AUTOTEST_REPEAT		"ce=100:repeat 2,ce:repeat 5,cx:repeat 5,cy:defb cx*cy:rend:rend:rend:assert cx==6 && cy==6 && ce==3:" \
 							"cpt=0:repeat:cpt=cpt+1:until cpt>4:assert cpt==5"
 
@@ -27582,6 +27583,13 @@ printf("testing structs OK\n");
 	if (!ret && opcodelen==1) {} else {printf("Autotest %03d ERROR (sizeof struct fields)\n",cpt);exit(-1);}
 	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
 printf("testing SIZEOF struct fields OK\n");
+
+	ret=RasmAssemble(AUTOTEST_STRUCT3,strlen(AUTOTEST_STRUCT3),&opcode,&opcodelen);
+	if (!ret && opcodelen==16 && opcode[0]==opcode[2] && opcode[2]==0x77
+			&& opcode[10]==1 && opcode[11]==2 && opcode[11]==opcode[14]
+			&& opcode[15]==3) {} else {printf("Autotest %03d ERROR (sizeof data struct fields with meta structs)\n",cpt);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing SIZEOF data struct fields with meta struct (regression test) OK\n");
 
 	ret=RasmAssemble(AUTOTEST_REPEAT,strlen(AUTOTEST_REPEAT),&opcode,&opcodelen);
 	if (!ret) {} else {printf("Autotest %03d ERROR (extended repeat)\n",cpt);exit(-1);}
