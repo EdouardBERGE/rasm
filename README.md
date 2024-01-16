@@ -61,6 +61,7 @@ The project was born a few years ago (2017) because i needed a really fast assem
 BTW there is many other assemblers you could try:
 
 - ORGAMS http://orgams.wikidot.com/ (definitely the best native Z80 assembler on any machine)
+- BASM https://github.com/cpcsdk/rust.cpclib/releases (powerfull and Orgams compatible assembler)
 - VASM http://sun.hasenbraten.de/vasm/
 - SjASM http://xl2s.tk/
 - SjASMPlus (fork) https://github.com/z00m128/sjasmplus
