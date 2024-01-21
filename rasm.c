@@ -17811,6 +17811,9 @@ void __REPEAT(struct s_assenv *ae) {
 
 void __REND(struct s_assenv *ae) {
 	struct s_expr_dico *rvar;
+	if (!ae->wl[ae->idx].t) {
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"REND does not need any parameter!\n");
+	}
 	if (ae->ir>0) {
 		if (ae->repeat[ae->ir-1].cpt==-1) {
 			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"REND encounter whereas referent REPEAT was waiting for UNTIL\n");
@@ -26762,6 +26765,8 @@ struct s_autotest_keyword autotest_keyword[]={
 	"assert {sizeof}metas.ss1==4 : nop",0}, // sizeof substruct in imbricated level 1 struct
 	{"struct s1 : lab1 defw : lab2 defw : endstruct : struct s2 : lab1 defw : lab2 defw : endstruct : struct metas : struct s1 ss1 : struct s2 ss2 : endstruct : "\
 	"assert {sizeof}metas.ss2==4 : nop",0}, // sizeof last substruct in imbricated level 1 struct
+	{"repeat 5 : rend nop",1}, {"repeat 5 : rend : nop",0},
+	{"",},
 	/*
 	 *
 	 * will need to test resize + format then meta review test!
