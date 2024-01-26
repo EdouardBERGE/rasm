@@ -12493,6 +12493,9 @@ void _DEFS(struct s_assenv *ae) {
 		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Syntax is DEFS repeat,value or DEFS repeat\n");
 	} else do {
 		ae->idx++;
+		if (StringIsQuote(ae->wl[ae->idx].w) && strlen(ae->wl[ae->idx].w)>3) {
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"DEFS repeat value cannot be a string!\n");
+		}
 		if (!ae->wl[ae->idx].t) {
 			ExpressionFastTranslate(ae,&ae->wl[ae->idx].w,0);
 			ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0); /* doing FastTranslate but not a complete evaluation */
@@ -26766,7 +26769,7 @@ struct s_autotest_keyword autotest_keyword[]={
 	{"struct s1 : lab1 defw : lab2 defw : endstruct : struct s2 : lab1 defw : lab2 defw : endstruct : struct metas : struct s1 ss1 : struct s2 ss2 : endstruct : "\
 	"assert {sizeof}metas.ss2==4 : nop",0}, // sizeof last substruct in imbricated level 1 struct
 	{"repeat 5 : rend nop",1}, {"repeat 5 : rend : nop",0},
-	{"",},
+	{"defs 'roudoudou'",1},
 	/*
 	 *
 	 * will need to test resize + format then meta review test!
