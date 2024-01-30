@@ -1,6 +1,6 @@
 #define PROGRAM_NAME      "RASM"
 #define PROGRAM_VERSION   "2.1"
-#define PROGRAM_SUBVERSION   ".6"
+#define PROGRAM_SUBVERSION   ".7"
 #define PROGRAM_DATE      "xx/12/2023"
 #define PROGRAM_COPYRIGHT "© 2017 BERGE Edouard / roudoudou from Praline"
 #define RELEASE_NAME      "Gerieh Yasmana"
