@@ -247,14 +247,15 @@ E_COMPUTE_OPERATION_SET_B=45,
 E_COMPUTE_OPERATION_SOFT2HARD=46,
 E_COMPUTE_OPERATION_HARD2SOFT=47,
 E_COMPUTE_OPERATION_PEEK=48,
+E_COMPUTE_OPERATION_POW2=49,
 /* string functions */
-E_COMPUTE_OPERATION_GETNOP=49,
-E_COMPUTE_OPERATION_GETTICK=50,
-E_COMPUTE_OPERATION_DURATION=51,
-E_COMPUTE_OPERATION_FILESIZE=52,
-E_COMPUTE_OPERATION_GETSIZE=53,
-E_COMPUTE_OPERATION_IS_REGISTER=54,
-E_COMPUTE_OPERATION_END=55
+E_COMPUTE_OPERATION_GETNOP=50,
+E_COMPUTE_OPERATION_GETTICK=51,
+E_COMPUTE_OPERATION_DURATION=52,
+E_COMPUTE_OPERATION_FILESIZE=53,
+E_COMPUTE_OPERATION_GETSIZE=54,
+E_COMPUTE_OPERATION_IS_REGISTER=55,
+E_COMPUTE_OPERATION_END=56
 };
 
 struct s_compute_element {
@@ -1227,6 +1228,7 @@ struct s_math_keyword math_keyword[]={
 {"HARD2SOFT_INK",0,E_COMPUTE_OPERATION_HARD2SOFT},
 {"H2S_INK",0,E_COMPUTE_OPERATION_HARD2SOFT},
 {"PEEK",0,E_COMPUTE_OPERATION_PEEK},
+{"POW2",0,E_COMPUTE_OPERATION_POW2},
 {"GETNOP",0,E_COMPUTE_OPERATION_GETNOP},
 {"GETTICK",0,E_COMPUTE_OPERATION_GETTICK},
 {"DURATION",0,E_COMPUTE_OPERATION_DURATION},
@@ -6655,6 +6657,7 @@ printf("DUMP des labels\n");
 			case E_COMPUTE_OPERATION_SOFT2HARD:printf("soft2hard ");break;
 			case E_COMPUTE_OPERATION_HARD2SOFT:printf("hard2soft ");break;
 			case E_COMPUTE_OPERATION_PEEK:printf("peek ");break;
+			case E_COMPUTE_OPERATION_POW2:printf("pow2 ");break;
 			case E_COMPUTE_OPERATION_GETNOP:printf("getnop ");break;
 			case E_COMPUTE_OPERATION_GETTICK:printf("gettick ");break;
 			case E_COMPUTE_OPERATION_DURATION:printf("duration ");break;
@@ -6785,6 +6788,7 @@ printf("operator string=%X\n",ae->computectx->operatorstack[o2].string);
 			case E_COMPUTE_OPERATION_SOFT2HARD:
 			case E_COMPUTE_OPERATION_HARD2SOFT:
 			case E_COMPUTE_OPERATION_PEEK:
+			case E_COMPUTE_OPERATION_POW2:
 			case E_COMPUTE_OPERATION_GETNOP:
 			case E_COMPUTE_OPERATION_GETTICK:
 			case E_COMPUTE_OPERATION_DURATION:
@@ -6906,6 +6910,7 @@ printf("final POP string=%X\n",ae->computectx->operatorstack[nboperatorstack+1].
 				case E_COMPUTE_OPERATION_SOFT2HARD:if (paccu>0) accu[paccu-1]=__Soft2HardInk(ae,accu[paccu-1],didx);break;
 				case E_COMPUTE_OPERATION_HARD2SOFT:if (paccu>0) accu[paccu-1]=__Hard2SoftInk(ae,accu[paccu-1],didx);break;
 				case E_COMPUTE_OPERATION_PEEK:if (paccu>0) accu[paccu-1]=ae->mem[ae->activebank][(unsigned short int)accu[paccu-1]];break;
+				case E_COMPUTE_OPERATION_POW2:if (paccu>0) accu[paccu-1]=(int)pow(2,accu[paccu-1])&workinterval;break;
 				/* functions with strings */
 				case E_COMPUTE_OPERATION_GETNOP:if (paccu>0) {
 								      int integeridx;
@@ -7156,6 +7161,7 @@ printf("final POP string=%X\n",ae->computectx->operatorstack[nboperatorstack+1].
 				case E_COMPUTE_OPERATION_SOFT2HARD:if (paccu>0) accu[paccu-1]=__Soft2HardInk(ae,accu[paccu-1],didx);break;
 				case E_COMPUTE_OPERATION_HARD2SOFT:if (paccu>0) accu[paccu-1]=__Hard2SoftInk(ae,accu[paccu-1],didx);break;
 				case E_COMPUTE_OPERATION_PEEK:if (paccu>0) accu[paccu-1]=ae->mem[ae->activebank][(unsigned short int)accu[paccu-1]];break;
+				case E_COMPUTE_OPERATION_POW2:if (paccu>0) accu[paccu-1]=pow(2.0,accu[paccu-1]);break;
 				/* functions with strings */
 				case E_COMPUTE_OPERATION_GETNOP:if (paccu>0) {
 								      int integeridx;
@@ -26770,6 +26776,8 @@ struct s_autotest_keyword autotest_keyword[]={
 	"assert {sizeof}metas.ss2==4 : nop",0}, // sizeof last substruct in imbricated level 1 struct
 	{"repeat 5 : rend nop",1}, {"repeat 5 : rend : nop",0},
 	{"defs 'roudoudou'",1},
+	{"assert pow2(1)==2:assert pow2(2)==4:assert pow2(4)==16:assert pow2(0.5)==sqrt(2):nop",0},
+
 	/*
 	 *
 	 * will need to test resize + format then meta review test!
