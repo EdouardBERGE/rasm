@@ -1,7 +1,7 @@
 CC=cc
 EXEC=rasm.exe
 
-CFLAGS=-lm -lrt -march=native -o $(EXEC)
+CFLAGS=-lm  -march=native -o $(EXEC)
 CFLAGS_OPT = $(CFLAGS) -O2
 CFLAGS_DBG = $(CFLAGS) -O0 -g -pthread
 CFLAGS_3RD = $(CFLAGS) -g -pthread -DNO_3RD_PARTIES
