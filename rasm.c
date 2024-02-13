@@ -9889,7 +9889,8 @@ unsigned char *EncodeSnapshotRLE(unsigned char *memin, int *lenout, int sizetoen
 	      	if (memin[i]==0xE5 && cpt==1) {
 			memout[idx++]=0xE5;
 			memout[idx++]=0x0;
-		} else if (cpt>=3) {
+			i++;
+		} else if (cpt>=3 || memin[i]==0xE5) {
 			memout[idx++]=0xE5;
 			memout[idx++]=cpt;
 			memout[idx++]=memin[i];
@@ -26785,6 +26786,8 @@ struct s_autotest_keyword autotest_keyword[]={
 	{"repeat 5 : rend nop",1}, {"repeat 5 : rend : nop",0},
 	{"defs 'roudoudou'",1},
 	{"assert pow2(1)==2:assert pow2(2)==4:assert pow2(4)==16:assert pow2(0.5)==sqrt(2):nop",0},
+	{"buildsna: bankset 0: org 0: run 0: brk: nop 10: defb 0xE5: nop 2: defb #E5,#E5: nop 2: defb #E5,#E5,#E5: nop",0},
+
 
 	/*
 	 *
