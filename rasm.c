@@ -9886,7 +9886,10 @@ unsigned char *EncodeSnapshotRLE(unsigned char *memin, int *lenout, int sizetoen
 
 		for (cpt=1;cpt<255 && i+cpt<sizetoencode;cpt++) if (memin[i]!=memin[i+cpt]) break;
 
-		if (cpt>=3 || memin[i]==0xE5) {
+	      	if (memin[i]==0xE5 && cpt==1) {
+			memout[idx++]=0xE5;
+			memout[idx++]=0x0;
+		} else if (cpt>=3) {
 			memout[idx++]=0xE5;
 			memout[idx++]=cpt;
 			memout[idx++]=memin[i];
@@ -15582,10 +15585,15 @@ void __SNAPINIT(struct s_assenv *ae) {
 			while (idx<65536 && src<srcmax) {
 				if (snapdata[src]==0xE5) {
 					src++;
-					for (i=0;i<snapdata[src] && idx<65536;i++) {
-						dataout[idx++]=snapdata[src+1];
+					if (!snapdata[src]) {
+						dataout[idx++]=0xE5;
+						src++;
+					} else {
+						for (i=0;i<snapdata[src] && idx<65536;i++) {
+							dataout[idx++]=snapdata[src+1];
+						}
+						src+=2;
 					}
-					src+=2;
 				} else {
 					dataout[idx++]=snapdata[src++];
 				}
