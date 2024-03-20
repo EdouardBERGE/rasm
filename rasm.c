@@ -489,6 +489,7 @@ enum e_hfe_action {
 	E_HFE_ACTION_START_CRC,
 	E_HFE_ACTION_OUTPUT_CRC,
 	E_HFE_ACTION_CLOSE,
+	E_HFE_ACTION_COMPLETE_TRACK,
 	E_HFE_ACTION_END
 };
 
@@ -13222,7 +13223,10 @@ void __hfe_close(struct s_assenv *ae, struct s_hfe_action *hfe_action) {
 }
 void __hfe_output_crc(struct s_assenv *ae, struct s_hfe_action *hfe_action) {
 	unsigned int zebyte;
-	zebyte=ae->hfecrc>>8;
+#if TRACE_HFE
+	printf("HFE output current CRC [%04X]\n",ae->hfecrc);
+#endif
+	zebyte=(ae->hfecrc>>8)&0xFF;
 	ObjectArrayAddDynamicValueConcat((void **)&ae->hfe->data,&ae->hfe->idata,&ae->hfe->mdata,&zebyte,sizeof(zebyte));
 	zebyte=ae->hfecrc&0xFF;
 	ObjectArrayAddDynamicValueConcat((void **)&ae->hfe->data,&ae->hfe->idata,&ae->hfe->mdata,&zebyte,sizeof(zebyte));
@@ -13230,14 +13234,39 @@ void __hfe_output_crc(struct s_assenv *ae, struct s_hfe_action *hfe_action) {
 void __hfe_start_crc(struct s_assenv *ae, struct s_hfe_action *hfe_action) {
 	ae->hfecrc=0xFFFF;
 }
+void __hfe_complete_track(struct s_assenv *ae, struct s_hfe_action *hfe_action) {
+	unsigned int zebyte=0x4E;
+	int i,target;
+
+	if (hfe_action->nbparam==1) target=6250; else
+	if (hfe_action->nbparam==2) target=RoundComputeExpression(ae,hfe_action->param[0],hfe_action->ioffset,0,0); else target=6250;
+#if TRACE_HFE
+	printf("HFE complete track to %d bytes\n",target);
+#endif
+
+	for (i=ae->hfe->idata;i<target;i++) {
+		ae->hfecrc=__internal_CRC16CCITT(ae->hfecrc,zebyte&0xFF);
+		ObjectArrayAddDynamicValueConcat((void **)&ae->hfe->data,&ae->hfe->idata,&ae->hfe->mdata,&zebyte,sizeof(zebyte));
+	}
+}
 void __hfe_add_byte(struct s_assenv *ae, struct s_hfe_action *hfe_action) {
 	unsigned int zebyte;
 	int i;
-	for (i=1;i<hfe_action->nbparam;i++) {
+#if TRACE_HFE
+	printf("add HFE byte(s) ");
+#endif
+	for (i=0;i<hfe_action->nbparam-1;i++) {
 		zebyte=RoundComputeExpression(ae,hfe_action->param[0+i],hfe_action->ioffset,0,0);
-		__internal_CRC16CCITT(ae->hfecrc,zebyte&0xFF);
+#if TRACE_HFE
+	printf("%02X",zebyte&0xFF);
+	if (zebyte>255) printf("|SYNCHRO "); else printf(" ");
+#endif
+		ae->hfecrc=__internal_CRC16CCITT(ae->hfecrc,zebyte&0xFF);
 		ObjectArrayAddDynamicValueConcat((void **)&ae->hfe->data,&ae->hfe->idata,&ae->hfe->mdata,&zebyte,sizeof(zebyte));
 	}
+#if TRACE_HFE
+	printf("\n");
+#endif
 }
 void __hfe_add_track_header(struct s_assenv *ae, struct s_hfe_action *hfe_action) {
 	unsigned int zebyte;
@@ -13385,7 +13414,7 @@ void __hfe_add_gap(struct s_assenv *ae, struct s_hfe_action *hfe_action) {
 			return;
 	}
 	for (i=0;i<bytenumber;i++) {
-		__internal_CRC16CCITT(ae->hfecrc,zebyte&0xFF);
+		ae->hfecrc=__internal_CRC16CCITT(ae->hfecrc,zebyte&0xFF);
 		ObjectArrayAddDynamicValueConcat((void **)&ae->hfe->data,&ae->hfe->idata,&ae->hfe->mdata,&zebyte,sizeof(zebyte));
 	}
 }
@@ -13405,7 +13434,8 @@ void __HFE(struct s_assenv *ae) {
 				if (strcmp(ae->wl[ae->idx+1].w,"ADD_GAP")==0)		curaction.action=E_HFE_ACTION_ADD_GAP; else
 				if (strcmp(ae->wl[ae->idx+1].w,"ADD_TRACK_HEADER")==0)	curaction.action=E_HFE_ACTION_ADD_TRACK_HEADER; else cmderr=1;
 				break;
-			case 'C':if (strcmp(ae->wl[ae->idx+1].w,"CLOSE")==0)	curaction.action=E_HFE_ACTION_CLOSE; else cmderr=1;break;
+			case 'C':if (strcmp(ae->wl[ae->idx+1].w,"CLOSE")==0)	curaction.action=E_HFE_ACTION_CLOSE; else
+				if (strcmp(ae->wl[ae->idx+1].w,"COMPLETE_TRACK")==0)	curaction.action=E_HFE_ACTION_COMPLETE_TRACK; else cmderr=1;break;
 			case 'I':if (strcmp(ae->wl[ae->idx+1].w,"INIT")==0)		curaction.action=E_HFE_ACTION_INIT; else cmderr=1;break;
 			case 'O':if (strcmp(ae->wl[ae->idx+1].w,"OUTPUT_CRC")==0)	curaction.action=E_HFE_ACTION_OUTPUT_CRC; else cmderr=1;break;
 			case 'S':
@@ -13418,6 +13448,7 @@ void __HFE(struct s_assenv *ae) {
 		// some action need more than one filename
 		switch (curaction.action) {
 			case E_HFE_ACTION_ADD_TRACK_HEADER: case E_HFE_ACTION_OUTPUT_CRC:case E_HFE_ACTION_START_CRC:case E_HFE_ACTION_CLOSE:
+			case E_HFE_ACTION_COMPLETE_TRACK:
 				nbparam=1;break;
 			case E_HFE_ACTION_INIT:case E_HFE_ACTION_SIDE:case E_HFE_ACTION_TRACK:case E_HFE_ACTION_ADD_BYTE:
 				nbparam=2;break;
@@ -13477,15 +13508,16 @@ void PopAllHFE(struct s_assenv *ae) {
 		ae->idx=ae->hfe_action[i].iw; // MakeError hack
 		switch (ae->hfe_action[i].action) {
 			case E_HFE_ACTION_ADD_TRACK_HEADER:	__hfe_add_track_header(ae,&ae->hfe_action[i]);break;
-			case E_HFE_ACTION_OUTPUT_CRC:	__hfe_output_crc(ae,&ae->hfe_action[i]);break;
-			case E_HFE_ACTION_START_CRC:	__hfe_start_crc(ae,&ae->hfe_action[i]);break;
+			case E_HFE_ACTION_OUTPUT_CRC:		__hfe_output_crc(ae,&ae->hfe_action[i]);break;
+			case E_HFE_ACTION_START_CRC:		__hfe_start_crc(ae,&ae->hfe_action[i]);break;
 			case E_HFE_ACTION_CLOSE: 		__hfe_close(ae,&ae->hfe_action[i]);break;
 			case E_HFE_ACTION_INIT:			__hfe_init(ae,&ae->hfe_action[i]);break;
 			case E_HFE_ACTION_SIDE:			__hfe_side(ae,&ae->hfe_action[i]);break;
 			case E_HFE_ACTION_TRACK:		__hfe_track(ae,&ae->hfe_action[i]);break;
 			case E_HFE_ACTION_ADD_GAP:		__hfe_add_gap(ae,&ae->hfe_action[i]);break;
 			case E_HFE_ACTION_ADD_BYTE:		__hfe_add_byte(ae,&ae->hfe_action[i]);break;
-			case E_HFE_ACTION_ADD_SECTOR:	__hfe_add_sector(ae,&ae->hfe_action[i]);break;
+			case E_HFE_ACTION_ADD_SECTOR:		__hfe_add_sector(ae,&ae->hfe_action[i]);break;
+			case E_HFE_ACTION_COMPLETE_TRACK:	__hfe_complete_track(ae,&ae->hfe_action[i]);break;
 			default:MakeError(ae,0,"(PopAllHFE)",0,"internal error during HFE deferred execution, please report\n");
 				break;
 		}
