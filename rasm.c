@@ -13027,11 +13027,12 @@ unsigned char *__internal_make_HFE_header(int ntrack,int nside) {
 unsigned char *__internal_track_to_HFE(unsigned int *track, int lng) {
         unsigned char *data;
         int previous=0,idx,v;
-        int i;
+        int i,j;
 
         if (!lng) return NULL;
 
         data=MemMalloc(2*lng);
+	memset(data,0,2*lng);
 
         for (i=idx=0;i<lng;i++) {
                 if (track[i]&SYNCHRO) {
@@ -13039,7 +13040,15 @@ unsigned char *__internal_track_to_HFE(unsigned int *track, int lng) {
                                 // push synchro byte
                                 case 0xC2:data[idx++]=0x4A; data[idx++]=0x24;break; // C2
                                 case 0xA1:data[idx++]=0x22; data[idx++]=0x91;break; // A1
-                                default:printf("unknown synchro byte %02X\n",track[i]);break;
+				default:printf("unknown synchro byte %02X position %d : ",track[i],i);
+					j=i-10;if (j<0) j=0;
+					for (;j<i;j++) printf("%02X ",track[j]);
+					printf("[%02X] ",track[i]);
+					for (j=i+1;j<i+11 && j<lng;j++) printf("%02X ",track[j]);
+
+					printf("\n");
+					idx+=2;
+					break;
                         }
                 } else {
                         v=track[i];
@@ -13065,7 +13074,7 @@ unsigned char *__internal_track_to_HFE(unsigned int *track, int lng) {
 
 void __internal_hfe_resize_track(struct s_assenv *ae) {
 #if TRACE_HFE
-	printf("resize track up to %d\n",ae->hfetrack);
+	printf("HFE resize track list up to %d\n",ae->hfetrack);
 #endif
 	if (ae->hfetrack*2>=ae->hfedisk[ae->nbhfedisk-1].itrack) {
 		struct s_hfe_track hfetrack={0};
@@ -13105,11 +13114,14 @@ void __hfe_track(struct s_assenv *ae, struct s_hfe_action *hfe_action) {
 		ae->hfetrack=0;
 	}
 	__internal_hfe_resize_track(ae);
+#if TRACE_HFE
+	printf("HFE set current track to %d\n",ae->hfetrack);
+#endif
 	ae->hfe=&ae->hfedisk[ae->nbhfedisk-1].track[ae->hfetrack*2+ae->hfeside]; // update fast ptr
 }
 
 void __hfe_close(struct s_assenv *ae, struct s_hfe_action *hfe_action) {
-	unsigned short int tracklist[256]={0};
+	unsigned short int tracklist[256]={0}; // specs max
 	unsigned int zebyte=0x4E;
 	unsigned char *hfe_header;
 	unsigned char filler[0x100]={0};
@@ -13135,7 +13147,7 @@ void __hfe_close(struct s_assenv *ae, struct s_hfe_action *hfe_action) {
 			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"HFE tracklen is above FDC tolerance for a 300RPM drive! (tracklen=%d)\n",tracklen);
 			return;
 		} else {
-			rasm_printf(ae,KWARNING"[%s:%d] Warning: HFE tracklen is very highi (%d)\n",GetCurrentFile(ae),ae->wl[ae->idx].l,tracklen);
+			rasm_printf(ae,KWARNING"[%s:%d] Warning: HFE tracklen is very high (%d)\n",GetCurrentFile(ae),ae->wl[ae->idx].l,tracklen);
 			if (ae->erronwarn) MaxError(ae);
 		}
 	}
@@ -13168,7 +13180,7 @@ void __hfe_close(struct s_assenv *ae, struct s_hfe_action *hfe_action) {
 	FileWriteBinary(oname,(char*)hfe_header,0x200);
 
 #if TRACE_HFE
-	printf("HFE blocks per track=%d\n",blocktrack);
+	printf("HFE blocks per track=%d   ",blocktrack);
 #endif
 
 	FileWriteBinary(oname,(char*)tracklist,0x200);
@@ -13183,6 +13195,9 @@ void __hfe_close(struct s_assenv *ae, struct s_hfe_action *hfe_action) {
 		ae->hfe=&ae->hfedisk[ae->nbhfedisk-1].track[j]; // update fast ptr for convenience
 		tracklen=ae->hfe->idata;
 
+#if TRACE_HFE
+	printf("HFE processing track %d\n",j>>1);
+#endif
 		data0=__internal_track_to_HFE(ae->hfedisk[ae->nbhfedisk-1].track[j+0].data,tracklen);
 		data1=__internal_track_to_HFE(ae->hfedisk[ae->nbhfedisk-1].track[j+1].data,tracklen);
 
@@ -13249,7 +13264,7 @@ void __hfe_add_sector(struct s_assenv *ae, struct s_hfe_action *hfe_action) {
 	int i,curlen,offset;
 
 #if TRACE_HFE
-	printf("add HFE sector (tracksize=%d)\n",ae->hfe->idata);
+	printf("add HFE sector (tracksize=%d) ",ae->hfe->idata);
 #endif
 
 	zebyte=0x00; // VCO SYNC
@@ -13264,22 +13279,44 @@ void __hfe_add_sector(struct s_assenv *ae, struct s_hfe_action *hfe_action) {
 	crc=__internal_CRC16CCITT(crc,0xA1);
 	crc=__internal_CRC16CCITT(crc,0xFE);
 
-	zebyte=RoundComputeExpression(ae,hfe_action->param[0],hfe_action->ioffset,0,0); // track
+	zebyte=RoundComputeExpression(ae,hfe_action->param[0],hfe_action->ioffset,0,0)&0xFF; // track
 	crc=__internal_CRC16CCITT(crc,zebyte);
 	ObjectArrayAddDynamicValueConcat((void **)&ae->hfe->data,&ae->hfe->idata,&ae->hfe->mdata,&zebyte,sizeof(zebyte));
-	zebyte=RoundComputeExpression(ae,hfe_action->param[1],hfe_action->ioffset,0,0); // side
+#if TRACE_HFE
+	printf("#%02X ",zebyte);
+#endif
+	
+	zebyte=RoundComputeExpression(ae,hfe_action->param[1],hfe_action->ioffset,0,0)&0xFF; // side
 	crc=__internal_CRC16CCITT(crc,zebyte);
 	ObjectArrayAddDynamicValueConcat((void **)&ae->hfe->data,&ae->hfe->idata,&ae->hfe->mdata,&zebyte,sizeof(zebyte));
-	zebyte=RoundComputeExpression(ae,hfe_action->param[2],hfe_action->ioffset,0,0); // ID
+#if TRACE_HFE
+	printf("#%02X ",zebyte);
+#endif
+	
+	zebyte=RoundComputeExpression(ae,hfe_action->param[2],hfe_action->ioffset,0,0)&0xFF; // ID
 	crc=__internal_CRC16CCITT(crc,zebyte);
 	ObjectArrayAddDynamicValueConcat((void **)&ae->hfe->data,&ae->hfe->idata,&ae->hfe->mdata,&zebyte,sizeof(zebyte));
-	sectorsize=zebyte=RoundComputeExpression(ae,hfe_action->param[3],hfe_action->ioffset,0,0); // sector size
+#if TRACE_HFE
+	printf("#%02X ",zebyte);
+#endif
+
+	sectorsize=zebyte=RoundComputeExpression(ae,hfe_action->param[3],hfe_action->ioffset,0,0)&0xFF; // sector size
 	crc=__internal_CRC16CCITT(crc,zebyte);
 	ObjectArrayAddDynamicValueConcat((void **)&ae->hfe->data,&ae->hfe->idata,&ae->hfe->mdata,&zebyte,sizeof(zebyte));
+#if TRACE_HFE
+	printf("#%02X ",zebyte);
+#endif
+
 	zebyte=(crc>>8)&0xFF; // CRC high weight
 	ObjectArrayAddDynamicValueConcat((void **)&ae->hfe->data,&ae->hfe->idata,&ae->hfe->mdata,&zebyte,sizeof(zebyte));
+#if TRACE_HFE
+	printf("#%02X",zebyte);
+#endif
 	zebyte=crc&0xFF; // CRC low weight
 	ObjectArrayAddDynamicValueConcat((void **)&ae->hfe->data,&ae->hfe->idata,&ae->hfe->mdata,&zebyte,sizeof(zebyte));
+#if TRACE_HFE
+	printf("%02X\n",zebyte);
+#endif
 
 	// gestion des longueurs à la con
 	switch (sectorsize) {
@@ -13313,7 +13350,7 @@ void __hfe_add_sector(struct s_assenv *ae, struct s_hfe_action *hfe_action) {
 	crc=__internal_CRC16CCITT(crc,0xFB);
 
 	for (i=0;i<curlen;i++) {
-		zebyte=ae->mem[hfe_action->ibank][offset+i];
+		zebyte=ae->mem[hfe_action->ibank][offset+i]&0xFF;
 		crc=__internal_CRC16CCITT(crc,zebyte);
 		ObjectArrayAddDynamicValueConcat((void **)&ae->hfe->data,&ae->hfe->idata,&ae->hfe->mdata,&zebyte,sizeof(zebyte));
 	}
@@ -13324,10 +13361,14 @@ void __hfe_add_sector(struct s_assenv *ae, struct s_hfe_action *hfe_action) {
 	ObjectArrayAddDynamicValueConcat((void **)&ae->hfe->data,&ae->hfe->idata,&ae->hfe->mdata,&zebyte,sizeof(zebyte));
 }
 void __hfe_add_gap(struct s_assenv *ae, struct s_hfe_action *hfe_action) {
-	unsigned short int zebyte;
+	unsigned int zebyte;
 	int i,bytenumber;
 
 	bytenumber=RoundComputeExpression(ae,hfe_action->param[0],hfe_action->ioffset,0,0);
+#if TRACE_HFE
+	printf("add HFE GAP (tracksize=%d) nbGAPbyte(s)=%d\n",ae->hfe->idata,bytenumber);
+#endif
+
 	if (bytenumber<1) {
 		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"GAP size must be greater than zero\n");
 		return;
@@ -19212,7 +19253,8 @@ printf("AudioLoadSample filesize=%d st=%d normalize=%.2lf\n",filesize,sample_typ
 					/* normalize */
 					cursample=MinMaxInt(floor(((accumulator/nbchannel)*normalize)+0.5)+128,0,255);
 					/* PSG levels & packing */
-					samplevalue=(samplevalue<<2)+(ae->psgtab[cursample]>>2);
+					if ((ae->psgtab[cursample]+1)>>2) samplevalue=(samplevalue<<2)+((ae->psgtab[cursample]+1)>>2)-1;
+					else samplevalue=(samplevalue<<2);
 				}
 				/* output */
 				___output(ae,samplevalue);
