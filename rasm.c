@@ -13014,7 +13014,7 @@ unsigned char *__internal_make_HFE_header(int ntrack,int nside) {
 	hfe[17]=1; // step...
 	hfe[18]=1;
 	hfe[19]=0; // tracklist offset => 0x200
-	hfe[20]=1; // write protected
+	hfe[20]=0; // write protected
 	hfe[21]=0xFF; // single step
 	hfe[22]=0xFF;
 	//
@@ -23802,6 +23802,7 @@ printf("init 0 amper=%d\n",ae->noampersand);
 	ae->snapshot.gatearray.palette[16]=0x04;
 
 	ae->snapshot.gatearray.multiconfiguration=0x8D; // lower/upper ROM off + mode 1
+	ae->snapshot.ramconfiguration=0xC0; // default
 	ae->snapshot.CPCType=2; /* 6128 */
 	ae->snapshot.crtcstate.model=0; /* CRTC 0 */
 	ae->snapshot.vsyncdelay=2;
