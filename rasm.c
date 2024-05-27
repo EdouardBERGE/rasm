@@ -8745,7 +8745,7 @@ int EDSK_addfile(struct s_assenv *ae,char *edskfilename,int facenumber, char *fi
 	int fb[180],rc,idxb;
 	unsigned char *data=NULL;
 	int size=0;
-	int firstblock,amsdos_user;
+	int firstblock,amsdos_user=0;
 
 	curwrap=EDSK_select(ae,edskfilename,facenumber);
 	/* update struct */
@@ -9260,7 +9260,7 @@ void PopAllSave(struct s_assenv *ae)
 	char *dskfilename;
 	char *filename;
 	int offset,size,run;
-	int i,is,erreur=0,touched,dummy_user;
+	int i,is,erreur=0,touched,dummy_user=0;
 	
 	for (is=0;is<ae->nbsave;is++) {
 		/* avoid quotes */
@@ -9336,6 +9336,7 @@ void PopAllSave(struct s_assenv *ae)
 			rasm_printf(ae,KIO"Write binary file %s (%d byte%s)\n",filename,size,size>1?"s":"");
 			FileRemoveIfExists(filename);
 			if (ae->save[is].amsdos) {
+				MakeAMSDOS_name(ae,filename,&dummy_user);
 				AmsdosHeader=MakeAMSDOSHeader(run,offset,offset+size,MakeAMSDOS_name(ae,filename,&dummy_user),dummy_user);
 				FileWriteBinary(filename,(char *)AmsdosHeader,128);
 			} else if (ae->save[is].hobeta) {
@@ -13197,7 +13198,7 @@ void __hfe_close(struct s_assenv *ae, struct s_hfe_action *hfe_action) {
 		tracklen=ae->hfe->idata;
 
 #if TRACE_HFE
-	printf("HFE processing track %d\n",j>>1);
+	printf("HFE processing track %d (nbdata=%d)\n",j>>1,tracklen);
 #endif
 		data0=__internal_track_to_HFE(ae->hfedisk[ae->nbhfedisk-1].track[j+0].data,tracklen);
 		data1=__internal_track_to_HFE(ae->hfedisk[ae->nbhfedisk-1].track[j+1].data,tracklen);
