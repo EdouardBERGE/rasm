@@ -13165,11 +13165,11 @@ void __hfe_close(struct s_assenv *ae, struct s_hfe_action *hfe_action) {
 
 		// upgrade shortest track to the longest
 		ae->hfe=&ae->hfedisk[ae->nbhfedisk-1].track[i*2]; // update fast ptr for convenience
-		while (ae->hfedisk[ae->nbhfedisk-1].track[i*2].idata<maxlen || ae->hfedisk[ae->nbhfedisk-1].track[i*2].idata<6125) {
+		while (ae->hfe->idata<maxlen || ae->hfe->idata<6125) {
 			ObjectArrayAddDynamicValueConcat((void **)&ae->hfe->data,&ae->hfe->idata,&ae->hfe->mdata,&zebyte,sizeof(zebyte));
 		}
 		ae->hfe=&ae->hfedisk[ae->nbhfedisk-1].track[i*2+1]; // update fast ptr for convenience
-		while (ae->hfedisk[ae->nbhfedisk-1].track[i*2+1].idata<maxlen || ae->hfedisk[ae->nbhfedisk-1].track[i*2].idata<6125) {
+		while (ae->hfe->idata<maxlen || ae->hfe->idata<6125) {
 			ObjectArrayAddDynamicValueConcat((void **)&ae->hfe->data,&ae->hfe->idata,&ae->hfe->mdata,&zebyte,sizeof(zebyte));
 		}
 		// blocktrack list
