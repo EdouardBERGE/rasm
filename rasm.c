@@ -17330,6 +17330,8 @@ void __COMZ(struct s_assenv *ae, int icomz) {
 
 	ae->codeadr=ae->comz[icomz].address;
 
+	newcomz=malloc(1);
+	newcomz[0]=0;
 	while (ae->wl[ae->idx].t!=1) {
 		if (!StringIsQuote(ae->wl[ae->idx+1].w)) {
 			char *string2print=NULL;
@@ -18884,7 +18886,7 @@ printf("struct (almost) legacy filler from %d to %d-1\n",localsize,ae->rasmstruc
 #endif
 						for (j=0;j<ae->rasmstruct[irs].rasmstructfield[i].idata;j++) {
 							___output(ae,ae->rasmstruct[irs].rasmstructfield[i].data[j]);
-							printf("insert data j=%d\n",j);
+							//printf("insert data j=%d\n",j);
 						}
 					}
 					nbelem--;
