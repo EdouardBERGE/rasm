@@ -16286,7 +16286,7 @@ void __ROMBANK(struct s_assenv *ae) {
 			// search for an immediate ROM used
 			rom_select=0;
 			if (ae->activebank<260-1) {
-				// no previous ROM => default
+				// no previous ROM => use default
 			} else {
 				for (i=0;i<257;i++) if (ae->rombank[i]==ae->activebank) break;
 				if (i<257) rom_select=i+1;
