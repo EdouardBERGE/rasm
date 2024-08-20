@@ -693,12 +693,6 @@ struct s_ifthen {
 /**************************************************
           w o r d    p r o c e s s i n g
 **************************************************/
-struct s_wordlist {
-	char *w;
-	int l,t,e; /* e=1 si egalite dans le mot */
-	int ifile;
-	int ml,mifile;
-};
 
 struct s_macro {
 	char *mnemo;
@@ -1191,6 +1185,13 @@ struct s_assenv {
 /*************************************
          D I R E C T I V E S
 *************************************/
+struct s_wordlist {
+	char *w;
+	int l,t,e; /* e=1 si egalite dans le mot */
+	int ifile;
+	int ml,mifile;
+	//void (*fastptr)(struct s_assenv *ae);
+};
 struct s_asm_keyword {
 	char *mnemo;
 	int crc,length;
@@ -6125,6 +6126,9 @@ double ComputeExpressionCore(struct s_assenv *ae,char *original_zeexpression,int
 							curval=curdic->v;
 							break;
 						} else {
+#if TRACE_COMPUTE_EXPRESSION
+	printf("recherche de bracket\n");
+#endif
 							/* getbank hack */
 							if (ae->computectx->varbuffer[minusptr]!='{') {
 								bank=0;
@@ -6174,10 +6178,8 @@ double ComputeExpressionCore(struct s_assenv *ae,char *original_zeexpression,int
 								}
 
 								if (curval==-1) {
-									if (i==ae->irasmstructalias) {
-										MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"cannot SIZEOF unknown structure [%s]!\n",ae->computectx->varbuffer+minusptr+bank);
+										MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"cannot SIZEOF unknown structure or field [%s]!\n",ae->computectx->varbuffer+minusptr+bank);
 										curval=0;
-									}
 								}
 							} else {
 								MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"expression [%s] - %s is an unknown prefix!\n",TradExpression(zeexpression),ae->computectx->varbuffer);
@@ -11148,6 +11150,7 @@ void _NOP(struct s_assenv *ae) {
 		} else {
 			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"NOP <repetition> must use positive value\n");
 		}
+		ae->idx++;
 	} else {
 		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"NOP is supposed to be used without parameter or with one optional parameter\n");
 	}
@@ -12266,6 +12269,7 @@ void _SRL8(struct s_assenv *ae) {
 			case CRC_IY:___output(ae,0xFD);___output(ae,0x6C);___output(ae,0xFD);___output(ae,0x26);___output(ae,0x00);ae->nop+=5;ae->tick+=19;break; /* LD YL,YH : LD YH,0 */
 			default:MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is SRL8 BC/DE/HL/IX/IY\n");
 		}
+		ae->idx++;
 	}
 }
 void _SRL(struct s_assenv *ae) {
@@ -16265,7 +16269,7 @@ void __BANK(struct s_assenv *ae) {
 }
 
 void __ROMBANK(struct s_assenv *ae) {
-	int rom_select;
+	int i,rom_select;
 
 	if (ae->getstruct==1) {
 		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"You cannot change BANK inside a structure declaration\n");
@@ -16278,7 +16282,17 @@ void __ROMBANK(struct s_assenv *ae) {
 	ae->remu=1; // force REMU output :)
 
 	if (!ae->wl[ae->idx].t) {
-		if (strcmp(ae->wl[ae->idx+1].w,"LOWER")==0) {
+		if (strcmp(ae->wl[ae->idx+1].w,"NEXT")==0) {
+			// search for an immediate ROM used
+			rom_select=0;
+			if (ae->activebank<260-1) {
+				// no previous ROM => default
+			} else {
+				for (i=0;i<257;i++) if (ae->rombank[i]==ae->activebank) break;
+				if (i<257) rom_select=i+1;
+				if (rom_select>=256) rom_select=0;
+			}
+		} else if (strcmp(ae->wl[ae->idx+1].w,"LOWER")==0) {
 			rom_select=256;
 			ae->idx++;
 		} else {
@@ -21104,39 +21118,52 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 		  e x e c u t e    i n s t r u c t i o n
 		*****************************************/
 		executed=0;
-		if (ilength<INSTRUCTION_MAXLENGTH && (ifast=ae->fastmatch[(int)wordlist[ae->idx].w[0]][ilength])!=-1) {
-			while (instruction[ifast].mnemo[0]==wordlist[ae->idx].w[0]) {
-				if (instruction[ifast].crc==curcrc && strcmp(instruction[ifast].mnemo,wordlist[ae->idx].w)==0) {
-					instruction[ifast].makemnemo(ae);
-					wordlist=ae->wl;
-					executed=1;
-					// normalement inutile
-					while (!wordlist[ae->idx].t) {
-						ae->idx++;
+	/*	
+		if (wordlist[ae->idx].fastptr) {
+			wordlist[ae->idx].fastptr(ae);
+			wordlist=ae->wl;
+			executed=1;
+			// normalement inutile
+			while (!wordlist[ae->idx].t) {
+				ae->idx++;
+			}
+		} else */
+	       	{
+			if (ilength<INSTRUCTION_MAXLENGTH && (ifast=ae->fastmatch[(int)wordlist[ae->idx].w[0]][ilength])!=-1) {
+				while (instruction[ifast].mnemo[0]==wordlist[ae->idx].w[0]) {
+					if (instruction[ifast].crc==curcrc && strcmp(instruction[ifast].mnemo,wordlist[ae->idx].w)==0) {
+						//wordlist[ae->idx].fastptr=instruction[ifast].makemnemo;
+						instruction[ifast].makemnemo(ae);
+						wordlist=ae->wl;
+						executed=1;
+						// normalement inutile => boucles!
+						while (!wordlist[ae->idx].t) {
+							ae->idx++;
+						}
+						break;
 					}
-					break;
+					ifast++;
 				}
-				ifast++;
 			}
-		}
-		/*****************************************
-		       e x e c u t e    m a c r o
-		*****************************************/
-		if (!executed) {
-			/* is it a macro? */
-			if ((ifast=SearchMacro(ae,curcrc,wordlist[ae->idx].w))>=0) {
-				wordlist=__MACRO_EXECUTE(ae,ifast);
-				continue;
-			}
-			/*********************************************************************
-			  e x e c u t e    e x p r e s s i o n   o r    p u s h    l a b e l
-			*********************************************************************/
-			/* neither instruction nor macro executed, this is a label or an assignement */
-			if (wordlist[ae->idx].e) {
-				ExpressionFastTranslate(ae,&wordlist[ae->idx].w,0);
-				ComputeExpression(ae,wordlist[ae->idx].w,ae->codeadr,0,0);
-			} else {
-				PushLabel(ae);
+			/*****************************************
+			       e x e c u t e    m a c r o
+			*****************************************/
+			if (!executed) {
+				/* is it a macro? */
+				if ((ifast=SearchMacro(ae,curcrc,wordlist[ae->idx].w))>=0) {
+					wordlist=__MACRO_EXECUTE(ae,ifast);
+					continue;
+				}
+				/*********************************************************************
+				  e x e c u t e    e x p r e s s i o n   o r    p u s h    l a b e l
+				*********************************************************************/
+				/* neither instruction nor macro executed, this is a label or an assignement */
+				if (wordlist[ae->idx].e) {
+					ExpressionFastTranslate(ae,&wordlist[ae->idx].w,0);
+					ComputeExpression(ae,wordlist[ae->idx].w,ae->codeadr,0,0);
+				} else {
+					PushLabel(ae);
+				}
 			}
 		}
 
@@ -24634,6 +24661,7 @@ printf("check quotes and repeats\n");
 
 	/* creer une liste de mots */
 	curw.w=TxtStrDup("BEGIN");
+	//curw.fastptr=NULL;
 	curw.l=0;
 	curw.ifile=0;
 	curw.t=1;
@@ -24836,6 +24864,7 @@ printf("ajout du mot [%s]\n",curw.w);
 #endif
 							ObjectArrayAddDynamicValueConcat((void**)&wordlist,&nbword,&maxword,&curw,sizeof(curw));
 							//texpr=0; /* reset expr */
+							//curw.fastptr=NULL;
 							curw.e=0;
 							lw=0;
 							w[lw]=0;
@@ -24868,6 +24897,7 @@ printf("macro trigger w=[%s]\n",curw.w);
 /* @@TODO AS80 compatibility patch!!! */
 												macro_trigger=curw.w[0];
 											} else {
+												//curw.fastptr=instruction[ifast].makemnemo;
 												Automate[' ']=1;
 												Automate['\t']=1;
 												ispace=0;
@@ -24970,6 +25000,7 @@ if (curw.w[0]=='=') {
 }
 #endif
 							ObjectArrayAddDynamicValueConcat((void**)&wordlist,&nbword,&maxword,&curw,sizeof(curw));
+							//curw.fastptr=NULL;
 							curw.e=0;
 							lw=0;
 							w[lw]=0;
@@ -25916,6 +25947,7 @@ int RasmAssembleInfoParam(const char *datain, int lenin, unsigned char **dataout
 #define AUTOTEST_LZX0B_E "inczx0b 'autotest_include.raw',0,1000"
 #define AUTOTEST_LZX0B_F "lzx0b : incbin'autotest_include.raw',0,1000 : lzclose"
 
+#define AUTOTEST_SIZEOF_BUG0 "struct MyStruct: val defb: endstruct: assert {sizeof}UnknownStruct==1 "
 
 #define AUTOTEST_MAXERROR	"repeat 20:aglapi:rend:nop"
 
@@ -27723,6 +27755,11 @@ printf("testing ticker OK\n");
 	if (!ret) {} else {printf("Autotest %03d ERROR (ifdef ifused)\n",cpt);exit(-1);}
 	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
 printf("testing IFDEF / IFUSED OK\n");
+
+	ret=RasmAssemble(AUTOTEST_SIZEOF_BUG0,strlen(AUTOTEST_SIZEOF_BUG0),&opcode,&opcodelen); // bug report Anrikun
+	if (ret) {} else {printf("Autotest %03d ERROR (must not sizeof an unknown struct)\n",cpt);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing SIZEOF bug OK\n");
 
 	ret=RasmAssemble(AUTOTEST_SAVEINVALID0,strlen(AUTOTEST_SAVEINVALID0),&opcode,&opcodelen);
 	if (!ret && FileGetSize("rasmoutput.bin")==256) { } else {printf("Autotest %03d ERROR (invalid file size on DISK with SAVE => mostly a pure windows compilation error)\n",cpt);exit(-1);}
