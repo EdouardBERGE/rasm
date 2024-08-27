@@ -22105,7 +22105,7 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 						}
 						if (ae->cprinfo) rasm_printf(ae,KVERBOSE"WriteCPR bank %2d of %5d byte%s start at #%04X",i,endoffset-offset,endoffset-offset>1?"s":" ",offset);
 						if (endoffset-offset>16384) {
-							rasm_printf(ae,"\nROM %d is too big!!!\n",i);
+							rasm_printf(ae,KERROR"\nROM %d is too big!!! (%d byte%s too large)\n"KVERBOSE,i,endoffset-offset-16384,endoffset-offset-16384>1?"s":"");
 							FileWriteBinaryClose(TMP_filename);
 							FileRemoveIfExists(TMP_filename);
 							FreeAssenv(ae);
@@ -22203,7 +22203,7 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 					if (endoffset>offset) {
 						/* cannot be bigger than 16K */
 						if (endoffset-offset>16384) {
-							rasm_printf(ae,"\nROM is too big!!!\n");
+							rasm_printf(ae,KERROR"\nROM is too big!!! (%d byte%s too large)\n"KVERBOSE,endoffset-offset-16384,endoffset-offset-16384>1?"s":"");
 							FileRemoveIfExists(TMP_filename);
 							FreeAssenv(ae);
 							exit(ABORT_ERROR);
@@ -22353,7 +22353,7 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 										}
 									}
 									if (endoffset-offset>16384) {
-										rasm_printf(ae,KERROR"\nBANK is too big!!!\n");
+										rasm_printf(ae,KERROR"\nBANK is too big!!! (%d byte%s too large)\n"KVERBOSE,endoffset-offset-16384,endoffset-offset-16384>1?"s":"");
 										if (!ae->flux) {
 											FileWriteBinaryClose(TMP_filename);
 											FileRemoveIfExists(TMP_filename);
@@ -22380,7 +22380,7 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 										if (i<4 || i+4>maxrom) rasm_printf(ae,KVERBOSE"WriteSNA bank %2d of %5d byte%s start at #%04X",i+k,endoffset-offset,endoffset-offset>1?"s":" ",offset);
 										else if (!noflood) {rasm_printf(ae,KVERBOSE"[...]\n");noflood=1;}
 										if (endoffset-offset>16384) {
-											rasm_printf(ae,KERROR"\nRAM block is too big!!!\n");
+											rasm_printf(ae,KERROR"\nRAM block is too big!!! (%d byte%s too large)\n"KVERBOSE,endoffset-offset-16384,endoffset-offset-16384>1?"s":"");
 											if (!ae->flux) {
 												FileWriteBinaryClose(TMP_filename);
 												FileRemoveIfExists(TMP_filename);
@@ -22455,7 +22455,7 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 									}
 								}
 								if (endoffset-offset>16384) {
-									rasm_printf(ae,KERROR"\nBANK is too big!!!\n");
+									rasm_printf(ae,KERROR"\nBANK is too big!!! (%d byte%s too large)\n"KVERBOSE,endoffset-offset-16384,endoffset-offset-16384>1?"s":"");
 									if (!ae->flux) {
 										FileWriteBinaryClose(TMP_filename);
 										FileRemoveIfExists(TMP_filename);
