@@ -985,6 +985,7 @@ struct s_assenv {
 	int maxptr;
 	/* CPR memory */
 	int iwnamebank[BANK_MAX_NUMBER];
+	int iwnameromsna[256]; // ROM with snapshots
 	unsigned char **mem;
 	int nbbank,maxbank;
 	int *memsize;
@@ -1000,7 +1001,7 @@ struct s_assenv {
 	int bankused[BANK_MAX_NUMBER];   /* 16K selected flag */
 	int bankgate[BANK_MAX_NUMBER+1];
 	int setgate[BANK_MAX_NUMBER+1];
-	int rombank[257];
+	int rombank[257]; // rom translation table for snapshots
 	int rundefined;
 	/* parsing */
 	struct s_wordlist *wl;
@@ -16388,6 +16389,54 @@ void __BANKSET(struct s_assenv *ae) {
 }
 
 
+void __NameROM(struct s_assenv *ae) {
+	int ibank;
+
+	if (!ae->forcesnapshot) {
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"NAMEROM can be used only with snapshot output\n");
+		return;
+	}
+
+	ae->bankmode=1;
+	if (!ae->wl[ae->idx].t && !ae->wl[ae->idx+1].t && ae->wl[ae->idx+2].t==1) {
+		if (!StringIsQuote(ae->wl[ae->idx+2].w)) {
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Syntax is NAMEROM <rom number|Lower>,'<string>'\n");
+		} else {
+			if (strcmp(ae->wl[ae->idx+1].w,"LOWER")==0) {
+				ibank=256;
+			} else {
+				ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
+				ibank=RoundComputeExpression(ae,ae->wl[ae->idx+1].w,ae->codeadr,0,0);
+			}
+			if (ibank<0 || ibank>256) {
+				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"NAMEROM selection must be from 0 to 255 (or use LOWER for lower ROM)\n");
+			} else {
+				ae->iwnameromsna[ibank]=ae->idx+2;
+			}
+		}
+		ae->idx+=2;
+	} else if (!ae->wl[ae->idx].t && ae->wl[ae->idx+1].t==1)  {
+		if (!StringIsQuote(ae->wl[ae->idx+1].w)) {
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Syntax is NAMEROM '<string>'\n");
+		} else {
+			int sl;
+			// find rom in translation table
+			for (sl=0;sl<257;sl++) {
+				if (ae->rombank[sl]==ae->activebank) {
+					ibank=sl;
+					break;
+				}
+			}
+			if (sl==257) {
+				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"NAMEROM cannot be used in that memory space\n");
+			} else {
+				ae->iwnameromsna[ibank]=ae->idx+1;
+			}
+		}
+	} else {
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"NAMEROM directive need one integer (or LOWER) and a string\n");
+	}
+}
 void __NameBANK(struct s_assenv *ae) {
 	int ibank;
 
@@ -16411,7 +16460,7 @@ void __NameBANK(struct s_assenv *ae) {
 		} else {
 			ibank=ae->activebank;
 			if (ibank<0 || ibank>=BANK_MAX_NUMBER) {
-				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"NAMEBANK selection must be from 0 to %d\n",BANK_MAX_NUMBER);
+				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"NAMEBANK cannot be used in that memory space\n");
 			} else {
 				ae->iwnamebank[ibank]=ae->idx+1;
 			}
@@ -20479,6 +20528,7 @@ struct s_asm_keyword instruction[]={
 {"BANK",0,0,__BANK},
 {"BANKSET",0,0,__BANKSET},
 {"NAMEBANK",0,0,__NameBANK},
+{"NAMEROM",0,0,__NameROM},
 {"LIMIT",0,0,__LIMIT},
 {"LZEXO",0,0,__LZEXO},
 {"LZX7",0,0,__LZX7},
@@ -22337,8 +22387,11 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 							bankset=i>>2;
 							if (ae->bankset[bankset]) {
 								memcpy(packed,ae->mem[i],65536);
-								if (i<4 || i+4>maxrom) rasm_printf(ae,KVERBOSE"WriteSNA bank %2d,%d,%d,%d packed\n",i,i+1,i+2,i+3);
-								else if (!noflood) {rasm_printf(ae,KVERBOSE"[...]\n");noflood=1;}
+								if (i<4 || i+4>maxrom) {
+									rasm_printf(ae,KVERBOSE"WriteSNA bank %2d,%d,%d,%d packed",i,i+1,i+2,i+3);
+									if (ae->iwnamebank[i]) printf(" (%s)",ae->wl[ae->iwnamebank[i]].w);
+									printf("\n");
+								} else if (!noflood) {rasm_printf(ae,KVERBOSE"[...]\n");noflood=1;}
 							} else {
 								memset(packed,0,65536);
 								for (k=0;k<4;k++) {
@@ -22377,8 +22430,11 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 										if (ae->iwnamebank[i]>0) {
 											lm=strlen(ae->wl[ae->iwnamebank[i]].w)-2;
 										}
-										if (i<4 || i+4>maxrom) rasm_printf(ae,KVERBOSE"WriteSNA bank %2d of %5d byte%s start at #%04X",i+k,endoffset-offset,endoffset-offset>1?"s":" ",offset);
-										else if (!noflood) {rasm_printf(ae,KVERBOSE"[...]\n");noflood=1;}
+										if (i<4 || i+4>maxrom) {
+											rasm_printf(ae,KVERBOSE"WriteSNA bank %2d of %5d byte%s start at #%04X",i+k,endoffset-offset,endoffset-offset>1?"s":" ",offset);
+											if (ae->iwnamebank[i]) printf(" (%s)",ae->wl[ae->iwnamebank[i]].w);
+											printf("\n");
+										} else if (!noflood) {rasm_printf(ae,KVERBOSE"[...]\n");noflood=1;}
 										if (endoffset-offset>16384) {
 											rasm_printf(ae,KERROR"\nRAM block is too big!!! (%d byte%s too large)\n"KVERBOSE,endoffset-offset-16384,endoffset-offset-16384>1?"s":"");
 											if (!ae->flux) {
@@ -22467,7 +22523,10 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 									continue;
 								}
 								if (!noflood || howmanyrom<=4) {
-									if (i<256) rasm_printf(ae,KVERBOSE"WriteSNA ROM %3d of %5d byte%s start at #%04X\n",i,endoffset-offset,endoffset-offset>1?"s":" ",offset); else rasm_printf(ae,KVERBOSE"WriteSNA LOWER   of %5d byte%s start at #%04X\n",endoffset-offset,endoffset-offset>1?"s":" ",offset);
+									if (i<256) rasm_printf(ae,KVERBOSE"WriteSNA ROM %3d of %5d byte%s start at #%04X",i,endoffset-offset,endoffset-offset>1?"s":" ",offset);
+									      else rasm_printf(ae,KVERBOSE"WriteSNA LOWER   of %5d byte%s start at #%04X",endoffset-offset,endoffset-offset>1?"s":" ",offset);
+									if (ae->iwnameromsna[i]) printf(" (%s)",ae->wl[ae->iwnameromsna[i]].w);
+									printf("\n");
 								} else if (!noflood) {rasm_printf(ae,KVERBOSE"[...]\n");noflood=1;}
 								howmanyrom--;
 
