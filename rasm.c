@@ -990,7 +990,7 @@ struct s_assenv {
 	int nbbank,maxbank;
 	int *memsize;
 	int nbmemsize,maxmemsize;
-	int forcetape,forcezx,forcecpr,forceROM,forceROMconcat,bankmode;
+	int forcetape,forcezx,forcecpr,forceROM,forceROMconcat,bankmode,snacpr;
 	int amsdos,forcesnapshot,packedbank,extendedCPR,xpr,cprinfo,cprinfo_export,dsksnapshot;
 	int lastbank,activebank; // current used bank where data/code has to be written | used with outputadr (see ORG tracking)
 	char *cprinfo_filename;
@@ -15703,6 +15703,8 @@ void __BUILDSNA(struct s_assenv *ae) {
 	while (!ae->wl[ae->idx].t) {
 		if (strcmp(ae->wl[ae->idx+1].w,"V2")==0) {
 			ae->snapshot.version=2;
+		} else if (strcmp(ae->wl[ae->idx+1].w,"CPR")==0) {
+			ae->snacpr=1;
 		} else if (strcmp(ae->wl[ae->idx+1].w,"DSK")==0) {
 			ae->dsksnapshot=1;
 		} else {
@@ -22075,7 +22077,7 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 			               C A R T R I D G E
 			**********************************************
 			*********************************************/
-			if (ae->forcecpr) {
+			if (ae->forcecpr || ae->snacpr) {
 				char ChunkName[32];
 				int ChunkSize;
 				unsigned char chunk_endian;
@@ -22089,8 +22091,17 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 				FileRemoveIfExists(TMP_filename);
 				
 				rasm_printf(ae,KIO"Write %scartridge file %s\n",ae->extendedCPR?"extended ":"",TMP_filename);
-				for (i=maxrom=0;i<ae->io;i++) {
-					if (ae->orgzone[i].ibank<256 && ae->orgzone[i].ibank>maxrom) maxrom=ae->orgzone[i].ibank;
+				if (!ae->snacpr) {
+					for (i=maxrom=0;i<ae->io;i++) {
+						if (ae->orgzone[i].ibank<256 && ae->orgzone[i].ibank>maxrom) maxrom=ae->orgzone[i].ibank;
+					}
+				} else {
+					// looking for logical indirect ROM from 128 to 128+31 included corresponding to 0-31 cartridge ROM
+					for (i=maxrom=0;i<257;i++) {
+						if (ae->rombank[i] && i>=128 && i<160) {
+							maxrom=i-128;
+						}
+					}
 				}
 				/* construction du CPR */
 				/* header blablabla */
@@ -22138,6 +22149,11 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 //printf("ORG[%03d]=B%02d/#%04X/#%04X\n",j,ae->orgzone[j].ibank,ae->orgzone[j].memstart,ae->orgzone[j].memend);
 //				}
 				for (i=0;i<=maxrom;i++) {
+					int backi;
+					if (ae->snacpr && maxrom<32) {
+						backi=i;
+						i=ae->rombank[i+128]; // hack
+					}
 					offset=65536;
 					endoffset=0;
 					for (j=0;j<ae->io;j++) {
@@ -22148,12 +22164,15 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 							if (ae->orgzone[j].memend>endoffset) endoffset=ae->orgzone[j].memend;
 						}
 					}
+					if (ae->snacpr && !i) endoffset=offset=0; // hack
 					if (endoffset>offset) {
 						int lm=0;
 						if (ae->iwnamebank[i]>0) {
-							lm=strlen(ae->wl[ae->iwnamebank[i]].w)-2;
+							if (!ae->snacpr) lm=strlen(ae->wl[ae->iwnamebank[i]].w)-2; else {
+								if (i) lm=strlen(ae->wl[ae->iwnameromsna[i]].w)-2; else lm=0; // cannot have a ROM physically in 0 with snapshots
+							}
 						}
-						if (ae->cprinfo) rasm_printf(ae,KVERBOSE"WriteCPR bank %2d of %5d byte%s start at #%04X",i,endoffset-offset,endoffset-offset>1?"s":" ",offset);
+						if (ae->cprinfo) rasm_printf(ae,KVERBOSE"WriteCPR bank %2d of %5d byte%s start at #%04X",ae->snacpr?backi:i,endoffset-offset,endoffset-offset>1?"s":" ",offset);
 						if (endoffset-offset>16384) {
 							rasm_printf(ae,KERROR"\nROM %d is too big!!! (%d byte%s too large)\n"KVERBOSE,i,endoffset-offset-16384,endoffset-offset-16384>1?"s":"");
 							FileWriteBinaryClose(TMP_filename);
@@ -22177,7 +22196,10 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 						ChunkName[1]='X';
 						ChunkName[2]=i>>8;
 						ChunkName[3]=i&255;
-					} else sprintf(ChunkName,"cb%02d",i);
+					} else {
+						if (ae->snacpr) sprintf(ChunkName,"cb%02d",backi); // hack
+						else sprintf(ChunkName,"cb%02d",i);
+					}
 					FileWriteBinary(TMP_filename,ChunkName,4);
 					chunk_endian=ChunkSize&0xFF;FileWriteBinary(TMP_filename,(char*)&chunk_endian,1);
 					chunk_endian=(ChunkSize>>8)&0xFF;FileWriteBinary(TMP_filename,(char*)&chunk_endian,1);
@@ -22212,6 +22234,7 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 							FileWriteBinary(xproutputname,(char*)ae->mem[i]+offset,ChunkSize);
 						}
 					}
+					if (ae->snacpr) i=backi; // hack
 				}
 				FileWriteBinaryClose(TMP_filename);
 				rasm_printf(ae,"Total %d bank%s (%dK)\n",maxrom+1,maxrom+1>1?"s":"",(maxrom+1)*16);
@@ -22220,7 +22243,8 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 						       R O M       
 			**********************************************
 			*********************************************/
-			} else if (ae->forceROM) {
+			}
+			if (ae->forceROM) {
 				unsigned char filler[16384]={0};
 				int noflood=0;
 
@@ -27005,6 +27029,8 @@ void RasmAutotest(void)
 		0x2d,0x86,0x9e,0xda,0x0f,0x49,0x82,0x00,0x00,0x00,0x80,0x7f,0x20,0x84,0xdb,0x7f,0x80,0xcd,0x85,0xdb,0x7f,
 		0x80,0x20,0x84,0xdb,0xff,0x80,0xcd,0x85,0xdb,0xff,0x80,0xc8,0xdd,0xd6,0x7c,0x7d,0x53,0x51,0x06,0x1e,0x81,
 		0xBE,0xF6,0xCC,0x12,0x73};
+	unsigned char crlfbug[32]={0x20,0x0d,0x0a,0x0d,0x0a,0xa,0xa,0xd,0xd,0x20,0x0d,0x0a,0x0d,0x0a,0xa,0xa,
+				0x20,0x0d,0x0a,0x0d,0x0a,0xa,0xa,0xd,0xd,0x20,0x0d,0x0a,0x0d,0x0a,0xa,0xa};
 
 
 #ifdef RDD
@@ -27027,7 +27053,44 @@ printf("testing rasm source integrity : activebank and maxptr update OK\n");
 	} else {
 		printf("rasm.c not found, skipping integrity tests\n");
 	}
-	
+
+	/* unit testing */
+	opcode=MemMalloc(64);
+	FileRemoveIfExists("rasmoutput_CRLF.raw");
+	if (FileWriteBinary("rasmoutput_CRLF.raw",(char *)crlfbug,32)!=32) {printf("Autotest %03d ERROR (Binary write must return outputed byte number)\n",cpt);exit(-1);} else cpt++;
+	printf("testing pure binary write OK\n");
+	FileWriteBinaryClose("rasmoutput_CRLF.raw");
+	if (FileGetSize("rasmoutput_CRLF.raw")!=32) {printf("Autotest %03d ERROR (Binary write must not change 0x0D or 0x0A output)\n",cpt);exit(-1);} else cpt++;
+	printf("testing pure binary write + GetSize OK\n");
+	if (!FileExists("rasmoutput_CRLF.raw")) {printf("Autotest %03d ERROR (fileExists KO)\n",cpt);exit(-1);} else cpt++;
+	printf("testing file exists OK\n");
+        if (FileReadBinary("rasmoutput_CRLF.raw",(char*)opcode,FileGetSize("rasmoutput_CRLF.raw"))!=32) {printf("Autotest %03d ERROR (Binary read must not change 0x0D or 0x0A output)\n",cpt);exit(-1);} else cpt++;
+	printf("testing pure binary file read OK\n");
+	FileRemoveIfExists("rasmoutput_CRLF.raw");
+	if (FileExists("rasmoutput_CRLF.raw")) {printf("Autotest %03d ERROR (cannot remove file or fileExists KO)\n",cpt);exit(-1);} else cpt++;
+	printf("testing file remove OK\n");
+	MemFree(opcode);opcode=NULL;
+
+	if (!StringIsMem("(45+3*12+tartampion)")) {printf("Autotest %03d ERROR (StringIsMem KO)\n",cpt);exit(-1);} else cpt++; 
+	if (StringIsMem("(45+3*12+tartampion)*2")) {printf("Autotest %03d ERROR (StringIsMem KO)\n",cpt);exit(-1);} else cpt++; 
+	if (StringIsMem("2*(45+3*12+tartampion)")) {printf("Autotest %03d ERROR (StringIsMem KO)\n",cpt);exit(-1);} else cpt++; 
+	if (StringIsMem("+(45+3*12+tartampion)")) {printf("Autotest %03d ERROR (StringIsMem KO)\n",cpt);exit(-1);} else cpt++; 
+	if (StringIsMem("(45+3*12+tartampion)+")) {printf("Autotest %03d ERROR (StringIsMem KO)\n",cpt);exit(-1);} else cpt++; 
+	if (StringIsMem("a(45+3*12+tartampion)")) {printf("Autotest %03d ERROR (StringIsMem KO)\n",cpt);exit(-1);} else cpt++; 
+	if (StringIsMem("(45+3*12+tartampion)a")) {printf("Autotest %03d ERROR (StringIsMem KO)\n",cpt);exit(-1);} else cpt++; 
+	if (StringIsMem("(45+3*12+tartampion\"")) {printf("Autotest %03d ERROR (StringIsMem KO)\n",cpt);exit(-1);} else cpt++; 
+	if (!StringIsMem("(45+3*12+tartampion\\)")) {printf("Autotest %03d ERROR (StringIsMem KO)\n",cpt);exit(-1);} else cpt++; 
+	printf("testing StringIsMem (9 tests) OK\n");
+	if (!StringIsQuote("'grouik'")) {printf("Autotest %03d ERROR (StringIsQuote KO)\n",cpt);exit(-1);} else cpt++;
+	if (!StringIsQuote("\"grouik\"")) {printf("Autotest %03d ERROR (StringIsQuote KO)\n",cpt);exit(-1);} else cpt++;
+	if (StringIsQuote("\"grouik\'")) {printf("Autotest %03d ERROR (StringIsQuote KO)\n",cpt);exit(-1);} else cpt++;
+	if (StringIsQuote("\'grouik\"")) {printf("Autotest %03d ERROR (StringIsQuote KO)\n",cpt);exit(-1);} else cpt++;
+	if (StringIsQuote("'grouik")) {printf("Autotest %03d ERROR (StringIsQuote KO)\n",cpt);exit(-1);} else cpt++;
+	if (StringIsQuote("grouik'")) {printf("Autotest %03d ERROR (StringIsQuote KO)\n",cpt);exit(-1);} else cpt++;
+	if (StringIsQuote("g'rouik'")) {printf("Autotest %03d ERROR (StringIsQuote KO)\n",cpt);exit(-1);} else cpt++;
+	if (StringIsQuote("'grou'ik")) {printf("Autotest %03d ERROR (StringIsQuote KO)\n",cpt);exit(-1);} else cpt++;
+	printf("testing StringIsQuote (8 tests) OK\n");
+
 	/* Autotest preprocessing */
 	ret=RasmAssemble(AUTOTEST_VIRGULE,strlen(AUTOTEST_VIRGULE),&opcode,&opcodelen);
 	if (ret) {} else {printf("Autotest %03d ERROR (double comma must trigger an error) ret=%d\n",cpt,ret);exit(-1);}
