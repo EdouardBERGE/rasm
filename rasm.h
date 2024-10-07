@@ -1,7 +1,7 @@
 #define PROGRAM_NAME      "RASM"
 #define PROGRAM_VERSION   "2.2"
-#define PROGRAM_SUBVERSION   ".7"
-#define PROGRAM_DATE      "xx/09/2024"
+#define PROGRAM_SUBVERSION   ".8"
+#define PROGRAM_DATE      "xx/10/2024"
 #define PROGRAM_COPYRIGHT "© 2017 BERGE Edouard / roudoudou from Praline"
 #define RELEASE_NAME      "Consolidation"
 
@@ -50,6 +50,7 @@ struct s_parameter {
 	char **symboldef;
 	int nsymb,msymb;
 	char **pathdef;
+	char *inline_asm;
 	int npath,mpath;
 	int noampersand;
 	int cprinfo,cprinfoexport;

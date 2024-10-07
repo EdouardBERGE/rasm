@@ -23153,7 +23153,7 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 		  S Y M B O L   E X P O R T
 		*****************************
 		****************************/
-		if (ae->remu && !ae->forcesnapshot) {
+		if (ae->remu) {
 #define MAKE_REMU_NAME if (ae->symbol_name) {sprintf(TMP_filename,"%s",ae->symbol_name);} else {sprintf(TMP_filename,"%s.rasm",ae->outputfilename);}
 			unsigned char *remu_output=NULL;
 			unsigned int chunksize;
@@ -24112,7 +24112,9 @@ printf("nbbank=%d initialised\n",ae->nbbank);
 	}
 	if (original_filename) MemFree(original_filename);
 	
-	if (param) rasm_printf(ae,KAYGREEN"Pre-processing [%s]\n",param->filename);
+	if (param) {
+		rasm_printf(ae,KAYGREEN"Pre-processing [%s]\n",param->filename?param->filename:"inline string");
+	}
 
 	// count instructions and fill crc/length in the dynamic array of RASM instructions
 	for (nbinstruction=0;instruction[nbinstruction].mnemo[0];nbinstruction++) {
@@ -24162,13 +24164,24 @@ printf("read file/flux\n");
 #endif
 
 	if (!ae->flux) {
-		zelines=FileReadLines(ae,filename);
-		FieldArrayAddDynamicValueConcat(&ae->filename,&ae->ifile,&ae->maxfile,filename);
-		if (ae->enforce_symbol_case) {
-			ae->rawfile=MemRealloc(ae->rawfile,sizeof(char **)*ae->ifile);
-			ae->rawlen=MemRealloc(ae->rawlen,sizeof(int)*ae->ifile);
-			ae->rawfile[ae->ifile-1]=ae->source_bigbuffer;
-			ae->rawlen[ae->ifile-1]=ae->source_bigbuffer_len;
+		if (filename) {
+			zelines=FileReadLines(ae,filename);
+			FieldArrayAddDynamicValueConcat(&ae->filename,&ae->ifile,&ae->maxfile,filename);
+			if (ae->enforce_symbol_case) {
+				ae->rawfile=MemRealloc(ae->rawfile,sizeof(char **)*ae->ifile);
+				ae->rawlen=MemRealloc(ae->rawlen,sizeof(int)*ae->ifile);
+				ae->rawfile[ae->ifile-1]=ae->source_bigbuffer;
+				ae->rawlen[ae->ifile-1]=ae->source_bigbuffer_len;
+			}
+		} else if (param->inline_asm) {
+			zelines=MemMalloc(sizeof(char *)*2);
+			zelines[0]=TxtStrDup(param->inline_asm);
+			zelines[1]=NULL;
+			FieldArrayAddDynamicValueConcat(&ae->filename,&ae->ifile,&ae->maxfile,"inline string");
+			ae->enforce_symbol_case=0;
+		} else {
+			fprintf(stderr,"internal error (no filename, no inline string, not in flux mode)\n");
+			exit(-1);
 		}
 	} else {
 		int flux_nblines=0;
@@ -29177,6 +29190,10 @@ int ParseOptions(char **argv,int argc, struct s_parameter *param)
 		param->warn_unused=1;
 	} else if (strcmp(argv[i],"-xpr")==0) {
 		param->xpr=1;
+	} else if (strcmp(argv[i],"-inline")==0) {
+		if (i+1<argc && param->inline_asm==NULL) {
+			param->inline_asm=argv[++i];
+		}
 	} else if (strcmp(argv[i],"-dams")==0) {
 	} else if (strcmp(argv[i],"-void")==0) {
 		param->macrovoid=1;
@@ -29421,7 +29438,7 @@ void GetParametersFromCommandLine(int argc, char **argv, struct s_parameter *par
 	for (i=1;i<argc;i++)
 		i+=ParseOptions(&argv[i],argc-i,param);
 
-	if (!param->filename) Usage(0);
+	if (!param->filename && !param->inline_asm) Usage(0);
 }
 
 /*
