@@ -17101,6 +17101,10 @@ void __BREAKPOINT(struct s_assenv *ae) {
 		
 		ae->idx++;
 		while (1) {
+			if (legacy) {
+				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Too much parameter with BREAKPOINT for legacy mode (see online documentation)\n");
+				break;
+			}
 			if (strcmp(ae->wl[ae->idx].w,"EXEC")==0 || strcmp(ae->wl[ae->idx].w,"TYPE=EXEC")==0) strcpy(acePoint.brkType,"EXEC"); else
 			if (strcmp(ae->wl[ae->idx].w,"MEM")==0 || strcmp(ae->wl[ae->idx].w,"TYPE=MEM")==0) strcpy(acePoint.brkType,"MEM"); else
 			if (strcmp(ae->wl[ae->idx].w,"IO")==0 || strcmp(ae->wl[ae->idx].w,"TYPE=IO")==0) strcpy(acePoint.brkType,"IO"); else
@@ -17120,7 +17124,7 @@ void __BREAKPOINT(struct s_assenv *ae) {
 			if (strncmp(ae->wl[ae->idx].w,"CONDITION=",10)==0) strncpy(acePoint.condition,ae->wl[ae->idx].w+10,sizeof(acePoint.condition)-1); else
 			if (strncmp(ae->wl[ae->idx].w,"NAME=",5)==0) strncpy(acePoint.name,ae->wl[ae->idx].w+5,sizeof(acePoint.name)-1); else
 			if (first) {
-				breakpoint.address=RoundComputeExpression(ae,ae->wl[ae->idx+1].w,ae->codeadr,0,0);
+				breakpoint.address=RoundComputeExpression(ae,ae->wl[ae->idx].w,ae->codeadr,0,0);
 				ObjectArrayAddDynamicValueConcat((void **)&ae->breakpoint,&ae->ibreakpoint,&ae->maxbreakpoint,&breakpoint,sizeof(struct s_breakpoint));
 				legacy=1;
 			} else {
@@ -27074,6 +27078,34 @@ struct s_autotest_keyword autotest_keyword[]={
 	{"assert pow2(1)==2:assert pow2(2)==4:assert pow2(4)==16:assert pow2(0.5)==sqrt(2):nop",0},
 	{"buildsna: bankset 0: org 0: run 0: brk: nop 10: defb 0xE5: nop 2: defb #E5,#E5: nop 2: defb #E5,#E5,#E5: nop",0},
 
+	{"org #C000 : breakpoint #1000 : nop",0},
+	{"org #C000 : breakpoint MEM : nop",0},
+	{"org #C000 : breakpoint IO : nop",0},
+	{"org #C000 : breakpoint EXEC : nop",0},
+	{"org #C000 : breakpoint RW : nop",0},
+	{"org #C000 : breakpoint READ : nop",0},
+	{"org #C000 : breakpoint WRITE : nop",0},
+	{"org #C000 : breakpoint READWRITE : nop",0},
+	{"org #C000 : breakpoint EXEC,READWRITE : nop",0},
+	{"org #C000 : breakpoint STOP : nop",0},
+	{"org #C000 : breakpoint STOPPER : nop",0},
+	{"org #C000 : breakpoint WATCH : nop",0},
+	{"org #C000 : breakpoint WATCHER : nop",0},
+	{"org #C000 : breakpoint EXEC,READWRITE,STOPPER : nop",0},
+	{"org #C000 : breakpoint ADDR=grouik : nop : grouik",0},
+	{"org #C000 : breakpoint EXEC,READWRITE,STOPPER,ADDR=grouik : nop : grouik",0},
+	{"org #C000 : breakpoint MASK=0x2222 : nop",0},
+	{"org #C000 : breakpoint EXEC,READWRITE,STOPPER,ADDR=grouik,MASK=0x2222 : nop : grouik",0},
+	{"org #C000 : breakpoint VALUE=0x22 : nop",0},
+	{"org #C000 : breakpoint EXEC,READWRITE,STOPPER,ADDR=grouik,MASK=0x2222,VALUE=0x22 : nop : grouik",0},
+	{"org #C000 : breakpoint VALMASK=0xFF : nop",0},
+	{"org #C000 : breakpoint EXEC,READWRITE,STOPPER,ADDR=grouik,MASK=0x2222,VALUE=0x22,VALMASK=0xFF : nop : grouik",0},
+	{"org #C000 : breakpoint NAME='roudoudou' : nop",0},
+	{"org #C000 : breakpoint EXEC,READWRITE,STOPPER,ADDR=grouik,MASK=0x2222,VALUE=0x22,VALMASK=0xFF,NAME='roudoudou' : nop : grouik",0},
+	{"org #C000 : breakpoint CONDITION='HL=0' : nop",0},
+	{"org #C000 : breakpoint EXEC,READWRITE,STOPPER,ADDR=grouik,MASK=0x2222,VALUE=0x22,VALMASK=0xFF,NAME='roudoudou',CONDITION='HL=0' : nop : grouik",0},
+	{"org #C000 : breakpoint CONDITION='HL=0',NAME='roudoudou',VALMASK=0xFF,VALUE=0x22,MASK=0x2222,ADDR=grouik,STOPPER,READWRITE,EXEC : nop : grouik",0},
+	{"org #C000 : breakpoint CONDITION='HL=0',NAME='roudoudou',VALMASK=0xFF,VALUE=0x22,MSK=0x2222,ADDR=grouik,STOPPER,READWRITE,EXEC : nop : grouik",1}, // typo
 
 	/*
 	 *
