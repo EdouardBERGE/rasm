@@ -881,6 +881,18 @@ struct s_breakpoint {
 	int address;
 	int bank;
 };
+struct s_ace_breakpoint {
+	char brkType[16];
+	char aMode[16];
+	char runMode[16];
+	unsigned int addr;     int iaddr;
+	unsigned int mask;     int imask;
+	unsigned int size;     int isize;
+	unsigned char value;   int ivalue;
+	unsigned char valmask; int ivalmask;
+	char condition[256];
+	char name[256];
+};
 
 struct s_comz {
 	int idx;
@@ -1140,6 +1152,8 @@ struct s_assenv {
 	struct s_save *save;
 	int nbsave,maxsave;
 	int current_run_idx;
+	struct s_ace_breakpoint *acebrk;
+	int iacebrk,macebrk;
 	/* HFE */
 	struct s_hfe_action *hfe_action;
 	int nbhfeaction,maxhfeaction;
@@ -17069,11 +17083,57 @@ void __BREAKPOINT(struct s_assenv *ae) {
 	if (ae->wl[ae->idx].t) {
 		breakpoint.address=ae->codeadr;
 		ObjectArrayAddDynamicValueConcat((void **)&ae->breakpoint,&ae->ibreakpoint,&ae->maxbreakpoint,&breakpoint,sizeof(struct s_breakpoint));
-	} else 	if (!ae->wl[ae->idx].t && ae->wl[ae->idx+1].t==1) {
-		breakpoint.address=RoundComputeExpression(ae,ae->wl[ae->idx+1].w,ae->codeadr,0,0);
-		ObjectArrayAddDynamicValueConcat((void **)&ae->breakpoint,&ae->ibreakpoint,&ae->maxbreakpoint,&breakpoint,sizeof(struct s_breakpoint));
-	} else {
-		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is BREAKPOINT [address]\n");
+	} else 	{
+		struct s_ace_breakpoint acePoint={0};
+		int first=1,legacy=0;
+
+		// default values
+		strcpy(acePoint.brkType,"MEM");
+		strcpy(acePoint.aMode,"RW");
+		strcpy(acePoint.runMode,"STOP"); // S/STOP/STOPPER W/WATCH/WATCHER
+		acePoint.addr=ae->codeadr;
+		acePoint.mask=0xFFFF;
+		acePoint.size=1;
+		acePoint.value=0;
+		acePoint.valmask=0;
+		sprintf(acePoint.name,"imported");
+		// parse breakpoint for export
+		
+		ae->idx++;
+		while (1) {
+			if (strcmp(ae->wl[ae->idx].w,"EXEC")==0 || strcmp(ae->wl[ae->idx].w,"TYPE=EXEC")==0) strcpy(acePoint.brkType,"EXEC"); else
+			if (strcmp(ae->wl[ae->idx].w,"MEM")==0 || strcmp(ae->wl[ae->idx].w,"TYPE=MEM")==0) strcpy(acePoint.brkType,"MEM"); else
+			if (strcmp(ae->wl[ae->idx].w,"IO")==0 || strcmp(ae->wl[ae->idx].w,"TYPE=IO")==0) strcpy(acePoint.brkType,"IO"); else
+			if (strcmp(ae->wl[ae->idx].w,"READ")==0 || strcmp(ae->wl[ae->idx].w,"ACCESS=READ")==0) strcpy(acePoint.aMode,"READ"); else
+			if (strcmp(ae->wl[ae->idx].w,"WRITE")==0 || strcmp(ae->wl[ae->idx].w,"ACCESS=WRITE")==0) strcpy(acePoint.aMode,"WRITE"); else
+			if (strcmp(ae->wl[ae->idx].w,"RW")==0 || strcmp(ae->wl[ae->idx].w,"ACCESS=RW")==0) strcpy(acePoint.aMode,"RW"); else
+			if (strcmp(ae->wl[ae->idx].w,"READWRITE")==0 || strcmp(ae->wl[ae->idx].w,"ACCESS=READWRITE")==0) strcpy(acePoint.aMode,"RW"); else
+			if (strcmp(ae->wl[ae->idx].w,"STOP")==0 || strcmp(ae->wl[ae->idx].w,"RUNMODE=STOP")==0) strcpy(acePoint.runMode,"STOP"); else
+			if (strcmp(ae->wl[ae->idx].w,"STOPPER")==0 || strcmp(ae->wl[ae->idx].w,"RUNMODE=STOPPER")==0) strcpy(acePoint.runMode,"STOP"); else
+			if (strcmp(ae->wl[ae->idx].w,"WATCH")==0 || strcmp(ae->wl[ae->idx].w,"RUNMODE=WATCH")==0) strcpy(acePoint.runMode,"WATCH"); else
+			if (strcmp(ae->wl[ae->idx].w,"WATCHER")==0 || strcmp(ae->wl[ae->idx].w,"RUNMODE=WATCHER")==0) strcpy(acePoint.runMode,"WATCH"); else
+			if (strncmp(ae->wl[ae->idx].w,"ADDR=",5)==0) acePoint.iaddr=ae->idx; else
+			if (strncmp(ae->wl[ae->idx].w,"MASK=",5)==0) acePoint.imask=ae->idx; else
+			if (strncmp(ae->wl[ae->idx].w,"SIZE=",5)==0) acePoint.isize=ae->idx; else
+			if (strncmp(ae->wl[ae->idx].w,"VALUE=",6)==0) acePoint.ivalue=ae->idx; else
+			if (strncmp(ae->wl[ae->idx].w,"VALMASK=",8)==0) acePoint.ivalmask=ae->idx; else
+			if (strncmp(ae->wl[ae->idx].w,"CONDITION=",10)==0) strncpy(acePoint.condition,ae->wl[ae->idx].w+10,sizeof(acePoint.condition)-1); else
+			if (strncmp(ae->wl[ae->idx].w,"NAME=",5)==0) strncpy(acePoint.name,ae->wl[ae->idx].w+5,sizeof(acePoint.name)-1); else
+			if (first) {
+				breakpoint.address=RoundComputeExpression(ae,ae->wl[ae->idx+1].w,ae->codeadr,0,0);
+				ObjectArrayAddDynamicValueConcat((void **)&ae->breakpoint,&ae->ibreakpoint,&ae->maxbreakpoint,&breakpoint,sizeof(struct s_breakpoint));
+				legacy=1;
+			} else {
+				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Invalid option for BREAKPOINT (see online documentation)\n");
+			}
+
+			first=0;
+			if (!ae->wl[ae->idx].t)	ae->idx++; else break;
+		}
+
+		//printf("add aceBrk %X %X [%s]\n",acePoint.addr,acePoint.mask,acePoint.name);
+
+		if (!legacy) ObjectArrayAddDynamicValueConcat((void **)&ae->acebrk,&ae->iacebrk,&ae->macebrk,&acePoint,sizeof(struct s_ace_breakpoint));
 	}
 }
 
@@ -20729,6 +20789,26 @@ unsigned char * _internal_export_REMU(struct s_assenv *ae, unsigned int *rchksiz
 		}
 		strcat(remu_output,zedigit);
 	}
+	for (i=0;i<ae->iacebrk;i++) {
+		unsigned int v;
+		strcat(remu_output,"acebreak ");
+		strcat(remu_output,ae->acebrk[i].brkType); strcat(remu_output,",");
+		strcat(remu_output,ae->acebrk[i].aMode); strcat(remu_output,",");
+		strcat(remu_output,ae->acebrk[i].runMode); strcat(remu_output,",");
+		if (ae->acebrk[i].iaddr) v=RoundComputeExpression(ae,ae->wl[ae->acebrk[i].iaddr].w+5,0,0,0); else v=ae->acebrk[i].addr;
+		strcat(remu_output,"addr="); sprintf(zedigit,"%d,",v);strcat(remu_output,zedigit);
+		if (ae->acebrk[i].imask) v=RoundComputeExpression(ae,ae->wl[ae->acebrk[i].imask].w+5,0,0,0); else v=ae->acebrk[i].mask;
+		strcat(remu_output,"mask="); sprintf(zedigit,"%d,",v);strcat(remu_output,zedigit);
+		if (ae->acebrk[i].isize) v=RoundComputeExpression(ae,ae->wl[ae->acebrk[i].isize].w+5,0,0,0); else v=ae->acebrk[i].size;
+		strcat(remu_output,"size="); sprintf(zedigit,"%d,",v);strcat(remu_output,zedigit);
+		if (ae->acebrk[i].ivalue) v=RoundComputeExpression(ae,ae->wl[ae->acebrk[i].ivalue].w+6,0,0,0); else v=ae->acebrk[i].value;
+		strcat(remu_output,"value="); sprintf(zedigit,"%d,",v);strcat(remu_output,zedigit);
+		if (ae->acebrk[i].ivalmask) v=RoundComputeExpression(ae,ae->wl[ae->acebrk[i].ivalmask].w+8,0,0,0); else v=ae->acebrk[i].valmask;
+		strcat(remu_output,"valmask="); sprintf(zedigit,"%d,",v);strcat(remu_output,zedigit);
+		strcat(remu_output,"name="); strcat(remu_output,ae->acebrk[i].name); strcat(remu_output,",");
+		strcat(remu_output,"condition="); strcat(remu_output,ae->acebrk[i].condition); strcat(remu_output,";");
+	}
+
 	chunksize=strlen(remu_output)-8;
 	remu_output[4]=chunksize&0xFF;
 	remu_output[5]=(chunksize>>8)&0xFF;
