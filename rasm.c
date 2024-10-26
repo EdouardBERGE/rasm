@@ -29355,7 +29355,9 @@ printf("curpath=[%s]\n",curpath);
 			case 'D':
 				if ((sep=strchr(argv[i],'='))!=NULL) {
 					if (sep!=argv[i]+2) {
+						int icc;
 						FieldArrayAddDynamicValueConcat(&param->symboldef,&param->nsymb,&param->msymb,argv[i]+2);
+						for (icc=0;param->symboldef[param->nsymb-1][icc];icc++) param->symboldef[param->nsymb-1][icc]=toupper(param->symboldef[param->nsymb-1][icc]);
 					} else {
 						Usage(1);
 					}
