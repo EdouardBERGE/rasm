@@ -1,6 +1,6 @@
 #define PROGRAM_NAME      "RASM"
 #define PROGRAM_VERSION   "2.2"
-#define PROGRAM_SUBVERSION   ".9"
+#define PROGRAM_SUBVERSION   ".10"
 #define PROGRAM_DATE      "xx/10/2024"
 #define PROGRAM_COPYRIGHT "© 2017 BERGE Edouard / roudoudou from Praline"
 #define RELEASE_NAME      "Consolidation"
