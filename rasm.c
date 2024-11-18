@@ -890,6 +890,7 @@ struct s_ace_breakpoint {
 	unsigned int size;     int isize;
 	unsigned char value;   int ivalue;
 	unsigned char valmask; int ivalmask;
+	unsigned int step;     int istep;
 	char condition[256];
 	char name[256];
 };
@@ -17116,6 +17117,7 @@ void __BREAKPOINT(struct s_assenv *ae) {
 			if (strcmp(ae->wl[ae->idx].w,"STOPPER")==0 || strcmp(ae->wl[ae->idx].w,"RUNMODE=STOPPER")==0) strcpy(acePoint.runMode,"STOP"); else
 			if (strcmp(ae->wl[ae->idx].w,"WATCH")==0 || strcmp(ae->wl[ae->idx].w,"RUNMODE=WATCH")==0) strcpy(acePoint.runMode,"WATCH"); else
 			if (strcmp(ae->wl[ae->idx].w,"WATCHER")==0 || strcmp(ae->wl[ae->idx].w,"RUNMODE=WATCHER")==0) strcpy(acePoint.runMode,"WATCH"); else
+			if (strncmp(ae->wl[ae->idx].w,"STEP=",5)==0) acePoint.istep=ae->idx; else
 			if (strncmp(ae->wl[ae->idx].w,"ADDR=",5)==0) acePoint.iaddr=ae->idx; else
 			if (strncmp(ae->wl[ae->idx].w,"MASK=",5)==0) acePoint.imask=ae->idx; else
 			if (strncmp(ae->wl[ae->idx].w,"SIZE=",5)==0) acePoint.isize=ae->idx; else
@@ -20810,7 +20812,9 @@ unsigned char * _internal_export_REMU(struct s_assenv *ae, unsigned int *rchksiz
 		if (ae->acebrk[i].ivalmask) v=RoundComputeExpression(ae,ae->wl[ae->acebrk[i].ivalmask].w+8,0,0,0); else v=ae->acebrk[i].valmask;
 		strcat(remu_output,"valmask="); sprintf(zedigit,"%d,",v);strcat(remu_output,zedigit);
 		strcat(remu_output,"name="); strcat(remu_output,ae->acebrk[i].name); strcat(remu_output,",");
-		strcat(remu_output,"condition="); strcat(remu_output,ae->acebrk[i].condition); strcat(remu_output,";");
+		strcat(remu_output,"condition="); strcat(remu_output,ae->acebrk[i].condition); strcat(remu_output,",");
+		if (ae->acebrk[i].istep) v=RoundComputeExpression(ae,ae->wl[ae->acebrk[i].imask].w+5,0,0,0); else v=ae->acebrk[i].step;
+		strcat(remu_output,"step="); sprintf(zedigit,"%d;",v);strcat(remu_output,zedigit);
 	}
 
 	chunksize=strlen(remu_output)-8;
@@ -29025,6 +29029,7 @@ void Usage(int help)
 		printf("-quick           enable fast mode for ZX0 crunching\n");
 		printf("-cprquiet        do not display ROM detailed informations\n");
 		printf("-map             display information during early assembling stages\n");
+		printf("-inline 'text'   assemble text from command line\n");
 		printf(KLWHITE"EDSK generation/update:\n"KNORMAL);
 		printf("-eo              overwrite files on disk if it already exists\n");
 		printf(KLWHITE"SNAPSHOT:\n"KNORMAL);
