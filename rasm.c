@@ -20813,7 +20813,7 @@ unsigned char * _internal_export_REMU(struct s_assenv *ae, unsigned int *rchksiz
 		strcat(remu_output,"valmask="); sprintf(zedigit,"%d,",v);strcat(remu_output,zedigit);
 		strcat(remu_output,"name="); strcat(remu_output,ae->acebrk[i].name); strcat(remu_output,",");
 		strcat(remu_output,"condition="); strcat(remu_output,ae->acebrk[i].condition); strcat(remu_output,",");
-		if (ae->acebrk[i].istep) v=RoundComputeExpression(ae,ae->wl[ae->acebrk[i].imask].w+5,0,0,0); else v=ae->acebrk[i].step;
+		if (ae->acebrk[i].istep) v=RoundComputeExpression(ae,ae->wl[ae->acebrk[i].istep].w+5,0,0,0); else v=ae->acebrk[i].step;
 		strcat(remu_output,"step="); sprintf(zedigit,"%d;",v);strcat(remu_output,zedigit);
 	}
 
