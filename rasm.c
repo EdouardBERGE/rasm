@@ -20222,7 +20222,7 @@ void __SAVE(struct s_assenv *ae) {
 								}
 							}
 						} else {
-							MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"SAVE 4th parameter must be empty or AMSDOS or DSK\n");
+							MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"SAVE 4th parameter must be empty or AMSDOS or HOBETA or DSK\n");
 							ko=0;
 						}
 					}
@@ -22848,12 +22848,13 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 						rasm_printf(ae,KAYGREEN"Total %d bank%s (%dK)\n",maxrom,maxrom>1?"s":"",(maxrom)*16);
 					}
 				}
+			}
 			/*********************************************
 			**********************************************
 					  B I N A R Y     F I L E
 			**********************************************
 			*********************************************/
-			} else {
+			if (!ae->forcecpr && !ae->forcesnapshot && !ae->forceROM && !ae->snacpr) {
 				int lastspaceid=-1;
 				
 				if (ae->binary_name) {
