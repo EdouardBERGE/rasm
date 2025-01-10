@@ -18792,7 +18792,7 @@ void __STRUCT(struct s_assenv *ae) {
 	struct s_rasmstruct rasmstruct={0};
 	struct s_rasmstruct rasmstructalias={0};
 	struct s_label curlabel={0};
-	int crc,i,j,irs;
+	int crc,i,j,k,l,irs;
 	/* filler */
 	int localsize,cursize;
 
@@ -18858,6 +18858,13 @@ void __STRUCT(struct s_assenv *ae) {
 #if TRACE_STRUCT
 printf("***** structure insertion inside struct [%s] inside struct ***\n",ae->wl[ae->idx+2].w);
 #endif
+
+					if (irs==ae->irasmstruct-1) {
+						MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Cannot insert self struct Object inside struct\n");
+						while (!ae->wl[ae->idx].t) ae->idx++;
+						return;
+					}
+
 					/* struct inside struct */
 					rasmstructalias.name=MemMalloc(strlen(ae->rasmstruct[ae->irasmstruct-1].name)+2+strlen(ae->wl[ae->idx+2].w));
 					sprintf(rasmstructalias.name,"%s.%s",ae->rasmstruct[ae->irasmstruct-1].name,ae->wl[ae->idx+2].w);
@@ -18869,14 +18876,17 @@ printf("***** structure insertion inside struct [%s] inside struct ***\n",ae->wl
 printf("structalias [%s] ptr=%d size=%d\n",rasmstructalias.name,rasmstructalias.ptr,rasmstructalias.size);
 #endif
 				/* extra parameter to declare an array? */
-				if (!ae->wl[ae->idx+2].t && !StringIsQuote(ae->wl[ae->idx+3].w)) {
-					ExpressionFastTranslate(ae,&ae->wl[ae->idx+3].w,0);
-					nbelem=RoundComputeExpression(ae,ae->wl[ae->idx+3].w,ae->outputadr,0,0);
-					if (nbelem<1) {
-						MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Struct array need a positive number of elements!\n");
-						nbelem=1;
+				if (!ae->wl[ae->idx+2].t) {
+				       if (!StringIsQuote(ae->wl[ae->idx+3].w)) {
+						ExpressionFastTranslate(ae,&ae->wl[ae->idx+3].w,0);
+						nbelem=RoundComputeExpression(ae,ae->wl[ae->idx+3].w,ae->outputadr,0,0);
+						if (nbelem<1) {
+							MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Struct array need a positive number of elements!\n");
+							nbelem=1;
+						}
+					} else {
+						MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"usage is STRUCT <structType> <structName>[,<arrayNbElement>[,<fieldFiller>, ...]]\n");
 					}
-					ae->idx++;
 				}
 				rasmstructalias.nbelem=nbelem;
 #if TRACE_STRUCT
@@ -18953,80 +18963,117 @@ printf("pushLight [%s] %d:%X\n",curlabel.name,curlabel.ibank,curlabel.ptr);
 
 				/* is there any filler in the declaration? */
 				localsize=0;
+				ae->idx+=2; // skip structType + structName
+				if (!ae->wl[ae->idx].t) ae->idx++; // skip nbElem
 
-#if 0
-
+				
 #if TRACE_STRUCT
-printf("struct new behaviour (scan for %d fields)\n",ae->rasmstruct[irs].irasmstructfield);
-#endif
-				/* déterminer si on est en remplissage par défaut ou remplissage surchargé */
-				for (i=0;i<ae->rasmstruct[irs].irasmstructfield;i++) {
+for (i=0;i<ae->rasmstruct[irs].irasmstructfield;i++) {
+	if (ae->rasmstruct[irs].rasmstructfield[i].size)
+	printf("field[%d] size=%d idata=%d offset=%d fullname=[%s] name=[%s]\n",i,ae->rasmstruct[irs].rasmstructfield[i].size,ae->rasmstruct[irs].rasmstructfield[i].idata,ae->rasmstruct[irs].rasmstructfield[i].offset,
+			ae->rasmstruct[irs].rasmstructfield[i].fullname,ae->rasmstruct[irs].rasmstructfield[i].name);
+}
 
-					if (!ae->wl[ae->idx+2+i].t || i+1>=ae->rasmstruct[irs].irasmstructfield) {
-						/* si le champ est sur le même offset que le précédent, on le saute */
-						if (i && ae->rasmstruct[irs].rasmstructfield[i].offset>ae->rasmstruct[irs].rasmstructfield[i-1].offset) continue;
-
-#if TRACE_STRUCT
-printf("get field? (%d)\n",irs);
-#endif
-						if (!StringIsQuote(ae->wl[ae->idx+i].w)) {
-							ExpressionFastTranslate(ae,&ae->wl[ae->idx+i].w,1);
-							zeval=RoundComputeExpressionCore(ae,ae->wl[ae->idx+i].w,ae->codeadr,0);
-						} else {
-							// push string
-						}
-
-						localsize+=ae->rasmstruct[irs].rasmstructfield[i].size;
-
-						/* pour du single shot ?
-						pushbyte(s) at ae->codeadr+ae->rasmstruct[irs].rasmstructfield[i].offset
-						*/
-
-						//ae->rasmstruct[irs].size;
-
-					} else {
-#if TRACE_STRUCT
-printf("*break*\n");
-#endif
-						break;
-					}
-				}
+printf("struct new behaviour (scan for %d fields) NBELEM=%d\n",ae->rasmstruct[irs].irasmstructfield,nbelem);
 #endif
 
-				/* (LEGACY) filler, on balance des zéros en attendant d'avoir la complétion par init */
-#if TRACE_STRUCT
-printf("struct (almost) legacy filler from %d to %d-1\n",localsize,ae->rasmstruct[irs].size);
-#endif
 				while (nbelem) {
-#if 0
-					cursize=localsize;
-					for (i=0;i<ae->rasmstruct[irs].irasmstructfield;i++) {
-						cursize+=ae->rasmstruct[irs].rasmstructfield[i].size;
-					}
-					#if TRACE_STRUCT
-					printf("cursize to insert = %d\n",cursize);
-					#endif
-#endif
+					for (i=j=0;i<ae->rasmstruct[irs].irasmstructfield;i++) {
+						if (!ae->rasmstruct[irs].rasmstructfield[i].size) continue;
+						if (!ae->wl[ae->idx+j].t) {
+							// we have an extra parameter, is it ok with the current field?
+							j++;
+							// if it's a quote, copy char...
+							if (StringIsQuote(ae->wl[ae->idx+j].w)) {
+								unsigned char c,zeQuote=ae->wl[ae->idx+j].w[0];
+								// fill up to field size
+								k=1; l=0;
 
+								while (l<ae->rasmstruct[irs].rasmstructfield[i].size) {
+									if (!ae->wl[ae->idx+j].w[k] || ae->wl[ae->idx+j].w[k]==zeQuote) break;
+									if (ae->wl[ae->idx+j].w[k]=='\\') {
+										k++;
+										if (ae->wl[ae->idx+j].w[k]!='\\') {
+											/* no conversion on escaped chars EXCEPT escape char ^_^ */
+											c=ae->wl[ae->idx+j].w[k];
+											switch (c) {
+												case 'e':___output(ae,0x1B);break;
+												case 'a':___output(ae,0x07);break; // alarm
+												case 'b':___output(ae,'\b');break;
+												case 'v':___output(ae,'\v');break; // v-tab
+												case 'f':___output(ae,'\f');break; // feed
+												case '0':___output(ae,'\0');break;
+												case 'r':___output(ae,'\r');break; // return
+												case 'n':___output(ae,'\n');break; // carriage-return
+												case 't':___output(ae,'\t');break; // tab
+												default:
+												___output(ae,c);
+											}
+											k++;
+											l++;
+										} else {
+											___output(ae,ae->charset[(unsigned int)(ae->wl[ae->idx+j].w[k]&0xFF)]);
+											k++;
+											l++;
+										}
+										ae->nop+=1;
+									} else {
+										/* charset conversion on the fly */
+										___output(ae,ae->charset[(unsigned int)(ae->wl[ae->idx+j].w[k]&0xFF)]);
+										ae->nop+=1;
+										k++;
+										l++;
+									}
+								}
+								if (l==ae->rasmstruct[irs].rasmstructfield[i].size) {
+									// check overrun
+									if (ae->wl[ae->idx+j].w[k] && ae->wl[ae->idx+j].w[k]!=zeQuote) {
+										rasm_printf(ae,KWARNING"[%s:%d] Warning: struct initialiser overrun field size!\n",GetCurrentFile(ae),ae->wl[ae->idx+j].l);
+										if (ae->erronwarn) MaxError(ae);
+									}
+								} else if (l<ae->rasmstruct[irs].rasmstructfield[i].size) {
+								// complete with default data if it's not enough
+									for (k=l;k<ae->rasmstruct[irs].rasmstructfield[i].idata;k++) {
+										___output(ae,ae->rasmstruct[irs].rasmstructfield[i].data[k]);
+										ae->nop+=1;
+									}
+								}
+							} else {
+								// depending the size of the field, compute and PUSH
+								switch (ae->rasmstruct[irs].rasmstructfield[i].size) {
+									case 1: PushExpression(ae,ae->idx+j,E_EXPRESSION_0V8);ae->nop+=1;break;
+									case 2: PushExpression(ae,ae->idx+j,E_EXPRESSION_0V16);ae->nop+=2;break;
+									case 4: PushExpression(ae,ae->idx+j,E_EXPRESSION_0V32);ae->nop+=4;break;
+									case 5: PushExpression(ae,ae->idx+j,E_EXPRESSION_0VR);ae->nop+=5;break;
+									default: rasm_printf(ae,KWARNING"[%s:%d] Warning: struct field desription is an expression [%s] but size is %d bytes\n",
+											GetCurrentFile(ae),ae->wl[ae->idx+j].l,ae->wl[ae->idx+j].w,ae->rasmstruct[irs].rasmstructfield[i].size);
+										if (ae->erronwarn) MaxError(ae);
+										for (k=0;k<ae->rasmstruct[irs].rasmstructfield[i].idata;k++) {
+											___output(ae,ae->rasmstruct[irs].rasmstructfield[i].data[k]);
+											ae->nop+=1;
+										}
+										break; // warning remover
+								}
+							}
+						} else {
 #if TRACE_STRUCT
-	printf("nbfield=%d\n",ae->rasmstruct[irs].irasmstructfield);
+							printf("No more init param, break\n");
 #endif
-					for (i=0;i<ae->rasmstruct[irs].irasmstructfield;i++) {
+							break;
+						}
+					}
+					// we may have break the initialisation, check and use default if needed
+					for (;i<ae->rasmstruct[irs].irasmstructfield;i++) {
 #if TRACE_STRUCT
-	printf("  field[%d] stored nbdata=%d fullsize=%d\n",i,ae->rasmstruct[irs].rasmstructfield[i].idata,ae->rasmstruct[irs].rasmstructfield[i].size);
+							printf("output default for [%s]\n",ae->rasmstruct[irs].rasmstructfield[i].fullname);
 #endif
-						for (j=0;j<ae->rasmstruct[irs].rasmstructfield[i].idata;j++) {
-							___output(ae,ae->rasmstruct[irs].rasmstructfield[i].data[j]);
-							//printf("insert data j=%d\n",j);
+						for (k=0;k<ae->rasmstruct[irs].rasmstructfield[i].idata;k++) {
+							___output(ae,ae->rasmstruct[irs].rasmstructfield[i].data[k]);
+							ae->nop+=1;
 						}
 					}
 					nbelem--;
 				}
-
-#if 0
-				for (i=localsize;i<ae->rasmstruct[irs].size;i++) ___output(ae,0);
-#endif
-				ae->idx+=2; // probablement à revoir dans le cas d'une init!!!
 			}
 		}
 	} else {
@@ -20551,7 +20598,7 @@ struct s_asm_keyword instruction[]={
 {"PROTECT",0,0,__PROTECT},
 {"WHILE",0,0,__WHILE},
 {"WEND",0,0,__WEND},
-{"READ",0,0,__READ},
+//{"READ",0,0,__READ},
 {"INCLUDE",0,0,__READ}, // anti-label
 {"HEXBIN",0,0,__HEXBIN},
 {"ALIGN",0,0,__ALIGN},
@@ -22024,7 +22071,6 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 	}
 
 
-
 /***************************************************************************************************************************************************************************************
 ****************************************************************************************************************************************************************************************
       W R I T E      O U T P U T      F I L E S
@@ -22169,6 +22215,8 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 				char ChunkName[32];
 				int ChunkSize;
 				unsigned char chunk_endian;
+				unsigned char *remu_output=NULL;
+				unsigned int remu_chunksize=0;
 			
 				if (ae->cartridge_name) {
 					sprintf(TMP_filename,"%s",ae->cartridge_name);
@@ -22191,13 +22239,17 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 						}
 					}
 				}
+				/* prepare REMU chunk to know the final size */
+				if (ae->remu) {
+					remu_output=_internal_export_REMU(ae,&remu_chunksize);
+				}
 				/* construction du CPR */
 				/* header blablabla */
 				strcpy(ChunkName,"RIFF");
 				FileWriteBinary(TMP_filename,ChunkName,4);
 
 				if (!ae->extendedCPR) {
-					ChunkSize=(maxrom+1)*(16384+8)+4;
+					ChunkSize=(maxrom+1)*(16384+8)+4+remu_chunksize+(remu_chunksize?8:0);
 					chunk_endian=ChunkSize&0xFF;FileWriteBinary(TMP_filename,(char*)&chunk_endian,1);
 					chunk_endian=(ChunkSize>>8)&0xFF;FileWriteBinary(TMP_filename,(char*)&chunk_endian,1);
 					chunk_endian=(ChunkSize>>16)&0xFF;FileWriteBinary(TMP_filename,(char*)&chunk_endian,1);
@@ -22211,7 +22263,7 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 						FileRemoveIfExists(xproutputname);
 					}
 
-					ChunkSize=(maxrom+1)*(16384+8)+4+10;
+					ChunkSize=(maxrom+1)*(16384+8)+4+10+remu_chunksize+(remu_chunksize?8:0);
 					chunk_endian=ChunkSize&0xFF;FileWriteBinary(TMP_filename,(char*)&chunk_endian,1);
 					chunk_endian=(ChunkSize>>8)&0xFF;FileWriteBinary(TMP_filename,(char*)&chunk_endian,1);
 					chunk_endian=(ChunkSize>>16)&0xFF;FileWriteBinary(TMP_filename,(char*)&chunk_endian,1);
@@ -22323,6 +22375,10 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 						}
 					}
 					if (ae->snacpr) i=backi; // hack
+				}
+				if (ae->remu) {
+					FileWriteBinary(TMP_filename,(char*)remu_output,remu_chunksize+8); // 8 bytes for the chunk header
+					MemFree(remu_output);
 				}
 				FileWriteBinaryClose(TMP_filename);
 				rasm_printf(ae,"Total %d bank%s (%dK)\n",maxrom+1,maxrom+1>1?"s":"",(maxrom+1)*16);
@@ -22501,8 +22557,8 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 								memcpy(packed,ae->mem[i],65536);
 								if (i<4 || i+4>maxrom) {
 									rasm_printf(ae,KVERBOSE"WriteSNA bank %2d,%d,%d,%d packed",i,i+1,i+2,i+3);
-									if (ae->iwnamebank[i]) printf(" (%s)",ae->wl[ae->iwnamebank[i]].w);
-									printf("\n");
+									if (ae->iwnamebank[i]) rasm_printf(ae," (%s)",ae->wl[ae->iwnamebank[i]].w);
+									rasm_printf(ae,"\n");
 								} else if (!noflood) {rasm_printf(ae,KVERBOSE"[...]\n");noflood=1;}
 							} else {
 								memset(packed,0,65536);
@@ -22544,8 +22600,8 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 										}
 										if (i<4 || i+4>maxrom) {
 											rasm_printf(ae,KVERBOSE"WriteSNA bank %2d of %5d byte%s start at #%04X",i+k,endoffset-offset,endoffset-offset>1?"s":" ",offset);
-											if (ae->iwnamebank[i]) printf(" (%s)",ae->wl[ae->iwnamebank[i]].w);
-											printf("\n");
+											if (ae->iwnamebank[i]) rasm_printf(ae," (%s)",ae->wl[ae->iwnamebank[i]].w);
+											rasm_printf(ae,"\n");
 										} else if (!noflood) {rasm_printf(ae,KVERBOSE"[...]\n");noflood=1;}
 										if (endoffset-offset>16384) {
 											rasm_printf(ae,KERROR"\nRAM block is too big!!! (%d byte%s too large)\n"KVERBOSE,endoffset-offset-16384,endoffset-offset-16384>1?"s":"");
@@ -22637,8 +22693,8 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 								if (!noflood || howmanyrom<=4) {
 									if (i<256) rasm_printf(ae,KVERBOSE"WriteSNA ROM %3d of %5d byte%s start at #%04X",i,endoffset-offset,endoffset-offset>1?"s":" ",offset);
 									      else rasm_printf(ae,KVERBOSE"WriteSNA LOWER   of %5d byte%s start at #%04X",endoffset-offset,endoffset-offset>1?"s":" ",offset);
-									if (ae->iwnameromsna[i]) printf(" (%s)",ae->wl[ae->iwnameromsna[i]].w);
-									printf("\n");
+									if (ae->iwnameromsna[i]) rasm_printf(ae," (%s)",ae->wl[ae->iwnameromsna[i]].w);
+									rasm_printf(ae,"\n");
 								} else if (!noflood) {rasm_printf(ae,KVERBOSE"[...]\n");noflood=1;}
 								howmanyrom--;
 
@@ -22657,7 +22713,6 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 								}
 							}
 						}
-
 
 						/**************************************************************
 								snapshot additional chunks in v3+ only
@@ -22856,7 +22911,6 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 			*********************************************/
 			if (!ae->forcecpr && !ae->forcesnapshot && !ae->forceROM && !ae->snacpr) {
 				int lastspaceid=-1;
-				
 				if (ae->binary_name) {
 					sprintf(TMP_filename,"%s",ae->binary_name);
 				} else {
@@ -24752,17 +24806,7 @@ if (!idx) printf("[%s]\n",listing[l].listing);
 						break;
 
 					case 'R':
-						if (strcmp(bval,"READ")==0) {
-							incstartL=l;
-							include=1;
-							waiting_quote=1;
-							rewrite=idx-4-1;
-							/* quote right after keyword */
-							if (c==quote_type) {
-								waiting_quote=2;
-							}
-						/* code dupliqué du UNTIL */
-						} else if (strcmp(bval,"REND")==0) {
+						if (strcmp(bval,"REND")==0) {
 							/* retrouver la structure repeat_index correspondant a l'ouverture */
 							for (ri=nri-1;ri>=0;ri--) {
 								if (TABrindex[ri].cl==-1) {
@@ -24826,7 +24870,7 @@ printf("bval=[%s]\n",bval);
 		}
 	}
 	if (waiting_quote && ilisting) {
-		MakeError(ae,0,ae->filename[listing[ilisting-1].ifile],listing[ilisting-1].iline,"A quoted string must follow INCLUDE/READ directive\n");
+		MakeError(ae,0,ae->filename[listing[ilisting-1].ifile],listing[ilisting-1].iline,"A quoted string must follow INCLUDE directive\n");
 	}
 
 #if TRACE_PREPRO
@@ -25618,7 +25662,7 @@ int RasmAssembleInfoParam(const char *datain, int lenin, unsigned char **dataout
 
 #define AUTOTEST_BADINCBIN "incl49 'truc\n .bin' \n nop nop"
 
-#define AUTOTEST_BADINCLUDE02 "read: ldir : cp ';'"
+#define AUTOTEST_BADINCLUDE02 "include : ldir : cp ';'"
 
 #define AUTOTEST_SETINSIDE "ld hl,0=0xC9FB"
 
@@ -27117,9 +27161,15 @@ struct s_autotest_keyword autotest_keyword[]={
 	 * will need to test resize + format then meta review test!
 	 *
 	 *
-	{"",},
-	{"",},
-	{"",},
+	{"struct untab: ch1 defi: ch2 defi: endstruct: struct unegrosse: struct untab mega1: ch1 defb: ch2 defw : ch3 defi: ch4 defb 'roudoudou',0: struct untab mega2: struct unegrosse entite ",1}, // must not hang!
+	{"struct untab: ch1 defi: ch2 defi: endstruct: struct unegrosse: struct untab mega1: ch1 defb: ch2 defw : ch3 defi: ch4 defb 'roudoudou',0: struct untab mega2: endstruct:struct unegrosse entite:assert $==33 ",0},
+	{"struct machin : roudoudou defs 10 : endstruct : struct machin pouet1,1,'roudoudou': assert $==10",0}, // less data in initializer
+	{"struct machin : roudoudou defs 10 : endstruct : struct machin pouet1,1,'roudoudou ': assert $==10",0}, // exact data in initializer
+	{"struct machin : roudoudou defs 10 : endstruct : struct machin pouet1,1,'roudoudou  ': assert $==10",0}, // more data in initialiser (warning)
+	{"struct machin : unbyte defb : endstruct : pouet=50 : struct machin pouet1,1,pouet: assert $==1",0},
+	{"struct machin : unword defw : endstruct : pouet=50 : struct machin pouet1,1,pouet: assert $==2",0},
+	{"struct machin : unInt defi : endstruct : pouet=50 : struct machin pouet1,1,pouet: assert $==4",0},
+	{"struct machin : unReal defr : endstruct : pouet=50 : struct machin pouet1,1,pouet: assert $==5",0},
 	{"",},
 	{"",},
 	{"",},
