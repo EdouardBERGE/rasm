@@ -12717,7 +12717,7 @@ void _DEFR_struct(struct s_assenv *ae) {
 
 void _DEFB(struct s_assenv *ae) {
 	int i,tquote;
-	unsigned char c;
+	unsigned char c,hexValue;
 	if (!ae->wl[ae->idx].t) {
 		do {
 			ae->idx++;
@@ -12739,6 +12739,26 @@ void _DEFB(struct s_assenv *ae) {
 								case 'r':___output(ae,'\r');break; // return
 								case 'n':___output(ae,'\n');break; // carriage-return
 								case 't':___output(ae,'\t');break; // tab
+								case 'x':// hexadecimal output
+									i++;
+									c=tolower(ae->wl[ae->idx].w[i]);
+									if ((c>='0' && c<='9') || (c>='a' && c<='f')) {
+										if (c<='9') hexValue=c-'0'; else hexValue=c-'a'+10;
+										i++;
+										c=tolower(ae->wl[ae->idx].w[i]);
+										if ((c>='0' && c<='9') || (c>='a' && c<='f')) {
+											hexValue<<=4;
+											if (c<='9') hexValue|=c-'0'; else hexValue|=c-'a'+10;
+									 		___output(ae,hexValue);
+										} else {
+											MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"DEFB invalid escaped hexadecimal value!\n");
+											i--; // in case of zero or quote!
+										}
+									} else {
+										MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"DEFB invalid escaped hexadecimal value!\n");
+										i--; // in case of zero of quote!
+									}
+									break;
 								default:
 								___output(ae,c);
 							}
@@ -18986,6 +19006,7 @@ printf("struct new behaviour (scan for %d fields) NBELEM=%d\n",ae->rasmstruct[ir
 							// if it's a quote, copy char...
 							if (StringIsQuote(ae->wl[ae->idx+j].w)) {
 								unsigned char c,zeQuote=ae->wl[ae->idx+j].w[0];
+								unsigned char hexValue;
 								// fill up to field size
 								k=1; l=0;
 
@@ -19006,6 +19027,26 @@ printf("struct new behaviour (scan for %d fields) NBELEM=%d\n",ae->rasmstruct[ir
 												case 'r':___output(ae,'\r');break; // return
 												case 'n':___output(ae,'\n');break; // carriage-return
 												case 't':___output(ae,'\t');break; // tab
+												case 'x':// hexadecimal output
+													k++;
+													c=tolower(ae->wl[ae->idx+j].w[k]);
+													if ((c>='0' && c<='9') || (c>='a' && c<='f')) {
+														if (c<='9') hexValue=c-'0'; else hexValue=c-'a'+10;
+														k++;
+														c=tolower(ae->wl[ae->idx+j].w[k]);
+														if ((c>='0' && c<='9') || (c>='a' && c<='f')) {
+															hexValue<<=4;
+															if (c<='9') hexValue|=c-'0'; else hexValue|=c-'a'+10;
+															___output(ae,hexValue);
+														} else {
+															MakeError(ae,ae->idx+j,GetCurrentFile(ae),ae->wl[ae->idx+j].l,"DEFB invalid escaped hexadecimal value!\n");
+															k--; // in case of zero or quote
+														}
+													} else {
+														MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx+j].l,"DEFB invalid escaped hexadecimal value!\n");
+														k--; // in case of zero or quote
+													}
+													break;
 												default:
 												___output(ae,c);
 											}
@@ -23597,26 +23638,30 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 *******************************************************************************************/
 	if (ae->dependencies) {
 		int trigdep=0;
-		
-		/* depends ALL */
-		if (ae->outputfilename && strcmp(ae->outputfilename,"rasmoutput")) {
-			trigdep=1;
-			printf("%s",ae->outputfilename);
-			if (ae->dependencies==E_DEPENDENCIES_MAKE) printf(" "); else printf("\n");
+	
+		if (ae->nberr)	{
+			rasm_printf(ae,KERROR"Fix error%s to see dependencies\n",ae->nberr,ae->nberr>1?"s":"");
+		} else {
+			/* depends ALL */
+			if (ae->outputfilename && strcmp(ae->outputfilename,"rasmoutput")) {
+				trigdep=1;
+				printf("%s",ae->outputfilename);
+				if (ae->dependencies==E_DEPENDENCIES_MAKE) printf(" "); else printf("\n");
+			}
+			for (i=1;i<ae->ifile;i++) {
+				trigdep=1;
+				SimplifyPath(ae->filename[i]);
+				printf("%s",ae->filename[i]);
+				if (ae->dependencies==E_DEPENDENCIES_MAKE) printf(" "); else printf("\n");
+			}
+			for (i=0;i<ae->ih;i++) {
+				trigdep=1;
+				SimplifyPath(ae->hexbin[i].filename);
+				printf("%s",ae->hexbin[i].filename);
+				if (ae->dependencies==E_DEPENDENCIES_MAKE) printf(" "); else printf("\n");
+			}
+			if (ae->dependencies==E_DEPENDENCIES_MAKE && trigdep) printf("\n");
 		}
-		for (i=1;i<ae->ifile;i++) {
-			trigdep=1;
-			SimplifyPath(ae->filename[i]);
-			printf("%s",ae->filename[i]);
-			if (ae->dependencies==E_DEPENDENCIES_MAKE) printf(" "); else printf("\n");
-		}
-		for (i=0;i<ae->ih;i++) {
-			trigdep=1;
-			SimplifyPath(ae->hexbin[i].filename);
-			printf("%s",ae->hexbin[i].filename);
-			if (ae->dependencies==E_DEPENDENCIES_MAKE) printf(" "); else printf("\n");
-		}
-		if (ae->dependencies==E_DEPENDENCIES_MAKE && trigdep) printf("\n");
 	}
 
 /*******************************************************************************************
@@ -25923,6 +25968,7 @@ int RasmAssembleInfoParam(const char *datain, int lenin, unsigned char **dataout
 
 #define AUTOTEST_CHARSET3	"CHARSET 'ABCDEFGHIJKLMNOPQRSTUVWXYZ',\"QWERTYUIOPASDFGHJKLZXCVBNM\" : DEFB 'THE QUICK BROWN FOX' : nop"
 
+#define AUTOTEST_DEFHEX0    "defb '\\xFFa' : defb 'a\\xFF'"
 
 #define AUTOTEST_NOCODE		"let monorg=$:NoCode:Org 0:Element1 db 0:Element2 dw 3:Element3 ds 50:Element4 defb 'rdd':Org 0:pouet defb 'nop':" \
 							"Code:Org monorg:cpt=$+element2+element3+element4:defs cpt,0"
@@ -27170,7 +27216,9 @@ struct s_autotest_keyword autotest_keyword[]={
 	{"struct machin : unword defw : endstruct : pouet=50 : struct machin pouet1,1,pouet: assert $==2",0},
 	{"struct machin : unInt defi : endstruct : pouet=50 : struct machin pouet1,1,pouet: assert $==4",0},
 	{"struct machin : unReal defr : endstruct : pouet=50 : struct machin pouet1,1,pouet: assert $==5",0},
-	{"",},
+	{"defb '\\xF'",1}, {"defb '\\xFg'",1}, {"defb '\\xF-'",1}, {"defb '\\xF '",1},
+	{"defb '\\x'",1}, {"defb '\\xg'",1}, {"defb '\\x-'",1}, {"defb '\\x '",1},
+	{"defb '\\x\\'",1},
 	{"",},
 	{"",},
 	{"",},{"",},{"",},{"",},{"",},
@@ -27869,7 +27917,12 @@ printf("testing extended charset OK\n");
 	if (!ret && strcmp(opcode,"ZIT JXOEA WKGVF YGB")==0) {} else {printf("Autotest %03d ERROR (charset string string)\n",cpt);exit(-1);}
 	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
 printf("testing charset string string OK\n");
-	
+
+	ret=RasmAssemble(AUTOTEST_DEFHEX0,strlen(AUTOTEST_DEFHEX0),&opcode,&opcodelen);
+	if (!ret && opcodelen==4 && opcode[0]==0xFF && opcode[3]==0xFF) {} else {printf("Autotest %03d ERROR (hex value in DEFB)\n",cpt);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing hex value in DEFB string OK\n");
+
 	ret=RasmAssemble(AUTOTEST_QUOTES,strlen(AUTOTEST_QUOTES),&opcode,&opcodelen);
 	if (!ret && opcodelen==10 && opcode[5]==0xE4 && opcode[6]==0x0D && opcode[7]==0x64 && opcode[8]==0x0D && opcode[9]==0xE4) {}
 		else {printf("Autotest %03d ERROR (quotes & escaped chars)\n",cpt);MiniDump(opcode,opcodelen);exit(-1);}
