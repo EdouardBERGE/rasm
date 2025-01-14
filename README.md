@@ -1,6 +1,6 @@
 <img src="assets/logo.png" alt="Logo courtesy of Barjack" title="logo">
 
-## Rasm Z80 assembler
+## Rasm Z80 assembler (is a COMMAND LINE tool)
     
 Rasm was designed to be damn FAST and handle HUGE projects. On a modern machine, it can assemble millions of instructions in a blink of an eye. It's way faster than the best alternatives. Rasm also runs on almost any platform : Linux, MacOS Intel or ARM, Windows 32 bits or 64 bits, MS-DOS and even MorphOS
 
