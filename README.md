@@ -16,6 +16,7 @@ Rasm was designed to be damn FAST and handle HUGE projects. On a modern machine,
 - CPC cartridge
 - CPC snapshots up to 4M
 - CPC EDSK (as many as you want in update or generation mode)
+- floppy HFE engine to manage ANY particular format
 - CPC/ZX TAPE output
 - CPC/ZX Binaries with or without AMSDOS/HOBETA header
 - ZX snapshots
@@ -25,7 +26,8 @@ Rasm was designed to be damn FAST and handle HUGE projects. On a modern machine,
 
 - symbols import, or export in files, CPC snapshot
 - breakpoint export in CPC snapshot or files
-- dependencies export
+- dependencies export for makefile creation
+- [ACE-DL](https://roudoudou.com/ACE-DL/) debug chunk in snapshot and cartridge for unprecedented debug experience
 
 ## Mostly unlimited design
 
