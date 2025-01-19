@@ -56,7 +56,7 @@ There is a cool French and English documentation, you should read it ;)
 
 ## Quality
 
-Each build is test every release, with more than 1200 automated tests
+Each build is tested every release, with more than 1200 automated tests.
 
 ## History
 
