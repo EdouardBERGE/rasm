@@ -54,6 +54,10 @@ There is a cool French and English documentation, you should read it ;)
 - EN: http://rasm.wikidot.com/english-index:home
 - FR: http://rasm.wikidot.com/
 
+## Quality
+
+Each build is test every release, with more than 1200 automated tests
+
 ## History
 
 The project was born a few years ago (2017) because i needed a really fast assembler in order to finish my demo before the deadline of the Alchemy 2017. The project was quite huge with approx 350.000 words to assemble but thanks to rasm, the 512K cartridge compiled in a blink of an eye even on my slow Atom CPU. Now Rasm is the reference for huge projects and ultra-fast assembling.
