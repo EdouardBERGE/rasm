@@ -990,6 +990,12 @@ struct s_relocation_write {
 	int dest;
 };
 
+struct s_utf8Remap {
+	unsigned char utf8Code[16];
+	int utf8Len;
+	unsigned char ccode;
+};
+
 /*******************************************
         G L O B A L     S T R U C T
 *******************************************/
@@ -1030,6 +1036,8 @@ struct s_assenv {
 #define INSTRUCTION_MAXLENGTH 14
 	int fastmatch[256][INSTRUCTION_MAXLENGTH];
 	unsigned char charset[256];
+	struct s_utf8Remap *utf8Remap;
+	int iUtf8Remap,mUtf8Remap;
 	int maxerr,extended_error,nowarning,erronwarn,utf8enable,freequote;
 	/* ORG tracking */
 	int codeadr,outputadr,nocode;      // codeadr is logical code position | outputadr is physical code position | nocode is a flag 1: no code to output 0: output code
@@ -12767,9 +12775,29 @@ void _DEFB(struct s_assenv *ae) {
 						}
 						ae->nop+=1;
 					} else {
-						/* charset conversion on the fly */
-						___output(ae,ae->charset[(unsigned int)(ae->wl[ae->idx].w[i]&0xFF)]);
-						ae->nop+=1;
+						if (ae->iUtf8Remap && ((unsigned char)ae->wl[ae->idx].w[i])>126) {
+							int k,l,found=0;
+							/* UTF8 conversion */
+							for (k=0;k<ae->iUtf8Remap;k++) {
+								for (l=0;l<ae->utf8Remap[k].utf8Len;l++) if (ae->utf8Remap[k].utf8Code[l]!=(unsigned char)ae->wl[ae->idx].w[i+l]) break;
+								if (l==ae->utf8Remap[k].utf8Len) {
+									found=1;
+									break;
+								}
+							}
+							if (found) {
+								___output(ae,ae->utf8Remap[k].ccode);
+								i+=ae->utf8Remap[k].utf8Len-1;
+								ae->nop+=1;
+							} else {
+								rasm_printf(ae,KWARNING"[%s:%d] Warning: UTF8 mapping was defined but no code were found for this one! [#%02X]\n",GetCurrentFile(ae),ae->wl[ae->idx].l,(unsigned char)ae->wl[ae->idx].w[i]);
+								if (ae->erronwarn) MaxError(ae);
+							}
+						} else {
+							/* charset conversion on the fly */
+							___output(ae,ae->charset[(unsigned int)(ae->wl[ae->idx].w[i]&0xFF)]);
+							ae->nop+=1;
+						}
 					}
 					i++;
 				}
@@ -12816,9 +12844,29 @@ void _DEFB_struct(struct s_assenv *ae) {
 						}
 						ae->nop+=1;
 					} else {
-						/* charset conversion on the fly */
-						___output(ae,ae->charset[(unsigned int)ae->wl[ae->idx].w[i]&0xFF]);
-						ae->nop+=1;
+						if (ae->iUtf8Remap && ((unsigned char)ae->wl[ae->idx].w[i])>126) {
+							int k,l,found=0;
+							/* UTF8 conversion */
+							for (k=0;k<ae->iUtf8Remap;k++) {
+								for (l=0;l<ae->utf8Remap[k].utf8Len;l++) if (ae->utf8Remap[k].utf8Code[l]!=(unsigned char)ae->wl[ae->idx].w[i+l]) break;
+								if (l==ae->utf8Remap[k].utf8Len) {
+									found=1;
+									break;
+								}
+							}
+							if (found) {
+								___output(ae,ae->utf8Remap[k].ccode);
+								i+=ae->utf8Remap[k].utf8Len-1;
+								ae->nop+=1;
+							} else {
+								rasm_printf(ae,KWARNING"[%s:%d] Warning: UTF8 mapping was defined but no code were found for this one! [#%02X]\n",GetCurrentFile(ae),ae->wl[ae->idx].l,(unsigned char)ae->wl[ae->idx].w[i]);
+								if (ae->erronwarn) MaxError(ae);
+							}
+						} else {
+							/* charset conversion on the fly */
+							___output(ae,ae->charset[(unsigned int)(ae->wl[ae->idx].w[i]&0xFF)]);
+							ae->nop+=1;
+						}
 					}
 					i++;
 				}
@@ -16573,6 +16621,28 @@ void __WRITE(struct s_assenv *ae) {
 	while (!ae->wl[ae->idx].t) ae->idx++;
 	if (!ok) {
 		___new_memory_space(ae);
+	}
+}
+void __UTF8REMAP(struct s_assenv *ae) {
+	struct s_utf8Remap utr={0};
+	int v;
+
+	if (ae->wl[ae->idx].t==1) {
+		// reinit REMAP
+		ae->iUtf8Remap=0;
+	} else if (!ae->wl[ae->idx].t && !ae->wl[ae->idx+1].t && ae->wl[ae->idx+2].t==1) {
+		if (StringIsQuote(ae->wl[ae->idx+1].w)) {
+			strncpy(utr.utf8Code,ae->wl[ae->idx+1].w+1,sizeof(utr.utf8Code)-1);
+			utr.utf8Len=strlen(utr.utf8Code);
+			utr.utf8Code[utr.utf8Len]=0;
+			utr.utf8Len--;
+			ExpressionFastTranslate(ae,&ae->wl[ae->idx+2].w,0);
+			v=RoundComputeExpression(ae,ae->wl[ae->idx+2].w,ae->codeadr,0,0);
+			utr.ccode=v;
+			ObjectArrayAddDynamicValueConcat((void **)&ae->utf8Remap,&ae->iUtf8Remap,&ae->mUtf8Remap,&utr,sizeof(utr));
+		}
+	} else {
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"UTF8REMAP must be used without parameter OR two params : utf8remap <utf8char>,<conversion value>\n");
 	}
 }
 void __CHARSET(struct s_assenv *ae) {
@@ -20669,6 +20739,7 @@ struct s_asm_keyword instruction[]={
 {"LET",0,0,__LET},
 {"ASSERT",0,0,__ASSERT},
 {"CHARSET",0,0,__CHARSET},
+{"UTF8REMAP",0,0,__UTF8REMAP},
 {"RUN",0,0,__RUN},
 {"SAVE",0,0,__SAVE},
 {"BRK",0,0,__BRK},
@@ -26083,6 +26154,10 @@ int RasmAssembleInfoParam(const char *datain, int lenin, unsigned char **dataout
 
 #define AUTOTEST_CONFINE	"org 0: nop: org 250: confine 10: defb #aa: org 500: confine 12: defb #bb: assert $<512 "
 
+#define AUTOTEST_UTF8		"utf8remap 'é',50 : defb 'é' : assert $==1" // outputed code must be 50 !
+
+#define AUTOTEST_UTF8B		" utf8remap 'é',' ': struct ustruct: lab defb 'édouard': endstruct: assert {sizeof}ustruct==7: struct ustruct edouard: assert $==7"
+
 #define AUTOTEST_SAVEINVALID0	"repeat 256,x : defb x-1 : rend : save 'rasmoutput.bin',0,$"
 
 #define AUTOTEST_SAVEINVALID1	"nop : save'gruik',20,-100"
@@ -28058,6 +28133,22 @@ printf("testing BANK tag + proximity labels OK\n");
 	RasmFreeInfoStruct(debug);
 printf("testing STR end mark OK (thanks to Golem)\n");
 
+	/* utf8 */
+	memset(&param,0,sizeof(struct s_parameter));
+	param.freequote=1;
+	ret=RasmAssembleInfoParam(AUTOTEST_UTF8,strlen(AUTOTEST_UTF8),&opcode,&opcodelen,&debug,&param);
+	if (!ret && opcodelen==1 && opcode[0]==50) {} else {printf("Autotest %03d ERROR (UTF8 remapping)\n",cpt);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+	RasmFreeInfoStruct(debug);
+printf("testing UTF8 remapping\n");
+
+	memset(&param,0,sizeof(struct s_parameter));
+	param.freequote=1;
+	ret=RasmAssembleInfoParam(AUTOTEST_UTF8B,strlen(AUTOTEST_UTF8B),&opcode,&opcodelen,&debug,&param);
+	if (!ret && opcodelen==7 && opcode[0]==' ') {} else {printf("Autotest %03d ERROR (UTF8 remapping inside struct)\n",cpt);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+	RasmFreeInfoStruct(debug);
+printf("testing UTF8 remapping inside structure declaration\n");
 
 	memset(&param,0,sizeof(struct s_parameter));
 	param.erronwarn=1;
