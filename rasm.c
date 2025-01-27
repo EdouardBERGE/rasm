@@ -19079,7 +19079,6 @@ printf("struct new behaviour (scan for %d fields) NBELEM=%d\n",ae->rasmstruct[ir
 								unsigned char hexValue;
 								// fill up to field size
 								k=1; l=0;
-
 								while (l<ae->rasmstruct[irs].rasmstructfield[i].size) {
 									if (!ae->wl[ae->idx+j].w[k] || ae->wl[ae->idx+j].w[k]==zeQuote) break;
 									if (ae->wl[ae->idx+j].w[k]=='\\') {
@@ -19129,9 +19128,29 @@ printf("struct new behaviour (scan for %d fields) NBELEM=%d\n",ae->rasmstruct[ir
 										}
 										ae->nop+=1;
 									} else {
-										/* charset conversion on the fly */
-										___output(ae,ae->charset[(unsigned int)(ae->wl[ae->idx+j].w[k]&0xFF)]);
-										ae->nop+=1;
+										if (ae->iUtf8Remap && ((unsigned char)ae->wl[ae->idx+j].w[k])>126) {
+											int ik,il,found=0;
+											/* UTF8 conversion */
+											for (ik=0;ik<ae->iUtf8Remap;ik++) {
+												for (il=0;il<ae->utf8Remap[ik].utf8Len;il++) if (ae->utf8Remap[ik].utf8Code[il]!=(unsigned char)ae->wl[ae->idx+j].w[k+il]) break;
+												if (il==ae->utf8Remap[ik].utf8Len) {
+													found=1;
+													break;
+												}
+											}
+											if (found) {
+												___output(ae,ae->utf8Remap[ik].ccode);
+												k+=ae->utf8Remap[ik].utf8Len-1;
+												ae->nop+=1;
+											} else {
+												rasm_printf(ae,KWARNING"[%s:%d] Warning: UTF8 mapping was defined but no code were found for this one! [#%02X]\n",GetCurrentFile(ae),ae->wl[ae->idx+j].l,(unsigned char)ae->wl[ae->idx+j].w[k]);
+												if (ae->erronwarn) MaxError(ae);
+											}
+										} else {
+											/* charset conversion on the fly */
+											___output(ae,ae->charset[(unsigned int)(ae->wl[ae->idx+j].w[k]&0xFF)]);
+											ae->nop+=1;
+										}
 										k++;
 										l++;
 									}
@@ -26158,6 +26177,9 @@ int RasmAssembleInfoParam(const char *datain, int lenin, unsigned char **dataout
 
 #define AUTOTEST_UTF8B		" utf8remap 'é',' ': struct ustruct: lab defb 'édouard': endstruct: assert {sizeof}ustruct==7: struct ustruct edouard: assert $==7"
 
+#define AUTOTEST_UTF8C		" utf8remap 'é',20 : struct s_texte : texte defs 10 :  endstruct : struct s_texte unestruct,1,'éééééééééé' "
+
+
 #define AUTOTEST_SAVEINVALID0	"repeat 256,x : defb x-1 : rend : save 'rasmoutput.bin',0,$"
 
 #define AUTOTEST_SAVEINVALID1	"nop : save'gruik',20,-100"
@@ -28149,6 +28171,14 @@ printf("testing UTF8 remapping\n");
 	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
 	RasmFreeInfoStruct(debug);
 printf("testing UTF8 remapping inside structure declaration\n");
+
+	memset(&param,0,sizeof(struct s_parameter));
+	param.freequote=1;
+	ret=RasmAssembleInfoParam(AUTOTEST_UTF8C,strlen(AUTOTEST_UTF8C),&opcode,&opcodelen,&debug,&param);
+	if (!ret && opcodelen==10 && opcode[0]==20 && opcode[1]==20 && opcode[2]==20) {} else {printf("Autotest %03d ERROR (UTF8 remapping inside inline struct with param overload)\n",cpt);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+	RasmFreeInfoStruct(debug);
+printf("testing UTF8 remapping inside inline structure with param overload\n");
 
 	memset(&param,0,sizeof(struct s_parameter));
 	param.erronwarn=1;
