@@ -19156,7 +19156,7 @@ printf("struct new behaviour (scan for %d fields) NBELEM=%d\n",ae->rasmstruct[ir
 									case 2: PushExpression(ae,ae->idx+j,E_EXPRESSION_0V16);ae->nop+=2;break;
 									case 4: PushExpression(ae,ae->idx+j,E_EXPRESSION_0V32);ae->nop+=4;break;
 									case 5: PushExpression(ae,ae->idx+j,E_EXPRESSION_0VR);ae->nop+=5;break;
-									default: rasm_printf(ae,KWARNING"[%s:%d] Warning: struct field desription is an expression [%s] but size is %d bytes\n",
+									default: rasm_printf(ae,KWARNING"[%s:%d] Warning: struct field description is an expression [%s] but size is %d bytes\n",
 											GetCurrentFile(ae),ae->wl[ae->idx+j].l,ae->wl[ae->idx+j].w,ae->rasmstruct[irs].rasmstructfield[i].size);
 										if (ae->erronwarn) MaxError(ae);
 										for (k=0;k<ae->rasmstruct[irs].rasmstructfield[i].idata;k++) {
