@@ -35,6 +35,7 @@ Rasm was designed to be damn FAST and handle HUGE projects. On a modern machine,
 - conditionnal macro, unlimited & embeded loops with local labels, switch/case
 - floating point engine, mathematical functions, ...
 - crunched segments declaration may overflow the 64K limit as much as you want
+- UTF8 characters mapper for any text remapping design
 
 ## Compatibility for archeology (with old versions of these assemblers)
 
