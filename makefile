@@ -141,7 +141,6 @@ release:
 	$(CC) $(SRC_LZSADIR)/stream.c $(LZSA_FLAGS)            -o $(SRC_LZSADIR)/stream.o
 	$(CC) rasm.c $(CFLAGS_OPT) $(APU_OBJ) $(LZSA_OBJ) $(ZX0_OBJ)
 	strip $(EXEC)
-	./upx --brute rasm.exe
 
 clean:
 	rm -rf *.o
