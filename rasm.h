@@ -24,6 +24,7 @@ struct s_parameter {
 	int export_snabrk;
 	int export_brk;
 	int nowarning;
+	int nocrunchwarning;
 	int erronwarn;
 	int utf8enable;
 	int freequote;

@@ -1042,7 +1042,7 @@ struct s_assenv {
 	unsigned char charset[256];
 	struct s_utf8Remap *utf8Remap;
 	int iUtf8Remap,mUtf8Remap;
-	int maxerr,extended_error,nowarning,erronwarn,utf8enable,freequote;
+	int maxerr,extended_error,nowarning,nocrunchwarning,erronwarn,utf8enable,freequote;
 	/* ORG tracking */
 	int codeadr,outputadr,nocode;      // codeadr is logical code position | outputadr is physical code position | nocode is a flag 1: no code to output 0: output code
 	int codeadrbackup,outputadrbackup; // when using NOCODE, switching back to CODE will restore physical AND logical addresses
@@ -20224,7 +20224,8 @@ if (curhexbin->crunch) printf("CRUNCHED! (%d)\n",curhexbin->crunch);
 									{
 									int delta,slzlen;
 
-									if (outputidx>=1024 && MAX_OFFSET_ZX0>5000) rasm_printf(ae,KWARNING"ZX0 is crunching %.1fkb this may take a while, be patient...\n",outputidx/1024.0);
+									if (!ae->nowarning)
+									if (!ae->nocrunchwarning && outputidx>=1024 && MAX_OFFSET_ZX0>5000) rasm_printf(ae,KWARNING"ZX0 is crunching %.1fkb this may take a while, be patient...\n",outputidx/1024.0);
 									newdata=zx0_compress(zx0_optimize(outputdata, outputidx, 0, MAX_OFFSET_ZX0), outputdata, outputidx, 0, 0, 1, &slzlen, &delta);
 									outputidx=slzlen;
 									MemFree(outputdata);
@@ -20238,7 +20239,8 @@ if (curhexbin->crunch) printf("CRUNCHED! (%d)\n",curhexbin->crunch);
 									{
 									int delta,slzlen;
 
-									if (outputidx>=1024 && MAX_OFFSET_ZX0>5000) rasm_printf(ae,KWARNING"ZX0 is crunching %.1fkb this may take a while, be patient...\n",outputidx/1024.0);
+									if (!ae->nowarning)
+									if (!ae->nocrunchwarning && outputidx>=1024 && MAX_OFFSET_ZX0>5000) rasm_printf(ae,KWARNING"ZX0 is crunching %.1fkb this may take a while, be patient...\n",outputidx/1024.0);
 									zx0_reverse(outputdata,outputdata+outputidx-1);
 									newdata=zx0_compress(zx0_optimize(outputdata, outputidx, 0, MAX_OFFSET_ZX0), outputdata, outputidx, 0, 1, 0,&slzlen, &delta);
         								zx0_reverse(newdata,newdata+slzlen-1);
@@ -20263,7 +20265,8 @@ if (curhexbin->crunch) printf("CRUNCHED! (%d)\n",curhexbin->crunch);
 									}
 									break;
 								case 8:
-									if (outputidx>=1024) rasm_printf(ae,KWARNING"Exomizer is crunching %.1fkb this may take a while, be patient...\n",outputidx/1024.0);
+									if (!ae->nowarning)
+									if (!ae->nocrunchwarning && outputidx>=512) rasm_printf(ae,KWARNING"Exomizer is crunching %.1fkb this may take a while, be patient...\n",outputidx/1024.0);
 									newdata=Exomizer_crunch(outputdata,outputidx,&outputidx);
 									MemFree(outputdata);
 									outputdata=newdata;
@@ -20272,7 +20275,8 @@ if (curhexbin->crunch) printf("CRUNCHED! (%d)\n",curhexbin->crunch);
 									#endif
 									break;
 								case 17:
-									if (outputidx>=1024) rasm_printf(ae,KWARNING"AP-Ultra is crunching %.1fkb this may take a while, be patient...\n",outputidx/1024.0);
+									if (!ae->nowarning)
+									if (!ae->nocrunchwarning && outputidx>=1024) rasm_printf(ae,KWARNING"AP-Ultra is crunching %.1fkb this may take a while, be patient...\n",outputidx/1024.0);
 									{
 									int nnewlen;
 									APULTRA_crunch(outputdata,outputidx,&newdata,&nnewlen);
@@ -20285,7 +20289,8 @@ if (curhexbin->crunch) printf("CRUNCHED! (%d)\n",curhexbin->crunch);
 									#endif
 									break;
 								case 18:
-									if (outputidx>=16384 && curhexbin->version==2) rasm_printf(ae,KWARNING"LZSA2 is crunching %.1fkb this may take a while, be patient...\n",outputidx/1024.0);
+									if (!ae->nowarning)
+									if (!ae->nocrunchwarning && outputidx>=16384 && curhexbin->version==2) rasm_printf(ae,KWARNING"LZSA2 is crunching %.1fkb this may take a while, be patient...\n",outputidx/1024.0);
 									{
 									int nnewlen;
 									LZSA_crunch(outputdata,outputidx,&newdata,&nnewlen,curhexbin->version,curhexbin->minmatch);
@@ -21945,14 +21950,16 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 
 						case 70:
 							#ifndef NO_3RD_PARTIES
-							if (input_size>=1024 && MAX_OFFSET_ZX0>5000) rasm_printf(ae,KWARNING"ZX0 is crunching %.1fkb this may take a while, be patient...\n",input_size/1024.0);
+							if (!ae->nowarning)
+							if (!ae->nocrunchwarning && input_size>=1024 && MAX_OFFSET_ZX0>5000) rasm_printf(ae,KWARNING"ZX0 is crunching %.1fkb this may take a while, be patient...\n",input_size/1024.0);
 							lzdata=zx0_compress(zx0_optimize(input_data, input_size, 0, MAX_OFFSET_ZX0), input_data, input_size, 0, 0, 1,&slzlen, &delta);
 							lzlen=slzlen;
 							#endif
 							break;
 						case 71:
 							#ifndef NO_3RD_PARTIES
-							if (input_size>=1024 && MAX_OFFSET_ZX0>5000) rasm_printf(ae,KWARNING"ZX0 is crunching %.1fkb this may take a while, be patient...\n",input_size/1024.0);
+							if (!ae->nowarning)
+							if (!ae->nocrunchwarning && input_size>=1024 && MAX_OFFSET_ZX0>5000) rasm_printf(ae,KWARNING"ZX0 is crunching %.1fkb this may take a while, be patient...\n",input_size/1024.0);
 							zx0_reverse(input_data,input_data+input_size-1);
 							lzdata=zx0_compress(zx0_optimize(input_data, input_size, 0, MAX_OFFSET_ZX0), input_data, input_size, 0, 1, 0,&slzlen, &delta);
        							zx0_reverse(lzdata,lzdata+slzlen-1);
@@ -21972,19 +21979,22 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 							break;
 						case 8:
 							#ifndef NO_3RD_PARTIES
-							if (input_size>=1024) rasm_printf(ae,KWARNING"Exomizer is crunching %.1fkb this may take a while, be patient...\n",input_size/1024.0);
+							if (!ae->nowarning)
+							if (!ae->nocrunchwarning && input_size>=512) rasm_printf(ae,KWARNING"Exomizer is crunching %.1fkb this may take a while, be patient...\n",input_size/1024.0);
 							lzdata=Exomizer_crunch(input_data,input_size,&lzlen);
 							#endif
 							break;
 						case 17:
 							#ifndef NO_3RD_PARTIES
-							if (input_size>=1024) rasm_printf(ae,KWARNING"AP-Ultra is crunching %.1fkb this may take a while, be patient...\n",input_size/1024.0);
+							if (!ae->nowarning)
+							if (!ae->nocrunchwarning && input_size>=1024) rasm_printf(ae,KWARNING"AP-Ultra is crunching %.1fkb this may take a while, be patient...\n",input_size/1024.0);
 							APULTRA_crunch(input_data,input_size,&lzdata,&lzlen);
 							#endif
 							break;
 						case 18:
 							#ifndef NO_3RD_PARTIES
-							if (input_size>=16384 && ae->lzsection[i].version==2) rasm_printf(ae,KWARNING"LZSA is crunching %.1fkb this may take a while, be patient...\n",input_size/1024.0);
+							if (!ae->nowarning)
+							if (!ae->nocrunchwarning && input_size>=16384 && ae->lzsection[i].version==2) rasm_printf(ae,KWARNING"LZSA is crunching %.1fkb this may take a while, be patient...\n",input_size/1024.0);
 							LZSA_crunch(input_data,input_size,&lzdata,&lzlen,ae->lzsection[i].version,ae->lzsection[i].minmatch);
 							#endif
 							break;
@@ -24096,6 +24106,7 @@ printf("paramz 1\n");
 		ae->maxerr=param->maxerr;
 		ae->extended_error=param->extended_error;
 		ae->nowarning=param->nowarning;
+		ae->nocrunchwarning=param->nocrunchwarning;
 		ae->erronwarn=param->erronwarn;
 		ae->utf8enable=param->utf8enable;
 		ae->freequote=param->freequote;
@@ -29290,6 +29301,7 @@ void Usage(int help)
 		printf("-twe             treat warnings as errors\n");
 		printf("-xr              extended error display\n");
 		printf("-w               disable warnings\n");
+		printf("-wc              disable warnings about slow crunch in progress\n");
 		printf("-void            force void usage with macro without parameter\n");
 		printf("-mml             allow macro usage with parameters on multiple lines\n");
 		printf("\n");
@@ -29579,6 +29591,8 @@ int ParseOptions(char **argv,int argc, struct s_parameter *param)
 		param->checkmode=1;
 	} else if (strcmp(argv[i],"-no")==0) {
 		param->checkmode=1;
+	} else if (strcmp(argv[i],"-wc")==0) {
+		param->nocrunchwarning=1;
 	} else if (strcmp(argv[i],"-w")==0) {
 		param->nowarning=1;
 	} else if (argv[i][0]=='-')	{
