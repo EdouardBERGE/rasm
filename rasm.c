@@ -268,7 +268,7 @@ char *string;
 struct s_compute_core_data {
 	/* evaluator v3 may be recursive */
 	char *varbuffer;
-	int maxivar;
+	//int maxivar;
 	struct s_compute_element *tokenstack;
 	int maxtokenstack;
 	struct s_compute_element *operatorstack;
@@ -379,7 +379,7 @@ struct s_memory_localisation {
 struct s_label {
 	char *name;   /* is alloced for local repeat or struct OR generated global -> in this case iw=-1 */
 	int localsize;
-	int iw;       /* index of the word of label name */
+	//int iw;       /* index of the word of label name  => DEPRECATED!
 	int crc;      /* crc of the label name */
 	int ptr;      /* "physical" address */
 	int lz;       /* is the label in a crunched section (or after)? */
@@ -700,6 +700,8 @@ struct s_macro {
 	/* une macro concatene des chaines et des parametres */
 	struct s_wordlist *wc;
 	int nbword,maxword;
+	int *replaceidx;
+	int nbreplace,maxreplace;
 	/**/
 	char **param;
 	int nbparam;
@@ -719,7 +721,7 @@ struct s_macro_fast {
 
 struct s_math_keyword {
 	char *mnemo;
-	int crc;
+	int crc,length;
 	enum e_compute_operation_type operation;
 };
 
@@ -1035,6 +1037,8 @@ struct s_assenv {
 	int nberr,flux;
 #define INSTRUCTION_MAXLENGTH 14
 	int fastmatch[256][INSTRUCTION_MAXLENGTH];
+#define FUNCTION_MAXLENGTH 14
+	int fastmath[256][FUNCTION_MAXLENGTH];
 	unsigned char charset[256];
 	struct s_utf8Remap *utf8Remap;
 	int iUtf8Remap,mUtf8Remap;
@@ -1062,6 +1066,7 @@ struct s_assenv {
 	int maxam,as80,dams,pasmo;  // compatibility flags
 	float rough;
 	struct s_compute_core_data *computectx,ctx1,ctx2;
+	char *fastVarBuffer;
 	struct s_crcstring_tree stringtree;
 	/* label */
 	struct s_label *label;
@@ -1214,6 +1219,7 @@ struct s_wordlist {
 	int l,t,e; /* e=1 si egalite dans le mot */
 	int ifile;
 	int ml,mifile;
+	int len;
 	//void (*fastptr)(struct s_assenv *ae);
 };
 struct s_asm_keyword {
@@ -1223,153 +1229,215 @@ struct s_asm_keyword {
 };
 
 struct s_math_keyword math_keyword[]={
-{"SIN",0,E_COMPUTE_OPERATION_SIN},
-{"COS",0,E_COMPUTE_OPERATION_COS},
-{"INT",0,E_COMPUTE_OPERATION_INT},
-{"ABS",0,E_COMPUTE_OPERATION_ABS},
-{"LN",0,E_COMPUTE_OPERATION_LN},
-{"LOG10",0,E_COMPUTE_OPERATION_LOG10},
-{"SQRT",0,E_COMPUTE_OPERATION_SQRT},
-{"FLOOR",0,E_COMPUTE_OPERATION_FLOOR},
-{"ASIN",0,E_COMPUTE_OPERATION_ASIN},
-{"ACOS",0,E_COMPUTE_OPERATION_ACOS},
-{"ATAN",0,E_COMPUTE_OPERATION_ATAN},
-{"EXP",0,E_COMPUTE_OPERATION_EXP},
-{"LO",0,E_COMPUTE_OPERATION_LOW},
-{"HI",0,E_COMPUTE_OPERATION_HIGH},
-{"PSGVALUE",0,E_COMPUTE_OPERATION_PSG},
-{"RND",0,E_COMPUTE_OPERATION_RND},
-{"FRAC",0,E_COMPUTE_OPERATION_FRAC},
-{"CEIL",0,E_COMPUTE_OPERATION_CEIL},
-{"GETR",0,E_COMPUTE_OPERATION_GET_R},
-{"GETV",0,E_COMPUTE_OPERATION_GET_V},
-{"GETG",0,E_COMPUTE_OPERATION_GET_V},
-{"GETB",0,E_COMPUTE_OPERATION_GET_B},
-{"SETR",0,E_COMPUTE_OPERATION_SET_R},
-{"SETV",0,E_COMPUTE_OPERATION_SET_V},
-{"SETG",0,E_COMPUTE_OPERATION_SET_V},
-{"SETB",0,E_COMPUTE_OPERATION_SET_B},
-{"SOFT2HARD_INK",0,E_COMPUTE_OPERATION_SOFT2HARD},
-{"S2H_INK",0,E_COMPUTE_OPERATION_SOFT2HARD},
-{"HARD2SOFT_INK",0,E_COMPUTE_OPERATION_HARD2SOFT},
-{"H2S_INK",0,E_COMPUTE_OPERATION_HARD2SOFT},
-{"PEEK",0,E_COMPUTE_OPERATION_PEEK},
-{"POW2",0,E_COMPUTE_OPERATION_POW2},
-{"GETNOP",0,E_COMPUTE_OPERATION_GETNOP},
-{"GETTICK",0,E_COMPUTE_OPERATION_GETTICK},
-{"DURATION",0,E_COMPUTE_OPERATION_DURATION},
-{"FILESIZE",0,E_COMPUTE_OPERATION_FILESIZE},
-{"GETSIZE",0,E_COMPUTE_OPERATION_GETSIZE},
-{"IS_REGISTER",0,E_COMPUTE_OPERATION_IS_REGISTER},
-{"",0,-1}
+{"SIN",0,0,E_COMPUTE_OPERATION_SIN},
+{"COS",0,0,E_COMPUTE_OPERATION_COS},
+{"INT",0,0,E_COMPUTE_OPERATION_INT},
+{"ABS",0,0,E_COMPUTE_OPERATION_ABS},
+{"LN",0,0,E_COMPUTE_OPERATION_LN},
+{"LOG10",0,0,E_COMPUTE_OPERATION_LOG10},
+{"SQRT",0,0,E_COMPUTE_OPERATION_SQRT},
+{"FLOOR",0,0,E_COMPUTE_OPERATION_FLOOR},
+{"ASIN",0,0,E_COMPUTE_OPERATION_ASIN},
+{"ACOS",0,0,E_COMPUTE_OPERATION_ACOS},
+{"ATAN",0,0,E_COMPUTE_OPERATION_ATAN},
+{"EXP",0,0,E_COMPUTE_OPERATION_EXP},
+{"LO",0,0,E_COMPUTE_OPERATION_LOW},
+{"HI",0,0,E_COMPUTE_OPERATION_HIGH},
+{"PSGVALUE",0,0,E_COMPUTE_OPERATION_PSG},
+{"RND",0,0,E_COMPUTE_OPERATION_RND},
+{"FRAC",0,0,E_COMPUTE_OPERATION_FRAC},
+{"CEIL",0,0,E_COMPUTE_OPERATION_CEIL},
+{"GETR",0,0,E_COMPUTE_OPERATION_GET_R},
+{"GETV",0,0,E_COMPUTE_OPERATION_GET_V},
+{"GETG",0,0,E_COMPUTE_OPERATION_GET_V},
+{"GETB",0,0,E_COMPUTE_OPERATION_GET_B},
+{"SETR",0,0,E_COMPUTE_OPERATION_SET_R},
+{"SETV",0,0,E_COMPUTE_OPERATION_SET_V},
+{"SETG",0,0,E_COMPUTE_OPERATION_SET_V},
+{"SETB",0,0,E_COMPUTE_OPERATION_SET_B},
+{"SOFT2HARD_INK",0,0,E_COMPUTE_OPERATION_SOFT2HARD},
+{"S2H_INK",0,0,E_COMPUTE_OPERATION_SOFT2HARD},
+{"HARD2SOFT_INK",0,0,E_COMPUTE_OPERATION_HARD2SOFT},
+{"H2S_INK",0,0,E_COMPUTE_OPERATION_HARD2SOFT},
+{"PEEK",0,0,E_COMPUTE_OPERATION_PEEK},
+{"POW2",0,0,E_COMPUTE_OPERATION_POW2},
+{"GETNOP",0,0,E_COMPUTE_OPERATION_GETNOP},
+{"GETTICK",0,0,E_COMPUTE_OPERATION_GETTICK},
+{"DURATION",0,0,E_COMPUTE_OPERATION_DURATION},
+{"FILESIZE",0,0,E_COMPUTE_OPERATION_FILESIZE},
+{"GETSIZE",0,0,E_COMPUTE_OPERATION_GETSIZE},
+{"IS_REGISTER",0,0,E_COMPUTE_OPERATION_IS_REGISTER},
+{"",0,0,-1}
 };
 
-#define CRC_SWITCH    0x01AEDE4A
-#define CRC_CASE      0x0826B794
-#define CRC_DEFAULT   0x9A0DAC7D
-#define CRC_BREAK     0xCD364DDD
-#define CRC_ENDSWITCH 0x18E9FB21
+#define CRC_SWITCH 0x5449141B
+#define CRC_CASE 0x45534143
+#define CRC_DEFAULT 0x41130910
+#define CRC_BREAK 0x41455209
+#define CRC_ENDSWITCH 0x1010075A
+#define CRC_ELSEIFNOT 0x0A1D0A58
+#define CRC_ELSEIF 0x45530503
+#define CRC_ELSE 0x45534C45
+#define CRC_ENDIF 0x49444E03
+#define CRC_IF 0x00004946
+#define CRC_IFDEF 0x4544460F
+#define CRC_UNDEF 0x45444E13
+#define CRC_IFNDEF 0x444E030F
+#define CRC_IFNOT 0x4F4E461D
+#define CRC_WHILE 0x4C494812
+#define CRC_UNTIL 0x49544E19
+#define CRC_MEND 0x444E454D
+#define CRC_ENDM 0x4D444E45
+#define CRC_MACRO 0x52434102
+#define CRC_IFUSED 0x5355030D
+#define CRC_IFNUSED 0x551D030D
+#define CRC_SIN 0x0053494E
+#define CRC_COS 0x00434F53
+#define CRC_0 0x00000030
+#define CRC_1 0x00000031
+#define CRC_2 0x00000032
+#define CRC_NC 0x00004E43
+#define CRC_Z 0x0000005A
+#define CRC_NZ 0x00004E5A
+#define CRC_P 0x00000050
+#define CRC_PO 0x0000504F
+#define CRC_PE 0x00005045
+#define CRC_M 0x0000004D
+#define CRC_HL_LOW 0x4C5F031F
+#define CRC_HL_HIGH 0x48160B00
+#define CRC_DE_LOW 0x4C5F0A13
+#define CRC_DE_HIGH 0x4816020C
+#define CRC_BC_LOW 0x4C5F0C15
+#define CRC_BC_HIGH 0x4816040A
+#define CRC_IX_LOW 0x4C5F171E
+#define CRC_IX_HIGH 0x48161F01
+#define CRC_IY_LOW 0x4C5F161E
+#define CRC_IY_HIGH 0x48161E01
+#define CRC_AF_LOW 0x4C5F0916
+#define CRC_AF_HIGH 0x48160109
+#define CRC_F 0x00000046
+#define CRC_I 0x00000049
+#define CRC_R 0x00000052
+#define CRC_A 0x00000041
+#define CRC_B 0x00000042
+#define CRC_C 0x00000043
+#define CRC_D 0x00000044
+#define CRC_E 0x00000045
+#define CRC_H 0x00000048
+#define CRC_L 0x0000004C
+#define CRC_XH 0x00005848
+#define CRC_XL 0x0000584C
+#define CRC_YH 0x00005948
+#define CRC_YL 0x0000594C
+#define CRC_HX 0x00004858
+#define CRC_LX 0x00004C58
+#define CRC_HY 0x00004859
+#define CRC_LY 0x00004C59
+#define CRC_IXL 0x0049584C
+#define CRC_IXH 0x00495848
+#define CRC_IYL 0x0049594C
+#define CRC_IYH 0x00495948
+#define CRC_BC 0x00004243
+#define CRC_DE 0x00004445
+#define CRC_HL 0x0000484C
+#define CRC_IX 0x00004958
+#define CRC_IY 0x00004959
+#define CRC_SP 0x00005350
+#define CRC_AF 0x00004146
+#define CRC_MHL 0x294C4828
+#define CRC_MDE 0x29454428
+#define CRC_MBC 0x29434228
+#define CRC_MIX 0x29584928
+#define CRC_MIY 0x29594928
+#define CRC_MSP 0x29505328
+#define CRC_MC 0x00284329
+#define CRC_DEFB 0x42464544
+#define CRC_DB 0x00004442
+#define CRC_DEFW 0x57464544
+#define CRC_DW 0x00004457
+#define CRC_DEFI 0x49464544
+#define CRC_DEFS 0x53464544
+#define CRC_DS 0x00004453
+#define CRC_DEFR 0x52464544
+#define CRC_DR 0x00004452
+#define CRC_DEFF 0x46464544
+#define CRC_DF 0x00004446
+#define CRC_REPEAT 0x45500406
+#define CRC_REND 0x444E4552
+#define CRC_WEND 0x444E4557
+#define CRC_ORG 0x004F5247
+#define CRC_BANK 0x4B4E4142
+#define CRC_HALT 0x544C4148
+#define CRC_NOP 0x004E4F50
+#define CRC_LDI 0x004C4449
+#define CRC_LDD 0x004C4444
+#define CRC_DEC 0x00444543
+#define CRC_INC 0x00494E43
+#define CRC_CPI 0x00435049
+#define CRC_CPD 0x00435044
+#define CRC_BIT 0x00424954
+#define CRC_RES 0x00524553
+#define CRC_SET 0x00534554
+#define CRC_CCF 0x00434346
+#define CRC_IND 0x00494E44
+#define CRC_INI 0x00494E49
+#define CRC_DAA 0x00444141
+#define CRC_CPL 0x0043504C
+#define CRC_EI 0x00004549
+#define CRC_DI 0x00004449
+#define CRC_IM 0x0000494D
+#define CRC_SCF 0x00534346
+#define CRC_NEG 0x004E4547
+#define CRC_OUTI 0x4954554F
+#define CRC_OUTD 0x4454554F
+#define CRC_OUT 0x004F5554
+#define CRC_IN 0x0000494E
+#define CRC_RLA 0x00524C41
+#define CRC_RLCA 0x41434C52
+#define CRC_RRCA 0x41435252
+#define CRC_RRA 0x00525241
+#define CRC_RLD 0x00524C44
+#define CRC_RRD 0x00525244
+#define CRC_RST 0x00525354
+#define CRC_RR 0x00005252
+#define CRC_RL 0x0000524C
+#define CRC_RRC 0x00525243
+#define CRC_RLC 0x00524C43
+#define CRC_SLA 0x00534C41
+#define CRC_SLL 0x00534C4C
+#define CRC_SRA 0x00535241
+#define CRC_SRL 0x0053524C
+#define CRC_ADD 0x00414444
+#define CRC_ADC 0x00414443
+#define CRC_SBC 0x00534243
+#define CRC_SUB 0x00535542
+#define CRC_XOR 0x00584F52
+#define CRC_AND 0x00414E44
+#define CRC_OR 0x00004F52
+#define CRC_CP 0x00004350
+#define CRC_PUSH 0x48535550
+#define CRC_POP 0x00504F50
+#define CRC_CALL 0x4C4C4143
+#define CRC_JR 0x00004A52
+#define CRC_JP 0x00004A50
+#define CRC_DJNZ 0x5A4E4A44
+#define CRC_RET 0x00524554
+#define CRC_RETN 0x4E544552
+#define CRC_RETI 0x49544552
+#define CRC_LD 0x00004C44
+#define CRC_EX 0x00004558
+#define CRC_EXX 0x00455858
+#define CRC_LDIR 0x5249444C
+#define CRC_LDDR 0x5244444C
+#define CRC_INIR 0x52494E49
+#define CRC_INDR 0x52444E49
+#define CRC_OTIR 0x5249544F
+#define CRC_OTDR 0x5244544F
+#define CRC_CPIR 0x52495043
+#define CRC_CPDR 0x52445043
 
-#define CRC_ELSEIFNOT 0x348E521
-#define CRC_ELSEIF 0xE175E230
-#define CRC_ELSE   0x3FF177A1
-#define CRC_ENDIF  0xCD5265DE
-#define CRC_IF     0x4BD52507
-#define CRC_IFDEF  0x4CB29DD6
-#define CRC_UNDEF  0xCCD2FDEA
-#define CRC_IFNDEF 0xD9AD0824
-#define CRC_IFNOT  0x4CCAC9F8
-#define CRC_WHILE  0xBC268FF1
-#define CRC_UNTIL  0xCC12A604
-#define CRC_MEND   0xFFFD899C
-#define CRC_ENDM   0x3FF9559C
-#define CRC_MACRO  0x64AA85EA
-#define CRC_IFUSED 0x91752638
-#define CRC_IFNUSED 0x1B39A886
-
-#define CRC_SIN 0xE1B71962
-#define CRC_COS 0xE077C55D
-
-#define CRC_0    0x7A98A6A8
-#define CRC_1    0x7A98A6A9
-#define CRC_2    0x7A98A6AA
 
 
-#define CRC_NC   0x4BD52B09
-#define CRC_Z    0x7A98A6D2
-#define CRC_NZ   0x4BD52B20
-#define CRC_P    0x7A98A6C8
-#define CRC_PO   0x4BD53717
-#define CRC_PE   0x4BD5370D
-#define CRC_M    0x7A98A6C5
-
-/* cut registers */
-#define CRC_HL_LOW	0xF9FDE22C
-#define CRC_HL_HIGH	0x2261E25A
-#define CRC_DE_LOW	0x3A3CE221
-#define CRC_DE_HIGH	0x23D0E04F
-#define CRC_BC_LOW	0xFDFF1E1D
-#define CRC_BC_HIGH	0x222BE44B
-#define CRC_IX_LOW	0xB9FD0439
-#define CRC_IX_HIGH	0xA3FD0667
-#define CRC_IY_LOW	0xD9ED6C3A
-#define CRC_IY_HIGH	0x23DD5068
-#define CRC_AF_LOW	0xDDCF141F
-#define CRC_AF_HIGH	0x223FEA4D
-
-/* 8 bits registers */
-#define CRC_F    0x7A98A6BE
-#define CRC_I    0x7A98A6C1
-#define CRC_R    0x7A98A6CA
-#define CRC_A    0x7A98A6B9
-#define CRC_B    0x7A98A6BA
-#define CRC_C    0x7A98A6BB
-#define CRC_D    0x7A98A6BC
-#define CRC_E    0x7A98A6BD
-#define CRC_H    0x7A98A6C0
-#define CRC_L    0x7A98A6C4
-/* dual naming */
-#define CRC_XH   0x4BD50718
-#define CRC_XL   0x4BD5071C
-#define CRC_YH   0x4BD50519
-#define CRC_YL   0x4BD5051D
-#define CRC_HX   0x4BD52718
-#define CRC_LX   0x4BD52F1C
-#define CRC_HY   0x4BD52719
-#define CRC_LY   0x4BD52F1D
-#define CRC_IXL  0xE19F1765
-#define CRC_IXH  0xE19F1761
-#define CRC_IYL  0xE19F1166
-#define CRC_IYH  0xE19F1162
-
-/* 16 bits registers */
-#define CRC_BC   0x4BD5D2FD
-#define CRC_DE   0x4BD5DF01
-#define CRC_HL   0x4BD5270C
-#define CRC_IX   0x4BD52519
-#define CRC_IY   0x4BD5251A
-#define CRC_SP   0x4BD5311B
-#define CRC_AF   0x4BD5D4FF
-/* memory convention */
-#define CRC_MHL  0xD0765F5D
-#define CRC_MDE  0xD0467D52
-#define CRC_MBC  0xD05E694E
-#define CRC_MIX  0xD072B76A
-#define CRC_MIY  0xD072B16B
-#define CRC_MSP  0xD01A876C
-#define CRC_MC   0xE018210C
-/* struct parsing */
-#define CRC_DEFB	0x37D15389
-#define CRC_DB		0x4BD5DEFE
-#define CRC_DEFW	0x37D1539E
-#define CRC_DW		0x4BD5DF13
-#define CRC_DEFI	0x37D15390
-#define CRC_DEFS	0x37D1539A
-#define CRC_DS		0x4BD5DF0F
-#define CRC_DEFR	0x37D15399
-#define CRC_DR		0x4BD5DF0E
-#define CRC_DEFF	0x37D1538D
-#define CRC_DF	        0x4BD5DF02
 
 /* struct declaration use special instructions for defines */
 int ICRC_DEFB,ICRC_DEFW,ICRC_DEFI,ICRC_DEFR,ICRC_DEFF,ICRC_DF,ICRC_DEFS,ICRC_DB,ICRC_DW,ICRC_DR,ICRC_DS;
@@ -2038,28 +2106,65 @@ void StateMachineResizeBuffer(char **ABuf, int idx, int *ASize) {
 	}
 }
 
-int GetCRC(char *label) {
-	#undef FUNC
-	#define FUNC "GetCRC"
-	int crc=0x12345678;
-	int i=0;
+#if 0
+#ifdef _WIN32
+__forceinline int GetCRC(char *label) {
+#else
+static inline int GetCRC(char *label) {
+#endif
+#endif
 
-	while (label[i]!=0) {
-		crc=(crc<<9)^(crc+label[i++]);
-	}
-	return crc;
+int GetCRC(char *label) {
+        #undef FUNC
+        #define FUNC "GetCRC"
+        int crc;
+        int i;
+
+        // first bytes with fast exit
+        if (label[1]) {
+                if (label[2]) {
+                        if (label[3]) {
+                                crc=*(int *)label;
+                                i=4;
+                        } else {
+                                return (label[0]<<16)|(label[1]<<8)|label[2];
+                        }
+                } else {
+                        return (label[0]<<8)|label[1];
+                }
+        } else {
+                return label[0];
+        }
+
+        // batch CRC
+        while (label[i]!=0) {
+                if (label[i+1]) {
+                        if (label[i+2]) {
+                                if (label[i+3]) {
+                                        crc^=*(int *)(&label[i]);
+                                        i+=4;
+                                } else {
+                                        crc^=(label[i]<<16)|(label[i+1]<<8)|label[i+2];
+                                        return crc;
+                                }
+                        } else {
+                                crc^=(label[i]<<8)|label[i+1];
+                                return crc;
+                        }
+                } else {
+                        crc^=label[i];
+                        return crc;
+                }
+        }
+        return crc;
 }
+
 int GetCRCandLength(char *label, int *ilength) {
 	#undef FUNC
 	#define FUNC "GetCRC"
-	int crc=0x12345678;
-	int i=0;
 
-	while (label[i]!=0) {
-		crc=(crc<<9)^(crc+label[i++]);
-	}
-	*ilength=i;
-	return crc;
+	*ilength=strlen(label);
+	return GetCRC(label);
 }
 
 int IsDirective(char *expr);
@@ -2247,11 +2352,11 @@ char *StringLooksLike(struct s_assenv *ae, char *str)
 
 	/* search in labels */
 	for (i=0;i<ae->il;i++) {
-		if (!ae->label[i].name && strlen(ae->wl[ae->label[i].iw].w)>4) {
-			curs=_internal_LevenshteinDistance(ae->wl[ae->label[i].iw].w,str);
+		if (strlen(ae->label[i].name)>4) {
+			curs=_internal_LevenshteinDistance(ae->label[i].name,str);
 			if (curs<score) {
 				score=curs;
-				ret=ae->wl[ae->label[i].iw].w;
+				ret=ae->label[i].name;
 			}
 		}
 	}
@@ -2739,18 +2844,11 @@ void FreeAssenv(struct s_assenv *ae)
 
 		for (i=0;i<ae->il;i++) {
 			/* on exporte tout */
-			if (!ae->label[i].name) {
-				/* les labels entiers */
-				debug_symbol.name=TxtStrDup(ae->wl[ae->label[i].iw].w);
-				debug_symbol.v=ae->label[i].ptr;
-				ObjectArrayAddDynamicValueConcat((void**)&ae->debug.symbol,&ae->debug.nbsymbol,&ae->debug.maxsymbol,&debug_symbol,sizeof(struct s_debug_symbol));
-			} else {
-				/* les labels locaux et générés */
-				debug_symbol.name=TxtStrDup(ae->label[i].name);
-				if (ae->label[i].localsize) debug_symbol.name[ae->label[i].localsize]=0;
-				debug_symbol.v=ae->label[i].ptr;
-				ObjectArrayAddDynamicValueConcat((void**)&ae->debug.symbol,&ae->debug.nbsymbol,&ae->debug.maxsymbol,&debug_symbol,sizeof(struct s_debug_symbol));
-			}
+			/* les labels locaux et générés */
+			debug_symbol.name=TxtStrDup(ae->label[i].name);
+			if (ae->label[i].localsize) debug_symbol.name[ae->label[i].localsize]=0;
+			debug_symbol.v=ae->label[i].ptr;
+			ObjectArrayAddDynamicValueConcat((void**)&ae->debug.symbol,&ae->debug.nbsymbol,&ae->debug.maxsymbol,&debug_symbol,sizeof(struct s_debug_symbol));
 		}
 		for (i=0;i<ae->ialias;i++) {
 			if (strcmp(ae->alias[i].alias,"IX") && strcmp(ae->alias[i].alias,"IY")) {
@@ -2779,7 +2877,7 @@ void FreeAssenv(struct s_assenv *ae)
 	
 	/* expression core buffer free */
 	ComputeExpressionCore(NULL,NULL,0,0);
-	ExpressionFastTranslate(NULL,NULL,0);
+	//ExpressionFastTranslate(NULL,NULL,0);
 	/* free labels, expression, orgzone, repeat, ... */
 	if (ae->mo) MemFree(ae->orgzone);
 	if (ae->me) {
@@ -2803,7 +2901,7 @@ void FreeAssenv(struct s_assenv *ae)
 		MemFree(ae->hexbin);
 	}
 	for (i=0;i<ae->il;i++) {
-		if (ae->label[i].name && ae->label[i].iw==-1) MemFree(ae->label[i].name);
+		MemFree(ae->label[i].name);
 	}
 	/* structures */
 	for (i=0;i<ae->irasmstructalias;i++) {
@@ -2894,6 +2992,9 @@ void FreeAssenv(struct s_assenv *ae)
 	}
 	MemFree(ae->wl);
 
+	if (ae->fastVarBuffer) {
+		MemFree(ae->fastVarBuffer);
+	}
 	if (ae->ctx1.varbuffer) {
 		MemFree(ae->ctx1.varbuffer);
 	}
@@ -3416,13 +3517,8 @@ void WarnLabelTreeRecurse(struct s_assenv *ae, struct s_crclabel_tree *lt)
 	}
 	for (i=0;i<lt->nlabel;i++) {
 		if (!lt->label[i].used) {
-			if (!lt->label[i].name) {
-				rasm_printf(ae,KWARNING"[%s:%d] Warning: label %s declared but not used\n",ae->filename[lt->label[i].fileidx],lt->label[i].fileline,ae->wl[lt->label[i].iw].w);
-				if (ae->erronwarn) MaxError(ae);
-			} else {
-				rasm_printf(ae,KWARNING"[%s:%d] Warning: label %s declared but not used\n",ae->filename[lt->label[i].fileidx],lt->label[i].fileline,lt->label[i].name);
-				if (ae->erronwarn) MaxError(ae);
-			}
+			rasm_printf(ae,KWARNING"[%s:%d] Warning: label %s declared but not used\n",ae->filename[lt->label[i].fileidx],lt->label[i].fileline,lt->label[i].name);
+			if (ae->erronwarn) MaxError(ae);
 		}
 	}
 }
@@ -3591,20 +3687,25 @@ struct s_expr_dico *SearchDico(struct s_assenv *ae, char *dico, int crc)
 	#define FUNC "SearchDico"
 
 	struct s_crcdico_tree *curdicotree;
-	int i,radix,dek=16;
+	int i,radix;
 
 	if ((curdicotree=ae->dicotree[(crc>>16)&0xFFFF])==NULL) return NULL; //@@FAST
 
-	while (dek) {
-		dek=dek-8;
-		radix=(crc>>dek)&0xFF;
-		if (curdicotree->radix[radix]) {
-			curdicotree=curdicotree->radix[radix];
-		} else {
-			/* radix not found, dico is not in index */
-			return NULL;
-		}
+	radix=(crc>>8)&0xFF;
+	if (curdicotree->radix[radix]) {
+		curdicotree=curdicotree->radix[radix];
+	} else {
+		/* radix not found, dico is not in index */
+		return NULL;
 	}
+	radix=crc&0xFF;
+	if (curdicotree->radix[radix]) {
+		curdicotree=curdicotree->radix[radix];
+	} else {
+		/* radix not found, dico is not in index */
+		return NULL;
+	}
+
 	for (i=0;i<curdicotree->ndico;i++) {
 		if (strcmp(curdicotree->dico[i].name,dico)==0) {
 			curdicotree->dico[i].used++;
@@ -3645,19 +3746,23 @@ int DelDico(struct s_assenv *ae, char *dico, int crc)
 	#define FUNC "DelDico"
 
 	struct s_crcdico_tree *curdicotree;
-	int i,radix,dek=16;
+	int i,radix;
 
 	if ((curdicotree=ae->dicotree[(crc>>16)&0xFFFF])==NULL) return 0; //@@FAST
 
-	while (dek) {
-		dek=dek-8;
-		radix=(crc>>dek)&0xFF;
-		if (curdicotree->radix[radix]) {
-			curdicotree=curdicotree->radix[radix];
-		} else {
-			/* radix not found, dico is not in index */
-			return 0;
-		}
+	radix=(crc>>8)&0xFF;
+	if (curdicotree->radix[radix]) {
+		curdicotree=curdicotree->radix[radix];
+	} else {
+		/* radix not found, dico is not in index */
+		return 0;
+	}
+	radix=crc&0xFF;
+	if (curdicotree->radix[radix]) {
+		curdicotree=curdicotree->radix[radix];
+	} else {
+		/* radix not found, dico is not in index */
+		return 0;
 	}
 	for (i=0;i<curdicotree->ndico;i++) {
 		if (strcmp(curdicotree->dico[i].name,dico)==0) {
@@ -3688,22 +3793,27 @@ void InsertUsedToTree(struct s_assenv *ae, char *used, int crc)
 		ae->usedtree[(crc>>16)&0xFFFF]=curusedtree;
 	}
 
-	while (dek) {
-		dek=dek-8;
-		radix=(crc>>dek)&0xFF;
-		if (curusedtree->radix[radix]) {
-			curusedtree=curusedtree->radix[radix];
-		} else {
-			curusedtree->radix[radix]=MemMalloc(sizeof(struct s_crcused_tree));
-			curusedtree=curusedtree->radix[radix];
-			memset(curusedtree,0,sizeof(struct s_crcused_tree));
-		}
+	radix=(crc>>8)&0xFF;
+	if (curusedtree->radix[radix]) {
+		curusedtree=curusedtree->radix[radix];
+	} else {
+		curusedtree->radix[radix]=MemMalloc(sizeof(struct s_crcused_tree));
+		curusedtree=curusedtree->radix[radix];
+		memset(curusedtree,0,sizeof(struct s_crcused_tree));
 	}
-	for (i=0;i<curusedtree->nused;i++) if (strcmp(used,curusedtree->used[i])==0) break;
-	/* no double */
-	if (i==curusedtree->nused) {
-		FieldArrayAddDynamicValueConcat(&curusedtree->used,&curusedtree->nused,&curusedtree->mused,used);
+	radix=crc&0xFF;
+	if (curusedtree->radix[radix]) {
+		curusedtree=curusedtree->radix[radix];
+	} else {
+		curusedtree->radix[radix]=MemMalloc(sizeof(struct s_crcused_tree));
+		curusedtree=curusedtree->radix[radix];
+		memset(curusedtree,0,sizeof(struct s_crcused_tree));
 	}
+
+	for (i=0;i<curusedtree->nused;i++) if (strcmp(used,curusedtree->used[i])==0) return; // already defined
+											     //
+	/* not found ok, but now used! ^_^ */
+	FieldArrayAddDynamicValueConcat(&curusedtree->used,&curusedtree->nused,&curusedtree->mused,used);
 }
 
 void FreeUsedTreeRecurse(struct s_crcused_tree *lt)
@@ -3895,19 +4005,23 @@ struct s_label *SearchLabel(struct s_assenv *ae, char *label, int crc)
 	#define FUNC "SearchLabel"
 
 	struct s_crclabel_tree *curlabeltree;
-	int i,radix,dek=16;
+	int radix;
 
 	if ((curlabeltree=ae->labeltree[(crc>>16)&0xFFFF])==NULL) return NULL; //@@FAST
 
-	while (dek) {
-		dek=dek-8;
-		radix=(crc>>dek)&0xFF;
+	radix=(crc>>8)&0xFF;
+	if (curlabeltree->radix[radix]) {
+		curlabeltree=curlabeltree->radix[radix];
+		radix=crc&0xFF;
 		if (curlabeltree->radix[radix]) {
 			curlabeltree=curlabeltree->radix[radix];
 		} else {
 			/* radix not found, label is not in index */
 			return NULL;
 		}
+	} else {
+		/* radix not found, label is not in index */
+		return NULL;
 	}
 
 #define PUSH_LABEL_OBJ		/* outside crunched section of in intermediate section */ \
@@ -3918,13 +4032,8 @@ struct s_label *SearchLabel(struct s_assenv *ae, char *label, int crc)
 					mapping.iorgzone=ae->io-1; mapping.ptr=ae->outputadr; mapping.size=2; mapping.value=curlabeltree->label[i].ptr; \
 					printf("add mapping for label [%s] ptr=%d size=%d value=%d\n",label,mapping.ptr,mapping.size,mapping.value); \
 					ObjectArrayAddDynamicValueConcat((void**)&ae->relocation,&ae->imapping,&ae->mmapping,&mapping,sizeof(mapping)); }
-
-	for (i=0;i<curlabeltree->nlabel;i++) {
-		if (!curlabeltree->label[i].name && strcmp(ae->wl[curlabeltree->label[i].iw].w,label)==0) {
-			//PUSH_LABEL_OBJ;
-			curlabeltree->label[i].used++;
-			return &curlabeltree->label[i];
-		} else if (curlabeltree->label[i].name && strcmp(curlabeltree->label[i].name,label)==0) {
+	for (int i=0;i<curlabeltree->nlabel;i++) {
+		if (strcmp(curlabeltree->label[i].name,label)==0) {
 			//PUSH_LABEL_OBJ;
 			curlabeltree->label[i].used++;
 			return &curlabeltree->label[i];
@@ -4141,82 +4250,6 @@ char *TranslateTag(struct s_assenv *ae, char *varbuffer, int *touched, int enabl
 
 	return varbuffer;
 }
-
-#define CRC_HALT	0xD7D1BFA1
-#define CRC_NOP		0xE1830165
-#define CRC_LDI		0xE18B3F51
-#define CRC_LDD		0xE18B3F4C
-#define CRC_DEC		0xE06BDD44
-#define CRC_INC		0xE19F3B52
-#define CRC_CPI		0xE077C754
-#define CRC_CPD		0xE077C74F
-#define CRC_BIT		0xE073D557
-#define CRC_RES		0xE1B32D62
-#define CRC_SET		0xE1B71164
-#define CRC_CCF		0xE0742D44
-#define CRC_IND		0xE19F3B53
-#define CRC_INI		0xE19F3B58
-#define CRC_DAA		0xE068253E
-#define CRC_CPL		0xE077C757
-#define CRC_EI		0x4BD5DD06
-#define CRC_DI		0x4BD5DF05
-#define CRC_IM		0x4BD5250E
-#define CRC_SCF		0xE1B72D54
-#define CRC_NEG		0xE1833D52
-#define CRC_OUTI	0xEFA5F1B9
-#define CRC_OUTD	0xEFA5F1B4
-#define CRC_OUT		0xE1871170
-#define CRC_IN		0x4BD5250F
-
-#define CRC_RLA		0xE1B31F57
-#define CRC_RLCA	0x878DAD9A
-#define CRC_RRCA	0x87A5B5A0
-#define CRC_RRA		0xE1B30B5D
-#define CRC_RLD		0xE1B31F5A
-#define CRC_RRD		0xE1B30B60
-#define CRC_RST		0xE1B30971
-#define CRC_RR		0x4BD5331C
-#define CRC_RL		0x4BD53316
-#define CRC_RRC		0xE1B30B5F
-#define CRC_RLC		0xE1B31F59
-#define CRC_SLA		0xE1B71F58
-#define CRC_SLL		0xE1B71F63
-#define CRC_SRA		0xE1B70B5E
-#define CRC_SRL		0xE1B70B69
-
-#define CRC_ADD		0xE07C2F41
-#define CRC_ADC		0xE07C2F40
-#define CRC_SBC		0xE1B72B50
-#define CRC_SUB		0xE1B77162
-#define CRC_XOR		0xE1DB3971
-#define CRC_AND		0xE07FDB4B
-#define CRC_OR		0x4BD52919
-#define CRC_CP		0x4BD5D10B
-
-#define CRC_PUSH	0x97A1EDB8
-#define CRC_POP		0xE1BB1967
-
-#define CRC_CALL	0x826B994
-#define CRC_JR		0x4BD52314
-#define CRC_JP		0x4BD52312
-#define CRC_DJNZ	0x37CD7BAE
-#define CRC_RET		0xE1B32D63
-#define CRC_RETN	0x87E9EBB1
-#define CRC_RETI	0x87E9EBAC
-
-#define CRC_LD		0x4BD52F08
-
-#define CRC_EX		0x4BD5DD15
-#define CRC_EXX		0xE06FF76D
-#define CRC_LDIR	0xF7F59DA3
-#define CRC_LDDR	0xF7F5A79E
-#define CRC_INIR	0xDFE98BAA
-#define CRC_INDR	0xDFE99DA5
-#define CRC_OTIR	0xEFB9D7B6
-#define CRC_OTDR	0xEFB9A1B1
-#define CRC_CPIR	0xFF96FA6
-#define CRC_CPDR	0xFF959A1
-
 
 
 int __GETNOP(struct s_assenv *ae,char *oplist, int didx)
@@ -5628,7 +5661,7 @@ double ComputeExpressionCore(struct s_assenv *ae,char *original_zeexpression,int
 	}
 
 	/* be sure to have at least some bytes allocated */
-	StateMachineResizeBuffer(&ae->computectx->varbuffer,128,&ae->computectx->maxivar);
+	//StateMachineResizeBuffer(&ae->computectx->varbuffer,128,&ae->computectx->maxivar);
 
 
 #if TRACE_COMPUTE_EXPRESSION
@@ -5706,7 +5739,7 @@ double ComputeExpressionCore(struct s_assenv *ae,char *original_zeexpression,int
 				idx++;
 				while (zeexpression[idx] && zeexpression[idx]!=c) {
 					ae->computectx->varbuffer[ivar++]=zeexpression[idx];
-					StateMachineResizeBuffer(&ae->computectx->varbuffer,ivar,&ae->computectx->maxivar);
+					//StateMachineResizeBuffer(&ae->computectx->varbuffer,ivar,&ae->computectx->maxivar);
 					idx++;
 				}
 				if (zeexpression[idx]) idx++; else MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"ComputeExpression [%s] quote bug!\n",TradExpression(zeexpression));
@@ -5797,15 +5830,15 @@ double ComputeExpressionCore(struct s_assenv *ae,char *original_zeexpression,int
 					/* previous char was an opening parenthesis or an operator */
 					ivar=0;
 					ae->computectx->varbuffer[ivar++]='-';
-					StateMachineResizeBuffer(&ae->computectx->varbuffer,ivar,&ae->computectx->maxivar);
+					//StateMachineResizeBuffer(&ae->computectx->varbuffer,ivar,&ae->computectx->maxivar);
 					c=zeexpression[++idx];
 					if (ae->AutomateExpressionValidCharFirst[(int)c&0xFF]) {
 						ae->computectx->varbuffer[ivar++]=c;
-						StateMachineResizeBuffer(&ae->computectx->varbuffer,ivar,&ae->computectx->maxivar);
+						//StateMachineResizeBuffer(&ae->computectx->varbuffer,ivar,&ae->computectx->maxivar);
 						c=zeexpression[++idx];
 						while (ae->AutomateExpressionValidChar[(int)c&0xFF]) {
 							ae->computectx->varbuffer[ivar++]=c;
-							StateMachineResizeBuffer(&ae->computectx->varbuffer,ivar,&ae->computectx->maxivar);
+							//StateMachineResizeBuffer(&ae->computectx->varbuffer,ivar,&ae->computectx->maxivar);
 							c=zeexpression[++idx];
 						}
 					}
@@ -5879,7 +5912,7 @@ double ComputeExpressionCore(struct s_assenv *ae,char *original_zeexpression,int
 						/* not a formula but only a prefix tag */
 						curly++;
 					}
-					StateMachineResizeBuffer(&ae->computectx->varbuffer,ivar,&ae->computectx->maxivar);
+					//StateMachineResizeBuffer(&ae->computectx->varbuffer,ivar,&ae->computectx->maxivar);
 					idx++;
 					c=zeexpression[idx];
 					Automate=ae->AutomateExpressionValidChar;
@@ -5895,7 +5928,7 @@ double ComputeExpressionCore(struct s_assenv *ae,char *original_zeexpression,int
 							}
 						}
 						ae->computectx->varbuffer[ivar++]=c;
-						StateMachineResizeBuffer(&ae->computectx->varbuffer,ivar,&ae->computectx->maxivar);
+						//StateMachineResizeBuffer(&ae->computectx->varbuffer,ivar,&ae->computectx->maxivar);
 						idx++;
 						c=zeexpression[idx];
 					}
@@ -6096,49 +6129,54 @@ double ComputeExpressionCore(struct s_assenv *ae,char *original_zeexpression,int
 	printf("après curly [%s]\n",minivarbuffer);
 #endif
 						ae->computectx=&ae->ctx1;
-						if (!touched) {
-							strcpy(ae->computectx->varbuffer+minusptr,minivarbuffer);
-						} else {
-							StateMachineResizeBuffer(&ae->computectx->varbuffer,strlen(minivarbuffer)+2,&ae->computectx->maxivar);
-							strcpy(ae->computectx->varbuffer+minusptr,minivarbuffer);
-						}
+						strcpy(ae->computectx->varbuffer+minusptr,minivarbuffer);
+						//if (!touched) {
+						//	strcpy(ae->computectx->varbuffer+minusptr,minivarbuffer);
+						//} else {
+							//StateMachineResizeBuffer(&ae->computectx->varbuffer,strlen(minivarbuffer)+2,&ae->computectx->maxivar);
+						//	strcpy(ae->computectx->varbuffer+minusptr,minivarbuffer);
+						//}
 						MemFree(minivarbuffer);
 						curlyflag=0;
 					}
 
-					crc=GetCRC(ae->computectx->varbuffer+minusptr);
-					/***************************************************
-					     L O O K I N G   F O R   A   F U N C T I O N
-					***************************************************/
-					for (imkey=0;math_keyword[imkey].mnemo[0];imkey++) {
-						if (crc==math_keyword[imkey].crc && strcmp(ae->computectx->varbuffer+minusptr,math_keyword[imkey].mnemo)==0) {
-							if (c=='(') {
-								/* push function as operator! */
-								stackelement.operator=math_keyword[imkey].operation;
-								stackelement.string=NULL;
-								/************************************************
-								      C R E A T E    E X T R A     T O K E N
-								************************************************/
-								ObjectArrayAddDynamicValueConcat((void **)&ae->computectx->tokenstack,&nbtokenstack,&ae->computectx->maxtokenstack,&stackelement,sizeof(stackelement));
-								stackelement.operator=E_COMPUTE_OPERATION_OPEN;
-								ObjectArrayAddDynamicValueConcat((void **)&ae->computectx->tokenstack,&nbtokenstack,&ae->computectx->maxtokenstack,&stackelement,sizeof(stackelement));
-								allow_minus_as_sign=1;
-								idx++;
-								parenth++;
-							} else {
-								MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"expression [%s] - %s is a reserved keyword!\n",TradExpression(zeexpression),math_keyword[imkey].mnemo);
-								curval=0;
-								idx++;
-							}
-							ivar=0;
-							break;
-						}
-					}
-					if (math_keyword[imkey].mnemo[0]) continue;
-					
-					if (ae->computectx->varbuffer[minusptr+0]=='$' && ae->computectx->varbuffer[minusptr+1]==0) {
+					if (ae->computectx->varbuffer[minusptr+0]=='$' && ivar==1) { //ae->computectx->varbuffer[minusptr+1]==0) {
 						curval=ptr;
 					} else {
+						int fastlen=ivar-minusptr;
+
+						crc=GetCRC(ae->computectx->varbuffer+minusptr);
+						/***************************************************
+						     L O O K I N G   F O R   A   F U N C T I O N
+						***************************************************/
+						if (fastlen<FUNCTION_MAXLENGTH && (imkey=ae->fastmath[(int)ae->computectx->varbuffer[minusptr]][fastlen])!=-1) {
+							do {
+								if (math_keyword[imkey].crc==crc && strcmp(math_keyword[imkey].mnemo+1,ae->computectx->varbuffer+minusptr+1)==0) {
+									if (c=='(') {
+										/* push function as operator! */
+										stackelement.operator=math_keyword[imkey].operation;
+										stackelement.string=NULL;
+										/************************************************
+										      C R E A T E    E X T R A     T O K E N
+										************************************************/
+										ObjectArrayAddDynamicValueConcat((void **)&ae->computectx->tokenstack,&nbtokenstack,&ae->computectx->maxtokenstack,&stackelement,sizeof(stackelement));
+										stackelement.operator=E_COMPUTE_OPERATION_OPEN;
+										ObjectArrayAddDynamicValueConcat((void **)&ae->computectx->tokenstack,&nbtokenstack,&ae->computectx->maxtokenstack,&stackelement,sizeof(stackelement));
+										allow_minus_as_sign=1;
+										parenth++;
+									} else {
+										MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"expression [%s] - %s is a reserved keyword!\n",TradExpression(zeexpression),math_keyword[imkey].mnemo);
+										curval=0;
+									}
+									idx++;
+									ivar=0;
+									break;
+								}
+								imkey++;
+							} while (math_keyword[imkey].mnemo[0]==ae->computectx->varbuffer[minusptr]);
+							if (!ivar) continue;
+						}
+					
 #if TRACE_COMPUTE_EXPRESSION
 	printf("search dico [%s]\n",ae->computectx->varbuffer+minusptr);
 #endif
@@ -6216,7 +6254,8 @@ double ComputeExpressionCore(struct s_assenv *ae,char *original_zeexpression,int
 							   expression->crunch_block=1 -> oui si même block
 							   expression->crunch_block=2 -> non car sera relogée
 							*/
-							if (page!=3) {
+
+							if (page!=3) { // si page vaut 3, on a déjà calculé la valeur à renvoyer
 
 
 
@@ -6844,16 +6883,16 @@ printf("final POP string=%X\n",ae->computectx->operatorstack[nboperatorstack+1].
 	if (ae->maxam || ae->as80) {
 		int workinterval;
 		if (ae->as80) workinterval=0xFFFFFFFF; else workinterval=0xFFFF;
+		if (maccu<=nbcomputestack) {
+			maccu=16+nbcomputestack;
+			accu=MemRealloc(accu,sizeof(double)*maccu);
+		}
 		for (i=0;i<nbcomputestack;i++) {
 			switch (computestack[i].operator) {
 				/************************************************
 				  c a s e s   s h o u l d    b e    s o r t e d
 				************************************************/
 				case E_COMPUTE_OPERATION_PUSH_DATASTC:
-					if (maccu<=paccu) {
-						maccu=16+paccu;
-						accu=MemRealloc(accu,sizeof(double)*maccu);
-					}
 					if (computestack[i].string) {
 						/* string hack */
 						accu[paccu]=i+0.1;
@@ -7071,6 +7110,11 @@ printf("final POP string=%X\n",ae->computectx->operatorstack[nboperatorstack+1].
 			}
 		}
 	} else {
+		// paccu vaut zéro :)
+		if (maccu<=nbcomputestack) {
+			maccu=16+nbcomputestack;
+			accu=MemRealloc(accu,sizeof(double)*maccu);
+		}
 		for (i=0;i<nbcomputestack;i++) {
 #if 0
 			int kk;
@@ -7100,10 +7144,6 @@ printf("final POP string=%X\n",ae->computectx->operatorstack[nboperatorstack+1].
 #endif
 			switch (computestack[i].operator) {
 				case E_COMPUTE_OPERATION_PUSH_DATASTC:
-					if (maccu<=paccu) {
-						maccu=16+paccu;
-						accu=MemRealloc(accu,sizeof(double)*maccu);
-					}
 					if (computestack[i].string) {
 						/* string hack */
 						accu[paccu]=i+0.1;
@@ -7603,15 +7643,8 @@ void ExpressionFastTranslate(struct s_assenv *ae, char **ptr_expr, int fullrepla
 	char *Automate;
 	int recurse=-1,recursecount=0;
 
-	if (!ae || !ptr_expr) {
-		if (varbuffer) MemFree(varbuffer);
-		varbuffer=NULL;
-		maxivar=1;
-		ivar=0;
-		return;
-	}
-	/* be sure to have at least some bytes allocated */
-	StateMachineResizeBuffer(&varbuffer,128,&maxivar);
+	//StateMachineResizeBuffer(&varbuffer,128,&maxivar);
+	varbuffer=ae->fastVarBuffer;
 	expr=*ptr_expr;
 
 	ivar=0;
@@ -7723,7 +7756,7 @@ printf("fast [%s]\n",expr);
 						/* this is only tag and not a formula */
 						curly++;
 					}
-					StateMachineResizeBuffer(&varbuffer,ivar,&maxivar);
+					//StateMachineResizeBuffer(&varbuffer,ivar,&maxivar);
 					idx++;
 					c=expr[idx];
 
@@ -7740,7 +7773,7 @@ printf("fast [%s]\n",expr);
 							}
 						}
 						varbuffer[ivar++]=c;
-						StateMachineResizeBuffer(&varbuffer,ivar,&maxivar);
+						//StateMachineResizeBuffer(&varbuffer,ivar,&maxivar);
 						idx++;
 						c=expr[idx];
 					}
@@ -7760,7 +7793,7 @@ printf("fast [%s]\n",expr);
 				char *minivarbuffer;
 				int touched;
 				minivarbuffer=TranslateTag(ae,TxtStrDup(varbuffer), &touched,0,E_TAGOPTION_NONE|(fullreplace?0:E_TAGOPTION_PRESERVE));
-				StateMachineResizeBuffer(&varbuffer,strlen(minivarbuffer)+1,&maxivar);
+				//StateMachineResizeBuffer(&varbuffer,strlen(minivarbuffer)+1,&maxivar);
 				strcpy(varbuffer,minivarbuffer);
 				newlen=strlen(varbuffer);
 				lenw=strlen(expr);
@@ -9615,23 +9648,28 @@ void InsertLabelToTree(struct s_assenv *ae, struct s_label *label)
 	#define FUNC "InsertLabelToTree"
 
 	struct s_crclabel_tree *curlabeltree;
-	int radix,dek=16;
+	int radix;
 
 	if ((curlabeltree=ae->labeltree[(label->crc>>16)&0xFFFF])==NULL) { //@@FAST
 		curlabeltree=MemMalloc(sizeof(struct s_crclabel_tree));
 		memset(curlabeltree,0,sizeof(struct s_crclabel_tree));
 		ae->labeltree[(label->crc>>16)&0xFFFF]=curlabeltree;
 	}
-	while (dek) {
-		dek=dek-8;
-		radix=(label->crc>>dek)&0xFF;
-		if (curlabeltree->radix[radix]) {
-			curlabeltree=curlabeltree->radix[radix];
-		} else {
-			curlabeltree->radix[radix]=MemMalloc(sizeof(struct s_crclabel_tree));
-			curlabeltree=curlabeltree->radix[radix];
-			memset(curlabeltree,0,sizeof(struct s_crclabel_tree));
-		}
+	radix=(label->crc>>8)&0xFF;
+	if (curlabeltree->radix[radix]) {
+		curlabeltree=curlabeltree->radix[radix];
+	} else {
+		curlabeltree->radix[radix]=MemMalloc(sizeof(struct s_crclabel_tree));
+		curlabeltree=curlabeltree->radix[radix];
+		memset(curlabeltree,0,sizeof(struct s_crclabel_tree));
+	}
+	radix=label->crc&0xFF;
+	if (curlabeltree->radix[radix]) {
+		curlabeltree=curlabeltree->radix[radix];
+	} else {
+		curlabeltree->radix[radix]=MemMalloc(sizeof(struct s_crclabel_tree));
+		curlabeltree=curlabeltree->radix[radix];
+		memset(curlabeltree,0,sizeof(struct s_crclabel_tree));
 	}
 	ObjectArrayAddDynamicValueConcat((void**)&curlabeltree->label,&curlabeltree->nlabel,&curlabeltree->mlabel,&label[0],sizeof(struct s_label));
 }
@@ -9761,7 +9799,6 @@ void PushLabel(struct s_assenv *ae)
 		/* label is structname+field */
 		curlabel.name=MemMalloc(strlen(ae->rasmstruct[ae->irasmstruct-1].name)+strlen(varbuffer)+2);
 		sprintf(curlabel.name,"%s.%s",ae->rasmstruct[ae->irasmstruct-1].name,varbuffer);
-		curlabel.iw=-1;
 		/* legacy */
 		curlabel.crc=GetCRC(curlabel.name);
 		curlabel.ptr=ae->codeadr;
@@ -9778,7 +9815,6 @@ void PushLabel(struct s_assenv *ae)
 #if TRACE_LABEL
 	printf("PUSH LOCAL\n");
 #endif
-			curlabel.iw=-1;
 			curlabel.local=1;
 			curlabel.localsize=strlen(varbuffer);
 			curlabel.name=MakeLocalLabel(ae,varbuffer,NULL);  MemFree(varbuffer);
@@ -9808,7 +9844,6 @@ void PushLabel(struct s_assenv *ae)
 							i++;
 						} while (varbuffer[i]!=0);
 
-						curlabel.iw=-1;
 						curlabel.name=varbuffer;
 						curlabel.crc=GetCRC(curlabel.name);
 					} else {
@@ -9817,7 +9852,6 @@ void PushLabel(struct s_assenv *ae)
 							curlabel.name=MemMalloc(strlen(varbuffer)+1+ae->lastgloballabellen);
 							sprintf(curlabel.name,"%s%s",ae->lastgloballabel,varbuffer);
 							MemFree(varbuffer);
-							curlabel.iw=-1;
 							curlabel.crc=GetCRC(curlabel.name);
 #if TRACE_LABEL
 printf("PUSH PROXIMITY label that may be exported [%s]->[%s]\n",ae->wl[ae->idx].w,curlabel.name);
@@ -9827,7 +9861,6 @@ printf("PUSH PROXIMITY label that may be exported [%s]->[%s]\n",ae->wl[ae->idx].
 printf("PUSH Orphan PROXIMITY label that cannot be exported [%s]->[%s]\n",ae->wl[ae->idx].w,curlabel.name);
 #endif
 
-							curlabel.iw=-1;
 							curlabel.name=varbuffer;
 							curlabel.crc=GetCRC(varbuffer);
 						}
@@ -9837,7 +9870,6 @@ printf("PUSH Orphan PROXIMITY label that cannot be exported [%s]->[%s]\n",ae->wl
 #if TRACE_LABEL
 	printf("PUSH => GLOBAL [%s]\n",varbuffer);
 #endif
-					curlabel.iw=-1;
 					curlabel.name=varbuffer; 
 					curlabel.crc=GetCRC(varbuffer);
 
@@ -9861,7 +9893,6 @@ printf("PUSH Orphan PROXIMITY label that cannot be exported [%s]->[%s]\n",ae->wl
 				MemFree(curlabel.name);
 				curlabel.name=newlabelname;
 				curlabel.crc=GetCRC(curlabel.name);
-				//curlabel.iw=-1; => deja mis depuis longtemps
 			}
 #if TRACE_LABEL
 	if (curlabel.name[0]!='@') printf("PUSH => ADD MODULE [%s] => [%s]\n",ae->module?ae->module:"(null)",curlabel.name);
@@ -16826,6 +16857,27 @@ void __MACRO(struct s_assenv *ae) {
 		if (ae->wl[idx].t==2) {
 			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Macro was not closed\n");
 		}
+
+		for (int i=0;i<curmacro.nbword;i++) {
+			/* tags in upper case for replacement in quotes */
+			if (StringIsQuote(curmacro.wc[i].w)) {
+				int lm,touched;
+				for (lm=touched=0;curmacro.wc[i].w[lm];lm++) {
+					if (curmacro.wc[i].w[lm]=='{') {
+						touched++;
+					} else if (curmacro.wc[i].w[lm]=='}') {
+						touched--;
+					} else if (touched) {
+						curmacro.wc[i].w[lm]=toupper(curmacro.wc[i].w[lm]);
+					}
+				}
+			}
+			// déclencheur inclusif (pas trop laxiste non plus)
+			if (strchr(curmacro.wc[i].w,'{')) {
+				IntArrayAddDynamicValueConcat(&curmacro.replaceidx,&curmacro.nbreplace,&curmacro.maxreplace,i);
+			}
+		}
+
 		ObjectArrayAddDynamicValueConcat((void**)&ae->macro,&ae->imacro,&ae->mmacro,&curmacro,sizeof(curmacro));
 		/* le quicksort n'est pas optimal mais on n'est pas supposé en créer des milliers */
 		qsort(ae->macro,ae->imacro,sizeof(struct s_macro),cmpmacros);
@@ -16840,7 +16892,7 @@ void __MACRO(struct s_assenv *ae) {
 
 struct s_wordlist *__MACRO_EXECUTE(struct s_assenv *ae, int imacro) {
 	struct s_wordlist *cpybackup;
-	int nbparam=0,idx,i,j,idad;
+	int nbparam=0,idx,i,j,k,idad;
 	int ifile,iline,iu,lenparam;
 	double v;
 	struct s_macro_position curmacropos={0};
@@ -17000,6 +17052,7 @@ struct s_wordlist *__MACRO_EXECUTE(struct s_assenv *ae, int imacro) {
 
 			for (i=0;i<ae->macro[imacro].nbword;i++) {
 				ae->wl[i+ae->idx].w=TxtStrDup(ae->macro[imacro].wc[i].w);
+				ae->wl[i+ae->idx].len=ae->macro[imacro].wc[i].len; // même si pas toujours parfait
 				ae->wl[i+ae->idx].l=iline;
 				ae->wl[i+ae->idx].ifile=ifile;
 				ae->wl[i+ae->idx].ml=ae->macro[imacro].wc[i].l;
@@ -17008,22 +17061,16 @@ struct s_wordlist *__MACRO_EXECUTE(struct s_assenv *ae, int imacro) {
 				ae->wl[i+ae->idx].t=ae->macro[imacro].wc[i].t;
 				ae->wl[i+ae->idx].e=ae->macro[imacro].wc[i].e;
 			}
-			/* replace */
+			/* replace only where it was supposed to be */
 			idx=ae->idx;
-			for (i=0;i<nbparam;i++) {
-				for (j=idx;j<idx+ae->macro[imacro].nbword;j++) {
-					/* tags in upper case for replacement in quotes */
-					if (StringIsQuote(ae->wl[j].w)) {
-						int lm,touched;
-						for (lm=touched=0;ae->wl[j].w[lm];lm++) {
-							if (ae->wl[j].w[lm]=='{') touched++; else if (ae->wl[j].w[lm]=='}') touched--; else if (touched) ae->wl[j].w[lm]=toupper(ae->wl[j].w[lm]);
-						}
-					}
-//printf("MACRO_EXECUTE word[%d]=[%s] param[%d]=[%s] cpybackup[%d]=[%s]\n",j,ae->wl[j].w,i,ae->macro[imacro].param[i],i,cpybackup[i].w);
+			for (k=0;k<ae->macro[imacro].nbreplace;k++) {
+				j=idx+ae->macro[imacro].replaceidx[k];
+				for (i=0;i<nbparam;i++) {
 					ae->wl[j].w=TxtReplace(ae->wl[j].w,ae->macro[imacro].param[i],cpybackup[i].w,0);
 				}
-				MemFree(cpybackup[i].w);
+				ae->wl[j].len=strlen(ae->wl[j].w); // car la longueur est susceptible d'avoir changé
 			}
+			for (i=0;i<nbparam;i++) MemFree(cpybackup[i].w);
 			MemFree(cpybackup);
 
 			/* look for specific tags */
@@ -18985,7 +19032,7 @@ printf("EVOL 119 - tableau! %d elem%s\n",nbelem,nbelem>1?"s":"");
 				ObjectArrayAddDynamicValueConcat((void **)&ae->rasmstructalias,&ae->irasmstructalias,&ae->mrasmstructalias,&rasmstructalias,sizeof(rasmstructalias));
 				
 				/* create label for global struct ptr */
-				curlabel.iw=-1;
+				//curlabel.iw=-1;
 				curlabel.ptr=ae->codeadr;
 				curlabel.fileidx=ae->wl[ae->idx+2].ifile;
 
@@ -19014,7 +19061,7 @@ printf("EVOL 119 - tableau! %d elem%s\n",nbelem,nbelem>1?"s":"");
 #if TRACE_STRUCT
 printf("create subfields\n");
 #endif
-				curlabel.iw=-1;
+				//curlabel.iw=-1;
 				curlabel.ptr=ae->codeadr;
 				curlabel.ibank=ae->activebank<BANK_MAX_NUMBER?ae->activebank:0;
 				for (i=0;i<ae->rasmstruct[irs].irasmstructfield;i++) {
@@ -19228,7 +19275,7 @@ void __ENDSTRUCT(struct s_assenv *ae) {
 			/* SIZEOF like Vasm with struct name */
 			curlabel.name=TxtStrDup(ae->rasmstruct[ae->irasmstruct-1].name);
 			curlabel.crc=ae->rasmstruct[ae->irasmstruct-1].crc;
-			curlabel.iw=-1;
+			//curlabel.iw=-1;
 			curlabel.ptr=ae->rasmstruct[ae->irasmstruct-1].size;
 			//curlabel.fileidx wont be used
 			PushLabelLight(ae,&curlabel);
@@ -20427,11 +20474,14 @@ void __MODULE(struct s_assenv *ae) {
 				ae->module=NULL;
 				ae->modulen=0;
 			} else {
+				int touched;
 				if (ae->modulen || ae->module) {
 					MemFree(ae->module);
 				}
-				ae->modulen=strlen(ae->wl[ae->idx+1].w);
+
 				ae->module=TxtStrDup(ae->wl[ae->idx+1].w);
+				ae->module=TranslateTag(ae,ae->module,&touched,1,E_TAGOPTION_REMOVESPACE);
+				ae->modulen=strlen(ae->module);
 			}
 		} else {
 			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"usage is MODULE [<module name>|OFF], directive without parameter or using 'OFF' will quit the current module\n");
@@ -20920,12 +20970,8 @@ unsigned char * _internal_export_REMU(struct s_assenv *ae, unsigned int *rchksiz
 		if (ae->label[i].autorise_export && !ae->label[i].make_alias) {
 			if (isrom) strcat(remu_output,"romlabel "); else strcat(remu_output,"label ");
 			memset(shortlabel,0,sizeof(shortlabel));
-			if (!ae->label[i].name) {
-				strncpy(shortlabel,ae->wl[ae->label[i].iw].w,sizeof(shortlabel)-1);
-			} else {
-				if (ae->label[i].localsize && ae->label[i].name[ae->label[i].localsize]!='_') sprintf(&ae->label[i].name[ae->label[i].localsize],"_%x",localcpt++);
-				strncpy(shortlabel,ae->label[i].name,sizeof(shortlabel)-1);
-			}
+			if (ae->label[i].localsize && ae->label[i].name[ae->label[i].localsize]!='_') sprintf(&ae->label[i].name[ae->label[i].localsize],"_%x",localcpt++);
+			strncpy(shortlabel,ae->label[i].name,sizeof(shortlabel)-1);
 			strcat(remu_output,shortlabel);
 			if (!isrom) {
 				// RAM can be gathered
@@ -21203,9 +21249,6 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 	/* add a fictive expression to simplify test when parsing expressions */
 	ObjectArrayAddDynamicValueConcat((void **)&ae->expression,&ae->ie,&ae->me,&curexp,sizeof(curexp));
 	
-	/* compute CRC for keywords */
-	for (icrc=0;math_keyword[icrc].mnemo[0];icrc++) math_keyword[icrc].crc=GetCRC(math_keyword[icrc].mnemo);
-
 	if (ae->as80==1 || ae->pasmo) { /* not for UZ80 */
 		for (icrc=0;instruction[icrc].mnemo[0];icrc++) {
 			if (strcmp(instruction[icrc].mnemo,"DEFB")==0 || strcmp(instruction[icrc].mnemo,"DB")==0) {
@@ -21263,8 +21306,6 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 	ae->idx=1;
 	if (!ae->verbose_assembling)
 	while (wordlist[ae->idx].t!=2) {
-		curcrc=GetCRCandLength(wordlist[ae->idx].w,&ilength);
-
 #if TRACE_ASSEMBLE
 		{
 			int insTR=ae->idx;
@@ -21274,9 +21315,18 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 				if (insTR==ae->idx+1) printf(" %s",wordlist[insTR].w); else printf(",%s",wordlist[insTR].w);
 			}
 			printf("\n");
-			printf("IR:%d IW:%d II:%d ISW:%d\n",ae->ir,ae->iw,ae->ii,ae->isw);
+			printf("IR:%d IW:%d II:%d ISW:%d E:%d\n",ae->ir,ae->iw,ae->ii,ae->isw,wordlist[ae->idx].e);
 		}
 #endif
+
+
+		if (!wordlist[ae->idx].e) {
+			curcrc=GetCRC(wordlist[ae->idx].w);
+			ilength=wordlist[ae->idx].len;
+		} else {
+			curcrc=0; // does not need CRC with expressions
+		}
+
 		/********************************************************************
 		  c o n d i t i o n n a l    a s s e m b l y    m a n a g e m e n t
 		********************************************************************/
@@ -21435,21 +21485,11 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 		/*****************************************
 		  e x e c u t e    i n s t r u c t i o n
 		*****************************************/
-		executed=0;
-	/*	
-		if (wordlist[ae->idx].fastptr) {
-			wordlist[ae->idx].fastptr(ae);
-			wordlist=ae->wl;
-			executed=1;
-			// normalement inutile
-			while (!wordlist[ae->idx].t) {
-				ae->idx++;
-			}
-		} else */
-	       	{
+	       	if (!wordlist[ae->idx].e) {
+			executed=0;
 			if (ilength<INSTRUCTION_MAXLENGTH && (ifast=ae->fastmatch[(int)wordlist[ae->idx].w[0]][ilength])!=-1) {
-				while (instruction[ifast].mnemo[0]==wordlist[ae->idx].w[0]) {
-					if (instruction[ifast].crc==curcrc && strcmp(instruction[ifast].mnemo,wordlist[ae->idx].w)==0) {
+				do {
+					if (instruction[ifast].crc==curcrc && strcmp(instruction[ifast].mnemo+1,wordlist[ae->idx].w+1)==0) {
 						//wordlist[ae->idx].fastptr=instruction[ifast].makemnemo;
 						instruction[ifast].makemnemo(ae);
 						wordlist=ae->wl;
@@ -21461,28 +21501,30 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 						break;
 					}
 					ifast++;
+				} while (instruction[ifast].mnemo[0]==wordlist[ae->idx].w[0]);
+				if (executed) {
+					ae->idx++; 
+					continue;
 				}
 			}
 			/*****************************************
 			       e x e c u t e    m a c r o
 			*****************************************/
-			if (!executed) {
-				/* is it a macro? */
-				if ((ifast=SearchMacro(ae,curcrc,wordlist[ae->idx].w))>=0) {
-					wordlist=__MACRO_EXECUTE(ae,ifast);
-					continue;
-				}
-				/*********************************************************************
-				  e x e c u t e    e x p r e s s i o n   o r    p u s h    l a b e l
-				*********************************************************************/
-				/* neither instruction nor macro executed, this is a label or an assignement */
-				if (wordlist[ae->idx].e) {
-					ExpressionFastTranslate(ae,&wordlist[ae->idx].w,0);
-					ComputeExpression(ae,wordlist[ae->idx].w,ae->codeadr,0,0);
-				} else {
-					PushLabel(ae);
-				}
+			/* is it a macro? */
+			if ((ifast=SearchMacro(ae,curcrc,wordlist[ae->idx].w))>=0) {
+				wordlist=__MACRO_EXECUTE(ae,ifast);
+				continue;
 			}
+			/**************************
+			    p u s h    l a b e l
+			**************************/
+			PushLabel(ae);
+		} else {
+			/****************************************
+			  e x e c u t e    e x p r e s s i o n   
+			****************************************/
+			ExpressionFastTranslate(ae,&wordlist[ae->idx].w,0);
+			ComputeExpression(ae,wordlist[ae->idx].w,ae->codeadr,0,0);
 		}
 
 		ae->idx++; 
@@ -21639,14 +21681,6 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 			if (ilength<INSTRUCTION_MAXLENGTH && (ifast=ae->fastmatch[(int)wordlist[ae->idx].w[0]][ilength])!=-1) {
 				while (instruction[ifast].mnemo[0]==wordlist[ae->idx].w[0]) {
 					if (instruction[ifast].crc==curcrc && strcmp(instruction[ifast].mnemo,wordlist[ae->idx].w)==0) {
-#define CRC_REPEAT	0xC9791639
-#define CRC_REND	0x87E997A1
-#define CRC_UNTIL	0xCC12A604
-#define CRC_WHILE	0xBC268FF1
-#define CRC_WEND	0xAF85D5A6
-#define CRC_ORG	        0xE1871B60
-#define CRC_BANK	0x3AB794
-#define CRC_BREAK	0xCD364DDD
 						if (curcrc==CRC_REND) {
 							if (ae->ir) {
 								printf(KBOLD"----- "KLWHITE"REND"KNORMAL" "KBOLD"----- ;"KNORMAL" counter=%d Level %d ",ae->repeat[ae->ir-1].repeat_counter,ae->ir-1);
@@ -22012,7 +22046,7 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 					while (il<ae->il && ae->label[il].iorgzone<iorgzone) il++;
 
 					while (il<ae->il && ae->label[il].iorgzone==iorgzone) {
-						curlabel=SearchLabel(ae,ae->label[il].iw!=-1?wordlist[ae->label[il].iw].w:ae->label[il].name,ae->label[il].crc);
+						curlabel=SearchLabel(ae,ae->label[il].name,ae->label[il].crc);
 						/* CANNOT be NULL */
 #if TRACE_LZ
 			printf("label %s valeur=#%04X shifte vers #%04X\n",ae->label[il].iw!=-1?wordlist[ae->label[il].iw].w:ae->label[il].name,curlabel->ptr,curlabel->ptr+lzshift);
@@ -22228,7 +22262,7 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 					curalias.translation=MemMalloc(16); sprintf(curalias.translation,"%d",ae->label[i].ptr);
 					curalias.len=strlen(curalias.translation);
 					curalias.autorise_export=1;
-					curalias.iw=ae->label[i].iw;
+					curalias.iw=-1; //ae->label[i].iw;
 					curalias.fromstruct=1; // ACE debug related
 					ae->label[i].ibank=0;//
 					ObjectArrayAddDynamicValueConcat((void**)&ae->alias,&ae->ialias,&ae->malias,&curalias,sizeof(curalias));
@@ -22280,11 +22314,12 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 
 				for (i=0;i<ae->il;i++) {
 					if (ae->label[i].autorise_export && !ae->label[i].make_alias) {
-						if (!ae->label[i].name) {
+						/* if (!ae->label[i].name) {
 							if ((casefound=_internal_stristr(ae->rawfile[ae->label[i].fileidx],ae->rawlen[ae->label[i].fileidx],ae->wl[ae->label[i].iw].w))!=NULL) {
 								memcpy(ae->wl[ae->label[i].iw].w,casefound,strlen(ae->wl[ae->label[i].iw].w));
 							}
-						} else if (ae->export_local || !ae->label[i].local) {
+						} else */
+						if (ae->export_local || !ae->label[i].local) {
 							char splitlabel[256];
 							char casecharbackup;
 							int caseidx;
@@ -22853,18 +22888,10 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 							struct s_breakpoint breakpoint={0};
 							/* add labels and local labels to breakpoint pool (if any) */
 							for (i=0;i<ae->il;i++) {
-								if (!ae->label[i].name) {
-									if (_internal_strnicmp(ae->wl[ae->label[i].iw].w,"BRK",3)==0 || _internal_strnicmp(ae->wl[ae->label[i].iw].w,"@BRK",4)==0 || _internal_stristr(ae->wl[ae->label[i].iw].w,strlen(ae->wl[ae->label[i].iw].w),".BRK")!=NULL) {
-										breakpoint.address=ae->label[i].ptr;
-										breakpoint.bank=ae->label[i].ibank;
-										ObjectArrayAddDynamicValueConcat((void **)&ae->breakpoint,&ae->ibreakpoint,&ae->maxbreakpoint,&breakpoint,sizeof(struct s_breakpoint));
-									}
-								} else {
-									if (_internal_strnicmp(ae->label[i].name,"BRK",3)==0 || _internal_strnicmp(ae->label[i].name,"@BRK",4)==0 || _internal_stristr(ae->label[i].name,strlen(ae->label[i].name),".BRK")) {
-										breakpoint.address=ae->label[i].ptr;
-										breakpoint.bank=ae->label[i].ibank;
-										ObjectArrayAddDynamicValueConcat((void **)&ae->breakpoint,&ae->ibreakpoint,&ae->maxbreakpoint,&breakpoint,sizeof(struct s_breakpoint));	
-									}
+								if (_internal_strnicmp(ae->label[i].name,"BRK",3)==0 || _internal_strnicmp(ae->label[i].name,"@BRK",4)==0 || _internal_stristr(ae->label[i].name,strlen(ae->label[i].name),".BRK")) {
+									breakpoint.address=ae->label[i].ptr;
+									breakpoint.bank=ae->label[i].ibank;
+									ObjectArrayAddDynamicValueConcat((void **)&ae->breakpoint,&ae->ibreakpoint,&ae->maxbreakpoint,&breakpoint,sizeof(struct s_breakpoint));	
 								}
 							}
 							if (ae->remu) {
@@ -22953,28 +22980,16 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 
 								for (i=0;i<ae->il;i++) {
 									if (ae->label[i].autorise_export && !ae->label[i].make_alias) {
-										if (!ae->label[i].name) {
-											symbol_len=strlen(ae->wl[ae->label[i].iw].w);
+										if (ae->export_local || !ae->label[i].local) {
+											symbol_len=strlen(ae->label[i].name);
 											if (symbol_len>255) symbol_len=255;
 											symbchunk[idx++]=symbol_len;
-											memcpy(symbchunk+idx,ae->wl[ae->label[i].iw].w,symbol_len);
+											memcpy(symbchunk+idx,ae->label[i].name,symbol_len);
 											idx+=symbol_len;
 											memset(symbchunk+idx,0,6);
 											idx+=6;
 											symbchunk[idx++]=(ae->label[i].ptr&0xFF00)/256;
 											symbchunk[idx++]=ae->label[i].ptr&0xFF;
-										} else {
-											if (ae->export_local || !ae->label[i].local) {
-												symbol_len=strlen(ae->label[i].name);
-												if (symbol_len>255) symbol_len=255;
-												symbchunk[idx++]=symbol_len;
-												memcpy(symbchunk+idx,ae->label[i].name,symbol_len);
-												idx+=symbol_len;
-												memset(symbchunk+idx,0,6);
-												idx+=6;
-												symbchunk[idx++]=(ae->label[i].ptr&0xFF00)/256;
-												symbchunk[idx++]=ae->label[i].ptr&0xFF;
-											}
 										}
 									}
 								}
@@ -23476,15 +23491,9 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 									sprintf(TMP_filename,"%s.sym.bank%d",ae->outputfilename,ae->label[i].ibank);
 								}
 							}
-							
-							if (!ae->label[i].name) {
-								sprintf(symbol_line,"%d:%04X %s\n",ae->label[i].ibank,ae->label[i].ptr,ae->wl[ae->label[i].iw].w);
+							if (ae->export_local || !ae->label[i].local) {
+								sprintf(symbol_line,"%d:%04X %s\n",ae->label[i].ibank,ae->label[i].ptr,ae->label[i].name);
 								FileWriteLine(TMP_filename,symbol_line);
-							} else {
-								if (ae->export_local || !ae->label[i].local) {
-									sprintf(symbol_line,"%d:%04X %s\n",ae->label[i].ibank,ae->label[i].ptr,ae->label[i].name);
-									FileWriteLine(TMP_filename,symbol_line);
-								}
 							}
 						}
 					}
@@ -23514,15 +23523,9 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 									sprintf(TMP_filename,"%s.sym.bank%d",ae->outputfilename,ae->label[i].ibank);
 								}
 							}
-
-							if (!ae->label[i].name) {
-								sprintf(symbol_line,ae->flexible_export,ae->wl[ae->label[i].iw].w,ae->label[i].ptr);
+							if (ae->export_local || !ae->label[i].local) {
+								sprintf(symbol_line,ae->flexible_export,ae->label[i].name,ae->label[i].ptr);
 								FileWriteLine(TMP_filename,symbol_line);
-							} else {
-								if (ae->export_local || !ae->label[i].local) {
-									sprintf(symbol_line,ae->flexible_export,ae->label[i].name,ae->label[i].ptr);
-									FileWriteLine(TMP_filename,symbol_line);
-								}
 							}
 						}
 					}
@@ -23552,14 +23555,9 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 									sprintf(TMP_filename,"%s.sym.bank%d",ae->outputfilename,ae->label[i].ibank);
 								}
 							}
-							if (!ae->label[i].name) {
-								sprintf(symbol_line,"%s #%04X\n",ae->wl[ae->label[i].iw].w,ae->label[i].ptr);
+							if (ae->export_local || !ae->label[i].local) {
+								sprintf(symbol_line,"%s #%04X\n",ae->label[i].name,ae->label[i].ptr);
 								FileWriteLine(TMP_filename,symbol_line);
-							} else {
-								if (ae->export_local || !ae->label[i].local) {
-									sprintf(symbol_line,"%s #%04X\n",ae->label[i].name,ae->label[i].ptr);
-									FileWriteLine(TMP_filename,symbol_line);
-								}
 							}
 						}
 					}
@@ -23589,14 +23587,9 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 									sprintf(TMP_filename,"%s.sym.bank%d",ae->outputfilename,ae->label[i].ibank);
 								}
 							}
-							if (!ae->label[i].name) {
-								sprintf(symbol_line,"%s EQU 0%04XH\n",ae->wl[ae->label[i].iw].w,ae->label[i].ptr);
+							if (ae->export_local || !ae->label[i].local) {
+								sprintf(symbol_line,"%s EQU 0%04XH\n",ae->label[i].name,ae->label[i].ptr);
 								FileWriteLine(TMP_filename,symbol_line);
-							} else {
-								if (ae->export_local || !ae->label[i].local) {
-									sprintf(symbol_line,"%s EQU 0%04XH\n",ae->label[i].name,ae->label[i].ptr);
-									FileWriteLine(TMP_filename,symbol_line);
-								}
 							}
 						}
 					}
@@ -23626,14 +23619,9 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 									sprintf(TMP_filename,"%s.sym.bank%d",ae->outputfilename,ae->label[i].ibank);
 								}
 							}
-							if (!ae->label[i].name) {
-								sprintf(symbol_line,"%s #%X B%d L\n",ae->wl[ae->label[i].iw].w,ae->label[i].ptr,ae->label[i].ibank>31?0:ae->label[i].ibank);
+							if (ae->export_local || !ae->label[i].local) {
+								sprintf(symbol_line,"%s #%X B%d L\n",ae->label[i].name,ae->label[i].ptr,ae->label[i].ibank>31?0:ae->label[i].ibank);
 								FileWriteLine(TMP_filename,symbol_line);
-							} else {
-								if (ae->export_local || !ae->label[i].local) {
-									sprintf(symbol_line,"%s #%X B%d L\n",ae->label[i].name,ae->label[i].ptr,ae->label[i].ibank>31?0:ae->label[i].ibank);
-									FileWriteLine(TMP_filename,symbol_line);
-								}
 							}
 						}
 					}
@@ -23675,18 +23663,10 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 
 			/* add labels and local labels to breakpoint pool (if any) */
 			for (i=0;i<ae->il;i++) {
-				if (!ae->label[i].name) {
-					if (strncmp(ae->wl[ae->label[i].iw].w,"BRK",3)==0 || strncmp(ae->wl[ae->label[i].iw].w,"@BRK",4)==0 || strstr(ae->wl[ae->label[i].iw].w,".BRK")) {
-						breakpoint.address=ae->label[i].ptr;
-						if (ae->label[i].ibank>3) breakpoint.bank=1; else breakpoint.bank=0;
-						ObjectArrayAddDynamicValueConcat((void **)&ae->breakpoint,&ae->ibreakpoint,&ae->maxbreakpoint,&breakpoint,sizeof(struct s_breakpoint));
-					}
-				} else {
-					if (strncmp(ae->label[i].name,"BRK",3)==0 || strncmp(ae->label[i].name,"@BRK",4)==0 || strstr(ae->label[i].name,".BRK")) {
-						breakpoint.address=ae->label[i].ptr;
-						if (ae->label[i].ibank>3) breakpoint.bank=1; else breakpoint.bank=0;
-						ObjectArrayAddDynamicValueConcat((void **)&ae->breakpoint,&ae->ibreakpoint,&ae->maxbreakpoint,&breakpoint,sizeof(struct s_breakpoint));								
-					}
+				if (strncmp(ae->label[i].name,"BRK",3)==0 || strncmp(ae->label[i].name,"@BRK",4)==0 || strstr(ae->label[i].name,".BRK")) {
+					breakpoint.address=ae->label[i].ptr;
+					if (ae->label[i].ibank>3) breakpoint.bank=1; else breakpoint.bank=0;
+					ObjectArrayAddDynamicValueConcat((void **)&ae->breakpoint,&ae->ibreakpoint,&ae->maxbreakpoint,&breakpoint,sizeof(struct s_breakpoint));
 				}
 			}
 
@@ -23817,15 +23797,15 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 	       }
 	}
 
-
 	FreeAssenv(ae);
 	return ok;
 }
 
 
-void EarlyPrepSrc(struct s_assenv *ae, char **listing, char *filename) {
+int EarlyPrepSrc(struct s_assenv *ae, char **listing, char *filename) {
 	int l,idx,c,quote_type=0;
 	int mlc_start,mlc_idx;
+	int midx=0;
 
 	/* virer les commentaires en ;, // mais aussi multi-lignes et convertir les decalages, passer les chars en upper case */
 	l=idx=0;
@@ -23834,6 +23814,7 @@ void EarlyPrepSrc(struct s_assenv *ae, char **listing, char *filename) {
 
 		if (!c) {
 			l++;
+			if (midx<idx) midx=idx+256;
 			idx=0;
 			continue;
 		} else {
@@ -23876,7 +23857,8 @@ void EarlyPrepSrc(struct s_assenv *ae, char **listing, char *filename) {
 							l++;
 							if (!listing[l]) {
 								MakeError(ae,0,filename,l+1,"opened comment to the end of the file\n");
-								return;
+								if (midx<idx) midx=idx+256;
+								return midx;
 							}
 						} else if (c=='*' && listing[l][idx]=='/') {
 							idx++;
@@ -23937,6 +23919,7 @@ void EarlyPrepSrc(struct s_assenv *ae, char **listing, char *filename) {
 	}
 	printf("-----------------\n");
 #endif
+	return midx;
 }
 
 void PreProcessingSplitListing(struct s_listing **listing, int *il, int *ml, int idx, int end, int start)
@@ -23984,11 +23967,17 @@ void PreProcessingInsertListing(struct s_listing **reflisting, int *il, int *ml,
 	}
 }
 
-int cmpkeyword(const void * a, const void * b)
-{
+int cmpkeyword(const void * a, const void * b) {
 	struct s_asm_keyword *sa,*sb;
 	sa=(struct s_asm_keyword *)a;
 	sb=(struct s_asm_keyword *)b;
+	// sort on length THEN on alphabetical order
+	if (sa->length!=sb->length) return sa->length-sb->length; else return strcmp(sa->mnemo,sb->mnemo);
+}
+int cmpmathkeyword(const void * a, const void * b) {
+	struct s_math_keyword *sa,*sb;
+	sa=(struct s_math_keyword *)a;
+	sb=(struct s_math_keyword *)b;
 	// sort on length THEN on alphabetical order
 	if (sa->length!=sb->length) return sa->length-sb->length; else return strcmp(sa->mnemo,sb->mnemo);
 }
@@ -24016,7 +24005,7 @@ struct s_assenv *PreProcessing(char *filename, int flux, const char *datain, int
 	int ilisting=0,maxlisting=0;
 	
 	char **listing_include=NULL;
-	int i,j,l=0,idx=0,c=0,li,le;
+	int i,j,l=0,idx=0,c=0,li,le,di,midx=0;
 	char Automate[256]={0};
 	char AutomatePrepro[256]={0};
 	struct s_hexbin curhexbin;
@@ -24147,8 +24136,8 @@ printf("paramz 1\n");
 printf("init 0 amper=%d\n",ae->noampersand);
 #endif
 	/* generic init */
-	ae->ctx1.maxivar=1;
-	ae->ctx2.maxivar=1;
+	//ae->ctx1.maxivar=1;
+	//ae->ctx2.maxivar=1;
 	ae->computectx=&ae->ctx1;
 	ae->flux=flux;
 	/* check snapshot structure */
@@ -24252,7 +24241,7 @@ printf("paramz\n");
 					/* sjasm */
 					*labelsep1=0;
 					curlabel.name=labelines[i];
-					curlabel.iw=-1;
+					//curlabel.iw=-1;
 					curlabel.crc=GetCRC(curlabel.name);
 					curlabel.ptr=strtol(labelsep1+6,NULL,16);
 					PushLabelLight(ae,&curlabel);
@@ -24260,7 +24249,7 @@ printf("paramz\n");
 					/* pasmo */
 					*labelsep1=0;
 					curlabel.name=labelines[i];
-					curlabel.iw=-1;
+					//curlabel.iw=-1;
 					curlabel.crc=GetCRC(curlabel.name);
 					curlabel.ptr=strtol(labelsep1+6,NULL,16);
 					//ObjectArrayAddDynamicValueConcat((void **)&ae->label,&ae->il,&ae->ml,&curlabel,sizeof(curlabel));
@@ -24270,7 +24259,7 @@ printf("paramz\n");
 					if (*(labelsep1+1)=='#') {
 						*labelsep1=0;
 						curlabel.name=labelines[i];
-						curlabel.iw=-1;
+						//curlabel.iw=-1;
 						curlabel.crc=GetCRC(curlabel.name);
 						curlabel.ptr=strtol(labelsep1+2,NULL,16);
 						//ObjectArrayAddDynamicValueConcat((void **)&ae->label,&ae->il,&ae->ml,&curlabel,sizeof(curlabel));
@@ -24414,6 +24403,27 @@ printf("nbbank=%d initialised\n",ae->nbbank);
 	for (i=0;i<nbinstruction;i++) {
 		if (ae->fastmatch[(int)instruction[i].mnemo[0]][instruction[i].length]==-1) ae->fastmatch[(int)instruction[i].mnemo[0]][instruction[i].length]=i;
 	} 
+
+	/* compute CRC for math keywords */
+	for (nbinstruction=0;math_keyword[nbinstruction].mnemo[0];nbinstruction++) {
+		math_keyword[nbinstruction].crc=GetCRCandLength(math_keyword[nbinstruction].mnemo,&math_keyword[nbinstruction].length);
+		if (math_keyword[nbinstruction].length>=FUNCTION_MAXLENGTH) {
+			rasm_printf(ae,"Internal Error, please resize fastmath length for [%s] with %d\n",math_keyword[nbinstruction].mnemo,math_keyword[nbinstruction].length+1);
+			exit(-666);
+		}
+	}
+	qsort(math_keyword,nbinstruction,sizeof(struct s_math_keyword),cmpmathkeyword);
+	// init fastmatch table
+	for (i=0;i<256;i++) {
+		for (l=0;l<FUNCTION_MAXLENGTH;l++) {
+			ae->fastmath[i][l]=-1;
+		}
+	}
+	// fill fastmath table with idx
+	for (i=0;i<nbinstruction;i++) {
+		if (ae->fastmath[(int)math_keyword[i].mnemo[0]][math_keyword[i].length]==-1) ae->fastmath[(int)math_keyword[i].mnemo[0]][math_keyword[i].length]=i;
+	} 
+
 	for (i=0;CharWord[i];i++) {Automate[((int)CharWord[i])&0xFF]=1;}
 	for (i=0;i<256;i++) {
 		if (((i>='A' && i<='Z') || (i>='0' && i<='9') || i=='@' || i=='_') && !quote_type) AutomatePrepro[i]=1; else AutomatePrepro[i]=0;
@@ -24503,7 +24513,10 @@ if (flux_nblines<50) printf("%02d[%s]\n",flux_nblines,zelines[flux_nblines]);
 #if TRACE_PREPRO
 printf("remove comz, do includes\n");
 #endif
-	EarlyPrepSrc(ae,zelines,ae->filename[ae->ifile-1]);
+	midx=EarlyPrepSrc(ae,zelines,ae->filename[ae->ifile-1]);
+	StateMachineResizeBuffer(&w,midx+256,&mw);
+	StateMachineResizeBuffer(&bval,midx+256,&sval);
+	StateMachineResizeBuffer(&qval,midx+256,&sqval);
 
 	for (i=0;zelines[i];i++) {
 		curlisting.ifile=0;
@@ -24540,6 +24553,7 @@ if (!idx) printf("[%s]\n",listing[l].listing);
 		c=listing[l].listing[idx++];
 		if (!c) {
 			l++;
+			if (idx>midx) midx=idx; // longueur maximale de ligne...
 			idx=0;
 			continue;
 		}
@@ -24583,7 +24597,7 @@ if (!idx) printf("[%s]\n",listing[l].listing);
 					if (c==quote_type) waiting_quote=2; else {
 						/* enforce there is only spaces or tabs between READ/INC and string */
 						if (c!=' ' && c!=0x9) {
-							MakeError(ae,0,ae->filename[listing[l].ifile],listing[l].iline,"A quoted string must follow INCLUDE/READ directive\n");
+							MakeError(ae,0,ae->filename[listing[l].ifile],listing[l].iline,"A quoted string must follow INCLUDE directive\n");
 							waiting_quote=0;
 							idx--;
 							continue;
@@ -24596,7 +24610,7 @@ if (!idx) printf("[%s]\n",listing[l].listing);
 						qval[iqval]=0;
 					} else {
 						qval[iqval++]=c;
-						StateMachineResizeBuffer(&qval,iqval,&sqval);
+						//StateMachineResizeBuffer(&qval,iqval,&sqval);
 						qval[iqval]=0;
 					}
 			}
@@ -24725,6 +24739,7 @@ if (!idx) printf("[%s]\n",listing[l].listing);
 
 					} else {
 						if (fileok) {
+							int newmidx;
 							#if TRACE_PREPRO
 							rasm_printf(ae,KIO"include [%s]\n",filename_toread);
 							#endif
@@ -24739,7 +24754,13 @@ if (!idx) printf("[%s]\n",listing[l].listing);
 								ae->rawlen[ae->ifile-1]=ae->source_bigbuffer_len;
 							}
 							/* virer les commentaires + pré-traitement */
-							EarlyPrepSrc(ae,listing_include,ae->filename[ae->ifile-1]);
+							newmidx=EarlyPrepSrc(ae,listing_include,ae->filename[ae->ifile-1]);
+							if (newmidx>midx) {
+								midx=newmidx+256;
+								StateMachineResizeBuffer(&w,midx+256,&mw);
+								StateMachineResizeBuffer(&bval,midx+256,&sval);
+								StateMachineResizeBuffer(&qval,midx+256,&sqval);
+							}
 
 							/* split de la ligne en cours + suppression de l'instruction include */
 							PreProcessingSplitListing(&listing,&ilisting,&maxlisting,l,rewrite,idx);
@@ -24783,12 +24804,12 @@ if (!idx) printf("[%s]\n",listing[l].listing);
 			//if (((c>='A' && c<='Z') || (c>='0' && c<='9') || c=='@' || c=='_')&& !quote_type) {
 			if (AutomatePrepro[((int)c)&0xFF] && !quote_type) {
 				bval[ival++]=c;
-				StateMachineResizeBuffer(&bval,ival,&sval);
+				//StateMachineResizeBuffer(&bval,ival,&sval);
 				bval[ival]=0;
 			} else {
 				switch (bval[0]) {
 					case 'I':
-						if (bval[1]=='N' && bval[2]=='C') {
+						if (ival>5 && bval[1]=='N' && bval[2]=='C') {
 							if (strcmp(bval,"INCLUDE")==0) {
 								incstartL=l;
 								include=1;
@@ -24941,7 +24962,7 @@ if (!idx) printf("[%s]\n",listing[l].listing);
 						break;
 
 					case 'R':
-						if (strcmp(bval,"REND")==0) {
+						if (ival==4 && strcmp(bval,"REND")==0) {
 							/* retrouver la structure repeat_index correspondant a l'ouverture */
 							for (ri=nri-1;ri>=0;ri--) {
 								if (TABrindex[ri].cl==-1) {
@@ -24954,7 +24975,7 @@ if (!idx) printf("[%s]\n",listing[l].listing);
 								MakeError(ae,0,ae->filename[listing[l].ifile],listing[l].iline,"%s refers to unknown REPEAT\n",bval);
 								//exit(1);
 							}
-						} else if (strcmp(bval,"REPEAT")==0) {
+						} else if (ival==6 && strcmp(bval,"REPEAT")==0) {
 							/* remplir la structure repeat_index */
 							rindex.ol=listing[l].iline;
 							rindex.oidx=idx;
@@ -24964,13 +24985,13 @@ if (!idx) printf("[%s]\n",listing[l].listing);
 						break;
 
 					case 'W':
-						if (strcmp(bval,"WHILE")==0) {
+						if (ival==5 && strcmp(bval,"WHILE")==0) {
 							/* remplir la structure repeat_index */
 							windex.ol=listing[l].iline;
 							windex.oidx=idx;
 							windex.ifile=ae->ifile-1;
 							ObjectArrayAddDynamicValueConcat((void**)&TABwindex,&nwi,&mwi,&windex,sizeof(windex));
-						} else if (strcmp(bval,"WEND")==0) {
+						} else if (ival==4 && strcmp(bval,"WEND")==0) {
 							/* retrouver la structure repeat_index correspondant a l'ouverture */
 							for (wi=nwi-1;wi>=0;wi--) {
 								if (TABwindex[wi].cl==-1) {
@@ -25030,19 +25051,24 @@ printf("check quotes and repeats\n");
 	curw.ifile=0;
 	curw.t=1;
 	curw.e=0;
+	curw.len=strlen(curw.w);
 	ObjectArrayAddDynamicValueConcat((void**)&wordlist,&nbword,&maxword,&curw,sizeof(curw));
 
 	/* pour les calculs d'adresses avec IX et IY on enregistre deux variables bidons du meme nom */
 	curw.e=7;
 	curw.w=TxtStrDup("SYNCHRO~256");
+	curw.len=strlen(curw.w);
 	ObjectArrayAddDynamicValueConcat((void**)&wordlist,&nbword,&maxword,&curw,sizeof(curw));
 	curw.e=2;
 	curw.w=TxtStrDup("IX~0");
+	curw.len=strlen(curw.w);
 	ObjectArrayAddDynamicValueConcat((void**)&wordlist,&nbword,&maxword,&curw,sizeof(curw));
 	curw.w=TxtStrDup("IY~0");
+	curw.len=strlen(curw.w);
 	ObjectArrayAddDynamicValueConcat((void**)&wordlist,&nbword,&maxword,&curw,sizeof(curw));
 	curw.e=12;
 	curw.w=TxtStrDup("RASM_VERSION~"PROGRAM_VERSION);
+	curw.len=strlen(curw.w);
 	ObjectArrayAddDynamicValueConcat((void**)&wordlist,&nbword,&maxword,&curw,sizeof(curw));
 	curw.e=0;
 
@@ -25053,6 +25079,8 @@ printf("check quotes and repeats\n");
 		l++;
 	}
 #endif	
+
+
 	texpr=quote_type=0;
 	l=lw=idx=0;
 	ispace=0;
@@ -25081,7 +25109,7 @@ printf("c='%c' automate[c]=%d\n",c>31?c:'.',Automate[((int)c)&0xFF]);
 					if (c=='\'') {
 						if (idx>2 && strncmp(&listing[l].listing[idx-3],"AF'",3)==0) {
 							w[lw++]=c;
-							StateMachineResizeBuffer(&w,lw,&mw);
+							//StateMachineResizeBuffer(&w,lw,&mw);
 							w[lw]=0;
 							break;
 						}
@@ -25095,7 +25123,7 @@ printf("quote\n");
 						} else {
 							quote_type=c;
 							w[lw++]=c;
-							StateMachineResizeBuffer(&w,lw,&mw);
+							//StateMachineResizeBuffer(&w,lw,&mw);
 							w[lw]=0;
 							break;
 						}
@@ -25110,39 +25138,34 @@ printf("quote\n");
 						} else {
 							quote_type=c;
 							w[lw++]=c;
-							StateMachineResizeBuffer(&w,lw,&mw);
+							//StateMachineResizeBuffer(&w,lw,&mw);
 							w[lw]=0;
 							break;
 						}
 					} else {
 						if (c!=' ' && c!='\t') {
 							w[lw++]=c;
-							StateMachineResizeBuffer(&w,lw,&mw);
+							//StateMachineResizeBuffer(&w,lw,&mw);
 							w[lw]=0;
 						} else {
+#if TRACE_PREPRO
+printf("1/2 Winape maxam operator test for [%s] [%s] %d lw=%d\n",w,w+ispace,ispace,lw);
+#endif
 							/* Winape/Maxam operator compatibility on expressions */
-#if TRACE_PREPRO
-printf("1/2 Winape maxam operator test for [%s]\n",w+ispace);
-#endif
 							if (texpr) {
-								if (strcmp(w+ispace,"AND")==0) {
-									w[ispace]='&';
-									lw=ispace+1;
-								} else if (strcmp(w+ispace,"OR")==0) {
-#if TRACE_PREPRO
-printf("conversion OR vers |\n");
-#endif
-									w[ispace]='|';
-									lw=ispace+1;
-								} else if (strcmp(w+ispace,"MOD")==0) {
-									w[ispace]='m';
-									lw=ispace+1;
-								} else if (strcmp(w+ispace,"XOR")==0) {
-									w[ispace]='^';
-									lw=ispace+1;
-								} else if (strcmp(w+ispace,"%")==0) {
-									w[ispace]='m';
-									lw=ispace+1;
+								switch (lw-ispace) {
+									case 1:if (w[ispace]=='%') w[ispace]='m';break;
+									case 2:if (w[ispace]=='O' && w[ispace+1]=='R') {w[ispace]='|';lw=ispace+1;}break;
+									case 3:if (w[ispace]=='A' && w[ispace+1]=='N' && w[ispace+2]=='D') {
+										       w[ispace]='&';lw=ispace+1;
+									       } else if (w[ispace+1]=='O') {
+											if (w[ispace]=='X' && w[ispace+2]=='R') {
+										       		w[ispace]='^';lw=ispace+1;
+											} else if (w[ispace]=='M' && w[ispace+2]=='D') {
+										       		w[ispace]='m';lw=ispace+1;
+											}
+									       }
+									default:
 								}
 							}
 							ispace=lw;
@@ -25161,37 +25184,32 @@ printf("*** separator='%c'\n",c);
 					if (lw) {
 						w[lw]=0;
 						if (texpr && !wordlist[nbword-1].t && wordlist[nbword-1].e && !hadcomma) {
-							/* pour compatibilite Winape avec AND,OR,XOR */
 #if TRACE_PREPRO
 printf("2/2 Winape maxam operator test for expression [%s]\n",w+ispace);
 #endif
-							if (strcmp(w,"AND")==0) {
-								wtmp=TxtStrDup("&");
-							} else if (strcmp(w,"OR")==0) {
-								wtmp=TxtStrDup("|");
-							} else if (strcmp(w,"XOR")==0) {
-								wtmp=TxtStrDup("^");
-							} else if (strcmp(w,"%")==0) {
-								wtmp=TxtStrDup("m");
-							} else {
-								wtmp=TxtStrDup(w);
+							// winape operator patches before concat
+						#if 0
+							switch (lw) {
+								case 1:if (w[0]=='%') w[0]='m';break;
+								case 2:if (w[0]=='O' && w[1]=='R') {w[0]='|';w[1]=0;lw=1;}break;
+								case 3:if (w[0]=='A' && w[1]=='N' && w[2]=='D') {
+									       w[0]='&';w[1]=0;lw=1;
+								       } else if (w[0]=='X' && w[1]=='O' && w[2]=='R') {
+									       w[0]='^';w[1]=0;lw=1;
+								       }
+								default:
 							}
-							/* on concatène le nouveau mot à l'expression */
+						#endif
+							// only one realloc check
+							di=le=wordlist[nbword-1].len;
+							//StateMachineResizeBuffer(&w,lw+di,&mw);
 							nbword--;
-							lw=0;
-							for (li=0;wordlist[nbword].w[li];li++) {
-								w[lw++]=wordlist[nbword].w[li];
-								StateMachineResizeBuffer(&w,lw,&mw);
-							}
-							w[lw]=0;
+							// move new word
+							for (li=0;li<=lw;li++) w[le++]=w[li];
+							for (li=0;li<di;li++) w[li]=wordlist[nbword].w[li];
 							MemFree(wordlist[nbword].w);
-							
-							for (li=0;wtmp[li];li++) {
-								w[lw++]=wtmp[li];
-								StateMachineResizeBuffer(&w,lw,&mw);
-							}
-							w[lw]=0;
-							MemFree(wtmp);
+							lw=di;
+
 							/* et on modifie l'automate pour la suite! */
 							Automate[' ']=1;
 							Automate['\t']=1;
@@ -25202,20 +25220,20 @@ printf("2/2 Winape maxam operator test for expression [%s]\n",w+ispace);
 							lw=0;
 							for (li=0;wordlist[nbword].w[li];li++) {
 								w[lw++]=wordlist[nbword].w[li];
-								StateMachineResizeBuffer(&w,lw,&mw);
+								//StateMachineResizeBuffer(&w,lw,&mw);
 							}
 							MemFree(wordlist[nbword].w);
 							curw.e=lw+1;
 							/* on ajoute l'egalite d'alias*/
 							w[lw++]='~';
-							StateMachineResizeBuffer(&w,lw,&mw);
+							//StateMachineResizeBuffer(&w,lw,&mw);
 							w[lw]=0;
 							Automate[' ']=1;
 							Automate['\t']=1;
 							ispace=lw;
 							texpr=1;
 						} else {
-							curw.w=TxtStrDup(w);
+							curw.len=lw; curw.w=MemMalloc(lw+1); memcpy(curw.w,w,lw+1);
 							curw.l=listing[l].iline;
 							curw.ifile=listing[l].ifile;
 							curw.t=0;
@@ -25227,7 +25245,7 @@ if (curw.w[0]=='=') {
 printf("ajout du mot [%s]\n",curw.w);
 #endif
 							ObjectArrayAddDynamicValueConcat((void**)&wordlist,&nbword,&maxword,&curw,sizeof(curw));
-							//texpr=0; /* reset expr */
+							//texpr=0;
 							//curw.fastptr=NULL;
 							curw.e=0;
 							lw=0;
@@ -25251,9 +25269,8 @@ printf("macro trigger w=[%s]\n",curw.w);
 								}
 								macro_trigger=0;
 							} else {
-								int keymatched=0,wlenot;
-								wlenot=strlen(curw.w);
-								if (wlenot<INSTRUCTION_MAXLENGTH && (ifast=ae->fastmatch[(int)curw.w[0]][wlenot])!=-1) {
+								int keymatched=0;
+								if (curw.len<INSTRUCTION_MAXLENGTH && (ifast=ae->fastmatch[(int)curw.w[0]][curw.len])!=-1) {
 									while (instruction[ifast].mnemo[0]==curw.w[0]) {
 										if (strcmp(instruction[ifast].mnemo,curw.w)==0) {
 											keymatched=1;														
@@ -25296,7 +25313,7 @@ printf("instruction en cours\n");
 					} else {
 						if (hadcomma) {
 							if (!ae->macro_multi_line) {
-								MakeError(ae,0,ae->filename[listing[l].ifile],listing[l].iline,"empty parameter\n");
+								MakeError(ae,0,ae->filename[listing[l].ifile],listing[l].iline,"empty parameter right after word [%s]\n",nbword>1?wordlist[nbword-1].w:"(null)");
 							}
 						}
 					}
@@ -25339,20 +25356,20 @@ printf("%s\n",wordlist[nbword].w);
 							lw=0;
 							for (li=0;wordlist[nbword].w[li];li++) {
 								w[lw++]=wordlist[nbword].w[li];
-								StateMachineResizeBuffer(&w,lw,&mw);
+								//StateMachineResizeBuffer(&w,lw,&mw);
 								w[lw]=0;
 							}
 							MemFree(wordlist[nbword].w);
 							/* on ajoute l'egalite ou comparaison! */
 							curw.e=lw+1;
 							w[lw++]='=';
-							StateMachineResizeBuffer(&w,lw,&mw);
+							//StateMachineResizeBuffer(&w,lw,&mw);
 							w[lw]=0;
 							Automate[' ']=1;
 							Automate['\t']=1;
 						} else {
 							/* mot de fin de ligne, à priori pas une expression */
-							curw.w=TxtStrDup(w);
+							curw.len=strlen(w); curw.w=MemMalloc(curw.len+1); memcpy(curw.w,w,curw.len+1);
 							curw.l=listing[l].iline;
 							curw.ifile=listing[l].ifile;
 							curw.t=1;
@@ -25405,11 +25422,11 @@ printf("*** patch prepro operator assignment + useless spacing\n");
 						if (!curw.e) {
 							curw.e=lw+1;
 							w[lw++]=c;
-							StateMachineResizeBuffer(&w,lw,&mw);
+							//StateMachineResizeBuffer(&w,lw,&mw);
 							w[lw]=0;
 						} else {
 							w[lw++]=c;
-							StateMachineResizeBuffer(&w,lw,&mw);
+							//StateMachineResizeBuffer(&w,lw,&mw);
 							w[lw]=0;
 						}
 					} else {
@@ -25421,16 +25438,14 @@ printf("mot precedent=[%s] t=%d\n",wordlist[nbword-1].w,wordlist[nbword-1].t);
 						if (hadcomma && c=='!') {
 							/* on peut commencer un argument par un NOT */
 							w[lw++]=c;
-							StateMachineResizeBuffer(&w,lw,&mw);
+							//StateMachineResizeBuffer(&w,lw,&mw);
 							w[lw]=0;
 							/* automate déjà modifié rien de plus */
 						} else if (!wordlist[nbword-1].t) {
 							/* il y avait un mot avant alors on va reorganiser la ligne */
 							/* patch NOT -> SAUF si c'est une directive */
 							int keymatched=0;
-							int wlenot;
-							wlenot=strlen(wordlist[nbword-1].w);
-							if (wlenot<INSTRUCTION_MAXLENGTH && (ifast=ae->fastmatch[(int)wordlist[nbword-1].w[0]][wlenot])!=-1) {
+							if (wordlist[nbword-1].len<INSTRUCTION_MAXLENGTH && (ifast=ae->fastmatch[(int)wordlist[nbword-1].w[0]][wordlist[nbword-1].len])!=-1) {
 								while (instruction[ifast].mnemo[0]==wordlist[nbword-1].w[0]) {
 									if (strcmp(instruction[ifast].mnemo,wordlist[nbword-1].w)==0) {
 										keymatched=1;														
@@ -25449,28 +25464,28 @@ printf("mot precedent=[%s] t=%d\n",wordlist[nbword-1].w,wordlist[nbword-1].t);
 										break;
 									}
 								}
-							}
-							if (!keymatched) {
-								nbword--;
-								for (li=0;wordlist[nbword].w[li];li++) {
-									w[lw++]=wordlist[nbword].w[li];
-									StateMachineResizeBuffer(&w,lw,&mw);
-									w[lw]=0;
+								if (!keymatched) {
+									nbword--;
+									//StateMachineResizeBuffer(&w,lw+wordlist[nbword].len+1,&mw);
+									for (li=0;wordlist[nbword].w[li];li++) {
+										w[lw++]=wordlist[nbword].w[li];
+										w[lw]=0;
+									}
+									MemFree(wordlist[nbword].w);
+									/* on ajoute l'egalite ou comparaison! */
+									if (opassign) {
+										#if TRACE_PREPRO
+										printf("*** patch opassign en finalisation de mot\n");
+										#endif
+										w[lw++]=opassign;
+										//StateMachineResizeBuffer(&w,lw,&mw);
+										w[lw]=0;
+									}
+									curw.e=lw+1;
 								}
-								MemFree(wordlist[nbword].w);
-								/* on ajoute l'egalite ou comparaison! */
-								if (opassign) {
-									#if TRACE_PREPRO
-									printf("*** patch opassign en finalisation de mot\n");
-									#endif
-									w[lw++]=opassign;
-									StateMachineResizeBuffer(&w,lw,&mw);
-									w[lw]=0;
-								}
-								curw.e=lw+1;
 							}
 							w[lw++]=c;
-							StateMachineResizeBuffer(&w,lw,&mw);
+							//StateMachineResizeBuffer(&w,lw,&mw);
 							w[lw]=0;
 							/* et on modifie l'automate pour la suite! */
 							Automate[' ']=1;
@@ -25490,7 +25505,7 @@ printf("quote start with %c\n",c);
 #endif
 			/* quoted string always starts with a single or a double quote */
 			w[lw++]=c;
-			StateMachineResizeBuffer(&w,lw,&mw);
+			//StateMachineResizeBuffer(&w,lw,&mw);
 			if (c=='\\') {
 				escape_code=1;
 			} else if (c==quote_type) {
@@ -25508,7 +25523,7 @@ printf("quote start with %c\n",c);
 					quote_type=0; // leave anyway
 				} else {
 					w[lw++]=c;
-					StateMachineResizeBuffer(&w,lw,&mw);
+					//StateMachineResizeBuffer(&w,lw,&mw);
 
 					// string is stored with quotes
 					if (!escape_code) {
@@ -25596,6 +25611,7 @@ printf("END\n");
 		wordlist[nbword-1].t=1;
 	}
 	curw.w="END";
+	curw.len=4;
 	curw.l=0;
 	curw.t=2;
 	curw.ifile=0;
@@ -25604,6 +25620,12 @@ printf("END\n");
 	rasm_printf(ae,KVERBOSE"wordlist contains %d element%s\n",nbword,nbword>1?"s":"");
 #endif
 	ae->nbword=nbword;
+
+//printf("maxLen=%d\n",midx);
+
+	ae->ctx1.varbuffer=MemMalloc(midx*10);
+	ae->ctx2.varbuffer=MemMalloc(midx*10);
+	ae->fastVarBuffer=MemMalloc(midx*10);
 
 	/* switch words for macro declaration with AS80 & UZ80 */
 	if (param && param->as80) {
@@ -27299,11 +27321,6 @@ struct s_autotest_keyword autotest_keyword[]={
 	{"org #C000 : breakpoint CONDITION='HL=0',NAME='roudoudou',VALMASK=0xFF,VALUE=0x22,MASK=0x2222,ADDR=grouik,STOPPER,READWRITE,EXEC : nop : grouik",0},
 	{"org #C000 : breakpoint CONDITION='HL=0',NAME='roudoudou',VALMASK=0xFF,VALUE=0x22,MSK=0x2222,ADDR=grouik,STOPPER,READWRITE,EXEC : nop : grouik",1}, // typo
 
-	/*
-	 *
-	 * will need to test resize + format then meta review test!
-	 *
-	 *
 	{"struct untab: ch1 defi: ch2 defi: endstruct: struct unegrosse: struct untab mega1: ch1 defb: ch2 defw : ch3 defi: ch4 defb 'roudoudou',0: struct untab mega2: struct unegrosse entite ",1}, // must not hang!
 	{"struct untab: ch1 defi: ch2 defi: endstruct: struct unegrosse: struct untab mega1: ch1 defb: ch2 defw : ch3 defi: ch4 defb 'roudoudou',0: struct untab mega2: endstruct:struct unegrosse entite:assert $==33 ",0},
 	{"struct machin : roudoudou defs 10 : endstruct : struct machin pouet1,1,'roudoudou': assert $==10",0}, // less data in initializer
@@ -27315,9 +27332,16 @@ struct s_autotest_keyword autotest_keyword[]={
 	{"struct machin : unReal defr : endstruct : pouet=50 : struct machin pouet1,1,pouet: assert $==5",0},
 	{"defb '\\xF'",1}, {"defb '\\xFg'",1}, {"defb '\\xF-'",1}, {"defb '\\xF '",1},
 	{"defb '\\x'",1}, {"defb '\\xg'",1}, {"defb '\\x-'",1}, {"defb '\\x '",1},
-	{"defb '\\x\\'",1},
-	{"",},
-	{"",},
+	{"defb '\\x\\'",1},	// passer une instruction en tant que paramètre de macro
+	{" macro uneInstruction instr: {instr} de: {instr} hl: mend: uneInstruction inc: uneInstruction dec ",0},
+	{"ld a,50 xor 10: ld a,50^10: ld a,50 mod 12: ld a,50%12: ld a,50 % 12 ",0}, // some prepro enforcing ^_^
+	{" repeat 10,x: bank: module truc{x}: oneTwo nop: rend",0}, // flexible module names
+
+	/*
+	 *
+	 * will need to test resize + format then meta review test!
+	 *
+	 *
 	{"",},{"",},{"",},{"",},{"",},
 	{"",},{"",},{"",},{"",},{"",},{"",},
 	{"",},{"",},{"",},{"",},{"",},{"",},{"",},{"",},{"",},{"",},{"",},{"",},
