@@ -4005,7 +4005,7 @@ struct s_label *SearchLabel(struct s_assenv *ae, char *label, int crc)
 	#define FUNC "SearchLabel"
 
 	struct s_crclabel_tree *curlabeltree;
-	int radix;
+	int radix,i;
 
 	if ((curlabeltree=ae->labeltree[(crc>>16)&0xFFFF])==NULL) return NULL; //@@FAST
 
@@ -4032,7 +4032,7 @@ struct s_label *SearchLabel(struct s_assenv *ae, char *label, int crc)
 					mapping.iorgzone=ae->io-1; mapping.ptr=ae->outputadr; mapping.size=2; mapping.value=curlabeltree->label[i].ptr; \
 					printf("add mapping for label [%s] ptr=%d size=%d value=%d\n",label,mapping.ptr,mapping.size,mapping.value); \
 					ObjectArrayAddDynamicValueConcat((void**)&ae->relocation,&ae->imapping,&ae->mmapping,&mapping,sizeof(mapping)); }
-	for (int i=0;i<curlabeltree->nlabel;i++) {
+	for (i=0;i<curlabeltree->nlabel;i++) {
 		if (strcmp(curlabeltree->label[i].name,label)==0) {
 			//PUSH_LABEL_OBJ;
 			curlabeltree->label[i].used++;
@@ -16785,7 +16785,7 @@ printf("<== PopGlobal on Stack [%s] igs=%d\n",ae->globalstack[ae->igs],ae->igs+1
 void __MACRO(struct s_assenv *ae) {
 	struct s_macro curmacro={0};
 	char *referentfilename,*zeparam;
-	int refidx,idx,getparam=1;
+	int refidx,idx,getparam=1,i;
 	struct s_wordlist curwl;
 
 	if (ae->getstruct==1) {
@@ -16858,7 +16858,7 @@ void __MACRO(struct s_assenv *ae) {
 			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Macro was not closed\n");
 		}
 
-		for (int i=0;i<curmacro.nbword;i++) {
+		for (i=0;i<curmacro.nbword;i++) {
 			/* tags in upper case for replacement in quotes */
 			if (StringIsQuote(curmacro.wc[i].w)) {
 				int lm,touched;
@@ -25165,7 +25165,7 @@ printf("1/2 Winape maxam operator test for [%s] [%s] %d lw=%d\n",w,w+ispace,ispa
 										       		w[ispace]='m';lw=ispace+1;
 											}
 									       }
-									default:
+									default:;
 								}
 							}
 							ispace=lw;
