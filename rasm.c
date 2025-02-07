@@ -19205,7 +19205,7 @@ printf("struct new behaviour (scan for %d fields) NBELEM=%d\n",ae->rasmstruct[ir
 								if (l==ae->rasmstruct[irs].rasmstructfield[i].size) {
 									// check overrun
 									if (ae->wl[ae->idx+j].w[k] && ae->wl[ae->idx+j].w[k]!=zeQuote) {
-										rasm_printf(ae,KWARNING"[%s:%d] Warning: struct initialiser overrun field size!\n",GetCurrentFile(ae),ae->wl[ae->idx+j].l);
+										rasm_printf(ae,KWARNING"[%s:%d] Warning: struct field number %d overrun! (%d byte%s max)!\n",GetCurrentFile(ae),ae->wl[ae->idx+j].l,j,ae->rasmstruct[irs].rasmstructfield[i].size,ae->rasmstruct[irs].rasmstructfield[i].size>1?"s":"");
 										if (ae->erronwarn) MaxError(ae);
 									}
 								} else if (l<ae->rasmstruct[irs].rasmstructfield[i].size) {
@@ -25601,7 +25601,7 @@ printf("quote start with %c\n",c);
 							if (w[utidx]>=32 && w[utidx]<127) before[bidx++]=(unsigned char)w[utidx]; else break;
 						}
 
-						MakeError(ae,0,ae->filename[listing[l].ifile],listing[l].iline,"Invalid char for quoted string [%s(%X)}\n",before,w[utidx]);
+						MakeError(ae,0,ae->filename[listing[l].ifile],listing[l].iline,"Invalid char for quoted string [%s(%X)] use -fq option to allow UTF8\n",before,w[utidx]);
 						utidx=backut;
 					}
 				}
