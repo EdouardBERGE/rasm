@@ -420,6 +420,11 @@ struct s_crclabel_tree {
 	struct s_label *label;
 	int nlabel,mlabel;
 };
+struct s_crcalias_tree {
+	struct s_crcalias_tree *radix[256];
+	struct s_alias *alias;
+	int nalias,malias;
+};
 struct s_crcdico_tree {
 	struct s_crcdico_tree *radix[256];
 	struct s_expr_dico *dico;
@@ -1102,6 +1107,7 @@ struct s_assenv {
 	/* expression dictionnary */
 	struct s_expr_dico *dico;
 	int idic,mdic;
+	struct s_crcalias_tree *aliastree[65536]; /* fast alias access */
 	struct s_crcdico_tree *dicotree[65536]; /* fast dico access */
 	struct s_crcused_tree *usedtree[65536]; /* fast used access */
 	/* ticker */
@@ -2088,15 +2094,17 @@ void InitAutomate(char *autotab, const unsigned char *def)
 	int i;
 
 	memset(autotab,0,256);
-	for (i=0;def[i];i++) {
+	for (i=0;def[i] && i<256;i++) {
 		autotab[(unsigned int)def[i]]=1;
 	}
 }
+// supposed to be used
 void StateMachineResizeBuffer(char **ABuf, int idx, int *ASize) {
 	#undef FUNC
 	#define FUNC "StateMachineResizeBuffer"
 
 	if (idx>=*ASize) {
+		*ASize=idx;
 		if (*ASize<16384) {
 			*ASize=(*ASize)*2;
 		} else {
@@ -2113,6 +2121,18 @@ __forceinline int GetCRC(char *label) {
 static inline int GetCRC(char *label) {
 #endif
 #endif
+
+int _oldGetCRC(char *label) {
+	#undef FUNC
+	#define FUNC "GetCRC"
+	int crc=0x12345678;
+	int i=0;
+
+	while (label[i]!=0) {
+		crc=(crc<<9)^(crc+label[i++]);
+	}
+	return crc;
+}
 
 int GetCRC(char *label) {
         #undef FUNC
@@ -2789,6 +2809,7 @@ char *GetCurrentFile(struct s_assenv *ae)
 *******************************************************************************************/
 void FreeLabelTree(struct s_assenv *ae);
 void FreeDicoTree(struct s_assenv *ae);
+void FreeAliasTree(struct s_assenv *ae);
 void FreeUsedTree(struct s_assenv *ae);
 void ExpressionFastTranslate(struct s_assenv *ae, char **ptr_expr, int fullreplace);
 char *TradExpression(char *zexp);
@@ -3021,6 +3042,7 @@ void FreeAssenv(struct s_assenv *ae)
 
 	MemFree(ae->outputfilename);
 	FreeLabelTree(ae);
+	FreeAliasTree(ae);
 	FreeDicoTree(ae);
 	FreeUsedTree(ae);
 	if (ae->mmacropos) MemFree(ae->macropos);
@@ -3297,7 +3319,7 @@ int cmpmacros(const void * a, const void * b)
 	sb=(struct s_macro *)b;
 	if (sa->crc<sb->crc) return -1; else return 1;
 }
-int SearchAlias(struct s_assenv *ae, int crc, char *zemot)
+int _deprecated_SearchAlias(struct s_assenv *ae, int crc, char *zemot)
 {
     int dw,dm,du,i;
 
@@ -3347,6 +3369,33 @@ int SearchMacro(struct s_assenv *ae, int crc, char *zemot)
 	return -1;
 }
 
+
+void InsertAliasToTree(struct s_assenv *ae, struct s_alias *alias)
+{
+	#undef FUNC
+	#define FUNC "InsertAliasToTree"
+
+	struct s_crcalias_tree *curaliastree;
+	int radix,dek=16;
+ 
+	if ((curaliastree=ae->aliastree[(alias->crc>>16)&0xFFFF])==NULL) { //@@FAST
+		curaliastree=MemMalloc(sizeof(struct s_crcalias_tree));
+		memset(curaliastree,0,sizeof(struct s_crcalias_tree));
+		ae->aliastree[(alias->crc>>16)&0xFFFF]=curaliastree;
+	}
+	while (dek) {
+		dek=dek-8;
+		radix=(alias->crc>>dek)&0xFF;
+		if (curaliastree->radix[radix]) {
+			curaliastree=curaliastree->radix[radix];
+		} else {
+			curaliastree->radix[radix]=MemMalloc(sizeof(struct s_crcalias_tree));
+			curaliastree=curaliastree->radix[radix];
+			memset(curaliastree,0,sizeof(struct s_crcalias_tree));
+		}
+	}
+	ObjectArrayAddDynamicValueConcat((void**)&curaliastree->alias,&curaliastree->nalias,&curaliastree->malias,alias,sizeof(struct s_alias));
+}
 void CheckAndSortAliases(struct s_assenv *ae)
 {
 	#undef FUNC
@@ -3364,7 +3413,8 @@ void CheckAndSortAliases(struct s_assenv *ae)
 			break;
 		}
 	}
-	
+	InsertAliasToTree(ae,&ae->alias[ae->ialias-1]);
+#if 0
 	/* cas particuliers pour insertion en début ou fin de liste */
 	if (ae->ialias-1) {
 		if (ae->alias[ae->ialias-1].crc>ae->alias[ae->ialias-2].crc) {
@@ -3399,8 +3449,8 @@ void CheckAndSortAliases(struct s_assenv *ae)
 	} else {
 		/* one alias need no sort */
 	}
+#endif
 }
-
 void InsertDicoToTree(struct s_assenv *ae, struct s_expr_dico *dico)
 {
 	#undef FUNC
@@ -3648,6 +3698,36 @@ void ExportDicoTree(struct s_assenv *ae, char *zefile, char *zeformat)
 		}
 	}
 }
+void FreeAliasTreeRecurse(struct s_crcalias_tree *lt)
+{
+	#undef FUNC
+	#define FUNC "FreeAliasTreeRecurse"
+
+	int i;
+
+	for (i=0;i<256;i++) {
+		if (lt->radix[i]) {
+			FreeAliasTreeRecurse(lt->radix[i]);
+		}
+	}
+	if (lt->malias) {
+		MemFree(lt->alias);
+	}
+	MemFree(lt);
+}
+void FreeAliasTree(struct s_assenv *ae)
+{
+	#undef FUNC
+	#define FUNC "FreeAliasTree"
+
+	int i;
+
+	for (i=0;i<65536;i++) {
+		if (ae->aliastree[i]) {
+			FreeAliasTreeRecurse(ae->aliastree[i]);
+		}
+	}
+}
 void FreeDicoTreeRecurse(struct s_crcdico_tree *lt)
 {
 	#undef FUNC
@@ -3681,6 +3761,37 @@ void FreeDicoTree(struct s_assenv *ae)
 		}
 	}
 }
+struct s_alias *SearchAlias(struct s_assenv *ae, int crc, char *zemot) {
+	#undef FUNC
+	#define FUNC "SearchAlias"
+	struct s_crcalias_tree *curaliastree;
+	int i,radix;
+
+	if ((curaliastree=ae->aliastree[(crc>>16)&0xFFFF])==NULL) return NULL; //@@FAST
+
+	radix=(crc>>8)&0xFF;
+	if (curaliastree->radix[radix]) {
+		curaliastree=curaliastree->radix[radix];
+	} else {
+		/* radix not found, dico is not in index */
+		return NULL;
+	}
+	radix=crc&0xFF;
+	if (curaliastree->radix[radix]) {
+		curaliastree=curaliastree->radix[radix];
+	} else {
+		/* radix not found, dico is not in index */
+		return NULL;
+	}
+
+	for (i=0;i<curaliastree->nalias;i++) {
+		if (strcmp(curaliastree->alias[i].alias,zemot)==0) {
+			//curaliastree->alias[i].used=1;
+			return &curaliastree->alias[i];
+		}
+	}
+	return NULL;
+}
 struct s_expr_dico *SearchDico(struct s_assenv *ae, char *dico, int crc)
 {
 	#undef FUNC
@@ -3708,7 +3819,7 @@ struct s_expr_dico *SearchDico(struct s_assenv *ae, char *dico, int crc)
 
 	for (i=0;i<curdicotree->ndico;i++) {
 		if (strcmp(curdicotree->dico[i].name,dico)==0) {
-			curdicotree->dico[i].used++;
+			//curdicotree->dico[i].used++;
 
 			if (curdicotree->dico[i].external) {
 				if (ae->external_mapping_size) {
@@ -4035,7 +4146,7 @@ struct s_label *SearchLabel(struct s_assenv *ae, char *label, int crc)
 	for (i=0;i<curlabeltree->nlabel;i++) {
 		if (strcmp(curlabeltree->label[i].name,label)==0) {
 			//PUSH_LABEL_OBJ;
-			curlabeltree->label[i].used++;
+			//curlabeltree->label[i].used=1;
 			return &curlabeltree->label[i];
 		}
 	}
@@ -5636,8 +5747,9 @@ double ComputeExpressionCore(struct s_assenv *ae,char *original_zeexpression,int
 	/* backup alias replace */
 	char *zeexpression,*expr;
 	int original=1;
-	int ialias,startvar=0;
+	int startvar=0;
 	int newlen,lenw;
+	struct s_alias *curalias;
 	/* dictionnary */
 	struct s_expr_dico *curdic;
 	struct s_label *curlabel;
@@ -6186,6 +6298,7 @@ double ComputeExpressionCore(struct s_assenv *ae,char *original_zeexpression,int
 	printf("trouvé valeur=%.2lf\n",curdic->v);
 #endif
 							curval=curdic->v;
+							curdic->used=1;
 							break;
 						} else {
 #if TRACE_COMPUTE_EXPRESSION
@@ -6323,6 +6436,7 @@ if (didx>0 && didx<ae->ie) {
 
 
 								if (curlabel) {
+									curlabel->used=1;
 									if (ae->stage<2) {
 										if (curlabel->lz==-1) {
 											if (!bank) {
@@ -6495,7 +6609,6 @@ printf("stage 2 | page=%d | ptr=%X ibank=%d\n",page,curlabel->ptr,curlabel->iban
 									/***********************************************
 										to allow aliases declared after use
 									***********************************************/
-									ialias=-1;
 									if (didx>0 && didx<ae->ie) {
 										if (ae->expression[didx].module) {
 											// build module+alias
@@ -6504,11 +6617,11 @@ printf("stage 2 | page=%d | ptr=%X ibank=%d\n",page,curlabel->ptr,curlabel->iban
                 									strcpy(dblvarbuffer,ae->expression[didx].module);
 											strcat(dblvarbuffer,ae->module_separator);
 											strcat(dblvarbuffer,ae->computectx->varbuffer+minusptr);
-											ialias=SearchAlias(ae,GetCRC(dblvarbuffer),dblvarbuffer);
+											curalias=SearchAlias(ae,GetCRC(dblvarbuffer),dblvarbuffer);
 											MemFree(dblvarbuffer);
-										}
-										if (ialias==-1) {
-											ialias=SearchAlias(ae,crc,ae->computectx->varbuffer+minusptr);
+											if (!curalias) curalias=SearchAlias(ae,crc,ae->computectx->varbuffer+minusptr);
+										} else {
+											curalias=SearchAlias(ae,crc,ae->computectx->varbuffer+minusptr);
 										}
 									} else {
 										if (ae->module) {
@@ -6517,16 +6630,17 @@ printf("stage 2 | page=%d | ptr=%X ibank=%d\n",page,curlabel->ptr,curlabel->iban
 											strcpy(dblvarbuffer,ae->module);
 											strcat(dblvarbuffer,ae->module_separator);
 											strcat(dblvarbuffer,ae->computectx->varbuffer+minusptr);
-											ialias=SearchAlias(ae,GetCRC(dblvarbuffer),dblvarbuffer);
+											curalias=SearchAlias(ae,GetCRC(dblvarbuffer),dblvarbuffer);
 											MemFree(dblvarbuffer);
-										}
-										if (ialias==-1) {
-											ialias=SearchAlias(ae,crc,ae->computectx->varbuffer+minusptr);
+											if (!curalias) curalias=SearchAlias(ae,crc,ae->computectx->varbuffer+minusptr);
+										} else {
+											curalias=SearchAlias(ae,crc,ae->computectx->varbuffer+minusptr);
 										}
 									}
 
-									if (ialias>=0) { // IX alias is always declared in the very beginning so ialias cannot be zero
-										newlen=ae->alias[ialias].len;
+									if (curalias) {
+										curalias->used=1;
+										newlen=curalias->len;
 										lenw=strlen(zeexpression);
 										if (newlen>ivar) {
 											/* realloc bigger */
@@ -6543,7 +6657,7 @@ printf("stage 2 | page=%d | ptr=%X ibank=%d\n",page,curlabel->ptr,curlabel->iban
 										if (newlen!=ivar) {
 											MemMove(zeexpression+startvar+newlen,zeexpression+startvar+ivar,lenw-startvar-ivar+1);
 										}
-										strncpy(zeexpression+startvar,ae->alias[ialias].translation,newlen); /* copy without zero terminator */
+										strncpy(zeexpression+startvar,curalias->translation,newlen); /* copy without zero terminator */
 										idx=startvar;
 										ivar=0;
 										continue;
@@ -7394,6 +7508,7 @@ void ExpressionSetDicoVar(struct s_assenv *ae,char *name, double v, int var_exte
 	curdic.name=TxtStrDup(name);
 	curdic.crc=GetCRC(name);
 	curdic.v=v;
+	curdic.used=0;
 	curdic.iw=ae->idx;
 	curdic.autorise_export=ae->autorise_export;
 	curdic.external=var_external;
@@ -7412,7 +7527,7 @@ double ComputeExpression(struct s_assenv *ae,char *expr, int ptr, int didx, int 
 	#define FUNC "ComputeExpression"
 
 	char *ptr_exp,*ptr_exp2;
-	int crc,idx=0,ialias,touched;
+	int crc,idx=0,touched;
 	double v;
 	struct s_alias curalias;
 	struct s_expr_dico *curdic;
@@ -7469,7 +7584,7 @@ printf("MakeAlias (2) EXPR=[%s EQU %s]\n",expr,ptr_exp2);
 			curalias.ptr=ae->codeadr;
 			curalias.lz=ae->ilz;
 
-			if ((ialias=SearchAlias(ae,curalias.crc,curalias.alias))>=0) {
+			if (SearchAlias(ae,curalias.crc,curalias.alias)) {
 				MakeError(ae,ae->idx,GetCurrentFile(ae),GetExpLine(ae,0),"Duplicate alias [%s]\n",expr);
 				MemFree(curalias.alias);
 			} else if (SearchLabel(ae,curalias.alias,curalias.crc)) {
@@ -7552,7 +7667,7 @@ printf("***********\n");
 						}
 
 						crc=GetCRC(expr);
-						if ((ialias=SearchAlias(ae,crc,expr))>=0) {
+						if (SearchAlias(ae,crc,expr)) {
 							MakeError(ae,ae->idx,GetCurrentFile(ae),GetExpLine(ae,0),"Variable cannot override existing alias [%s]\n",expr);
 							return 0;
 						}
@@ -7630,12 +7745,13 @@ void ExpressionFastTranslate(struct s_assenv *ae, char **ptr_expr, int fullrepla
 	#undef FUNC
 	#define FUNC "ExpressionFastTranslate"
 
+	struct s_alias *curalias;
 	struct s_label *curlabel;
 	struct s_expr_dico *curdic;
 	static char *varbuffer=NULL;
 	static int ivar,maxivar=1;
 	char curval[256]={0};
-	int c,lenw=0,idx=0,crc,startvar=0,newlen,ialias,found_replace,yves,dek,reidx,lenbuf,rlen,tagoffset;
+	int c,lenw=0,idx=0,crc,startvar=0,newlen,found_replace,yves,dek,reidx,lenbuf,rlen,tagoffset;
 	double v;
 	char tmpuchar[16];
 	char *expr,*locallabel;
@@ -7850,6 +7966,7 @@ printf("ExpressionFastTranslate (full) => varbuffer=[%s] lz=%d\n",varbuffer,ae->
 					curdic=SearchDico(ae,varbuffer,crc);
 					if (curdic) {
 						v=curdic->v;
+						curdic->used=1;
 #if TRACE_COMPUTE_EXPRESSION
 printf("ExpressionFastTranslate (full) -> replace var (%s=%0.1lf)\n",varbuffer,v);
 #endif
@@ -7880,6 +7997,7 @@ printf("ExpressionFastTranslate (full) -> replace var (%s=%0.1lf)\n",varbuffer,v
 			if (!found_replace) {
 				curlabel=SearchLabel(ae,varbuffer,crc);
 				if (curlabel) {
+					curlabel->used=1;
 					if (!curlabel->lz || ae->stage>1) {
 						yves=curlabel->ptr;
 
@@ -7918,19 +8036,20 @@ printf("ExpressionFastTranslate SearchAlias inside module => varbuffer=[%s]\n",v
 					strcpy(dblvarbuffer,ae->module);
 					strcat(dblvarbuffer,ae->module_separator);
 					strcat(dblvarbuffer,varbuffer);
-					ialias=SearchAlias(ae,GetCRC(dblvarbuffer),dblvarbuffer);
+					curalias=SearchAlias(ae,GetCRC(dblvarbuffer),dblvarbuffer);
 					MemFree(dblvarbuffer);
 				} else {
-					ialias=-1;
+					curalias=NULL;
 				}
 
-				if (ialias>=0 || (ialias=SearchAlias(ae,crc,varbuffer))>=0) {
-					newlen=ae->alias[ialias].len;
+				if (curalias || (curalias=SearchAlias(ae,crc,varbuffer))) {
+					curalias->used=1;
+					newlen=curalias->len;
 					lenw=strlen(expr);
 					/* infinite replacement check */
 					if (recurse<=startvar) {
 						/* recurse maximum count is a mix of alias len and alias number */
-						if (recursecount>ae->ialias+ae->alias[ialias].len) {
+						if (recursecount>ae->ialias) {
 							if (strchr(expr,'~')!=NULL) *strchr(expr,'~')=0;
 							MakeError(ae,ae->idx,GetCurrentFile(ae),GetExpLine(ae,0),"alias definition of %s has infinite recursivity\n",expr);
 							expr[0]=0; /* avoid some errors due to shitty definition */
@@ -7946,7 +8065,7 @@ printf("ExpressionFastTranslate SearchAlias inside module => varbuffer=[%s]\n",v
 					if (newlen!=ivar) {
 						MemMove(expr+startvar+newlen,expr+startvar+ivar,lenw-startvar-ivar+1);
 					}
-					strncpy(expr+startvar,ae->alias[ialias].translation,newlen); /* copy without zero terminator */
+					strncpy(expr+startvar,curalias->translation,newlen); /* copy without zero terminator */
 					found_replace=1;
 					/* need to parse again alias because of delayed declarations */
 					recurse=startvar;
@@ -9646,7 +9765,6 @@ void InsertLabelToTree(struct s_assenv *ae, struct s_label *label)
 {
 	#undef FUNC
 	#define FUNC "InsertLabelToTree"
-
 	struct s_crclabel_tree *curlabeltree;
 	int radix;
 
@@ -9904,7 +10022,7 @@ printf("PUSH Orphan PROXIMITY label that cannot be exported [%s]->[%s]\n",ae->wl
 				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"cannot create label [%s] as there is already a variable with the same name\n",curlabel.name);
 				return;
 			}
-			if(SearchAlias(ae,curlabel.crc,curlabel.name)!=-1) {
+			if(SearchAlias(ae,curlabel.crc,curlabel.name)) {
 				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"cannot create label [%s] as there is already an alias with the same name\n",curlabel.name);
 				return;
 			}
@@ -15347,7 +15465,7 @@ void __AMSDOS(struct s_assenv *ae) {
 void __internal_LOCAL(struct s_assenv *ae, int localval) {
 	struct s_label *curlabel;
 	struct s_expr_dico *curdic;
-	int ialias,crc,freeflag;
+	int crc,freeflag;
 	char *localname;
 
 	if (ae->wl[ae->idx].t) {
@@ -15377,9 +15495,10 @@ void __internal_LOCAL(struct s_assenv *ae, int localval) {
 	}
 }
 void __internal_EXPORT(struct s_assenv *ae, int exportval) {
+	struct s_alias *curalias;
 	struct s_label *curlabel;
 	struct s_expr_dico *curdic;
-	int ialias,crc,freeflag;
+	int crc,freeflag;
 	char *localname;
 
 	if (ae->wl[ae->idx].t) {
@@ -15406,8 +15525,8 @@ void __internal_EXPORT(struct s_assenv *ae, int exportval) {
 			if ((curdic=SearchDico(ae,ae->wl[ae->idx].w,crc))!=NULL) {
 				curdic->autorise_export=exportval;
 			} else {
-				if ((ialias=SearchAlias(ae,crc,ae->wl[ae->idx].w))!=-1) {
-					ae->alias[ialias].autorise_export=exportval;
+				if ((curalias=SearchAlias(ae,crc,ae->wl[ae->idx].w))) {
+					curalias->autorise_export=exportval;
 				} else {
 					MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"(E)NOEXPORT did not found [%s] in variables, labels or aliases\n",ae->wl[ae->idx].w);
 				}
@@ -16811,7 +16930,7 @@ void __MACRO(struct s_assenv *ae) {
 				if ((SearchLabel(ae,ae->wl[ae->idx+1].w,curmacro.crc))!=NULL) {
 					MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Macro definition: There is already a label with this name\n");
 				} else {
-					if ((SearchAlias(ae,curmacro.crc,ae->wl[ae->idx+1].w))!=-1) {
+					if (SearchAlias(ae,curmacro.crc,ae->wl[ae->idx+1].w)) {
 						MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Macro definition: There is already an alias with this name\n");
 					} else {
 						if (IsRegister(curmacro.mnemo)) {
@@ -17140,6 +17259,7 @@ void __TICKER(struct s_assenv *ae) {
 					/* compute nop count */
 					if (ae->wl[ae->idx+1].w[4]=='Z') tvar->v=ae->tick-ae->ticker[i].tickerstart;
 					else tvar->v=ae->nop-ae->ticker[i].nopstart;
+					tvar->used=1;
 				} else {
 					/* create var with nop count */
 					if (ae->wl[ae->idx+1].w[4]=='Z') ExpressionSetDicoVar(ae,ae->wl[ae->idx+2].w,ae->tick-ae->ticker[i].tickerstart,0);
@@ -18136,10 +18256,12 @@ void __REPEAT(struct s_assenv *ae) {
 				crc=GetCRC(ae->wl[ae->idx].w);
 				if ((rvar=SearchDico(ae,ae->wl[ae->idx].w,crc))!=NULL) {
 					rvar->v=vstart;
+					rvar->used=1;
 				} else {
 					/* mais ne peut être un label ou un alias */
 					ExpressionSetDicoVar(ae,ae->wl[ae->idx].w,vstart,0);
 					rvar=SearchDico(ae,ae->wl[ae->idx].w,crc);
+					rvar->used=1;
 				}
 				currepeat.repeatvarstruct=rvar;
 				currepeat.repeatvar=ae->wl[ae->idx].w;
@@ -18182,7 +18304,6 @@ void __REND(struct s_assenv *ae) {
 		} else {
 			ae->repeat[ae->ir-1].cpt--;
 			ae->repeat[ae->ir-1].repeat_counter++;
-			//if ((rvar=SearchDico(ae,ae->repeat[ae->ir-1].repeatvar,ae->repeat[ae->ir-1].repeatcrc))!=NULL) {
 			if (ae->repeat[ae->ir-1].repeatvarstruct) {
 				rvar=ae->repeat[ae->ir-1].repeatvarstruct;
 				rvar->v+=ae->repeat[ae->ir-1].varincrement; // LEGACY rvar->v=ae->repeat[ae->ir-1].repeat_counter;
@@ -18318,15 +18439,18 @@ void __IF_light(struct s_assenv *ae) {
 void __IFUSED(struct s_assenv *ae) {
 	struct s_ifthen ifthen={0};
 	int rexpr,crc;
+	struct s_label *curlabel;
+	struct s_alias *curalias;
+	struct s_expr_dico *curdico;
 	
 	if (!ae->wl[ae->idx].t && ae->wl[ae->idx+1].t==1) {
 		if (!ae->AutomateValidLabelFirst[((int)ae->wl[ae->idx+1].w[0])&0xFF]) {
-			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"IFUSED argument must be a variable or a label\n");
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"IFUSED argument must be a variable, alias or a label\n");
 			return;
 		}
 		crc=GetCRC(ae->wl[ae->idx+1].w);
-		if ((SearchDico(ae,ae->wl[ae->idx+1].w,crc))!=NULL) {
-			rexpr=1;
+		if ((curdico=SearchDico(ae,ae->wl[ae->idx+1].w,crc))!=NULL) {
+			rexpr=curdico->used;
 		} else {
 			char *labelmodule=NULL;
 			// first look for module label!
@@ -18335,17 +18459,19 @@ void __IFUSED(struct s_assenv *ae) {
 				strcpy(labelmodule,ae->module);
 				strcat(labelmodule,ae->module_separator);
 				strcat(labelmodule,ae->wl[ae->idx+1].w);
+				curlabel=SearchLabel(ae,labelmodule,GetCRC(labelmodule));
+				MemFree(labelmodule);
+			} else {
+				curlabel=SearchLabel(ae,ae->wl[ae->idx+1].w,crc);
 			}
-			if (ae->module && (SearchLabel(ae,labelmodule,GetCRC(labelmodule)))!=NULL) {
-				rexpr=1;
-			} else if ((SearchLabel(ae,ae->wl[ae->idx+1].w,crc))!=NULL) {
-				rexpr=1;
-			} else if ((SearchAlias(ae,crc,ae->wl[ae->idx+1].w))!=-1) {
-				rexpr=1;
+
+			if (curlabel) {
+				rexpr=curlabel->used;;
+			} else if ((curalias=SearchAlias(ae,crc,ae->wl[ae->idx+1].w))!=NULL) {
+				rexpr=curalias->used;
 			} else {
 				rexpr=SearchUsed(ae,ae->wl[ae->idx+1].w,crc);
 			}
-			if (labelmodule) MemFree(labelmodule);
 		}
 		ifthen.v=rexpr;
 		ifthen.filename=GetCurrentFile(ae);
@@ -18403,7 +18529,7 @@ void __IFDEF(struct s_assenv *ae) {
 				rexpr=1;
 			} else if ((SearchLabel(ae,ae->wl[ae->idx+1].w,crc))!=NULL) {
 				rexpr=1;
-			} else if ((SearchAlias(ae,crc,ae->wl[ae->idx+1].w))!=-1) {
+			} else if (SearchAlias(ae,crc,ae->wl[ae->idx+1].w)) {
 					rexpr=1;
 			} else if (SearchMacro(ae,crc,ae->wl[ae->idx+1].w)>=0) {
 					rexpr=1;
@@ -18457,7 +18583,7 @@ void __IFNDEF(struct s_assenv *ae) {
 				rexpr=0;
 			} else if ((SearchLabel(ae,ae->wl[ae->idx+1].w,crc))!=NULL) {
 				rexpr=0;
-			} else if ((SearchAlias(ae,crc,ae->wl[ae->idx+1].w))!=-1) {
+			} else if (SearchAlias(ae,crc,ae->wl[ae->idx+1].w)) {
 					rexpr=0;
 			} else if (SearchMacro(ae,crc,ae->wl[ae->idx+1].w)>=0) {
 				rexpr=0;
@@ -18941,7 +19067,7 @@ void __STRUCT(struct s_assenv *ae) {
 			if (!ae->getstruct) {
 				/* cannot be an existing label or EQU (but variable ok) */
 				crc=GetCRC(ae->wl[ae->idx+1].w);
-				if ((SearchLabel(ae,ae->wl[ae->idx+1].w,crc))!=NULL || (SearchAlias(ae,crc,ae->wl[ae->idx+1].w))!=-1) {
+				if (SearchLabel(ae,ae->wl[ae->idx+1].w,crc) || SearchAlias(ae,crc,ae->wl[ae->idx+1].w)) {
 					MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"STRUCT name must be different from existing labels ou aliases\n");
 				} else {
 					ae->backup_filename=GetCurrentFile(ae);
@@ -19911,6 +20037,7 @@ printf(" -> VTILES loading\n");
 									crc=GetCRC(ae->wl[ae->idx+6].w);
 									if ((rvar=SearchDico(ae,ae->wl[ae->idx+6].w,crc))!=NULL) {
 										rvar->v=ae->hexbin[hbinidx].rawlen;
+										rvar->used=1;
 									} else {
 										/* mais ne peut être un label ou un alias */
 										ExpressionSetDicoVar(ae,ae->wl[ae->idx+6].w,ae->hexbin[hbinidx].rawlen,0);
@@ -21904,6 +22031,7 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 		printf("Compute all EQU which are supposed to be statics!\n");
 #endif
 		for (i=0;i<ae->ialias;i++) {
+			struct s_alias *curalias;
 			char alias_value[128];
 			double v;
 			// compute EQU defined in crunched sections
@@ -21914,6 +22042,10 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 				MemFree(ae->alias[i].translation);
 				ae->alias[i].translation=TxtStrDup(alias_value);
 				ae->alias[i].len=strlen(ae->alias[i].translation);
+				// update tree
+				curalias=SearchAlias(ae,ae->alias[i].crc,ae->alias[i].alias);
+				curalias->translation=ae->alias[i].translation;
+				curalias->len=ae->alias[i].len;
 			}
 		}
 #if TRACE_LZ
@@ -27022,8 +27154,7 @@ int RasmAssembleInfoParam(const char *datain, int lenin, unsigned char **dataout
 
 #define AUTOTEST_DEFMOD "nbt=0: module preums: label1 nop: label3: label4: ifdef label1:nbt+=1:endif: ifdef label3:nbt+=1:endif:"\
 "ifdef label4:nbt+=1:endif: ifndef label5:nbt+=1:endif: module deuze: label1 nop: label3: label5: ifdef label1:nbt+=1:endif:"\
-"ifdef label3:nbt+=1:endif: ifndef label4:nbt+=1:endif: ifdef label5:nbt+=1:endif: assert nbt==8:"\
-"module grouik: plop: ifused plop : glop=1 : endif:assert glop==1"
+"ifdef label3:nbt+=1:endif: ifndef label4:nbt+=1:endif: ifdef label5:nbt+=1:endif: assert nbt==8:"
 
 #define AUTOTEST_GTILES    "incbin 'autotest_include.raw',GTILES,4"
 #define AUTOTEST_ITILES    "incbin 'autotest_include.raw',ITILES,4"
@@ -27347,6 +27478,26 @@ struct s_autotest_keyword autotest_keyword[]={
 	{" macro uneInstruction instr: {instr} de: {instr} hl: mend: uneInstruction inc: uneInstruction dec ",0},
 	{"ld a,50 xor 10: ld a,50^10: ld a,50 mod 12: ld a,50%12: ld a,50 % 12 ",0}, // some prepro enforcing ^_^
 	{" repeat 10,x: bank: module truc{x}: oneTwo nop: rend",0}, // flexible module names
+								    //
+	{"ifused machin : assert 0==1 : endif : nop",0}, // ifused without anything
+	{"machin equ 5 : ifused machin : assert 0==1 : endif : nop",0},
+	{"machin equ 5 : ifused machin : assert 0==1 : endif : ifused machin : assert 0==1 : endif : nop",0},
+	{"machin equ 5 : ld hl,machin : ifnused machin : assert 0==1 : endif ",0},
+	{"truc=50 : ifused truc : assert 0==1 : endif : nop",0},
+	{"truc=50 : ifused truc : assert 0==1 : endif : ifused truc : assert 0==1 : endif : nop",0},
+	{"truc=50 : ld hl,truc : ifnused truc : assert 0==1 : endif ",0},
+	{"labelobleu : ifused labelobleu : assert 0==1 : endif : nop",0},
+	{"labelobleu : ifused labelobleu : assert 0==1 : endif : ifused labelobleu : assert 0==1 : endif : nop",0},
+	{"labelobleu : ld hl,labelobleu : ifnused labelobleu : assert 0==1 : endif ",0},
+	{"labelobleu : noexport labelobleu : ifused labelobleu : assert 0==1 : endif : nop",0},
+	{"labelobleu : enoexport labelobleu : ifused labelobleu : assert 0==1 : endif : nop",0},
+	// label + module + confusion volontaire
+	{"ld hl,plop: module grouik: plop: ifused plop : assert 0==1 : endif: module: ifnused plop : assert 0==1 : endif: plop nop",0},
+
+	{" ifdef bidule : assert 0==1 : endif : nop ",0},
+	{" bidule : ifndef bidule : assert 0==1 : endif : nop ",0},
+	{" bidule equ 5 : ifndef bidule : assert 0==1 : endif : nop ",0},
+	{" bidule=5 : ifndef bidule : assert 0==1 : endif : nop ",0},
 
 	/*
 	 *
@@ -27383,8 +27534,9 @@ void RasmAutotest(void)
 	struct s_rasm_info *debug;
 	unsigned char *opcode=NULL;
 	int opcodelen,ret;
-	int cpt=0,chk,i,j,k,idx,sko=0;
+	int cpt=0,chk,i,j,k,idx,sko=0,ASize;
 	char *tmpstr3,**tmpsplit;
+	char *ABuf;
 	unsigned char RealDump[65]={00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x80,0x00,0x00,0x00,0x80,0x80,0x00,0x00,0x80,
 		0x2d,0x86,0x9e,0xda,0x0f,0x49,0x82,0x00,0x00,0x00,0x80,0x7f,0x20,0x84,0xdb,0x7f,0x80,0xcd,0x85,0xdb,0x7f,
 		0x80,0x20,0x84,0xdb,0xff,0x80,0xcd,0x85,0xdb,0xff,0x80,0xc8,0xdd,0xd6,0x7c,0x7d,0x53,0x51,0x06,0x1e,0x81,
@@ -27413,6 +27565,23 @@ printf("testing rasm source integrity : activebank and maxptr update OK\n");
 	} else {
 		printf("rasm.c not found, skipping integrity tests\n");
 	}
+
+	if (GetCRC("SWITCH")!=CRC_SWITCH) {printf("Autotest %03d ERROR (testing CRC on 'switch')\n",cpt);exit(-1);} else cpt++;
+	if (GetCRC("ELSEIFNOT")!=CRC_ELSEIFNOT) {printf("Autotest %03d ERROR (testing CRC on 'elseifnot')\n",cpt);exit(-1);} else cpt++;
+	if (GetCRC("ELSE")!=CRC_ELSE) {printf("Autotest %03d ERROR (testing CRC on 'else')\n",cpt);exit(-1);} else cpt++;
+	if (GetCRC("IF")!=CRC_IF) {printf("Autotest %03d ERROR (testing CRC on 'if')\n",cpt);exit(-1);} else cpt++;
+	if (GetCRC("ENDSWITCH")!=CRC_ENDSWITCH) {printf("Autotest %03d ERROR (testing CRC on 'endswitch')\n",cpt);exit(-1);} else cpt++;
+	printf("testing current CRC with some defined keywords OK\n");
+
+	ABuf=NULL;
+	ASize=0;
+	StateMachineResizeBuffer(&ABuf,16,&ASize);
+	if (ASize<16) {printf("Autotest %03d ERROR (testing StateMachineResizeBuffer 16 bytes %d allocated)\n",cpt,ASize);exit(-1);} else cpt++;
+	StateMachineResizeBuffer(&ABuf,40000,&ASize);
+	if (ASize<40000) {printf("Autotest %03d ERROR (testing StateMachineResizeBuffer 40k bytes %d allocated)\n",cpt,ASize);exit(-1);} else cpt++;
+	memset(ABuf,0,ASize);
+	printf("testing StateMachineResizeBuffer OK\n");
+
 
 	/* unit testing */
 	opcode=MemMalloc(64);
