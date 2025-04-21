@@ -722,6 +722,7 @@ struct s_macro_position {
 struct s_macro_fast {
 	char *mnemo;
 	int crc;
+	int len;
 };
 
 struct s_math_keyword {
@@ -25104,6 +25105,11 @@ if (!idx) printf("[%s]\n",listing[l].listing);
 						}
 						break;
 
+					case 'F': // freequotes
+						if (ival==10 && strcmp(bval,"FREEQUOTES")==0) {
+							ae->freequote=1;
+						}
+						break;
 					case 'R':
 						if (ival==4 && strcmp(bval,"REND")==0) {
 							/* retrouver la structure repeat_index correspondant a l'ouverture */
@@ -25408,6 +25414,7 @@ printf("macro trigger w=[%s]\n",curw.w);
 								if (macro_trigger=='M') {
 									curmacrofast.mnemo=curw.w;
 									curmacrofast.crc=GetCRC(curw.w);
+									curmacrofast.len=curw.len;
 									ObjectArrayAddDynamicValueConcat((void**)&MacroFast,&idxmacrofast,&maxmacrofast,&curmacrofast,sizeof(struct s_macro_fast));	
 								}
 								macro_trigger=0;
