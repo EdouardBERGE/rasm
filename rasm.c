@@ -959,6 +959,7 @@ E_POKER_CIPHER001=2,
 E_POKER_CIPHER002=3,
 E_POKER_CIPHER003=4,
 E_POKER_CIPHER004=5,
+E_POKER_SUM16=6,
 E_POKER_END
 };
 
@@ -969,6 +970,7 @@ char *strpoker[]={
 	"CIPHER002 running XOR initialised with memory location",
 	"CIPHER003 XOR with LSB of memory location",
 	"CIPHER004 XOR with key looping",
+	"SUM16",
 	NULL
 };
 
@@ -20659,6 +20661,29 @@ void __SUMMEM(struct s_assenv *ae) {
 	}
 }
 
+void __SUM16(struct s_assenv *ae) {
+	struct s_poker poker={0};
+
+	if (!ae->wl[ae->idx].t && !ae->wl[ae->idx+1].t && ae->wl[ae->idx+2].t==1) {
+		/* no poke in a NOCODE section */
+		if (!ae->nocode) {
+			poker.method=E_POKER_SUM16;
+			poker.istart=ae->idx+1;
+			poker.iend=ae->idx+2;
+			ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,1);
+			ExpressionFastTranslate(ae,&ae->wl[ae->idx+2].w,1);
+			poker.outputadr=ae->outputadr;
+			poker.ibank=ae->activebank;
+			poker.ipoker=ae->idx;
+			ObjectArrayAddDynamicValueConcat((void**)&ae->poker,&ae->nbpoker,&ae->maxpoker,&poker,sizeof(poker));
+		}
+		___output(ae,0);
+		___output(ae,0);
+	} else {
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"usage is SUM16 start,end\n");
+	}
+}
+
 void __XORMEM(struct s_assenv *ae) {
 	struct s_poker poker={0};
 
@@ -20996,6 +21021,7 @@ struct s_asm_keyword instruction[]={
 {"ENDMODULE",0,0,__ENDMODULE},
 {"TIMESTAMP",0,0,__TIMESTAMP},
 {"SUMMEM",0,0,__SUMMEM},
+{"SUM16",0,0,__SUM16},
 {"XORMEM",0,0,__XORMEM},
 {"CIPHERMEM",0,0,__CIPHERMEM},
 {"EXTERNAL",0,0,__EXTERNAL},
@@ -22285,6 +22311,7 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 	for (i=0;i<ae->nbpoker;i++) {
 		int istart=-1,iend=-1;
 		unsigned char xorval,sumval;
+		unsigned short int sum16;
 
 		/* start/end */
 		ae->idx=ae->poker[i].istart; /* exp hack */
@@ -22345,6 +22372,14 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 				}
 				if (zekey) MemFree(zekey);
 				}
+				break;
+			case E_POKER_SUM16:
+				sum16=0;
+				for (j=istart;j<iend;j++) {
+					sum16+=ae->mem[ae->poker[i].ibank][j];
+				}
+				ae->mem[ae->poker[i].ibank][ae->poker[i].outputadr]=sum16&0xFF;
+				ae->mem[ae->poker[i].ibank][ae->poker[i].outputadr+1]=sum16>>8;
 				break;
 			default:printf("warning remover\n");break;
 		}
@@ -27168,6 +27203,8 @@ int RasmAssembleInfoParam(const char *datain, int lenin, unsigned char **dataout
 #define AUTOTEST_GTILES_KO "incbin 'autotest_include.raw',GTILES,5"
 #define AUTOTEST_ITILES_KO "incbin 'autotest_include.raw',ITILES,5"
 
+#define AUTOTEST_SUM16 " tot=0: repeat 256: v=rnd(256): defb v: tot+=v: rend: sum16 0,256: defw tot"
+
 
 struct s_autotest_keyword {
 	char *keywordtest;
@@ -28618,6 +28655,11 @@ printf("testing formula function for Plus color management OK\n");
 	if (!ret) {} else {printf("Autotest %03d ERROR (formula func FRAC)\n",cpt);exit(-1);}
 	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
 printf("testing formula FRAC function OK\n");
+
+	ret=RasmAssemble(AUTOTEST_SUM16,strlen(AUTOTEST_SUM16),&opcode,&opcodelen);
+	if (!ret && opcodelen==260 && opcode[256]==opcode[258] && opcode[257]==opcode[259]) {} else {printf("Autotest %03d ERROR (SUMMEM16)\n",cpt);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing directive SUMMEM16 OK\n");
 	
 	ret=RasmAssemble(AUTOTEST_RND,strlen(AUTOTEST_RND),&opcode,&opcodelen);
 	if (!ret) {} else {printf("Autotest %03d ERROR (formula func RND)\n",cpt);exit(-1);}
