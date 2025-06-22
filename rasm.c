@@ -2875,11 +2875,9 @@ void FreeAssenv(struct s_assenv *ae)
 			ObjectArrayAddDynamicValueConcat((void**)&ae->debug.symbol,&ae->debug.nbsymbol,&ae->debug.maxsymbol,&debug_symbol,sizeof(struct s_debug_symbol));
 		}
 		for (i=0;i<ae->ialias;i++) {
-			if (strcmp(ae->alias[i].alias,"IX") && strcmp(ae->alias[i].alias,"IY")) {
-				debug_symbol.name=TxtStrDup(ae->alias[i].alias);
-				debug_symbol.v=RoundComputeExpression(ae,ae->alias[i].translation,0,0,0);
-				ObjectArrayAddDynamicValueConcat((void**)&ae->debug.symbol,&ae->debug.nbsymbol,&ae->debug.maxsymbol,&debug_symbol,sizeof(struct s_debug_symbol));
-			}
+			debug_symbol.name=TxtStrDup(ae->alias[i].alias);
+			debug_symbol.v=RoundComputeExpression(ae,ae->alias[i].translation,0,0,0);
+			ObjectArrayAddDynamicValueConcat((void**)&ae->debug.symbol,&ae->debug.nbsymbol,&ae->debug.maxsymbol,&debug_symbol,sizeof(struct s_debug_symbol));
 		}
 
 		/* export struct */
@@ -3530,7 +3528,7 @@ void SnapshotDicoTreeRecurse(struct s_crcdico_tree *lt)
 	}
 	if (lt->mdico) {
 		for (i=0;i<lt->ndico;i++) {
-			if (strcmp(lt->dico[i].name,"IX") && strcmp(lt->dico[i].name,"IY") && strcmp(lt->dico[i].name,"PI") && strcmp(lt->dico[i].name,"ASSEMBLER_RASM")) {
+			if (strcmp(lt->dico[i].name,"PI") && strcmp(lt->dico[i].name,"ASSEMBLER_RASM")) {
 				SnapshotDicoInsert(lt->dico[i].name,(int)floor(lt->dico[i].v+0.5),NULL);
 			}
 		}
@@ -3602,7 +3600,7 @@ void WarnDicoTreeRecurse(struct s_assenv *ae, struct s_crcdico_tree *lt)
 		}
 	}
 	for (i=0;i<lt->ndico;i++) {
-		if (strcmp(lt->dico[i].name,"IX") && strcmp(lt->dico[i].name,"IY") && strcmp(lt->dico[i].name,"PI") && strcmp(lt->dico[i].name,"ASSEMBLER_RASM") && !lt->dico[i].used) {
+		if (strcmp(lt->dico[i].name,"PI") && strcmp(lt->dico[i].name,"ASSEMBLER_RASM") && !lt->dico[i].used) {
 			rasm_printf(ae,KWARNING"[%s:%d] Warning: variable %s declared but not used\n",ae->filename[ae->wl[lt->dico[i].iw].ifile],ae->wl[lt->dico[i].iw].l,lt->dico[i].name);
 				if (ae->erronwarn) MaxError(ae);
 		}
@@ -3636,7 +3634,7 @@ void ExportDicoTreeRecurse(struct s_crcdico_tree *lt, char *zefile, char *zeform
 	}
 	if (lt->mdico) {
 		for (i=0;i<lt->ndico;i++) {
-			if (strcmp(lt->dico[i].name,"IX") && strcmp(lt->dico[i].name,"IY") && strcmp(lt->dico[i].name,"PI") && strcmp(lt->dico[i].name,"ASSEMBLER_RASM") && lt->dico[i].autorise_export) {
+			if (strcmp(lt->dico[i].name,"PI") && strcmp(lt->dico[i].name,"ASSEMBLER_RASM") && lt->dico[i].autorise_export) {
 				snprintf(symbol_line,sizeof(symbol_line)-1,zeformat,lt->dico[i].name,(int)floor(lt->dico[i].v+0.5));
 				symbol_line[sizeof(symbol_line)-1]=0xD;
 				FileWriteLine(zefile,symbol_line);
@@ -3660,7 +3658,7 @@ void ExportDicoTreeRecurseCase(struct s_assenv *ae,struct s_crcdico_tree *lt, ch
 	}
 	if (lt->mdico) {
 		for (i=0;i<lt->ndico;i++) {
-			if (strcmp(lt->dico[i].name,"IX") && strcmp(lt->dico[i].name,"IY") && strcmp(lt->dico[i].name,"PI") && strcmp(lt->dico[i].name,"ASSEMBLER_RASM") && lt->dico[i].autorise_export) {
+			if (strcmp(lt->dico[i].name,"PI") && strcmp(lt->dico[i].name,"ASSEMBLER_RASM") && lt->dico[i].autorise_export) {
 				// case search
 				char *casefound;
 				int namelen;
@@ -6743,11 +6741,7 @@ if (!ae->extended_error) {
 }
 printf("DUMP des labels\n");
 	for (i=0;i<ae->il;i++) {
-		if (!ae->label[i].name) {
-			printf("%d:%04X %s\n",ae->label[i].ibank,ae->label[i].ptr,ae->wl[ae->label[i].iw].w);
-		} else {
-			printf("%d:%04X %s\n",ae->label[i].ibank,ae->label[i].ptr,ae->label[i].name);
-		}
+		printf("%d:%04X %s\n",ae->label[i].ibank,ae->label[i].ptr,ae->label[i].name);
 	}
 #endif
 
@@ -8364,6 +8358,9 @@ void PushExpression(struct s_assenv *ae,int iw,enum e_expression zetype)
 							break;
 				case E_EXPRESSION_IV8:
 				case E_EXPRESSION_IV81:
+						     // patch IX/IY because they dont exist anymore as constants
+						     ae->wl[iw].w[1]='%';
+						     ae->wl[iw].w[2]='0';
 				case E_EXPRESSION_IV16:startptr=-2;
 							break;
 				case E_EXPRESSION_3V8:startptr=-3;
@@ -10229,18 +10226,27 @@ void _SBC(struct s_assenv *ae) {
 			case CRC_IYH:case CRC_HY:case CRC_YH:___output(ae,0xFD);___output(ae,0x9C);ae->nop+=2;ae->tick+=8;break;
 			case CRC_IYL:case CRC_LY:case CRC_YL:___output(ae,0xFD);___output(ae,0x9D);ae->nop+=2;ae->tick+=8;break;
 			case CRC_IX:case CRC_IY:
-				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Use SBC with A,B,C,D,E,H,L,XH,XL,YH,YL,(HL),(IX),(IY)\n");
+				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Use SBC with A,B,C,D,E,H,L,XH,XL,YH,YL,(HL),(IX+n),(IY+n)\n");
 				ae->idx++;
 				return;
 			default:
-				if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0) {
-					___output(ae,0xDD);___output(ae,0x9E);
-					PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
-					ae->nop+=5;ae->tick+=19;
-				} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0) {
-					___output(ae,0xFD);___output(ae,0x9E);
-					PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
-					ae->nop+=5;ae->tick+=19;
+				/* 
+				 */
+				if (ae->wl[ae->idx+1].w[0]=='(') {
+					if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-')) {
+						___output(ae,0xDD);___output(ae,0x9E);
+						PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
+						ae->nop+=5;ae->tick+=19;
+					} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-')) {
+						___output(ae,0xFD);___output(ae,0x9E);
+						PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
+						ae->nop+=5;ae->tick+=19;
+					} else { // there is starting parenthesis but this is literal
+						___output(ae,0xDE);
+						EnforceNoAddressingMode(ae->idx+1);
+						PushExpression(ae,ae->idx+1,E_EXPRESSION_V8);
+						ae->nop+=2;ae->tick+=7;
+					}
 				} else {
 					___output(ae,0xDE);
 					PushExpression(ae,ae->idx+1,E_EXPRESSION_V8);
@@ -10287,18 +10293,25 @@ void _ADC(struct s_assenv *ae) {
 			case CRC_IYH:case CRC_HY:case CRC_YH:___output(ae,0xFD);___output(ae,0x8C);ae->nop+=2;ae->tick+=8;break;
 			case CRC_IYL:case CRC_LY:case CRC_YL:___output(ae,0xFD);___output(ae,0x8D);ae->nop+=2;ae->tick+=8;break;
 			case CRC_IX:case CRC_IY:
-				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Use ADC with A,B,C,D,E,H,L,XH,XL,YH,YL,(HL),(IX),(IY)\n");
+				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Use ADC with A,B,C,D,E,H,L,XH,XL,YH,YL,(HL),(IX+n),(IY+n)\n");
 				ae->idx++;
 				return;
 			default:
-				if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0) {
-					___output(ae,0xDD);___output(ae,0x8E);
-					PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
-					ae->nop+=5;ae->tick+=19;
-				} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0) {
-					___output(ae,0xFD);___output(ae,0x8E);
-					PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
-					ae->nop+=5;ae->tick+=19;
+				if (ae->wl[ae->idx+1].w[0]=='(') {
+					if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-')) {
+						___output(ae,0xDD);___output(ae,0x8E);
+						PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
+						ae->nop+=5;ae->tick+=19;
+					} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-')) {
+						___output(ae,0xFD);___output(ae,0x8E);
+						PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
+						ae->nop+=5;ae->tick+=19;
+					} else {
+						___output(ae,0xCE);
+						EnforceNoAddressingMode(ae->idx+1);
+						PushExpression(ae,ae->idx+1,E_EXPRESSION_V8);
+						ae->nop+=2;ae->tick+=7;
+					}
 				} else {
 					___output(ae,0xCE);
 					PushExpression(ae,ae->idx+1,E_EXPRESSION_V8);
@@ -10345,18 +10358,25 @@ void _ADD(struct s_assenv *ae) {
 			case CRC_IYH:case CRC_HY:case CRC_YH:___output(ae,0xFD);___output(ae,0x84);ae->nop+=2;ae->tick+=8;break;
 			case CRC_IYL:case CRC_LY:case CRC_YL:___output(ae,0xFD);___output(ae,0x85);ae->nop+=2;ae->tick+=8;break;
 			case CRC_IX:case CRC_IY:
-				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Use ADD with A,B,C,D,E,H,L,XH,XL,YH,YL,(HL),(IX),(IY)\n");
+				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Use ADD with A,B,C,D,E,H,L,XH,XL,YH,YL,(HL),(IX+n),(IY+n)\n");
 				ae->idx++;
 				return;
 			default:
-				if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0) {
-					___output(ae,0xDD);___output(ae,0x86);
-					PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
-					ae->nop+=5;ae->tick+=19;
-				} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0) {
-					___output(ae,0xFD);___output(ae,0x86);
-					PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
-					ae->nop+=5;ae->tick+=19;
+				if (ae->wl[ae->idx+1].w[0]=='(') {
+					if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-')) {
+						___output(ae,0xDD);___output(ae,0x86);
+						PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
+						ae->nop+=5;ae->tick+=19;
+					} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-')) {
+						___output(ae,0xFD);___output(ae,0x86);
+						PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
+						ae->nop+=5;ae->tick+=19;
+					} else {
+						___output(ae,0xC6);
+						EnforceNoAddressingMode(ae->idx+1);
+						PushExpression(ae,ae->idx+1,E_EXPRESSION_V8);
+						ae->nop+=2;ae->tick+=7;
+					}
 				} else {
 					___output(ae,0xC6);
 					PushExpression(ae,ae->idx+1,E_EXPRESSION_V8);
@@ -10423,14 +10443,21 @@ void _CP(struct s_assenv *ae) {
 			case CRC_IYH:case CRC_HY:case CRC_YH:___output(ae,0xFD);___output(ae,0xBC);ae->nop+=2;ae->tick+=8;break;
 			case CRC_IYL:case CRC_LY:case CRC_YL:___output(ae,0xFD);___output(ae,0xBD);ae->nop+=2;ae->tick+=8;break;
 			default:
-				if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0) {
-					___output(ae,0xDD);___output(ae,0xBE);
-					PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
-					ae->nop+=5;ae->tick+=19;
-				} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0) {
-					___output(ae,0xFD);___output(ae,0xBE);
-					PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
-					ae->nop+=5;ae->tick+=19;
+				if (ae->wl[ae->idx+1].w[0]=='(') {
+					if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-')) {
+						___output(ae,0xDD);___output(ae,0xBE);
+						PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
+						ae->nop+=5;ae->tick+=19;
+					} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-')) {
+						___output(ae,0xFD);___output(ae,0xBE);
+						PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
+						ae->nop+=5;ae->tick+=19;
+					} else {
+						___output(ae,0xFE);
+						EnforceNoAddressingMode(ae->idx+1);
+						PushExpression(ae,ae->idx+1,E_EXPRESSION_V8);
+						ae->nop+=2;ae->tick+=7;
+					}
 				} else {
 					___output(ae,0xFE);
 					PushExpression(ae,ae->idx+1,E_EXPRESSION_V8);
@@ -10583,22 +10610,28 @@ void _DEC(struct s_assenv *ae) {
 				case CRC_SP:___output(ae,0x3B);ae->nop+=2;ae->tick+=6;break;
 				case CRC_MHL:___output(ae,0x35);ae->nop+=3;ae->tick+=11;break;
 				default:
-					if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0) {
-						___output(ae,0xDD);___output(ae,0x35);
-						PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
-						ae->nop+=6;ae->tick+=23;
-					} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0) {
-						___output(ae,0xFD);___output(ae,0x35);
-						PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
-						ae->nop+=6;ae->tick+=23;
+					if (ae->wl[ae->idx+1].w[0]=='(') {
+						if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-')) {
+							___output(ae,0xDD);___output(ae,0x35);
+							PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
+							ae->nop+=6;ae->tick+=23;
+						} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-')) {
+							___output(ae,0xFD);___output(ae,0x35);
+							PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
+							ae->nop+=6;ae->tick+=23;
+						} else {
+							MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"invalid DEC addressing mode, use only A,B,C,D,E,H,L,XH,XL,YH,YL,(HL),(IX+n),(IY+n)\n");
+							ae->idx++;
+							return;
+						}
 					} else {
-						MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Use DEC with A,B,C,D,E,H,L,XH,XL,YH,YL,BC,DE,HL,SP,(HL),(IX),(IY)\n");
+						MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Use DEC with A,B,C,D,E,H,L,XH,XL,YH,YL,BC,DE,HL,SP,(HL),(IX+n),(IY+n)\n");
 					}
 			}
 			ae->idx++;
 		} while (ae->wl[ae->idx].t==0);
 	} else {
-		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Use DEC with A,B,C,D,E,H,L,XH,XL,YH,YL,BC,DE,HL,SP,(HL),(IX),(IY)\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Use DEC with A,B,C,D,E,H,L,XH,XL,YH,YL,BC,DE,HL,SP,(HL),(IX+n),(IY+n)\n");
 	}
 }
 void _INC(struct s_assenv *ae) {
@@ -10624,22 +10657,28 @@ void _INC(struct s_assenv *ae) {
 				case CRC_SP:___output(ae,0x33);ae->nop+=2;ae->tick+=6;break;
 				case CRC_MHL:___output(ae,0x34);ae->nop+=3;ae->tick+=11;break;
 				default:
-					if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0) {
-						___output(ae,0xDD);___output(ae,0x34);
-						PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
-						ae->nop+=6;ae->tick+=23;
-					} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0) {
-						___output(ae,0xFD);___output(ae,0x34);
-						PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
-						ae->nop+=6;ae->tick+=23;
+					if (ae->wl[ae->idx+1].w[0]=='(') {
+						if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-')) {
+							___output(ae,0xDD);___output(ae,0x34);
+							PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
+							ae->nop+=6;ae->tick+=23;
+						} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-')) {
+							___output(ae,0xFD);___output(ae,0x34);
+							PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
+							ae->nop+=6;ae->tick+=23;
+						} else {
+							MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"invalid INC addressing mode, use only A,B,C,D,E,H,L,XH,XL,YH,YL,(HL),(IX+n),(IY+n)\n");
+							ae->idx++;
+							return;
+						}
 					} else {
-						MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Use INC with A,B,C,D,E,H,L,XH,XL,YH,YL,BC,DE,HL,SP,(HL),(IX),(IY)\n");
+						MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Use INC with A,B,C,D,E,H,L,XH,XL,YH,YL,BC,DE,HL,SP,(HL),(IX+n),(IY+n)\n");
 					}
 			}
 			ae->idx++;
 		} while (ae->wl[ae->idx].t==0);
 	} else {
-		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Use INC with A,B,C,D,E,H,L,XH,XL,YH,YL,BC,DE,HL,SP,(HL),(IX),(IY)\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Use INC with A,B,C,D,E,H,L,XH,XL,YH,YL,BC,DE,HL,SP,(HL),(IX+n),(IY+n)\n");
 	}
 }
 
@@ -10665,18 +10704,25 @@ void _SUB(struct s_assenv *ae) {
 			case CRC_IYH:case CRC_HY:case CRC_YH:___output(ae,0xFD);___output(ae,OPCODE+4);ae->nop+=2;ae->tick+=8;break;
 			case CRC_IYL:case CRC_LY:case CRC_YL:___output(ae,0xFD);___output(ae,OPCODE+5);ae->nop+=2;ae->tick+=8;break;
 			case CRC_IX:case CRC_IY:
-				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Use SUB with A,B,C,D,E,H,L,XH,XL,YH,YL,(HL),(IX),(IY)\n");
+				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Use SUB with A,B,C,D,E,H,L,XH,XL,YH,YL,(HL),(IX+n),(IY+n)\n");
 				ae->idx++;
 				return;
 			default:
-				if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0) {
-					___output(ae,0xDD);___output(ae,OPCODE+6);
-					PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
-					ae->nop+=5;ae->tick+=19;
-				} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0) {
-					___output(ae,0xFD);___output(ae,OPCODE+6);
-					PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
-					ae->nop+=5;ae->tick+=19;
+				if (ae->wl[ae->idx+1].w[0]=='(') {
+					if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-')) {
+						___output(ae,0xDD);___output(ae,OPCODE+6);
+						PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
+						ae->nop+=5;ae->tick+=19;
+					} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-')) {
+						___output(ae,0xFD);___output(ae,OPCODE+6);
+						PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
+						ae->nop+=5;ae->tick+=19;
+					} else {
+						___output(ae,0xD6);
+						EnforceNoAddressingMode(ae->idx+1);
+						PushExpression(ae,ae->idx+1,E_EXPRESSION_V8);
+						ae->nop+=2;ae->tick+=7;
+					}
 				} else {
 					___output(ae,0xD6);
 					PushExpression(ae,ae->idx+1,E_EXPRESSION_V8);
@@ -10685,7 +10731,7 @@ void _SUB(struct s_assenv *ae) {
 		}
 		ae->idx++;
 	} else {
-		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Use SUB with A,B,C,D,E,H,L,XH,XL,YH,YL,(HL),(IX),(IY)\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Use SUB with A,B,C,D,E,H,L,XH,XL,YH,YL,(HL),(IX+n),(IY+n)\n");
 	}
 }
 void _AND(struct s_assenv *ae) {
@@ -10709,14 +10755,20 @@ void _AND(struct s_assenv *ae) {
 			case CRC_IYH:case CRC_HY:case CRC_YH:___output(ae,0xFD);___output(ae,OPCODE+4);ae->nop+=2;ae->tick+=8;break;
 			case CRC_IYL:case CRC_LY:case CRC_YL:___output(ae,0xFD);___output(ae,OPCODE+5);ae->nop+=2;ae->tick+=8;break;
 			default:
-				if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0) {
-					___output(ae,0xDD);___output(ae,OPCODE+6);
-					PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
-					ae->nop+=5;ae->tick+=19;
-				} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0) {
-					___output(ae,0xFD);___output(ae,OPCODE+6);
-					PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
-					ae->nop+=5;ae->tick+=19;
+				if (ae->wl[ae->idx+1].w[0]=='(') {
+					if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-')) {
+						___output(ae,0xDD);___output(ae,OPCODE+6);
+						PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
+						ae->nop+=5;ae->tick+=19;
+					} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-')) {
+						___output(ae,0xFD);___output(ae,OPCODE+6);
+						PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
+						ae->nop+=5;ae->tick+=19;
+					} else {
+						MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"invalid AND addressing mode, use only A,B,C,D,E,H,L,XH,XL,YH,YL,(HL),(IX+n),(IY+n)\n");
+						ae->idx++;
+						return;
+					}
 				} else {
 					___output(ae,0xE6);
 					PushExpression(ae,ae->idx+1,E_EXPRESSION_V8);
@@ -10725,7 +10777,7 @@ void _AND(struct s_assenv *ae) {
 		}
 		ae->idx++;
 	} else {
-		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Use AND with A,B,C,D,E,H,L,XH,XL,YH,YL,(HL),(IX),(IY)\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Use AND with A,B,C,D,E,H,L,XH,XL,YH,YL,(HL),(IX+n),(IY+n)\n");
 	}
 }
 void _OR(struct s_assenv *ae) {
@@ -10749,14 +10801,20 @@ void _OR(struct s_assenv *ae) {
 			case CRC_IYH:case CRC_HY:case CRC_YH:___output(ae,0xFD);___output(ae,OPCODE+4);ae->nop+=2;ae->tick+=8;break;
 			case CRC_IYL:case CRC_LY:case CRC_YL:___output(ae,0xFD);___output(ae,OPCODE+5);ae->nop+=2;ae->tick+=8;break;
 			default:
-				if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0) {
-					___output(ae,0xDD);___output(ae,OPCODE+6);
-					PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
-					ae->nop+=5;ae->tick+=19;
-				} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0) {
-					___output(ae,0xFD);___output(ae,OPCODE+6);
-					PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
-					ae->nop+=5;ae->tick+=19;
+				if (ae->wl[ae->idx+1].w[0]=='(') {
+					if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-')) {
+						___output(ae,0xDD);___output(ae,OPCODE+6);
+						PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
+						ae->nop+=5;ae->tick+=19;
+					} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-')) {
+						___output(ae,0xFD);___output(ae,OPCODE+6);
+						PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
+						ae->nop+=5;ae->tick+=19;
+					} else {
+						MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"invalid OR addressing mode, use only A,B,C,D,E,H,L,XH,XL,YH,YL,(HL),(IX+n),(IY+n)\n");
+						ae->idx++;
+						return;
+					}
 				} else {
 					___output(ae,0xF6);
 					PushExpression(ae,ae->idx+1,E_EXPRESSION_V8);
@@ -10765,7 +10823,7 @@ void _OR(struct s_assenv *ae) {
 		}
 		ae->idx++;
 	} else {
-		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Use OR with A,B,C,D,E,H,L,XH,XL,YH,YL,(HL),(IX),(IY)\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Use OR with A,B,C,D,E,H,L,XH,XL,YH,YL,(HL),(IX+n),(IY+n)\n");
 	}
 }
 void _XOR(struct s_assenv *ae) {
@@ -10789,14 +10847,20 @@ void _XOR(struct s_assenv *ae) {
 			case CRC_IYH:case CRC_HY:case CRC_YH:___output(ae,0xFD);___output(ae,OPCODE+4);ae->nop+=2;ae->tick+=8;break;
 			case CRC_IYL:case CRC_LY:case CRC_YL:___output(ae,0xFD);___output(ae,OPCODE+5);ae->nop+=2;ae->tick+=8;break;
 			default:
-				if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0) {
-					___output(ae,0xDD);___output(ae,OPCODE+6);
-					PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
-					ae->nop+=5;ae->tick+=19;
-				} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0) {
-					___output(ae,0xFD);___output(ae,OPCODE+6);
-					PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
-					ae->nop+=5;ae->tick+=19;
+				if (ae->wl[ae->idx+1].w[0]=='(') {
+					if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-')) {
+						___output(ae,0xDD);___output(ae,OPCODE+6);
+						PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
+						ae->nop+=5;ae->tick+=19;
+					} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-')) {
+						___output(ae,0xFD);___output(ae,OPCODE+6);
+						PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
+						ae->nop+=5;ae->tick+=19;
+					} else {
+						MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"invalid XOR addressing mode, use only A,B,C,D,E,H,L,XH,XL,YH,YL,(HL),(IX+n),(IY+n)\n");
+						ae->idx++;
+						return;
+					}
 				} else {
 					___output(ae,0xEE);
 					PushExpression(ae,ae->idx+1,E_EXPRESSION_V8);
@@ -10805,7 +10869,7 @@ void _XOR(struct s_assenv *ae) {
 		}
 		ae->idx++;
 	} else {
-		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Use XOR with A,B,C,D,E,H,L,XH,XL,YH,YL,(HL),(IX),(IY)\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Use XOR with A,B,C,D,E,H,L,XH,XL,YH,YL,(HL),(IX+n),(IY+n)\n");
 	}
 }
 
@@ -11423,18 +11487,24 @@ void _LD(struct s_assenv *ae) {
 					case CRC_MDE:___output(ae,0x1A);ae->nop+=2;ae->tick+=7;break;
 					default:
 					/* (ix+expression) (iy+expression) (expression) expression */
-					if (strncmp(ae->wl[ae->idx+2].w,"(IX",3)==0) {
-						___output(ae,0xDD);___output(ae,0x7E);
-						PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);
-						ae->nop+=5;ae->tick+=19;
-					} else if (strncmp(ae->wl[ae->idx+2].w,"(IY",3)==0) {
-						___output(ae,0xFD);___output(ae,0x7E);
-						PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);
-						ae->nop+=5;ae->tick+=19;
-					} else if (StringIsMem(ae->wl[ae->idx+2].w)) {
-						___output(ae,0x3A);
-						PushExpression(ae,ae->idx+2,E_EXPRESSION_V16);
-						ae->nop+=4;ae->tick+=13;
+					if (ae->wl[ae->idx+2].w[0]=='(') {
+						if (strncmp(ae->wl[ae->idx+2].w,"(IX",3)==0 && (ae->wl[ae->idx+2].w[3]=='+' || ae->wl[ae->idx+2].w[3]=='-')) {
+							___output(ae,0xDD);___output(ae,0x7E);
+							PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);
+							ae->nop+=5;ae->tick+=19;
+						} else if (strncmp(ae->wl[ae->idx+2].w,"(IY",3)==0 && (ae->wl[ae->idx+2].w[3]=='+' || ae->wl[ae->idx+2].w[3]=='-')) {
+							___output(ae,0xFD);___output(ae,0x7E);
+							PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);
+							ae->nop+=5;ae->tick+=19;
+						} else if (StringIsMem(ae->wl[ae->idx+2].w)) {
+							___output(ae,0x3A);
+							PushExpression(ae,ae->idx+2,E_EXPRESSION_V16);
+							ae->nop+=4;ae->tick+=13;
+						} else {
+							___output(ae,0x3E);
+							PushExpression(ae,ae->idx+2,E_EXPRESSION_V8);
+							ae->nop+=2;ae->tick+=7;
+						}
 					} else {
 						___output(ae,0x3E);
 						PushExpression(ae,ae->idx+2,E_EXPRESSION_V8);
@@ -11474,17 +11544,23 @@ void _LD(struct s_assenv *ae) {
 					case CRC_A:___output(ae,0x47);ae->nop+=1;ae->tick+=4;break;
 					default:
 					/* (ix+expression) (iy+expression) expression */
-					if (strncmp(ae->wl[ae->idx+2].w,"(IX",3)==0) {
-						___output(ae,0xDD);___output(ae,0x46);
-						PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);
-						ae->nop+=5;ae->tick+=19;
-					} else if (strncmp(ae->wl[ae->idx+2].w,"(IY",3)==0) {
-						___output(ae,0xFD);___output(ae,0x46);
-						PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);
-						ae->nop+=5;ae->tick+=19;
+					if (ae->wl[ae->idx+2].w[0]=='(') {
+						if (strncmp(ae->wl[ae->idx+2].w,"(IX",3)==0 && (ae->wl[ae->idx+2].w[3]=='+' || ae->wl[ae->idx+2].w[3]=='-')) {
+							___output(ae,0xDD);___output(ae,0x46);
+							PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);
+							ae->nop+=5;ae->tick+=19;
+						} else if (strncmp(ae->wl[ae->idx+2].w,"(IY",3)==0 && (ae->wl[ae->idx+2].w[3]=='+' || ae->wl[ae->idx+2].w[3]=='-')) {
+							___output(ae,0xFD);___output(ae,0x46);
+							PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);
+							ae->nop+=5;ae->tick+=19;
+						} else {
+							___output(ae,0x06);
+							EnforceNoAddressingMode(ae->idx+2);
+							PushExpression(ae,ae->idx+2,E_EXPRESSION_V8);
+							ae->nop+=2;ae->tick+=7;
+						}
 					} else {
 						___output(ae,0x06);
-						EnforceNoAddressingMode(ae->idx+2);
 						PushExpression(ae,ae->idx+2,E_EXPRESSION_V8);
 						ae->nop+=2;ae->tick+=7;
 					}
@@ -11506,17 +11582,23 @@ void _LD(struct s_assenv *ae) {
 					case CRC_A:___output(ae,0x4F);ae->nop+=1;ae->tick+=4;break;
 					default:
 					/* (ix+expression) (iy+expression) expression */
-					if (strncmp(ae->wl[ae->idx+2].w,"(IX",3)==0) {
-						___output(ae,0xDD);___output(ae,0x4E);
-						PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);
-						ae->nop+=5;ae->tick+=19;
-					} else if (strncmp(ae->wl[ae->idx+2].w,"(IY",3)==0) {
-						___output(ae,0xFD);___output(ae,0x4E);
-						PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);
-						ae->nop+=5;ae->tick+=19;
+					if (ae->wl[ae->idx+2].w[0]=='(') {
+						if (strncmp(ae->wl[ae->idx+2].w,"(IX",3)==0 && (ae->wl[ae->idx+2].w[3]=='+' || ae->wl[ae->idx+2].w[3]=='-')) {
+							___output(ae,0xDD);___output(ae,0x4E);
+							PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);
+							ae->nop+=5;ae->tick+=19;
+						} else if (strncmp(ae->wl[ae->idx+2].w,"(IY",3)==0 && (ae->wl[ae->idx+2].w[3]=='+' || ae->wl[ae->idx+2].w[3]=='-')) {
+							___output(ae,0xFD);___output(ae,0x4E);
+							PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);
+							ae->nop+=5;ae->tick+=19;
+						} else {
+							___output(ae,0x0E);
+							EnforceNoAddressingMode(ae->idx+2);
+							PushExpression(ae,ae->idx+2,E_EXPRESSION_V8);
+							ae->nop+=2;ae->tick+=7;
+						}
 					} else {
 						___output(ae,0x0E);
-						EnforceNoAddressingMode(ae->idx+2);
 						PushExpression(ae,ae->idx+2,E_EXPRESSION_V8);
 						ae->nop+=2;ae->tick+=7;
 					}
@@ -11538,17 +11620,23 @@ void _LD(struct s_assenv *ae) {
 					case CRC_A:___output(ae,0x57);ae->nop+=1;ae->tick+=4;break;
 					default:
 					/* (ix+expression) (iy+expression) expression */
-					if (strncmp(ae->wl[ae->idx+2].w,"(IX",3)==0) {
-						___output(ae,0xDD);___output(ae,0x56);
-						PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);
-						ae->nop+=5;ae->tick+=19;
-					} else if (strncmp(ae->wl[ae->idx+2].w,"(IY",3)==0) {
-						___output(ae,0xFD);___output(ae,0x56);
-						PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);
-						ae->nop+=5;ae->tick+=19;
+					if (ae->wl[ae->idx+2].w[0]=='(') {
+						if (strncmp(ae->wl[ae->idx+2].w,"(IX",3)==0 && (ae->wl[ae->idx+2].w[3]=='+' || ae->wl[ae->idx+2].w[3]=='-')) {
+							___output(ae,0xDD);___output(ae,0x56);
+							PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);
+							ae->nop+=5;ae->tick+=19;
+						} else if (strncmp(ae->wl[ae->idx+2].w,"(IY",3)==0 && (ae->wl[ae->idx+2].w[3]=='+' || ae->wl[ae->idx+2].w[3]=='-')) {
+							___output(ae,0xFD);___output(ae,0x56);
+							PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);
+							ae->nop+=5;ae->tick+=19;
+						} else {
+							___output(ae,0x16);
+							EnforceNoAddressingMode(ae->idx+2);
+							PushExpression(ae,ae->idx+2,E_EXPRESSION_V8);
+							ae->nop+=2;ae->tick+=7;
+						}
 					} else {
 						___output(ae,0x16);
-						EnforceNoAddressingMode(ae->idx+2);
 						PushExpression(ae,ae->idx+2,E_EXPRESSION_V8);
 						ae->nop+=2;ae->tick+=7;
 					}
@@ -11570,17 +11658,23 @@ void _LD(struct s_assenv *ae) {
 					case CRC_A:___output(ae,0x5F);ae->nop+=1;ae->tick+=4;break;
 					default:
 					/* (ix+expression) (iy+expression) expression */
-					if (strncmp(ae->wl[ae->idx+2].w,"(IX",3)==0) {
-						___output(ae,0xDD);___output(ae,0x5E);
-						PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);
-						ae->nop+=5;ae->tick+=19;
-					} else if (strncmp(ae->wl[ae->idx+2].w,"(IY",3)==0) {
-						___output(ae,0xFD);___output(ae,0x5E);
-						PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);
-						ae->nop+=5;ae->tick+=19;
+					if (ae->wl[ae->idx+2].w[0]=='(') {
+						if (strncmp(ae->wl[ae->idx+2].w,"(IX",3)==0 && (ae->wl[ae->idx+2].w[3]=='+' || ae->wl[ae->idx+2].w[3]=='-')) {
+							___output(ae,0xDD);___output(ae,0x5E);
+							PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);
+							ae->nop+=5;ae->tick+=19;
+						} else if (strncmp(ae->wl[ae->idx+2].w,"(IY",3)==0 && (ae->wl[ae->idx+2].w[3]=='+' || ae->wl[ae->idx+2].w[3]=='-')) {
+							___output(ae,0xFD);___output(ae,0x5E);
+							PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);
+							ae->nop+=5;ae->tick+=19;
+						} else {
+							___output(ae,0x1E);
+							EnforceNoAddressingMode(ae->idx+2);
+							PushExpression(ae,ae->idx+2,E_EXPRESSION_V8);
+							ae->nop+=2;ae->tick+=7;
+						}
 					} else {
 						___output(ae,0x1E);
-						EnforceNoAddressingMode(ae->idx+2);
 						PushExpression(ae,ae->idx+2,E_EXPRESSION_V8);
 						ae->nop+=2;ae->tick+=7;
 					}
@@ -11596,14 +11690,10 @@ void _LD(struct s_assenv *ae) {
 					case CRC_IYL:case CRC_LY:case CRC_YL:___output(ae,0xFD);___output(ae,0x65);ae->nop+=2;ae->tick+=8;break;
 					case CRC_A:___output(ae,0xFD);___output(ae,0x67);ae->nop+=2;ae->tick+=8;break;
 					default:
-						if (strncmp(ae->wl[ae->idx+2].w,"(IX",3) && strncmp(ae->wl[ae->idx+2].w,"(IY",3)) {
-							___output(ae,0xFD);___output(ae,0x26);
-							EnforceNoAddressingMode(ae->idx+2);
-							PushExpression(ae,ae->idx+2,E_EXPRESSION_V8);
-							ae->nop+=3;ae->tick+=11;
-						} else {
-							MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"LD iyh,n/r only\n");
-						}
+						___output(ae,0xFD);___output(ae,0x26);
+						EnforceNoAddressingMode(ae->idx+2);
+						PushExpression(ae,ae->idx+2,E_EXPRESSION_V8);
+						ae->nop+=3;ae->tick+=11;
 				}
 				break;
 			case CRC_IYL:case CRC_LY:case CRC_YL:
@@ -11616,14 +11706,10 @@ void _LD(struct s_assenv *ae) {
 					case CRC_IYL:case CRC_LY:case CRC_YL:___output(ae,0xFD);___output(ae,0x6D);ae->nop+=2;ae->tick+=8;break;
 					case CRC_A:___output(ae,0xFD);___output(ae,0x6F);ae->nop+=2;ae->tick+=8;break;
 					default:
-						if (strncmp(ae->wl[ae->idx+2].w,"(IX",3) && strncmp(ae->wl[ae->idx+2].w,"(IY",3)) {
-							___output(ae,0xFD);___output(ae,0x2E);
-							EnforceNoAddressingMode(ae->idx+2);
-							PushExpression(ae,ae->idx+2,E_EXPRESSION_V8);
-							ae->nop+=3;ae->tick+=11;
-						} else {
-							MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"LD iyl,n/r only\n");
-						}
+						___output(ae,0xFD);___output(ae,0x2E);
+						EnforceNoAddressingMode(ae->idx+2);
+						PushExpression(ae,ae->idx+2,E_EXPRESSION_V8);
+						ae->nop+=3;ae->tick+=11;
 				}
 				break;
 			case CRC_IXH:case CRC_HX:case CRC_XH:
@@ -11636,14 +11722,10 @@ void _LD(struct s_assenv *ae) {
 					case CRC_IXL:case CRC_LX:case CRC_XL:___output(ae,0xDD);___output(ae,0x65);ae->nop+=2;ae->tick+=8;break;
 					case CRC_A:___output(ae,0xDD);___output(ae,0x67);ae->nop+=2;ae->tick+=8;break;
 					default:
-						if (strncmp(ae->wl[ae->idx+2].w,"(IX",3) && strncmp(ae->wl[ae->idx+2].w,"(IY",3)) {
-							___output(ae,0xDD);___output(ae,0x26);
-							EnforceNoAddressingMode(ae->idx+2);
-							PushExpression(ae,ae->idx+2,E_EXPRESSION_V8);
-							ae->nop+=3;ae->tick+=11;
-						} else {
-							MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"LD ixh,n/r only\n");
-						}
+						___output(ae,0xDD);___output(ae,0x26);
+						EnforceNoAddressingMode(ae->idx+2);
+						PushExpression(ae,ae->idx+2,E_EXPRESSION_V8);
+						ae->nop+=3;ae->tick+=11;
 				}
 				break;
 			case CRC_IXL:case CRC_LX:case CRC_XL:
@@ -11656,14 +11738,10 @@ void _LD(struct s_assenv *ae) {
 					case CRC_IXL:case CRC_LX:case CRC_XL:___output(ae,0xDD);___output(ae,0x6D);ae->nop+=2;ae->tick+=8;break;
 					case CRC_A:___output(ae,0xDD);___output(ae,0x6F);ae->nop+=2;ae->tick+=8;break;
 					default:
-						if (strncmp(ae->wl[ae->idx+2].w,"(IX",3) && strncmp(ae->wl[ae->idx+2].w,"(IY",3)) {
-							___output(ae,0xDD);___output(ae,0x2E);
-							EnforceNoAddressingMode(ae->idx+2);
-							PushExpression(ae,ae->idx+2,E_EXPRESSION_V8);
-							ae->nop+=3;ae->tick+=11;
-						} else {
-							MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"LD ixl,n/r only\n");
-						}
+						___output(ae,0xDD);___output(ae,0x2E);
+						EnforceNoAddressingMode(ae->idx+2);
+						PushExpression(ae,ae->idx+2,E_EXPRESSION_V8);
+						ae->nop+=3;ae->tick+=11;
 				}
 				break;
 			case CRC_H:
@@ -11678,17 +11756,23 @@ void _LD(struct s_assenv *ae) {
 					case CRC_A:___output(ae,0x67);ae->nop+=1;ae->tick+=4;break;
 					default:
 					/* (ix+expression) (iy+expression) expression */
-					if (strncmp(ae->wl[ae->idx+2].w,"(IX",3)==0) {
-						___output(ae,0xDD);___output(ae,0x66);
-						PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);
-						ae->nop+=5;ae->tick+=19;
-					} else if (strncmp(ae->wl[ae->idx+2].w,"(IY",3)==0) {
-						___output(ae,0xFD);___output(ae,0x66);
-						PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);
-						ae->nop+=5;ae->tick+=19;
+					if (ae->wl[ae->idx+2].w[0]=='(') {
+						if (strncmp(ae->wl[ae->idx+2].w,"(IX",3)==0 && (ae->wl[ae->idx+2].w[3]=='+' || ae->wl[ae->idx+2].w[3]=='-')) {
+							___output(ae,0xDD);___output(ae,0x66);
+							PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);
+							ae->nop+=5;ae->tick+=19;
+						} else if (strncmp(ae->wl[ae->idx+2].w,"(IY",3)==0 && (ae->wl[ae->idx+2].w[3]=='+' || ae->wl[ae->idx+2].w[3]=='-')) {
+							___output(ae,0xFD);___output(ae,0x66);
+							PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);
+							ae->nop+=5;ae->tick+=19;
+						} else {
+							___output(ae,0x26);
+							EnforceNoAddressingMode(ae->idx+2);
+							PushExpression(ae,ae->idx+2,E_EXPRESSION_V8);
+							ae->nop+=2;ae->tick+=7;
+						}
 					} else {
 						___output(ae,0x26);
-						EnforceNoAddressingMode(ae->idx+2);
 						PushExpression(ae,ae->idx+2,E_EXPRESSION_V8);
 						ae->nop+=2;ae->tick+=7;
 					}
@@ -11706,17 +11790,23 @@ void _LD(struct s_assenv *ae) {
 					case CRC_A:___output(ae,0x6F);ae->nop+=1;ae->tick+=4;break;
 					default:
 					/* (ix+expression) (iy+expression) expression */
-					if (strncmp(ae->wl[ae->idx+2].w,"(IX",3)==0) {
-						___output(ae,0xDD);___output(ae,0x6E);
-						PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);
-						ae->nop+=5;ae->tick+=19;
-					} else if (strncmp(ae->wl[ae->idx+2].w,"(IY",3)==0) {
-						___output(ae,0xFD);___output(ae,0x6E);
-						PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);
-						ae->nop+=5;ae->tick+=19;
+					if (ae->wl[ae->idx+2].w[0]=='(') {
+						if (strncmp(ae->wl[ae->idx+2].w,"(IX",3)==0 && (ae->wl[ae->idx+2].w[3]=='+' || ae->wl[ae->idx+2].w[3]=='-')) {
+							___output(ae,0xDD);___output(ae,0x6E);
+							PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);
+							ae->nop+=5;ae->tick+=19;
+						} else if (strncmp(ae->wl[ae->idx+2].w,"(IY",3)==0 && (ae->wl[ae->idx+2].w[3]=='+' || ae->wl[ae->idx+2].w[3]=='-')) {
+							___output(ae,0xFD);___output(ae,0x6E);
+							PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);
+							ae->nop+=5;ae->tick+=19;
+						} else {
+							___output(ae,0x2E);
+							EnforceNoAddressingMode(ae->idx+2);
+							PushExpression(ae,ae->idx+2,E_EXPRESSION_V8);
+							ae->nop+=2;ae->tick+=7;
+						}
 					} else {
 						___output(ae,0x2E);
-						EnforceNoAddressingMode(ae->idx+2);
 						PushExpression(ae,ae->idx+2,E_EXPRESSION_V8);
 						ae->nop+=2;ae->tick+=7;
 					}
@@ -11767,24 +11857,31 @@ void _LD(struct s_assenv *ae) {
 						    ___output(ae,0x39);                                       // ADD HL,SP
 						    ae->nop+=6;ae->tick+=21;break;
 					default:
-					if (strncmp(ae->wl[ae->idx+2].w,"(IX",3)==0 && (ae->wl[ae->idx+2].w[3]=='+' || ae->wl[ae->idx+2].w[3]=='-')) {
-						/* enhanced LD HL,(IX+nn) */
-						___output(ae,0xDD);___output(ae,0x66);
-						PushExpression(ae,ae->idx+2,E_EXPRESSION_IV81);
-						___output(ae,0xDD);___output(ae,0x6E);
-						PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);
-						ae->nop+=10;ae->tick+=19;ae->tick+=19;
-					} else if (strncmp(ae->wl[ae->idx+2].w,"(IY",3)==0 && (ae->wl[ae->idx+2].w[3]=='+' || ae->wl[ae->idx+2].w[3]=='-')) {
-						/* enhanced LD HL,(IY+nn) */
-						___output(ae,0xFD);___output(ae,0x66);
-						PushExpression(ae,ae->idx+2,E_EXPRESSION_IV81);
-						___output(ae,0xFD);___output(ae,0x6E);
-						PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);
-						ae->nop+=10;ae->tick+=19;ae->tick+=19;
-					} else if (StringIsMem(ae->wl[ae->idx+2].w)) {
-						___output(ae,0x2A);
-						PushExpression(ae,ae->idx+2,E_EXPRESSION_V16);
-						ae->nop+=5;ae->tick+=16;
+					if (ae->wl[ae->idx+2].w[0]=='(') {
+						if (strncmp(ae->wl[ae->idx+2].w,"(IX",3)==0 && (ae->wl[ae->idx+2].w[3]=='+' || ae->wl[ae->idx+2].w[3]=='-')) {
+							/* enhanced LD HL,(IX+nn) */
+							___output(ae,0xDD);___output(ae,0x66);
+							PushExpression(ae,ae->idx+2,E_EXPRESSION_IV81);
+							___output(ae,0xDD);___output(ae,0x6E);
+							PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);
+							ae->nop+=10;ae->tick+=19;ae->tick+=19;
+						} else if (strncmp(ae->wl[ae->idx+2].w,"(IY",3)==0 && (ae->wl[ae->idx+2].w[3]=='+' || ae->wl[ae->idx+2].w[3]=='-')) {
+							/* enhanced LD HL,(IY+nn) */
+							___output(ae,0xFD);___output(ae,0x66);
+							PushExpression(ae,ae->idx+2,E_EXPRESSION_IV81);
+							___output(ae,0xFD);___output(ae,0x6E);
+							PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);
+							ae->nop+=10;ae->tick+=19;ae->tick+=19;
+						} else if (StringIsMem(ae->wl[ae->idx+2].w)) {
+							___output(ae,0x2A);
+							PushExpression(ae,ae->idx+2,E_EXPRESSION_V16);
+							ae->nop+=5;ae->tick+=16;
+						} else {
+							// leggit too
+							___output(ae,0x21);
+							PushExpression(ae,ae->idx+2,E_EXPRESSION_V16);
+							ae->nop+=3;ae->tick+=10;
+						}
 					} else {
 						___output(ae,0x21);
 						PushExpression(ae,ae->idx+2,E_EXPRESSION_V16);
@@ -11803,24 +11900,30 @@ void _LD(struct s_assenv *ae) {
 					case CRC_IY:___output(ae,0xFD);___output(ae,0x44);ae->nop+=4;
 						    ___output(ae,0xFD);___output(ae,0x4D);ae->tick+=16;break;
 					default:
-					if (strncmp(ae->wl[ae->idx+2].w,"(IX",3)==0 && (ae->wl[ae->idx+2].w[3]=='+' || ae->wl[ae->idx+2].w[3]=='-')) {
-						/* enhanced LD BC,(IX+nn) */
-						___output(ae,0xDD);___output(ae,0x46);
-						PushExpression(ae,ae->idx+2,E_EXPRESSION_IV81);
-						___output(ae,0xDD);___output(ae,0x4E);
-						PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);
-						ae->nop+=10;ae->tick+=19;ae->tick+=19;
-					} else if (strncmp(ae->wl[ae->idx+2].w,"(IY",3)==0 && (ae->wl[ae->idx+2].w[3]=='+' || ae->wl[ae->idx+2].w[3]=='-')) {
-						/* enhanced LD BC,(IY+nn) */
-						___output(ae,0xFD);___output(ae,0x46);
-						PushExpression(ae,ae->idx+2,E_EXPRESSION_IV81);
-						___output(ae,0xFD);___output(ae,0x4E);
-						PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);
-						ae->nop+=10;ae->tick+=19;ae->tick+=19;
-					} else if (StringIsMem(ae->wl[ae->idx+2].w)) {
-						___output(ae,0xED);___output(ae,0x4B);
-						PushExpression(ae,ae->idx+2,E_EXPRESSION_IV16);
-						ae->nop+=6;ae->tick+=20;
+					if (ae->wl[ae->idx+2].w[0]=='(') {
+						if (strncmp(ae->wl[ae->idx+2].w,"(IX",3)==0 && (ae->wl[ae->idx+2].w[3]=='+' || ae->wl[ae->idx+2].w[3]=='-')) {
+							/* enhanced LD BC,(IX+nn) */
+							___output(ae,0xDD);___output(ae,0x46);
+							PushExpression(ae,ae->idx+2,E_EXPRESSION_IV81);
+							___output(ae,0xDD);___output(ae,0x4E);
+							PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);
+							ae->nop+=10;ae->tick+=19;ae->tick+=19;
+						} else if (strncmp(ae->wl[ae->idx+2].w,"(IY",3)==0 && (ae->wl[ae->idx+2].w[3]=='+' || ae->wl[ae->idx+2].w[3]=='-')) {
+							/* enhanced LD BC,(IY+nn) */
+							___output(ae,0xFD);___output(ae,0x46);
+							PushExpression(ae,ae->idx+2,E_EXPRESSION_IV81);
+							___output(ae,0xFD);___output(ae,0x4E);
+							PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);
+							ae->nop+=10;ae->tick+=19;ae->tick+=19;
+						} else if (StringIsMem(ae->wl[ae->idx+2].w)) {
+							___output(ae,0xED);___output(ae,0x4B);
+							PushExpression(ae,ae->idx+2,E_EXPRESSION_IV16);
+							ae->nop+=6;ae->tick+=20;
+						} else {
+							___output(ae,0x01);
+							PushExpression(ae,ae->idx+2,E_EXPRESSION_V16);
+							ae->nop+=3;ae->tick+=10;
+						}
 					} else {
 						___output(ae,0x01);
 						PushExpression(ae,ae->idx+2,E_EXPRESSION_V16);
@@ -11839,24 +11942,30 @@ void _LD(struct s_assenv *ae) {
 					case CRC_IY:___output(ae,0xFD);___output(ae,0x54);ae->nop+=4;
 						    ___output(ae,0xFD);___output(ae,0x5D);ae->tick+=16;break;
 					default:
-					if (strncmp(ae->wl[ae->idx+2].w,"(IX",3)==0 && (ae->wl[ae->idx+2].w[3]=='+' || ae->wl[ae->idx+2].w[3]=='-')) {
-						/* enhanced LD DE,(IX+nn) */
-						___output(ae,0xDD);___output(ae,0x56);
-						PushExpression(ae,ae->idx+2,E_EXPRESSION_IV81);
-						___output(ae,0xDD);___output(ae,0x5E);
-						PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);
-						ae->nop+=10;ae->tick+=19;ae->tick+=19;
-					} else if (strncmp(ae->wl[ae->idx+2].w,"(IY",3)==0 && (ae->wl[ae->idx+2].w[3]=='+' || ae->wl[ae->idx+2].w[3]=='-')) {
-						/* enhanced LD DE,(IY+nn) */
-						___output(ae,0xFD);___output(ae,0x56);
-						PushExpression(ae,ae->idx+2,E_EXPRESSION_IV81);
-						___output(ae,0xFD);___output(ae,0x5E);
-						PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);
-						ae->nop+=10;ae->tick+=19;ae->tick+=19;
-					} else if (StringIsMem(ae->wl[ae->idx+2].w)) {
-						___output(ae,0xED);___output(ae,0x5B);
-						PushExpression(ae,ae->idx+2,E_EXPRESSION_IV16);
-						ae->nop+=6;ae->tick+=20;
+					if (ae->wl[ae->idx+2].w[0]=='(') {
+						if (strncmp(ae->wl[ae->idx+2].w,"(IX",3)==0 && (ae->wl[ae->idx+2].w[3]=='+' || ae->wl[ae->idx+2].w[3]=='-')) {
+							/* enhanced LD DE,(IX+nn) */
+							___output(ae,0xDD);___output(ae,0x56);
+							PushExpression(ae,ae->idx+2,E_EXPRESSION_IV81);
+							___output(ae,0xDD);___output(ae,0x5E);
+							PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);
+							ae->nop+=10;ae->tick+=19;ae->tick+=19;
+						} else if (strncmp(ae->wl[ae->idx+2].w,"(IY",3)==0 && (ae->wl[ae->idx+2].w[3]=='+' || ae->wl[ae->idx+2].w[3]=='-')) {
+							/* enhanced LD DE,(IY+nn) */
+							___output(ae,0xFD);___output(ae,0x56);
+							PushExpression(ae,ae->idx+2,E_EXPRESSION_IV81);
+							___output(ae,0xFD);___output(ae,0x5E);
+							PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);
+							ae->nop+=10;ae->tick+=19;ae->tick+=19;
+						} else if (StringIsMem(ae->wl[ae->idx+2].w)) {
+							___output(ae,0xED);___output(ae,0x5B);
+							PushExpression(ae,ae->idx+2,E_EXPRESSION_IV16);
+							ae->nop+=6;ae->tick+=20;
+						} else {
+							___output(ae,0x11);
+							PushExpression(ae,ae->idx+2,E_EXPRESSION_V16);
+							ae->nop+=3;ae->tick+=10;
+						}
 					} else {
 						___output(ae,0x11);
 						PushExpression(ae,ae->idx+2,E_EXPRESSION_V16);
@@ -11872,18 +11981,14 @@ void _LD(struct s_assenv *ae) {
 					case CRC_DE:___output(ae,0xDD);___output(ae,0x62);
 						    ___output(ae,0xDD);___output(ae,0x6B);ae->nop+=4;ae->tick+=16;break;
 					default:
-						if (strncmp(ae->wl[ae->idx+2].w,"(IX",3) && strncmp(ae->wl[ae->idx+2].w,"(IY",3)) {
-							if (StringIsMem(ae->wl[ae->idx+2].w)) {
-								___output(ae,0xDD);___output(ae,0x2A);
-								PushExpression(ae,ae->idx+2,E_EXPRESSION_IV16);
-								ae->nop+=6;ae->tick+=20;
-							} else {
-								___output(ae,0xDD);___output(ae,0x21);
-								PushExpression(ae,ae->idx+2,E_EXPRESSION_IV16);
-								ae->nop+=4;ae->tick+=14;
-							}
+						if (StringIsMem(ae->wl[ae->idx+2].w)) {
+							___output(ae,0xDD);___output(ae,0x2A);
+							PushExpression(ae,ae->idx+2,E_EXPRESSION_IV16);
+							ae->nop+=6;ae->tick+=20;
 						} else {
-							MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"LD IX,(nn)/BC/DE/nn only\n");
+							___output(ae,0xDD);___output(ae,0x21);
+							PushExpression(ae,ae->idx+2,E_EXPRESSION_IV16);
+							ae->nop+=4;ae->tick+=14;
 						}
 				}
 				break;
@@ -11895,18 +12000,14 @@ void _LD(struct s_assenv *ae) {
 					case CRC_DE:___output(ae,0xFD);___output(ae,0x62);
 						    ___output(ae,0xFD);___output(ae,0x6B);ae->nop+=4;ae->tick+=16;break;
 					default:
-						if (strncmp(ae->wl[ae->idx+2].w,"(IX",3) && strncmp(ae->wl[ae->idx+2].w,"(IY",3)) {
-							if (StringIsMem(ae->wl[ae->idx+2].w)) {
-								___output(ae,0xFD);___output(ae,0x2A);
-								PushExpression(ae,ae->idx+2,E_EXPRESSION_IV16);
-								ae->nop+=6;ae->tick+=20;
-							} else {
-								___output(ae,0xFD);___output(ae,0x21);
-								PushExpression(ae,ae->idx+2,E_EXPRESSION_IV16);
-								ae->nop+=4;ae->tick+=14;
-							}
+						if (StringIsMem(ae->wl[ae->idx+2].w)) {
+							___output(ae,0xFD);___output(ae,0x2A);
+							PushExpression(ae,ae->idx+2,E_EXPRESSION_IV16);
+							ae->nop+=6;ae->tick+=20;
 						} else {
-							MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"LD IY,(nn)/BC/DE/nn only\n");
+							___output(ae,0xFD);___output(ae,0x21);
+							PushExpression(ae,ae->idx+2,E_EXPRESSION_IV16);
+							ae->nop+=4;ae->tick+=14;
 						}
 				}
 				break;
@@ -11916,24 +12017,20 @@ void _LD(struct s_assenv *ae) {
 					case CRC_IX:___output(ae,0xDD);___output(ae,0xF9);ae->nop+=3;ae->tick+=10;break;
 					case CRC_IY:___output(ae,0xFD);___output(ae,0xF9);ae->nop+=3;ae->tick+=10;break;
 					default:
-						if (strncmp(ae->wl[ae->idx+2].w,"(IX",3) && strncmp(ae->wl[ae->idx+2].w,"(IY",3)) {
-							if (StringIsMem(ae->wl[ae->idx+2].w)) {
-								___output(ae,0xED);___output(ae,0x7B);
-								PushExpression(ae,ae->idx+2,E_EXPRESSION_IV16);
-								ae->nop+=6;ae->tick+=20;
-							} else {
-								___output(ae,0x31);
-								PushExpression(ae,ae->idx+2,E_EXPRESSION_V16);
-								ae->nop+=3;ae->tick+=10;
-							}
+						if (StringIsMem(ae->wl[ae->idx+2].w)) {
+							___output(ae,0xED);___output(ae,0x7B);
+							PushExpression(ae,ae->idx+2,E_EXPRESSION_IV16);
+							ae->nop+=6;ae->tick+=20;
 						} else {
-							MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"LD SP,(nn)/HL/IX/IY only\n");
+							___output(ae,0x31);
+							PushExpression(ae,ae->idx+2,E_EXPRESSION_V16);
+							ae->nop+=3;ae->tick+=10;
 						}
 				}
 				break;
 			default:
 				/* (ix+expression) (iy+expression) (expression) expression */
-				if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0) {
+				if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-')) {
 					switch (GetCRC(ae->wl[ae->idx+2].w)) {
 						case CRC_B:___output(ae,0xDD);___output(ae,0x70);PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);ae->nop+=5;ae->tick+=19;break;
 						case CRC_C:___output(ae,0xDD);___output(ae,0x71);PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);ae->nop+=5;ae->tick+=19;break;
@@ -11946,16 +12043,13 @@ void _LD(struct s_assenv *ae) {
 						case CRC_DE:___output(ae,0xDD);___output(ae,0x72);PushExpression(ae,ae->idx+1,E_EXPRESSION_IV81);___output(ae,0xDD);___output(ae,0x73);PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);ae->nop+=10;ae->tick+=38;break;
 						case CRC_BC:___output(ae,0xDD);___output(ae,0x70);PushExpression(ae,ae->idx+1,E_EXPRESSION_IV81);___output(ae,0xDD);___output(ae,0x71);PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);ae->nop+=10;ae->tick+=38;break;
 						default:
-							if (!StringIsMem(ae->wl[ae->idx+2].w)) {
-								___output(ae,0xDD);___output(ae,0x36);
-								PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
-								PushExpression(ae,ae->idx+2,E_EXPRESSION_3V8);
-								ae->nop+=6;ae->tick+=23;
-							} else {
-								MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"LD (IX+n),n/r only\n");
-							}
+							___output(ae,0xDD);___output(ae,0x36);
+							EnforceNoAddressingMode(ae->idx+2);
+							PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
+							PushExpression(ae,ae->idx+2,E_EXPRESSION_3V8);
+							ae->nop+=6;ae->tick+=23;
 					}
-				} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0) {
+				} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-')) {
 					switch (GetCRC(ae->wl[ae->idx+2].w)) {
 						case CRC_B:___output(ae,0xFD);___output(ae,0x70);PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);ae->nop+=5;ae->tick+=19;break;
 						case CRC_C:___output(ae,0xFD);___output(ae,0x71);PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);ae->nop+=5;ae->tick+=19;break;
@@ -11968,14 +12062,11 @@ void _LD(struct s_assenv *ae) {
 						case CRC_DE:___output(ae,0xFD);___output(ae,0x72);PushExpression(ae,ae->idx+1,E_EXPRESSION_IV81);___output(ae,0xFD);___output(ae,0x73);PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);ae->nop+=10;ae->tick+=38;break;
 						case CRC_BC:___output(ae,0xFD);___output(ae,0x70);PushExpression(ae,ae->idx+1,E_EXPRESSION_IV81);___output(ae,0xFD);___output(ae,0x71);PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);ae->nop+=10;ae->tick+=38;break;
 						default:
-							if (!StringIsMem(ae->wl[ae->idx+2].w)) {
-							    ___output(ae,0xFD);___output(ae,0x36);
-								PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
-								PushExpression(ae,ae->idx+2,E_EXPRESSION_3V8);
-								ae->nop+=6;ae->tick+=23;
-							} else {
-								MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"LD (IX+n),n/r only\n");
-							}
+							___output(ae,0xFD);___output(ae,0x36);
+							EnforceNoAddressingMode(ae->idx+2);
+							PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
+							PushExpression(ae,ae->idx+2,E_EXPRESSION_3V8);
+							ae->nop+=6;ae->tick+=23;
 					}
 				} else if (StringIsMem(ae->wl[ae->idx+1].w)) {
 					switch (GetCRC(ae->wl[ae->idx+2].w)) {
@@ -12032,12 +12123,12 @@ void _RLC(struct s_assenv *ae) {
 			case CRC_MHL:___output(ae,0xCB);___output(ae,0x6);ae->nop+=4;ae->tick+=15;break;
 			case CRC_A:___output(ae,0xCB);___output(ae,0x7);ae->nop+=2;ae->tick+=8;break;
 			default:
-				if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0) {
+				if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-')) {
 					___output(ae,0xDD);___output(ae,0xCB);
 					PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
 					___output(ae,0x6);
 					ae->nop+=7;ae->tick+=23;
-				} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0) {
+				} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-')) {
 					___output(ae,0xFD);___output(ae,0xCB);
 					PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
 					___output(ae,0x6);
@@ -12048,9 +12139,9 @@ void _RLC(struct s_assenv *ae) {
 		}
 		ae->idx++;
 	} else if (!ae->wl[ae->idx+1].t && ae->wl[ae->idx+2].t!=2) {
-		if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0) {
+		if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-')) {
 			___output(ae,0xDD);
-		} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0) {
+		} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-')) {
 			___output(ae,0xFD);
 		} else {
 			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is RLC (IX+n),reg8\n");
@@ -12103,12 +12194,12 @@ void _RRC(struct s_assenv *ae) {
 			case CRC_MHL:___output(ae,0xCB);___output(ae,0xE);ae->nop+=4;ae->tick+=15;break;
 			case CRC_A:___output(ae,0xCB);___output(ae,0xF);ae->nop+=2;ae->tick+=8;break;
 			default:
-				if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0) {
+				if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-')) {
 					___output(ae,0xDD);___output(ae,0xCB);
 					PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
 					___output(ae,0xE);
 					ae->nop+=7;ae->tick+=23;
-				} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0) {
+				} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-')) {
 					___output(ae,0xFD);___output(ae,0xCB);
 					PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
 					___output(ae,0xE);ae->tick+=23;
@@ -12119,9 +12210,9 @@ void _RRC(struct s_assenv *ae) {
 		}
 		ae->idx++;
 	} else if (!ae->wl[ae->idx+1].t && ae->wl[ae->idx+2].t!=2) {
-		if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0) {
+		if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-')) {
 			___output(ae,0xDD);
-		} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0) {
+		} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-')) {
 			___output(ae,0xFD);
 		} else {
 			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is RRC (IX+n),reg8\n");
@@ -12160,12 +12251,12 @@ void _RL(struct s_assenv *ae) {
 			case CRC_MHL:___output(ae,0xCB);___output(ae,0x16);ae->nop+=4;ae->tick+=15;break;
 			case CRC_A:___output(ae,0xCB);___output(ae,0x17);ae->nop+=2;ae->tick+=8;break;
 			default:
-				if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0) {
+				if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-')) {
 					___output(ae,0xDD);___output(ae,0xCB);
 					PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
 					___output(ae,0x16);
 					ae->nop+=7;ae->tick+=23;
-				} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0) {
+				} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-')) {
 					___output(ae,0xFD);___output(ae,0xCB);
 					PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
 					___output(ae,0x16);
@@ -12176,9 +12267,9 @@ void _RL(struct s_assenv *ae) {
 		}
 		ae->idx++;
 	} else if (!ae->wl[ae->idx+1].t && ae->wl[ae->idx+2].t!=2) {
-		if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0) {
+		if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-')) {
 			___output(ae,0xDD);
-		} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0) {
+		} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-')) {
 			___output(ae,0xFD);
 		} else {
 			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is RL (IX+n),reg8\n");
@@ -12218,12 +12309,12 @@ void _RR(struct s_assenv *ae) {
 			case CRC_MHL:___output(ae,0xCB);___output(ae,0x1E);ae->nop+=4;ae->tick+=15;break;
 			case CRC_A:___output(ae,0xCB);___output(ae,0x1F);ae->nop+=2;ae->tick+=8;break;
 			default:
-				if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0) {
+				if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-')) {
 					___output(ae,0xDD);___output(ae,0xCB);
 					PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
 					___output(ae,0x1E);
 					ae->nop+=7;ae->tick+=23;
-				} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0) {
+				} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-')) {
 					___output(ae,0xFD);___output(ae,0xCB);
 					PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
 					___output(ae,0x1E);
@@ -12234,9 +12325,9 @@ void _RR(struct s_assenv *ae) {
 		}
 		ae->idx++;
 	} else if (!ae->wl[ae->idx+1].t && ae->wl[ae->idx+2].t!=2) {
-		if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0) {
+		if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-')) {
 			___output(ae,0xDD);
-		} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0) {
+		} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-')) {
 			___output(ae,0xFD);
 		} else {
 			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is RR (IX+n),reg8\n");
@@ -12276,12 +12367,12 @@ void _SLA(struct s_assenv *ae) {
 			case CRC_MHL:___output(ae,0xCB);___output(ae,0x26);ae->nop+=4;ae->tick+=15;break;
 			case CRC_A:___output(ae,0xCB);___output(ae,0x27);ae->nop+=2;ae->tick+=8;break;
 			default:
-				if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0) {
+				if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-')) {
 					___output(ae,0xDD);___output(ae,0xCB);
 					PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
 					___output(ae,0x26);
 					ae->nop+=7;ae->tick+=23;
-				} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0) {
+				} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-')) {
 					___output(ae,0xFD);___output(ae,0xCB);
 					PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
 					___output(ae,0x26);
@@ -12292,9 +12383,9 @@ void _SLA(struct s_assenv *ae) {
 		}
 		ae->idx++;
 	} else if (!ae->wl[ae->idx+1].t && ae->wl[ae->idx+2].t!=2) {
-		if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0) {
+		if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-')) {
 			___output(ae,0xDD);
-		} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0) {
+		} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-')) {
 			___output(ae,0xFD);
 		} else {
 			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is SLA (IX+n),reg8\n");
@@ -12334,12 +12425,12 @@ void _SRA(struct s_assenv *ae) {
 			case CRC_MHL:___output(ae,0xCB);___output(ae,0x2E);ae->nop+=4;ae->tick+=15;break;
 			case CRC_A:___output(ae,0xCB);___output(ae,0x2F);ae->nop+=2;ae->tick+=8;break;
 			default:
-				if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0) {
+				if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-')) {
 					___output(ae,0xDD);___output(ae,0xCB);
 					PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
 					___output(ae,0x2E);
 					ae->nop+=7;ae->tick+=23;
-				} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0) {
+				} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-')) {
 					___output(ae,0xFD);___output(ae,0xCB);
 					PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
 					___output(ae,0x2E);
@@ -12350,9 +12441,9 @@ void _SRA(struct s_assenv *ae) {
 		}
 		ae->idx++;
 	} else if (!ae->wl[ae->idx+1].t && ae->wl[ae->idx+2].t!=2) {
-		if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0) {
+		if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-')) {
 			___output(ae,0xDD);
-		} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0) {
+		} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-')) {
 			___output(ae,0xFD);
 		} else {
 			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is SRA (IX+n),reg8\n");
@@ -12393,12 +12484,12 @@ void _SLL(struct s_assenv *ae) {
 			case CRC_MHL:___output(ae,0xCB);___output(ae,0x36);ae->nop+=4;ae->tick+=15;break;
 			case CRC_A:___output(ae,0xCB);___output(ae,0x37);ae->nop+=2;ae->tick+=8;break;
 			default:
-				if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0) {
+				if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-')) {
 					___output(ae,0xDD);___output(ae,0xCB);
 					PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
 					___output(ae,0x36);
 					ae->nop+=7;ae->tick+=23;
-				} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0) {
+				} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-')) {
 					___output(ae,0xFD);___output(ae,0xCB);
 					PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
 					___output(ae,0x36);
@@ -12409,9 +12500,9 @@ void _SLL(struct s_assenv *ae) {
 		}
 		ae->idx++;
 	} else if (!ae->wl[ae->idx+1].t && ae->wl[ae->idx+2].t!=2) {
-		if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0) {
+		if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-')) {
 			___output(ae,0xDD);
-		} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0) {
+		} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-')) {
 			___output(ae,0xFD);
 		} else {
 			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is SLL (IX+n),reg8\n");
@@ -12464,12 +12555,12 @@ void _SRL(struct s_assenv *ae) {
 			case CRC_MHL:___output(ae,0xCB);___output(ae,0x3E);ae->nop+=4;ae->tick+=15;break;
 			case CRC_A:___output(ae,0xCB);___output(ae,0x3F);ae->nop+=2;ae->tick+=8;break;
 			default:
-				if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0) {
+				if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-')) {
 					___output(ae,0xDD);___output(ae,0xCB);
 					PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
 					___output(ae,0x3E);
 					ae->nop+=7;ae->tick+=23;
-				} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0) {
+				} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-')) {
 					___output(ae,0xFD);___output(ae,0xCB);
 					PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
 					___output(ae,0x3E);
@@ -12480,9 +12571,9 @@ void _SRL(struct s_assenv *ae) {
 		}
 		ae->idx++;
 	} else if (!ae->wl[ae->idx+1].t && ae->wl[ae->idx+2].t!=2) {
-		if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0) {
+		if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-')) {
 			___output(ae,0xDD);
-		} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0) {
+		} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-')) {
 			___output(ae,0xFD);
 		} else {
 			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is SRL (IX+n),reg8\n");
@@ -12529,12 +12620,12 @@ void _BIT(struct s_assenv *ae) {
 				case CRC_MHL:___output(ae,0xCB);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x6+o);ae->nop+=3;ae->tick+=12;break;
 				case CRC_A:___output(ae,0xCB);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x7+o);ae->nop+=2;ae->tick+=8;break;
 				default:
-					if (strncmp(ae->wl[ae->idx+2].w,"(IX",3)==0) {
+					if (strncmp(ae->wl[ae->idx+2].w,"(IX",3)==0 && (ae->wl[ae->idx+2].w[3]=='+' || ae->wl[ae->idx+2].w[3]=='-')) {
 						___output(ae,0xDD);___output(ae,0xCB);
 						PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);
 						PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x6+o);
 						ae->nop+=6;ae->tick+=20;
-					} else if (strncmp(ae->wl[ae->idx+2].w,"(IY",3)==0) {
+					} else if (strncmp(ae->wl[ae->idx+2].w,"(IY",3)==0 && (ae->wl[ae->idx+2].w[3]=='+' || ae->wl[ae->idx+2].w[3]=='-')) {
 						___output(ae,0xFD);___output(ae,0xCB);
 						PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);
 						PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x6+o);
@@ -12574,12 +12665,12 @@ void _RES(struct s_assenv *ae) {
 				case CRC_MHL:___output(ae,0xCB);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x6+o);ae->nop+=4;ae->tick+=15;break;
 				case CRC_A:___output(ae,0xCB);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x7+o);ae->nop+=2;ae->tick+=8;break;
 				default:
-					if (strncmp(ae->wl[ae->idx+2].w,"(IX",3)==0) {
+					if (strncmp(ae->wl[ae->idx+2].w,"(IX",3)==0 && (ae->wl[ae->idx+2].w[3]=='+' || ae->wl[ae->idx+2].w[3]=='-')) {
 						___output(ae,0xDD);___output(ae,0xCB);
 						PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);
 						PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x6+o);
 						ae->nop+=7;ae->tick+=23;
-					} else if (strncmp(ae->wl[ae->idx+2].w,"(IY",3)==0) {
+					} else if (strncmp(ae->wl[ae->idx+2].w,"(IY",3)==0 && (ae->wl[ae->idx+2].w[3]=='+' || ae->wl[ae->idx+2].w[3]=='-')) {
 						___output(ae,0xFD);___output(ae,0xCB);
 						PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);
 						PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x6+o);
@@ -12590,9 +12681,9 @@ void _RES(struct s_assenv *ae) {
 			}
 			ae->idx+=2;
 		} else if (!ae->wl[ae->idx+1].t && !ae->wl[ae->idx+2].t && ae->wl[ae->idx+3].t==1) {
-			if (strncmp(ae->wl[ae->idx+2].w,"(IX",3)==0) {
+			if (strncmp(ae->wl[ae->idx+2].w,"(IX",3)==0 && (ae->wl[ae->idx+2].w[3]=='+' || ae->wl[ae->idx+2].w[3]=='-')) {
 				___output(ae,0xDD);
-			} else if (strncmp(ae->wl[ae->idx+2].w,"(IY",3)==0) {
+			} else if (strncmp(ae->wl[ae->idx+2].w,"(IY",3)==0 && (ae->wl[ae->idx+2].w[3]=='+' || ae->wl[ae->idx+2].w[3]=='-')) {
 				___output(ae,0xFD);
 			} else {
 				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is RES n,(IX+n),reg8\n");
@@ -12637,12 +12728,12 @@ void _SET(struct s_assenv *ae) {
 				case CRC_MHL:___output(ae,0xCB);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x6+o);ae->nop+=4;ae->tick+=15;break;
 				case CRC_A:___output(ae,0xCB);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x7+o);ae->nop+=2;ae->tick+=8;break;
 				default:
-					if (strncmp(ae->wl[ae->idx+2].w,"(IX",3)==0) {
+					if (strncmp(ae->wl[ae->idx+2].w,"(IX",3)==0 && (ae->wl[ae->idx+2].w[3]=='+' || ae->wl[ae->idx+2].w[3]=='-')) {
 						___output(ae,0xDD);___output(ae,0xCB);
 						PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);
 						PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x6+o);
 						ae->nop+=7;ae->tick+=23;
-					} else if (strncmp(ae->wl[ae->idx+2].w,"(IY",3)==0) {
+					} else if (strncmp(ae->wl[ae->idx+2].w,"(IY",3)==0 && (ae->wl[ae->idx+2].w[3]=='+' || ae->wl[ae->idx+2].w[3]=='-')) {
 						___output(ae,0xFD);___output(ae,0xCB);
 						PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);
 						PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x6+o);
@@ -12653,9 +12744,9 @@ void _SET(struct s_assenv *ae) {
 			}
 			ae->idx+=2;
 		} else if (!ae->wl[ae->idx+1].t && !ae->wl[ae->idx+2].t && ae->wl[ae->idx+3].t==1) {
-			if (strncmp(ae->wl[ae->idx+2].w,"(IX",3)==0) {
+			if (strncmp(ae->wl[ae->idx+2].w,"(IX",3)==0 && (ae->wl[ae->idx+2].w[3]=='+' || ae->wl[ae->idx+2].w[3]=='-')) {
 				___output(ae,0xDD);
-			} else if (strncmp(ae->wl[ae->idx+2].w,"(IY",3)==0) {
+			} else if (strncmp(ae->wl[ae->idx+2].w,"(IY",3)==0 && (ae->wl[ae->idx+2].w[3]=='+' || ae->wl[ae->idx+2].w[3]=='-')) {
 				___output(ae,0xFD);
 			} else {
 				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is SET n,(IX+n),reg8\n");
@@ -22900,9 +22991,9 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 							if (ae->bankset[bankset]) {
 								memcpy(packed,ae->mem[i],65536);
 								if (i<4 || i+4>maxrom) {
-									rasm_printf(ae,KVERBOSE"WriteSNA bank %2d,%d,%d,%d packed",i,i+1,i+2,i+3);
-									if (ae->iwnamebank[i]) rasm_printf(ae," (%s)",ae->wl[ae->iwnamebank[i]].w);
-									rasm_printf(ae,"\n");
+									if (ae->cprinfo) rasm_printf(ae,KVERBOSE"WriteSNA bank %2d,%d,%d,%d packed",i,i+1,i+2,i+3);
+									if (ae->cprinfo) if (ae->iwnamebank[i]) rasm_printf(ae," (%s)",ae->wl[ae->iwnamebank[i]].w);
+									if (ae->cprinfo) rasm_printf(ae,"\n");
 								} else if (!noflood) {rasm_printf(ae,KVERBOSE"[...]\n");noflood=1;}
 							} else {
 								memset(packed,0,65536);
@@ -22943,9 +23034,9 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 											lm=strlen(ae->wl[ae->iwnamebank[i]].w)-2;
 										}
 										if (i<4 || i+4>maxrom) {
-											rasm_printf(ae,KVERBOSE"WriteSNA bank %2d of %5d byte%s start at #%04X",i+k,endoffset-offset,endoffset-offset>1?"s":" ",offset);
-											if (ae->iwnamebank[i]) rasm_printf(ae," (%s)",ae->wl[ae->iwnamebank[i]].w);
-											rasm_printf(ae,"\n");
+											if (ae->cprinfo) rasm_printf(ae,KVERBOSE"WriteSNA bank %2d of %5d byte%s start at #%04X",i+k,endoffset-offset,endoffset-offset>1?"s":" ",offset);
+											if (ae->cprinfo) if (ae->iwnamebank[i]) rasm_printf(ae," (%s)",ae->wl[ae->iwnamebank[i]].w);
+											if (ae->cprinfo) rasm_printf(ae,"\n");
 										} else if (!noflood) {rasm_printf(ae,KVERBOSE"[...]\n");noflood=1;}
 										if (endoffset-offset>16384) {
 											rasm_printf(ae,KERROR"\nRAM block is too big!!! (%d byte%s too large)\n"KVERBOSE,endoffset-offset-16384,endoffset-offset-16384>1?"s":"");
@@ -22961,7 +23052,7 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 										} else {
 											if (i<4 || i+4>maxrom) rasm_printf(ae,"\n");
 										}
-									} else {
+									} else if (ae->cprinfo) {
 										if (i<4 || i+4>maxrom) rasm_printf(ae,KVERBOSE"WriteSNA bank %2d (empty)\n",i+k);
 										else if (!noflood) {rasm_printf(ae,KVERBOSE"[...]\n");noflood=1;}
 									}
@@ -23035,10 +23126,12 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 									continue;
 								}
 								if (!noflood || howmanyrom<=4) {
+									if (ae->cprinfo) {
 									if (i<256) rasm_printf(ae,KVERBOSE"WriteSNA ROM %3d of %5d byte%s start at #%04X",i,endoffset-offset,endoffset-offset>1?"s":" ",offset);
 									      else rasm_printf(ae,KVERBOSE"WriteSNA LOWER   of %5d byte%s start at #%04X",endoffset-offset,endoffset-offset>1?"s":" ",offset);
 									if (ae->iwnameromsna[i]) rasm_printf(ae," (%s)",ae->wl[ae->iwnameromsna[i]].w);
 									rasm_printf(ae,"\n");
+									}
 								} else if (!noflood) {rasm_printf(ae,KVERBOSE"[...]\n");noflood=1;}
 								howmanyrom--;
 
@@ -23604,12 +23697,10 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 		********************************/
 		if (ae->warn_unused) {
 			for (i=0;i<ae->ialias;i++) {
-				if (strcmp(ae->alias[i].alias,"IX") && strcmp(ae->alias[i].alias,"IY")) {
 					if (!ae->alias[i].used) {
 						rasm_printf(ae,KWARNING"[%s:%d] Warning: alias %s declared but not used\n",ae->filename[ae->wl[ae->alias[i].iw].ifile],ae->wl[ae->alias[i].iw].l,ae->alias[i].alias);
 						if (ae->erronwarn) MaxError(ae);
 					}
-				}
 			}
 			WarnLabelTree(ae);
 			WarnDicoTree(ae);
@@ -23683,10 +23774,8 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 					}
 					if (ae->export_equ) {
 						for (i=0;i<ae->ialias;i++) {
-							if (strcmp(ae->alias[i].alias,"IX") && strcmp(ae->alias[i].alias,"IY")) {
 								sprintf(symbol_line,"%04X %s\n",RoundComputeExpression(ae,ae->alias[i].translation,0,-ae->alias[i].iw,0),ae->alias[i].alias);
 								FileWriteLine(TMP_filename,symbol_line);
-							}
 						}
 					}
 					break;
@@ -23714,10 +23803,8 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 					}
 					if (ae->export_equ) {
 						for (i=0;i<ae->ialias;i++) {
-							if (strcmp(ae->alias[i].alias,"IX") && strcmp(ae->alias[i].alias,"IY")) {
 								sprintf(symbol_line,ae->flexible_export,ae->alias[i].alias,RoundComputeExpression(ae,ae->alias[i].translation,0,-ae->alias[i].iw,0));
 								FileWriteLine(TMP_filename,symbol_line);
-							}
 						}
 					}
 					FileWriteLineClose(TMP_filename);
@@ -23746,10 +23833,8 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 					}
 					if (ae->export_equ) {
 						for (i=0;i<ae->ialias;i++) {
-							if (strcmp(ae->alias[i].alias,"IX") && strcmp(ae->alias[i].alias,"IY")) {
 								sprintf(symbol_line,"%s #%04X\n",ae->alias[i].alias,RoundComputeExpression(ae,ae->alias[i].translation,0,-ae->alias[i].iw,0));
 								FileWriteLine(TMP_filename,symbol_line);
-							}
 						}
 					}
 					FileWriteLineClose(TMP_filename);
@@ -23778,10 +23863,8 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 					}
 					if (ae->export_equ) {
 						for (i=0;i<ae->ialias;i++) {
-							if (strcmp(ae->alias[i].alias,"IX") && strcmp(ae->alias[i].alias,"IY")) {
 								sprintf(symbol_line,"%s EQU 0%04XH\n",ae->alias[i].alias,RoundComputeExpression(ae,ae->alias[i].translation,0,-ae->alias[i].iw,0));
 								FileWriteLine(TMP_filename,symbol_line);
-							}
 						}
 					}
 					FileWriteLineClose(TMP_filename);
@@ -23810,7 +23893,7 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 					}
 					if (ae->export_equ) {
 						for (i=0;i<ae->ialias;i++) {
-							if (strcmp(ae->alias[i].alias,"IX") && strcmp(ae->alias[i].alias,"IY") && ae->alias[i].autorise_export) {
+							if (ae->alias[i].autorise_export) {
 								if (ae->alias[i].fromstruct) sprintf(symbol_line,"%s #%X B0 I\n",ae->alias[i].alias,RoundComputeExpression(ae,ae->alias[i].translation,0,-ae->alias[i].iw,0));
 								else sprintf(symbol_line,"%s #%X B0 A\n",ae->alias[i].alias,RoundComputeExpression(ae,ae->alias[i].translation,0,-ae->alias[i].iw,0));
 								FileWriteLine(TMP_filename,symbol_line);
@@ -25241,13 +25324,6 @@ printf("check quotes and repeats\n");
 	/* pour les calculs d'adresses avec IX et IY on enregistre deux variables bidons du meme nom */
 	curw.e=7;
 	curw.w=TxtStrDup("SYNCHRO~256");
-	curw.len=strlen(curw.w);
-	ObjectArrayAddDynamicValueConcat((void**)&wordlist,&nbword,&maxword,&curw,sizeof(curw));
-	curw.e=2;
-	curw.w=TxtStrDup("IX~0");
-	curw.len=strlen(curw.w);
-	ObjectArrayAddDynamicValueConcat((void**)&wordlist,&nbword,&maxword,&curw,sizeof(curw));
-	curw.w=TxtStrDup("IY~0");
 	curw.len=strlen(curw.w);
 	ObjectArrayAddDynamicValueConcat((void**)&wordlist,&nbword,&maxword,&curw,sizeof(curw));
 	curw.e=12;
@@ -27543,11 +27619,39 @@ struct s_autotest_keyword autotest_keyword[]={
 	{" bidule equ 5 : ifndef bidule : assert 0==1 : endif : nop ",0},
 	{" bidule=5 : ifndef bidule : assert 0==1 : endif : nop ",0},
 
+	// IX/IY trick removal check :)
+	{"ld hl,ix",1},
+	{"ixab=5:ld h,(ixab)",1},
+	{"ixab=5:ld l,(ixab)",1},
+	{"ixab=5:ld d,(ixab)",1},
+	{"ixab=5:ld e,(ixab)",1},
+	{"ixab=5:ld b,(ixab)",1},
+	{"ixab=5:ld c,(ixab)",1},
+	{"ixab=5:ld xh,(ixab)",1},
+	{"ixab=5:ld yh,(ixab)",1},
+	{"ixab=5:ld xl,(ixab)",1},
+	{"ixab=5:ld yl,(ixab)",1},
+	{"ixab=5:sla (ixab)",1},
+	{"ixab=5:sra (ixab)",1},
+	{"ixab=5:srl (ixab)",1},
+	{"ixab=5:sll (ixab)",1},
+	{"ixab=5:rrc (ixab)",1},
+	{"ixab=5:rr  (ixab)",1},
+	{"ixab=5:rlc (ixab)",1},
+	{"ixab=5:rl  (ixab)",1},
+	{"ixab=5:or  (ixab)",1},
+	{"ixab=5:xor (ixab)",1},
+	{"ixab=5:and (ixab)",1},
+	{"ixab=5:sub (ixab)",1},
+	{"ixab=5:sbc (ixab)",1},
+	{"ixab=5:add (ixab)",1},
+	{"ixab=5:adc (ixab)",1},
 	/*
 	 *
 	 * will need to test resize + format then meta review test!
 	 *
 	 *
+	{"",},{"",},{"",},
 	{"",},{"",},{"",},{"",},{"",},
 	{"",},{"",},{"",},{"",},{"",},{"",},
 	{"",},{"",},{"",},{"",},{"",},{"",},{"",},{"",},{"",},{"",},{"",},{"",},
