@@ -5631,7 +5631,7 @@ int __DURATION(struct s_assenv *ae,char *opcode, int didx)
 int __FILESIZE(struct s_assenv *ae,char *zefile, int didx)
 {
 	#undef FUNC
-	#define FUNC "__DURATION"
+	#define FUNC "__FILESIZE"
 
 	FILE *f;
 	int zesize;
@@ -7164,7 +7164,7 @@ printf("final POP string=%X\n",ae->computectx->operatorstack[nboperatorstack+1].
 										}
 									}
 								} else {
-									MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"DURATION is empty\n");
+									MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"FILESIZE is empty\n");
 								}
 							       break;
 							       /* CC GETNOP */
@@ -19988,6 +19988,7 @@ void __HEXBIN(struct s_assenv *ae) {
 	struct s_hexbin *curhexbin;
 	unsigned char *newdata=NULL;
 	int fileok=0,incwav=0;
+	int ifExists=0;
 	
 	if (!ae->wl[ae->idx].t) {
 		ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,1);
@@ -20014,7 +20015,11 @@ printf("Hexbin for WAV-> %s (no operation until delayed load)\n",ae->wl[ae->idx+
 #if TRACE_HEXBIN
 printf("Hexbin legacy datalen=%d\n",ae->hexbin[hbinidx].datalen);
 #endif
-				if (strcmp("REVERT",ae->wl[ae->idx+2].w)==0) {
+				if (strcmp("EXISTS",ae->wl[ae->idx+2].w)==0) {
+					ifExists=1;
+					offset=size=0; // full file
+					ae->idx++;
+				} else if (strcmp("REVERT",ae->wl[ae->idx+2].w)==0) {
 					/* revert data */
 					if (!ae->wl[ae->idx+2].t) {
 						MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"INCBIN REVERT does not need extra parameters\n");
@@ -20210,7 +20215,9 @@ printf("Hexbin -> surprise! we found the file!\n");
 				deload=1;
 			} else {
 				/* still not found */
-				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"file not found [%s]\n",newfilename);
+				if (!ifExists) {
+					MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"file not found [%s]\n",newfilename);
+				}
 				MemFree(newfilename);
 				return;
 			}
@@ -27646,6 +27653,7 @@ struct s_autotest_keyword autotest_keyword[]={
 	{"ixab=5:sbc (ixab)",1},
 	{"ixab=5:add (ixab)",1},
 	{"ixab=5:adc (ixab)",1},
+	{"nop : incbin 'ljkhsdlkjksdflkjsdflkjdf.sdfkujhsdjkfh.sdfkjhsdfkjhsfd',EXISTS",0}, // no error with EXISTS option
 	/*
 	 *
 	 * will need to test resize + format then meta review test!
