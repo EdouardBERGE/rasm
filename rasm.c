@@ -30020,7 +30020,7 @@ printf("curpath=[%s]\n",curpath);
 					case 's':
 						param->export_local=1;
 						param->export_sym=1;
-						param->export_sna=1;return 0;
+						return 0;
 					default:
 						Usage(1);
 						break;
