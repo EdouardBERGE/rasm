@@ -23,7 +23,7 @@ You may send requests/bugs in the same topic
 -----------------------------------------------------------------------------------------------------
 This software is using MIT "expat" license
 
-« Copyright © BERGE Edouard (roudoudou)
+Â« Copyright Â© BERGE Edouard (roudoudou)
 
 Permission  is  hereby  granted,  free  of charge,to any person obtaining a copy  of  this  software
 and  associated  documentation/source   files   of RASM, to deal in the Software without restriction,
@@ -38,7 +38,7 @@ including  but  not  limited  to the warranties of merchantability,   fitness   
 purpose  and  noninfringement.  In  no event shall the  authors  or  copyright  holders be liable for
 any  claim, damages  or other  liability,  whether in  an  action  of  contract, tort  or  otherwise,
 arising from,  out of  or in connection  with  the software  or  the  use  or  other  dealings in the
-Software. »
+Software. Â»
 -----------------------------------------------------------------------------------------------------
 Linux compilation with GCC or Clang:
 cc rasm.c -O2 -lm -lrt -march=native -o rasm
@@ -505,7 +505,7 @@ struct s_hfe_action {
 	int ioffset;
 	// deferred calculation info
 	int iw,nbparam;
-	// copie intégrale des paramètres?
+	// copie intÃ©grale des paramÃ¨tres?
 	char **param;
 	int iparam,mparam;
 	// extended sector definition
@@ -768,7 +768,7 @@ struct s_rasm_thread {
 /*********************************************************
             S N A P S H O T     E X P O R T
 *********************************************************/
-/* extension 4Mo = 256 slots + 4 slots 64K de RAM par défaut => 260 */
+/* extension 4Mo = 256 slots + 4 slots 64K de RAM par dÃ©faut => 260 */
 
 #define BANK_MAX_NUMBER 260
 
@@ -1461,7 +1461,7 @@ A-Z variable ou fonction (cos, sin, tan, sqr, pow, mod, and, xor, mod, ...)
 +*-/&^m| operateur
 */
 
-#define AutomateExpressionValidCharExtendedDefinition "0123456789.ABCDEFGHIJKLMNOPQRSTUVWXYZ_{}@+-*/~^$#%<=>|&" /* § */
+#define AutomateExpressionValidCharExtendedDefinition "0123456789.ABCDEFGHIJKLMNOPQRSTUVWXYZ_{}@+-*/~^$#%<=>|&" /* Â§ */
 #define AutomateExpressionValidCharFirstDefinition "#%0123456789.ABCDEFGHIJKLMNOPQRSTUVWXYZ_@${"
 #define AutomateExpressionValidCharDefinition "0123456789.ABCDEFGHIJKLMNOPQRSTUVWXYZ_{}@$"
 #define AutomateValidLabelFirstDefinition ".ABCDEFGHIJKLMNOPQRSTUVWXYZ_@"
@@ -1524,7 +1524,7 @@ nMaxCompressedSize=65536;
 
 /* RAW */
 nFlags=1<<1; // nFlags=LZSA_FLAG_RAW_BLOCK;
-/* par défaut du LZSA1-Fast */
+/* par dÃ©faut du LZSA1-Fast */
 if (version<1 || version>2) {
 	version=1;
 }
@@ -2248,14 +2248,14 @@ int StringIsMem(char *w)
 					break;
 				case '(':p++;break;
 				case ')':p--;
-					/* si on sort de la première parenthèse */
+					/* si on sort de la premiÃ¨re parenthÃ¨se */
 					if (!p && w[idx+1]) return 0;
 					break;
 				default:break;
 			}
 			idx++;
 		}
-		/* si on ne termine pas par une parenthèse */
+		/* si on ne termine pas par une parenthÃ¨se */
 		if (w[idx-1]!=')') return 0;
 	} else {
 		return 0;
@@ -2868,7 +2868,7 @@ void FreeAssenv(struct s_assenv *ae)
 
 		for (i=0;i<ae->il;i++) {
 			/* on exporte tout */
-			/* les labels locaux et générés */
+			/* les labels locaux et gÃ©nÃ©rÃ©s */
 			debug_symbol.name=TxtStrDup(ae->label[i].name);
 			if (ae->label[i].localsize) debug_symbol.name[ae->label[i].localsize]=0;
 			debug_symbol.v=ae->label[i].ptr;
@@ -3416,10 +3416,10 @@ void CheckAndSortAliases(struct s_assenv *ae)
 	}
 	InsertAliasToTree(ae,&ae->alias[ae->ialias-1]);
 #if 0
-	/* cas particuliers pour insertion en début ou fin de liste */
+	/* cas particuliers pour insertion en dÃ©but ou fin de liste */
 	if (ae->ialias-1) {
 		if (ae->alias[ae->ialias-1].crc>ae->alias[ae->ialias-2].crc) {
-			/* pas de tri il est déjà au bon endroit */
+			/* pas de tri il est dÃ©jÃ  au bon endroit */
 		} else if (ae->alias[ae->ialias-1].crc<ae->alias[0].crc) {
 			/* insertion tout en bas de liste */
 			tmpalias=ae->alias[ae->ialias-1];
@@ -6239,7 +6239,7 @@ double ComputeExpressionCore(struct s_assenv *ae,char *original_zeexpression,int
 #endif
 						minivarbuffer=TranslateTag(ae,minivarbuffer, &touched,0,E_TAGOPTION_NONE);
 #if TRACE_COMPUTE_EXPRESSION
-	printf("après curly [%s]\n",minivarbuffer);
+	printf("aprÃ¨s curly [%s]\n",minivarbuffer);
 #endif
 						ae->computectx=&ae->ctx1;
 						strcpy(ae->computectx->varbuffer+minusptr,minivarbuffer);
@@ -6296,7 +6296,7 @@ double ComputeExpressionCore(struct s_assenv *ae,char *original_zeexpression,int
 						curdic=SearchDico(ae,ae->computectx->varbuffer+minusptr,crc);
 						if (curdic) {
 #if TRACE_COMPUTE_EXPRESSION
-	printf("trouvé valeur=%.2lf\n",curdic->v);
+	printf("trouvÃ© valeur=%.2lf\n",curdic->v);
 #endif
 							curval=curdic->v;
 							curdic->used=1;
@@ -6312,22 +6312,22 @@ double ComputeExpressionCore(struct s_assenv *ae,char *original_zeexpression,int
 							} else if (strncmp(ae->computectx->varbuffer+minusptr,"{BANK}",6)==0) {
 								bank=6;
 								page=0;
-								/* obligé de recalculer le CRC */
+								/* obligÃ© de recalculer le CRC */
 								crc=GetCRC(ae->computectx->varbuffer+minusptr+bank);
 							} else if (strncmp(ae->computectx->varbuffer+minusptr,"{PAGE}",6)==0) {
 								bank=6;
 								page=1;
-								/* obligé de recalculer le CRC */
+								/* obligÃ© de recalculer le CRC */
 								crc=GetCRC(ae->computectx->varbuffer+minusptr+bank);
 							} else if (strncmp(ae->computectx->varbuffer+minusptr,"{PAGESET}",9)==0) {
 								bank=9;
 								page=2;
-								/* obligé de recalculer le CRC */
+								/* obligÃ© de recalculer le CRC */
 								crc=GetCRC(ae->computectx->varbuffer+minusptr+bank);
 							} else if (strncmp(ae->computectx->varbuffer+minusptr,"{SIZEOF}",8)==0) {
 								bank=8;
 								page=3;
-								/* obligé de recalculer le CRC */
+								/* obligÃ© de recalculer le CRC */
 								crc=GetCRC(ae->computectx->varbuffer+minusptr+bank);
 								curval=-1;
 								/* search in structures aliases */
@@ -6365,11 +6365,11 @@ double ComputeExpressionCore(struct s_assenv *ae,char *original_zeexpression,int
 							/* limited label translation while processing crunched blocks
 							   ae->curlz == current crunched block processed
 							   expression->crunch_block=0 -> oui
-							   expression->crunch_block=1 -> oui si même block
-							   expression->crunch_block=2 -> non car sera relogée
+							   expression->crunch_block=1 -> oui si mÃªme block
+							   expression->crunch_block=2 -> non car sera relogÃ©e
 							*/
 
-							if (page!=3) { // si page vaut 3, on a déjà calculé la valeur à renvoyer
+							if (page!=3) { // si page vaut 3, on a dÃ©jÃ  calculÃ© la valeur Ã  renvoyer
 
 
 
@@ -6395,7 +6395,7 @@ if (didx>0 && didx<ae->ie) {
 		curlabel=NULL;
 	}
 
-	/* pas trouvé on cherche LEGACY */
+	/* pas trouvÃ© on cherche LEGACY */
 	if (!curlabel) {
 		curlabel=SearchLabel(ae,ae->computectx->varbuffer+minusptr+bank,crc);
 #if TRACE_LABEL || TRACE_COMPUTE_EXPRESSION
@@ -6419,7 +6419,7 @@ if (didx>0 && didx<ae->ie) {
 
 		/* on essaie toujours de trouver le label du module courant */	
 		curlabel=SearchLabel(ae,dblvarbuffer,GetCRC(dblvarbuffer));
-		/* pas trouvé on cherche LEGACY */
+		/* pas trouvÃ© on cherche LEGACY */
 		if (!curlabel) curlabel=SearchLabel(ae,ae->computectx->varbuffer+minusptr+bank,crc);
 #if TRACE_LABEL || TRACE_COMPUTE_EXPRESSION
 		else printf("label trouve via ajout du MODULE\n");
@@ -6429,7 +6429,7 @@ if (didx>0 && didx<ae->ie) {
 	} else {
 		curlabel=SearchLabel(ae,ae->computectx->varbuffer+minusptr+bank,crc);
 #if TRACE_LABEL || TRACE_COMPUTE_EXPRESSION
-		if (curlabel) printf("label trouve sans avoir ajouté de MODULE\n");
+		if (curlabel) printf("label trouve sans avoir ajoutÃ© de MODULE\n");
 #endif
 	}
 }
@@ -6490,7 +6490,7 @@ printf("page=%d | ptr=%X ibank=%d\n",page,curlabel->ptr,curlabel->ibank);
 										} else {
 											int process_label=1;
 
-											// si on est dans une section crunchée, on doit faire un contrôle étendu du scope du label
+											// si on est dans une section crunchÃ©e, on doit faire un contrÃ´le Ã©tendu du scope du label
 											if (ae->lzsection[curlabel->lz].lzversion) {
 												/* label MUST be intermediate OR in the crunched block */
 												//if (curlabel->iorgzone==ae->expression[didx].iorgzone) {
@@ -6669,7 +6669,7 @@ printf("stage 2 | page=%d | ptr=%X ibank=%d\n",page,curlabel->ptr,curlabel->iban
 
 										reverse_idx=strlen(ae->computectx->varbuffer)-1;
 										if (ae->computectx->varbuffer[reverse_idx]>='0' && ae->computectx->varbuffer[reverse_idx]<='9') {
-											/* vu que ça ne PEUT PAS être une valeur litérale, on ne fait pas de test de débordement */
+											/* vu que Ã§a ne PEUT PAS Ãªtre une valeur litÃ©rale, on ne fait pas de test de dÃ©bordement */
 											reverse_idx--;
 											while (ae->computectx->varbuffer[reverse_idx]>='0' && ae->computectx->varbuffer[reverse_idx]<='9') {
 												reverse_idx--;
@@ -7221,7 +7221,7 @@ printf("final POP string=%X\n",ae->computectx->operatorstack[nboperatorstack+1].
 			}
 		}
 	} else {
-		// paccu vaut zéro :)
+		// paccu vaut zÃ©ro :)
 		if (maccu<=nbcomputestack) {
 			maccu=16+nbcomputestack;
 			accu=MemRealloc(accu,sizeof(double)*maccu);
@@ -7545,7 +7545,7 @@ double ComputeExpression(struct s_assenv *ae,char *expr, int ptr, int didx, int 
 printf("MakeAlias (1) EXPR=[%s EQU %s]\n",expr,ptr_exp2);
 #endif
 			
-			/* alias locaux ou de proximité */
+			/* alias locaux ou de proximitÃ© */
 			if (strchr("@.",expr[0])) {
 #if TRACE_COMPUTE_EXPRESSION
 printf("WARNING! alias is local! [%s]\n",expr);
@@ -7990,7 +7990,7 @@ printf("ExpressionFastTranslate (full) -> replace var (%s=%0.1lf)\n",varbuffer,v
 					}
 				}
 			}
-			/* on cherche aussi dans les labels existants => priorité aux modules!!! */   // modulmodif => pas utile?
+			/* on cherche aussi dans les labels existants => prioritÃ© aux modules!!! */   // modulmodif => pas utile?
 			if (!found_replace) {
 				curlabel=SearchLabel(ae,varbuffer,crc);
 				if (curlabel) {
@@ -8196,7 +8196,7 @@ printf("exprout=[%s]\n",expr);
 								}
 							} else if (ae->forcesnapshot) {
 								if (ae->activebank<BANK_MAX_NUMBER) {
-									/* on autorise le préfixe BANK en snapshot avec une subtilité */
+									/* on autorise le prÃ©fixe BANK en snapshot avec une subtilitÃ© */
 								if (ae->bankset[ae->activebank>>2]) {
 									tagvalue=ae->activebank+(ae->codeadr>>14); /* dans un bankset on tient compte de l'adresse */
 								} else {
@@ -8371,7 +8371,7 @@ void PushExpression(struct s_assenv *ae,int iw,enum e_expression zetype)
 				case E_EXPRESSION_BRS:break;
 				default:break;
 			}
-			/* hack pourri pour gérer le $ */
+			/* hack pourri pour gÃ©rer le $ */
 			ae->codeadr+=startptr;
 			/* ok mais les labels locaux des macros? */
 
@@ -8720,7 +8720,7 @@ void EDSK_load(struct s_assenv *ae,struct s_edsk_wrapper *curwrap, char *edskfil
 					FreeAssenv(ae);exit(ABORT_ERROR);
 				}
 			}
-			/* piste à piste on lit les blocs DANS L'ORDRE LOGIQUE!!! */
+			/* piste Ã  piste on lit les blocs DANS L'ORDRE LOGIQUE!!! */
 			for (b=0xC1;b<=0xC9;b++)
 			for (s=0;s<sectornumber;s++) {
 				if (data[i+24+8*s+2]==b) {
@@ -8817,7 +8817,7 @@ void EDSK_load(struct s_assenv *ae,struct s_edsk_wrapper *curwrap, char *edskfil
 	printf("\n");
 #endif
 
-				/* piste à piste on lit les blocs DANS L'ORDRE LOGIQUE!!! */
+				/* piste Ã  piste on lit les blocs DANS L'ORDRE LOGIQUE!!! */
 				for (b=0xC1;b<=0xC9;b++) {
 					tmpcurrentsectorposition=currentsectorposition;
 					for (s=0;s<sectornumber;s++) {
@@ -8846,7 +8846,7 @@ void EDSK_load(struct s_assenv *ae,struct s_edsk_wrapper *curwrap, char *edskfil
 	/* Rasm management of (e)DSK files is AMSDOS compatible, just need to copy CATalog blocks but sort them... */
 	memcpy(&curwrap->entry[0],curwrap->blocks[0],1024);
 	memcpy(&curwrap->entry[32],curwrap->blocks[1],1024);
-	/* tri des entrées selon le user */
+	/* tri des entrÃ©es selon le user */
 	qsort(curwrap->entry,64,sizeof(struct s_edsk_wrapper_entry),cmpAmsdosentry);
 	curwrap->nbentry=64;
 	for (i=0;i<64;i++) {
@@ -9133,10 +9133,10 @@ void EDSK_write_file(struct s_assenv *ae,struct s_edsk_wrapper *faceA,struct s_e
 	
 	if (!faceA && !faceB) return;
 	
-	/* création des deux blocs du directory par face */
+	/* crÃ©ation des deux blocs du directory par face */
 	EDSK_build_amsdos_directory(faceA);
 	EDSK_build_amsdos_directory(faceB);
-	/* écriture header */
+	/* Ã©criture header */
 	strcpy((char *)header,"EXTENDED CPC DSK File\r\nDisk-Info\r\n");
 	sprintf(headertag,"%-9.9s",RASM_SNAP_VERSION);
 	strcpy((char *)header+0x22,headertag);
@@ -9157,7 +9157,7 @@ void EDSK_write_file(struct s_assenv *ae,struct s_edsk_wrapper *faceA,struct s_e
 #endif
 	FileWriteBinary(faceA->edsk_filename,(char *)header,256);
 	
-	/* écriture des pistes */
+	/* Ã©criture des pistes */
 	for (t=0;t<40;t++) {
 		strcpy((char *)trackblock,"Track-Info\r\n");
 		trackblock[0x10]=t;
@@ -9198,15 +9198,15 @@ void EDSK_write_file(struct s_assenv *ae,struct s_edsk_wrapper *faceA,struct s_e
 #if TRACE_EDSK
 	if (t<3) printf("\n"); else if (t==3) printf("...\n");
 #endif
-		/* écriture du track info */
+		/* Ã©criture du track info */
 		FileWriteBinary(faceA->edsk_filename,(char *)trackblock,256);
 
 
-		/* il faut convertir les blocs logiques en secteurs physiques ET entrelacés */
+		/* il faut convertir les blocs logiques en secteurs physiques ET entrelacÃ©s */
 		idblock=t*9/2;
 		blockoffset=((t*9)%2)*512;
 
-		/* le premier secteur de la piste est à cheval sur le bloc logique une fois sur deux */
+		/* le premier secteur de la piste est Ã  cheval sur le bloc logique une fois sur deux */
 		FileWriteBinary(faceA->edsk_filename,(char *)&faceA->blocks[idblock][0]+blockoffset,512); /* C1 */
 		if (!blockoffset) {
 			FileWriteBinary(faceA->edsk_filename,(char *)&faceA->blocks[idblock+2][0]+512,512); /* C6 */
@@ -9228,7 +9228,7 @@ void EDSK_write_file(struct s_assenv *ae,struct s_edsk_wrapper *faceA,struct s_e
 			FileWriteBinary(faceA->edsk_filename,(char *)&faceA->blocks[idblock+2][0]+512,512); /* C5 */
 		}
 
-		/* @@TODO ça semble un peu foireux comme procédé */	
+		/* @@TODO Ã§a semble un peu foireux comme procÃ©dÃ© */	
 		if (faceB) {
 #if TRACE_EDSK
 	printf("writing EDSK face B /!\\  probably NOT WORKING !!!\n");
@@ -9238,9 +9238,9 @@ void EDSK_write_file(struct s_assenv *ae,struct s_edsk_wrapper *faceA,struct s_e
 				trackblock[0x18+i*8+0]=trackblock[0x10];
 				trackblock[0x18+i*8+1]=trackblock[0x11];
 			}
-			/* écriture du track info */
+			/* Ã©criture du track info */
 			FileWriteBinary(faceB->edsk_filename,(char *)trackblock,256);
-			/* écriture des secteurs */
+			/* Ã©criture des secteurs */
 			idblock=t*9/2;
 			blockoffset=((t*9)%2)*512;
 			FileWriteBinary(faceB->edsk_filename,(char *)&faceB->blocks[idblock][0]+blockoffset,512);
@@ -9488,7 +9488,7 @@ void PopAllSave(struct s_assenv *ae)
 		/* DSK management */
 		if (ae->save[is].dsk) {
 			if (ae->save[is].iwdskname!=-1) {
-				/* obligé de dupliquer à cause du reuse */
+				/* obligÃ© de dupliquer Ã  cause du reuse */
 				dskfilename=TxtStrDup(ae->wl[ae->save[is].iwdskname].w);
 				dskfilename[strlen(dskfilename)-1]=0;
 				if (!EDSK_addfile(ae,dskfilename+1,ae->save[is].face,filename,ae->mem[ae->save[is].ibank]+offset,size,offset,run)) {
@@ -9558,7 +9558,7 @@ void PopAllExpression(struct s_assenv *ae, int crunched_zone)
 
 	   idealement on doit tolerer les adresses situees apres le crunch dans une autre ORG zone!
 
-	   on utilise ae->stage pour créer un état intermédiaire dans le ComputeExpressionCore
+	   on utilise ae->stage pour crÃ©er un Ã©tat intermÃ©diaire dans le ComputeExpressionCore
 	*/
 	if (crunched_zone>=0) {
 		ae->stage=1;
@@ -10017,7 +10017,7 @@ printf("PUSH Orphan PROXIMITY label that cannot be exported [%s]->[%s]\n",ae->wl
 	else printf("PUSH => NO MODULE for local label\n");
 #endif
 
-			/* contrôle dico uniquement avec des labels non locaux */
+			/* contrÃ´le dico uniquement avec des labels non locaux */
 			if (SearchDico(ae,curlabel.name,curlabel.crc)) {
 				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"cannot create label [%s] as there is already a variable with the same name\n",curlabel.name);
 				return;
@@ -10233,11 +10233,11 @@ void _SBC(struct s_assenv *ae) {
 				/* 
 				 */
 				if (ae->wl[ae->idx+1].w[0]=='(') {
-					if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-')) {
+					if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-'  || ae->wl[ae->idx+1].w[3]==')')) {
 						___output(ae,0xDD);___output(ae,0x9E);
 						PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
 						ae->nop+=5;ae->tick+=19;
-					} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-')) {
+					} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-'  || ae->wl[ae->idx+1].w[3]==')')) {
 						___output(ae,0xFD);___output(ae,0x9E);
 						PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
 						ae->nop+=5;ae->tick+=19;
@@ -10298,11 +10298,11 @@ void _ADC(struct s_assenv *ae) {
 				return;
 			default:
 				if (ae->wl[ae->idx+1].w[0]=='(') {
-					if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-')) {
+					if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-'  || ae->wl[ae->idx+1].w[3]==')')) {
 						___output(ae,0xDD);___output(ae,0x8E);
 						PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
 						ae->nop+=5;ae->tick+=19;
-					} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-')) {
+					} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-'  || ae->wl[ae->idx+1].w[3]==')')) {
 						___output(ae,0xFD);___output(ae,0x8E);
 						PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
 						ae->nop+=5;ae->tick+=19;
@@ -10363,11 +10363,11 @@ void _ADD(struct s_assenv *ae) {
 				return;
 			default:
 				if (ae->wl[ae->idx+1].w[0]=='(') {
-					if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-')) {
+					if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-'  || ae->wl[ae->idx+1].w[3]==')')) {
 						___output(ae,0xDD);___output(ae,0x86);
 						PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
 						ae->nop+=5;ae->tick+=19;
-					} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-')) {
+					} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-'  || ae->wl[ae->idx+1].w[3]==')')) {
 						___output(ae,0xFD);___output(ae,0x86);
 						PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
 						ae->nop+=5;ae->tick+=19;
@@ -10444,11 +10444,11 @@ void _CP(struct s_assenv *ae) {
 			case CRC_IYL:case CRC_LY:case CRC_YL:___output(ae,0xFD);___output(ae,0xBD);ae->nop+=2;ae->tick+=8;break;
 			default:
 				if (ae->wl[ae->idx+1].w[0]=='(') {
-					if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-')) {
+					if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-'  || ae->wl[ae->idx+1].w[3]==')')) {
 						___output(ae,0xDD);___output(ae,0xBE);
 						PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
 						ae->nop+=5;ae->tick+=19;
-					} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-')) {
+					} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-'  || ae->wl[ae->idx+1].w[3]==')')) {
 						___output(ae,0xFD);___output(ae,0xBE);
 						PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
 						ae->nop+=5;ae->tick+=19;
@@ -10611,11 +10611,11 @@ void _DEC(struct s_assenv *ae) {
 				case CRC_MHL:___output(ae,0x35);ae->nop+=3;ae->tick+=11;break;
 				default:
 					if (ae->wl[ae->idx+1].w[0]=='(') {
-						if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-')) {
+						if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-'  || ae->wl[ae->idx+1].w[3]==')')) {
 							___output(ae,0xDD);___output(ae,0x35);
 							PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
 							ae->nop+=6;ae->tick+=23;
-						} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-')) {
+						} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-'  || ae->wl[ae->idx+1].w[3]==')')) {
 							___output(ae,0xFD);___output(ae,0x35);
 							PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
 							ae->nop+=6;ae->tick+=23;
@@ -10658,11 +10658,11 @@ void _INC(struct s_assenv *ae) {
 				case CRC_MHL:___output(ae,0x34);ae->nop+=3;ae->tick+=11;break;
 				default:
 					if (ae->wl[ae->idx+1].w[0]=='(') {
-						if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-')) {
+						if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-'  || ae->wl[ae->idx+1].w[3]==')')) {
 							___output(ae,0xDD);___output(ae,0x34);
 							PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
 							ae->nop+=6;ae->tick+=23;
-						} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-')) {
+						} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-'  || ae->wl[ae->idx+1].w[3]==')')) {
 							___output(ae,0xFD);___output(ae,0x34);
 							PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
 							ae->nop+=6;ae->tick+=23;
@@ -10709,11 +10709,11 @@ void _SUB(struct s_assenv *ae) {
 				return;
 			default:
 				if (ae->wl[ae->idx+1].w[0]=='(') {
-					if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-')) {
+					if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-'  || ae->wl[ae->idx+1].w[3]==')')) {
 						___output(ae,0xDD);___output(ae,OPCODE+6);
 						PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
 						ae->nop+=5;ae->tick+=19;
-					} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-')) {
+					} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-'  || ae->wl[ae->idx+1].w[3]==')')) {
 						___output(ae,0xFD);___output(ae,OPCODE+6);
 						PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
 						ae->nop+=5;ae->tick+=19;
@@ -10756,11 +10756,11 @@ void _AND(struct s_assenv *ae) {
 			case CRC_IYL:case CRC_LY:case CRC_YL:___output(ae,0xFD);___output(ae,OPCODE+5);ae->nop+=2;ae->tick+=8;break;
 			default:
 				if (ae->wl[ae->idx+1].w[0]=='(') {
-					if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-')) {
+					if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-'  || ae->wl[ae->idx+1].w[3]==')')) {
 						___output(ae,0xDD);___output(ae,OPCODE+6);
 						PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
 						ae->nop+=5;ae->tick+=19;
-					} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-')) {
+					} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-'  || ae->wl[ae->idx+1].w[3]==')')) {
 						___output(ae,0xFD);___output(ae,OPCODE+6);
 						PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
 						ae->nop+=5;ae->tick+=19;
@@ -10802,11 +10802,11 @@ void _OR(struct s_assenv *ae) {
 			case CRC_IYL:case CRC_LY:case CRC_YL:___output(ae,0xFD);___output(ae,OPCODE+5);ae->nop+=2;ae->tick+=8;break;
 			default:
 				if (ae->wl[ae->idx+1].w[0]=='(') {
-					if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-')) {
+					if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-'  || ae->wl[ae->idx+1].w[3]==')')) {
 						___output(ae,0xDD);___output(ae,OPCODE+6);
 						PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
 						ae->nop+=5;ae->tick+=19;
-					} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-')) {
+					} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-'  || ae->wl[ae->idx+1].w[3]==')')) {
 						___output(ae,0xFD);___output(ae,OPCODE+6);
 						PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
 						ae->nop+=5;ae->tick+=19;
@@ -10848,11 +10848,11 @@ void _XOR(struct s_assenv *ae) {
 			case CRC_IYL:case CRC_LY:case CRC_YL:___output(ae,0xFD);___output(ae,OPCODE+5);ae->nop+=2;ae->tick+=8;break;
 			default:
 				if (ae->wl[ae->idx+1].w[0]=='(') {
-					if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-')) {
+					if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-'  || ae->wl[ae->idx+1].w[3]==')')) {
 						___output(ae,0xDD);___output(ae,OPCODE+6);
 						PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
 						ae->nop+=5;ae->tick+=19;
-					} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-')) {
+					} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-'  || ae->wl[ae->idx+1].w[3]==')')) {
 						___output(ae,0xFD);___output(ae,OPCODE+6);
 						PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
 						ae->nop+=5;ae->tick+=19;
@@ -11488,11 +11488,11 @@ void _LD(struct s_assenv *ae) {
 					default:
 					/* (ix+expression) (iy+expression) (expression) expression */
 					if (ae->wl[ae->idx+2].w[0]=='(') {
-						if (strncmp(ae->wl[ae->idx+2].w,"(IX",3)==0 && (ae->wl[ae->idx+2].w[3]=='+' || ae->wl[ae->idx+2].w[3]=='-')) {
+						if (strncmp(ae->wl[ae->idx+2].w,"(IX",3)==0 && (ae->wl[ae->idx+2].w[3]=='+' || ae->wl[ae->idx+2].w[3]=='-'  || ae->wl[ae->idx+2].w[3]==')')) {
 							___output(ae,0xDD);___output(ae,0x7E);
 							PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);
 							ae->nop+=5;ae->tick+=19;
-						} else if (strncmp(ae->wl[ae->idx+2].w,"(IY",3)==0 && (ae->wl[ae->idx+2].w[3]=='+' || ae->wl[ae->idx+2].w[3]=='-')) {
+						} else if (strncmp(ae->wl[ae->idx+2].w,"(IY",3)==0 && (ae->wl[ae->idx+2].w[3]=='+' || ae->wl[ae->idx+2].w[3]=='-'  || ae->wl[ae->idx+2].w[3]==')')) {
 							___output(ae,0xFD);___output(ae,0x7E);
 							PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);
 							ae->nop+=5;ae->tick+=19;
@@ -11545,11 +11545,11 @@ void _LD(struct s_assenv *ae) {
 					default:
 					/* (ix+expression) (iy+expression) expression */
 					if (ae->wl[ae->idx+2].w[0]=='(') {
-						if (strncmp(ae->wl[ae->idx+2].w,"(IX",3)==0 && (ae->wl[ae->idx+2].w[3]=='+' || ae->wl[ae->idx+2].w[3]=='-')) {
+						if (strncmp(ae->wl[ae->idx+2].w,"(IX",3)==0 && (ae->wl[ae->idx+2].w[3]=='+' || ae->wl[ae->idx+2].w[3]=='-'  || ae->wl[ae->idx+2].w[3]==')')) {
 							___output(ae,0xDD);___output(ae,0x46);
 							PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);
 							ae->nop+=5;ae->tick+=19;
-						} else if (strncmp(ae->wl[ae->idx+2].w,"(IY",3)==0 && (ae->wl[ae->idx+2].w[3]=='+' || ae->wl[ae->idx+2].w[3]=='-')) {
+						} else if (strncmp(ae->wl[ae->idx+2].w,"(IY",3)==0 && (ae->wl[ae->idx+2].w[3]=='+' || ae->wl[ae->idx+2].w[3]=='-'  || ae->wl[ae->idx+2].w[3]==')')) {
 							___output(ae,0xFD);___output(ae,0x46);
 							PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);
 							ae->nop+=5;ae->tick+=19;
@@ -11583,11 +11583,11 @@ void _LD(struct s_assenv *ae) {
 					default:
 					/* (ix+expression) (iy+expression) expression */
 					if (ae->wl[ae->idx+2].w[0]=='(') {
-						if (strncmp(ae->wl[ae->idx+2].w,"(IX",3)==0 && (ae->wl[ae->idx+2].w[3]=='+' || ae->wl[ae->idx+2].w[3]=='-')) {
+						if (strncmp(ae->wl[ae->idx+2].w,"(IX",3)==0 && (ae->wl[ae->idx+2].w[3]=='+' || ae->wl[ae->idx+2].w[3]=='-'  || ae->wl[ae->idx+2].w[3]==')')) {
 							___output(ae,0xDD);___output(ae,0x4E);
 							PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);
 							ae->nop+=5;ae->tick+=19;
-						} else if (strncmp(ae->wl[ae->idx+2].w,"(IY",3)==0 && (ae->wl[ae->idx+2].w[3]=='+' || ae->wl[ae->idx+2].w[3]=='-')) {
+						} else if (strncmp(ae->wl[ae->idx+2].w,"(IY",3)==0 && (ae->wl[ae->idx+2].w[3]=='+' || ae->wl[ae->idx+2].w[3]=='-'  || ae->wl[ae->idx+2].w[3]==')')) {
 							___output(ae,0xFD);___output(ae,0x4E);
 							PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);
 							ae->nop+=5;ae->tick+=19;
@@ -11621,11 +11621,11 @@ void _LD(struct s_assenv *ae) {
 					default:
 					/* (ix+expression) (iy+expression) expression */
 					if (ae->wl[ae->idx+2].w[0]=='(') {
-						if (strncmp(ae->wl[ae->idx+2].w,"(IX",3)==0 && (ae->wl[ae->idx+2].w[3]=='+' || ae->wl[ae->idx+2].w[3]=='-')) {
+						if (strncmp(ae->wl[ae->idx+2].w,"(IX",3)==0 && (ae->wl[ae->idx+2].w[3]=='+' || ae->wl[ae->idx+2].w[3]=='-'  || ae->wl[ae->idx+2].w[3]==')')) {
 							___output(ae,0xDD);___output(ae,0x56);
 							PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);
 							ae->nop+=5;ae->tick+=19;
-						} else if (strncmp(ae->wl[ae->idx+2].w,"(IY",3)==0 && (ae->wl[ae->idx+2].w[3]=='+' || ae->wl[ae->idx+2].w[3]=='-')) {
+						} else if (strncmp(ae->wl[ae->idx+2].w,"(IY",3)==0 && (ae->wl[ae->idx+2].w[3]=='+' || ae->wl[ae->idx+2].w[3]=='-'  || ae->wl[ae->idx+2].w[3]==')')) {
 							___output(ae,0xFD);___output(ae,0x56);
 							PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);
 							ae->nop+=5;ae->tick+=19;
@@ -11659,11 +11659,11 @@ void _LD(struct s_assenv *ae) {
 					default:
 					/* (ix+expression) (iy+expression) expression */
 					if (ae->wl[ae->idx+2].w[0]=='(') {
-						if (strncmp(ae->wl[ae->idx+2].w,"(IX",3)==0 && (ae->wl[ae->idx+2].w[3]=='+' || ae->wl[ae->idx+2].w[3]=='-')) {
+						if (strncmp(ae->wl[ae->idx+2].w,"(IX",3)==0 && (ae->wl[ae->idx+2].w[3]=='+' || ae->wl[ae->idx+2].w[3]=='-'  || ae->wl[ae->idx+2].w[3]==')')) {
 							___output(ae,0xDD);___output(ae,0x5E);
 							PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);
 							ae->nop+=5;ae->tick+=19;
-						} else if (strncmp(ae->wl[ae->idx+2].w,"(IY",3)==0 && (ae->wl[ae->idx+2].w[3]=='+' || ae->wl[ae->idx+2].w[3]=='-')) {
+						} else if (strncmp(ae->wl[ae->idx+2].w,"(IY",3)==0 && (ae->wl[ae->idx+2].w[3]=='+' || ae->wl[ae->idx+2].w[3]=='-'  || ae->wl[ae->idx+2].w[3]==')')) {
 							___output(ae,0xFD);___output(ae,0x5E);
 							PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);
 							ae->nop+=5;ae->tick+=19;
@@ -11757,11 +11757,11 @@ void _LD(struct s_assenv *ae) {
 					default:
 					/* (ix+expression) (iy+expression) expression */
 					if (ae->wl[ae->idx+2].w[0]=='(') {
-						if (strncmp(ae->wl[ae->idx+2].w,"(IX",3)==0 && (ae->wl[ae->idx+2].w[3]=='+' || ae->wl[ae->idx+2].w[3]=='-')) {
+						if (strncmp(ae->wl[ae->idx+2].w,"(IX",3)==0 && (ae->wl[ae->idx+2].w[3]=='+' || ae->wl[ae->idx+2].w[3]=='-'  || ae->wl[ae->idx+2].w[3]==')')) {
 							___output(ae,0xDD);___output(ae,0x66);
 							PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);
 							ae->nop+=5;ae->tick+=19;
-						} else if (strncmp(ae->wl[ae->idx+2].w,"(IY",3)==0 && (ae->wl[ae->idx+2].w[3]=='+' || ae->wl[ae->idx+2].w[3]=='-')) {
+						} else if (strncmp(ae->wl[ae->idx+2].w,"(IY",3)==0 && (ae->wl[ae->idx+2].w[3]=='+' || ae->wl[ae->idx+2].w[3]=='-'  || ae->wl[ae->idx+2].w[3]==')')) {
 							___output(ae,0xFD);___output(ae,0x66);
 							PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);
 							ae->nop+=5;ae->tick+=19;
@@ -11791,11 +11791,11 @@ void _LD(struct s_assenv *ae) {
 					default:
 					/* (ix+expression) (iy+expression) expression */
 					if (ae->wl[ae->idx+2].w[0]=='(') {
-						if (strncmp(ae->wl[ae->idx+2].w,"(IX",3)==0 && (ae->wl[ae->idx+2].w[3]=='+' || ae->wl[ae->idx+2].w[3]=='-')) {
+						if (strncmp(ae->wl[ae->idx+2].w,"(IX",3)==0 && (ae->wl[ae->idx+2].w[3]=='+' || ae->wl[ae->idx+2].w[3]=='-'  || ae->wl[ae->idx+2].w[3]==')')) {
 							___output(ae,0xDD);___output(ae,0x6E);
 							PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);
 							ae->nop+=5;ae->tick+=19;
-						} else if (strncmp(ae->wl[ae->idx+2].w,"(IY",3)==0 && (ae->wl[ae->idx+2].w[3]=='+' || ae->wl[ae->idx+2].w[3]=='-')) {
+						} else if (strncmp(ae->wl[ae->idx+2].w,"(IY",3)==0 && (ae->wl[ae->idx+2].w[3]=='+' || ae->wl[ae->idx+2].w[3]=='-'  || ae->wl[ae->idx+2].w[3]==')')) {
 							___output(ae,0xFD);___output(ae,0x6E);
 							PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);
 							ae->nop+=5;ae->tick+=19;
@@ -11858,14 +11858,14 @@ void _LD(struct s_assenv *ae) {
 						    ae->nop+=6;ae->tick+=21;break;
 					default:
 					if (ae->wl[ae->idx+2].w[0]=='(') {
-						if (strncmp(ae->wl[ae->idx+2].w,"(IX",3)==0 && (ae->wl[ae->idx+2].w[3]=='+' || ae->wl[ae->idx+2].w[3]=='-')) {
+						if (strncmp(ae->wl[ae->idx+2].w,"(IX",3)==0 && (ae->wl[ae->idx+2].w[3]=='+' || ae->wl[ae->idx+2].w[3]=='-'  || ae->wl[ae->idx+2].w[3]==')')) {
 							/* enhanced LD HL,(IX+nn) */
 							___output(ae,0xDD);___output(ae,0x66);
 							PushExpression(ae,ae->idx+2,E_EXPRESSION_IV81);
 							___output(ae,0xDD);___output(ae,0x6E);
 							PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);
 							ae->nop+=10;ae->tick+=19;ae->tick+=19;
-						} else if (strncmp(ae->wl[ae->idx+2].w,"(IY",3)==0 && (ae->wl[ae->idx+2].w[3]=='+' || ae->wl[ae->idx+2].w[3]=='-')) {
+						} else if (strncmp(ae->wl[ae->idx+2].w,"(IY",3)==0 && (ae->wl[ae->idx+2].w[3]=='+' || ae->wl[ae->idx+2].w[3]=='-'  || ae->wl[ae->idx+2].w[3]==')')) {
 							/* enhanced LD HL,(IY+nn) */
 							___output(ae,0xFD);___output(ae,0x66);
 							PushExpression(ae,ae->idx+2,E_EXPRESSION_IV81);
@@ -11901,14 +11901,14 @@ void _LD(struct s_assenv *ae) {
 						    ___output(ae,0xFD);___output(ae,0x4D);ae->tick+=16;break;
 					default:
 					if (ae->wl[ae->idx+2].w[0]=='(') {
-						if (strncmp(ae->wl[ae->idx+2].w,"(IX",3)==0 && (ae->wl[ae->idx+2].w[3]=='+' || ae->wl[ae->idx+2].w[3]=='-')) {
+						if (strncmp(ae->wl[ae->idx+2].w,"(IX",3)==0 && (ae->wl[ae->idx+2].w[3]=='+' || ae->wl[ae->idx+2].w[3]=='-'  || ae->wl[ae->idx+2].w[3]==')')) {
 							/* enhanced LD BC,(IX+nn) */
 							___output(ae,0xDD);___output(ae,0x46);
 							PushExpression(ae,ae->idx+2,E_EXPRESSION_IV81);
 							___output(ae,0xDD);___output(ae,0x4E);
 							PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);
 							ae->nop+=10;ae->tick+=19;ae->tick+=19;
-						} else if (strncmp(ae->wl[ae->idx+2].w,"(IY",3)==0 && (ae->wl[ae->idx+2].w[3]=='+' || ae->wl[ae->idx+2].w[3]=='-')) {
+						} else if (strncmp(ae->wl[ae->idx+2].w,"(IY",3)==0 && (ae->wl[ae->idx+2].w[3]=='+' || ae->wl[ae->idx+2].w[3]=='-'  || ae->wl[ae->idx+2].w[3]==')')) {
 							/* enhanced LD BC,(IY+nn) */
 							___output(ae,0xFD);___output(ae,0x46);
 							PushExpression(ae,ae->idx+2,E_EXPRESSION_IV81);
@@ -11943,14 +11943,14 @@ void _LD(struct s_assenv *ae) {
 						    ___output(ae,0xFD);___output(ae,0x5D);ae->tick+=16;break;
 					default:
 					if (ae->wl[ae->idx+2].w[0]=='(') {
-						if (strncmp(ae->wl[ae->idx+2].w,"(IX",3)==0 && (ae->wl[ae->idx+2].w[3]=='+' || ae->wl[ae->idx+2].w[3]=='-')) {
+						if (strncmp(ae->wl[ae->idx+2].w,"(IX",3)==0 && (ae->wl[ae->idx+2].w[3]=='+' || ae->wl[ae->idx+2].w[3]=='-'  || ae->wl[ae->idx+2].w[3]==')')) {
 							/* enhanced LD DE,(IX+nn) */
 							___output(ae,0xDD);___output(ae,0x56);
 							PushExpression(ae,ae->idx+2,E_EXPRESSION_IV81);
 							___output(ae,0xDD);___output(ae,0x5E);
 							PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);
 							ae->nop+=10;ae->tick+=19;ae->tick+=19;
-						} else if (strncmp(ae->wl[ae->idx+2].w,"(IY",3)==0 && (ae->wl[ae->idx+2].w[3]=='+' || ae->wl[ae->idx+2].w[3]=='-')) {
+						} else if (strncmp(ae->wl[ae->idx+2].w,"(IY",3)==0 && (ae->wl[ae->idx+2].w[3]=='+' || ae->wl[ae->idx+2].w[3]=='-'  || ae->wl[ae->idx+2].w[3]==')')) {
 							/* enhanced LD DE,(IY+nn) */
 							___output(ae,0xFD);___output(ae,0x56);
 							PushExpression(ae,ae->idx+2,E_EXPRESSION_IV81);
@@ -12030,7 +12030,7 @@ void _LD(struct s_assenv *ae) {
 				break;
 			default:
 				/* (ix+expression) (iy+expression) (expression) expression */
-				if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-')) {
+				if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-'  || ae->wl[ae->idx+1].w[3]==')')) {
 					switch (GetCRC(ae->wl[ae->idx+2].w)) {
 						case CRC_B:___output(ae,0xDD);___output(ae,0x70);PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);ae->nop+=5;ae->tick+=19;break;
 						case CRC_C:___output(ae,0xDD);___output(ae,0x71);PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);ae->nop+=5;ae->tick+=19;break;
@@ -12049,7 +12049,7 @@ void _LD(struct s_assenv *ae) {
 							PushExpression(ae,ae->idx+2,E_EXPRESSION_3V8);
 							ae->nop+=6;ae->tick+=23;
 					}
-				} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-')) {
+				} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-'  || ae->wl[ae->idx+1].w[3]==')')) {
 					switch (GetCRC(ae->wl[ae->idx+2].w)) {
 						case CRC_B:___output(ae,0xFD);___output(ae,0x70);PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);ae->nop+=5;ae->tick+=19;break;
 						case CRC_C:___output(ae,0xFD);___output(ae,0x71);PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);ae->nop+=5;ae->tick+=19;break;
@@ -12123,12 +12123,12 @@ void _RLC(struct s_assenv *ae) {
 			case CRC_MHL:___output(ae,0xCB);___output(ae,0x6);ae->nop+=4;ae->tick+=15;break;
 			case CRC_A:___output(ae,0xCB);___output(ae,0x7);ae->nop+=2;ae->tick+=8;break;
 			default:
-				if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-')) {
+				if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-'  || ae->wl[ae->idx+1].w[3]==')')) {
 					___output(ae,0xDD);___output(ae,0xCB);
 					PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
 					___output(ae,0x6);
 					ae->nop+=7;ae->tick+=23;
-				} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-')) {
+				} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-'  || ae->wl[ae->idx+1].w[3]==')')) {
 					___output(ae,0xFD);___output(ae,0xCB);
 					PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
 					___output(ae,0x6);
@@ -12139,9 +12139,9 @@ void _RLC(struct s_assenv *ae) {
 		}
 		ae->idx++;
 	} else if (!ae->wl[ae->idx+1].t && ae->wl[ae->idx+2].t!=2) {
-		if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-')) {
+		if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-'  || ae->wl[ae->idx+1].w[3]==')')) {
 			___output(ae,0xDD);
-		} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-')) {
+		} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-'  || ae->wl[ae->idx+1].w[3]==')')) {
 			___output(ae,0xFD);
 		} else {
 			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is RLC (IX+n),reg8\n");
@@ -12194,12 +12194,12 @@ void _RRC(struct s_assenv *ae) {
 			case CRC_MHL:___output(ae,0xCB);___output(ae,0xE);ae->nop+=4;ae->tick+=15;break;
 			case CRC_A:___output(ae,0xCB);___output(ae,0xF);ae->nop+=2;ae->tick+=8;break;
 			default:
-				if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-')) {
+				if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-'  || ae->wl[ae->idx+1].w[3]==')')) {
 					___output(ae,0xDD);___output(ae,0xCB);
 					PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
 					___output(ae,0xE);
 					ae->nop+=7;ae->tick+=23;
-				} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-')) {
+				} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-'  || ae->wl[ae->idx+1].w[3]==')')) {
 					___output(ae,0xFD);___output(ae,0xCB);
 					PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
 					___output(ae,0xE);ae->tick+=23;
@@ -12210,9 +12210,9 @@ void _RRC(struct s_assenv *ae) {
 		}
 		ae->idx++;
 	} else if (!ae->wl[ae->idx+1].t && ae->wl[ae->idx+2].t!=2) {
-		if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-')) {
+		if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-'  || ae->wl[ae->idx+1].w[3]==')')) {
 			___output(ae,0xDD);
-		} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-')) {
+		} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-'  || ae->wl[ae->idx+1].w[3]==')')) {
 			___output(ae,0xFD);
 		} else {
 			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is RRC (IX+n),reg8\n");
@@ -12251,12 +12251,12 @@ void _RL(struct s_assenv *ae) {
 			case CRC_MHL:___output(ae,0xCB);___output(ae,0x16);ae->nop+=4;ae->tick+=15;break;
 			case CRC_A:___output(ae,0xCB);___output(ae,0x17);ae->nop+=2;ae->tick+=8;break;
 			default:
-				if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-')) {
+				if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-'  || ae->wl[ae->idx+1].w[3]==')')) {
 					___output(ae,0xDD);___output(ae,0xCB);
 					PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
 					___output(ae,0x16);
 					ae->nop+=7;ae->tick+=23;
-				} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-')) {
+				} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-'  || ae->wl[ae->idx+1].w[3]==')')) {
 					___output(ae,0xFD);___output(ae,0xCB);
 					PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
 					___output(ae,0x16);
@@ -12267,9 +12267,9 @@ void _RL(struct s_assenv *ae) {
 		}
 		ae->idx++;
 	} else if (!ae->wl[ae->idx+1].t && ae->wl[ae->idx+2].t!=2) {
-		if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-')) {
+		if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-'  || ae->wl[ae->idx+1].w[3]==')')) {
 			___output(ae,0xDD);
-		} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-')) {
+		} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-'  || ae->wl[ae->idx+1].w[3]==')')) {
 			___output(ae,0xFD);
 		} else {
 			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is RL (IX+n),reg8\n");
@@ -12309,12 +12309,12 @@ void _RR(struct s_assenv *ae) {
 			case CRC_MHL:___output(ae,0xCB);___output(ae,0x1E);ae->nop+=4;ae->tick+=15;break;
 			case CRC_A:___output(ae,0xCB);___output(ae,0x1F);ae->nop+=2;ae->tick+=8;break;
 			default:
-				if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-')) {
+				if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-'  || ae->wl[ae->idx+1].w[3]==')')) {
 					___output(ae,0xDD);___output(ae,0xCB);
 					PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
 					___output(ae,0x1E);
 					ae->nop+=7;ae->tick+=23;
-				} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-')) {
+				} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-'  || ae->wl[ae->idx+1].w[3]==')')) {
 					___output(ae,0xFD);___output(ae,0xCB);
 					PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
 					___output(ae,0x1E);
@@ -12325,9 +12325,9 @@ void _RR(struct s_assenv *ae) {
 		}
 		ae->idx++;
 	} else if (!ae->wl[ae->idx+1].t && ae->wl[ae->idx+2].t!=2) {
-		if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-')) {
+		if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-'  || ae->wl[ae->idx+1].w[3]==')')) {
 			___output(ae,0xDD);
-		} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-')) {
+		} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-'  || ae->wl[ae->idx+1].w[3]==')')) {
 			___output(ae,0xFD);
 		} else {
 			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is RR (IX+n),reg8\n");
@@ -12367,12 +12367,12 @@ void _SLA(struct s_assenv *ae) {
 			case CRC_MHL:___output(ae,0xCB);___output(ae,0x26);ae->nop+=4;ae->tick+=15;break;
 			case CRC_A:___output(ae,0xCB);___output(ae,0x27);ae->nop+=2;ae->tick+=8;break;
 			default:
-				if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-')) {
+				if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-'  || ae->wl[ae->idx+1].w[3]==')')) {
 					___output(ae,0xDD);___output(ae,0xCB);
 					PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
 					___output(ae,0x26);
 					ae->nop+=7;ae->tick+=23;
-				} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-')) {
+				} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-'  || ae->wl[ae->idx+1].w[3]==')')) {
 					___output(ae,0xFD);___output(ae,0xCB);
 					PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
 					___output(ae,0x26);
@@ -12383,9 +12383,9 @@ void _SLA(struct s_assenv *ae) {
 		}
 		ae->idx++;
 	} else if (!ae->wl[ae->idx+1].t && ae->wl[ae->idx+2].t!=2) {
-		if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-')) {
+		if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-'  || ae->wl[ae->idx+1].w[3]==')')) {
 			___output(ae,0xDD);
-		} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-')) {
+		} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-'  || ae->wl[ae->idx+1].w[3]==')')) {
 			___output(ae,0xFD);
 		} else {
 			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is SLA (IX+n),reg8\n");
@@ -12425,12 +12425,12 @@ void _SRA(struct s_assenv *ae) {
 			case CRC_MHL:___output(ae,0xCB);___output(ae,0x2E);ae->nop+=4;ae->tick+=15;break;
 			case CRC_A:___output(ae,0xCB);___output(ae,0x2F);ae->nop+=2;ae->tick+=8;break;
 			default:
-				if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-')) {
+				if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-'  || ae->wl[ae->idx+1].w[3]==')')) {
 					___output(ae,0xDD);___output(ae,0xCB);
 					PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
 					___output(ae,0x2E);
 					ae->nop+=7;ae->tick+=23;
-				} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-')) {
+				} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-'  || ae->wl[ae->idx+1].w[3]==')')) {
 					___output(ae,0xFD);___output(ae,0xCB);
 					PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
 					___output(ae,0x2E);
@@ -12441,9 +12441,9 @@ void _SRA(struct s_assenv *ae) {
 		}
 		ae->idx++;
 	} else if (!ae->wl[ae->idx+1].t && ae->wl[ae->idx+2].t!=2) {
-		if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-')) {
+		if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-'  || ae->wl[ae->idx+1].w[3]==')')) {
 			___output(ae,0xDD);
-		} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-')) {
+		} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-'  || ae->wl[ae->idx+1].w[3]==')')) {
 			___output(ae,0xFD);
 		} else {
 			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is SRA (IX+n),reg8\n");
@@ -12484,12 +12484,12 @@ void _SLL(struct s_assenv *ae) {
 			case CRC_MHL:___output(ae,0xCB);___output(ae,0x36);ae->nop+=4;ae->tick+=15;break;
 			case CRC_A:___output(ae,0xCB);___output(ae,0x37);ae->nop+=2;ae->tick+=8;break;
 			default:
-				if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-')) {
+				if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-'  || ae->wl[ae->idx+1].w[3]==')')) {
 					___output(ae,0xDD);___output(ae,0xCB);
 					PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
 					___output(ae,0x36);
 					ae->nop+=7;ae->tick+=23;
-				} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-')) {
+				} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-'  || ae->wl[ae->idx+1].w[3]==')')) {
 					___output(ae,0xFD);___output(ae,0xCB);
 					PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
 					___output(ae,0x36);
@@ -12500,9 +12500,9 @@ void _SLL(struct s_assenv *ae) {
 		}
 		ae->idx++;
 	} else if (!ae->wl[ae->idx+1].t && ae->wl[ae->idx+2].t!=2) {
-		if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-')) {
+		if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-'  || ae->wl[ae->idx+1].w[3]==')')) {
 			___output(ae,0xDD);
-		} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-')) {
+		} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-'  || ae->wl[ae->idx+1].w[3]==')')) {
 			___output(ae,0xFD);
 		} else {
 			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is SLL (IX+n),reg8\n");
@@ -12555,12 +12555,12 @@ void _SRL(struct s_assenv *ae) {
 			case CRC_MHL:___output(ae,0xCB);___output(ae,0x3E);ae->nop+=4;ae->tick+=15;break;
 			case CRC_A:___output(ae,0xCB);___output(ae,0x3F);ae->nop+=2;ae->tick+=8;break;
 			default:
-				if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-')) {
+				if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-'  || ae->wl[ae->idx+1].w[3]==')')) {
 					___output(ae,0xDD);___output(ae,0xCB);
 					PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
 					___output(ae,0x3E);
 					ae->nop+=7;ae->tick+=23;
-				} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-')) {
+				} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-'  || ae->wl[ae->idx+1].w[3]==')')) {
 					___output(ae,0xFD);___output(ae,0xCB);
 					PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
 					___output(ae,0x3E);
@@ -12571,9 +12571,9 @@ void _SRL(struct s_assenv *ae) {
 		}
 		ae->idx++;
 	} else if (!ae->wl[ae->idx+1].t && ae->wl[ae->idx+2].t!=2) {
-		if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-')) {
+		if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-'  || ae->wl[ae->idx+1].w[3]==')')) {
 			___output(ae,0xDD);
-		} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-')) {
+		} else if (strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0 && (ae->wl[ae->idx+1].w[3]=='+' || ae->wl[ae->idx+1].w[3]=='-'  || ae->wl[ae->idx+1].w[3]==')')) {
 			___output(ae,0xFD);
 		} else {
 			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is SRL (IX+n),reg8\n");
@@ -12620,12 +12620,12 @@ void _BIT(struct s_assenv *ae) {
 				case CRC_MHL:___output(ae,0xCB);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x6+o);ae->nop+=3;ae->tick+=12;break;
 				case CRC_A:___output(ae,0xCB);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x7+o);ae->nop+=2;ae->tick+=8;break;
 				default:
-					if (strncmp(ae->wl[ae->idx+2].w,"(IX",3)==0 && (ae->wl[ae->idx+2].w[3]=='+' || ae->wl[ae->idx+2].w[3]=='-')) {
+					if (strncmp(ae->wl[ae->idx+2].w,"(IX",3)==0 && (ae->wl[ae->idx+2].w[3]=='+' || ae->wl[ae->idx+2].w[3]=='-'  || ae->wl[ae->idx+2].w[3]==')')) {
 						___output(ae,0xDD);___output(ae,0xCB);
 						PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);
 						PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x6+o);
 						ae->nop+=6;ae->tick+=20;
-					} else if (strncmp(ae->wl[ae->idx+2].w,"(IY",3)==0 && (ae->wl[ae->idx+2].w[3]=='+' || ae->wl[ae->idx+2].w[3]=='-')) {
+					} else if (strncmp(ae->wl[ae->idx+2].w,"(IY",3)==0 && (ae->wl[ae->idx+2].w[3]=='+' || ae->wl[ae->idx+2].w[3]=='-'  || ae->wl[ae->idx+2].w[3]==')')) {
 						___output(ae,0xFD);___output(ae,0xCB);
 						PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);
 						PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x6+o);
@@ -12665,12 +12665,12 @@ void _RES(struct s_assenv *ae) {
 				case CRC_MHL:___output(ae,0xCB);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x6+o);ae->nop+=4;ae->tick+=15;break;
 				case CRC_A:___output(ae,0xCB);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x7+o);ae->nop+=2;ae->tick+=8;break;
 				default:
-					if (strncmp(ae->wl[ae->idx+2].w,"(IX",3)==0 && (ae->wl[ae->idx+2].w[3]=='+' || ae->wl[ae->idx+2].w[3]=='-')) {
+					if (strncmp(ae->wl[ae->idx+2].w,"(IX",3)==0 && (ae->wl[ae->idx+2].w[3]=='+' || ae->wl[ae->idx+2].w[3]=='-'  || ae->wl[ae->idx+2].w[3]==')')) {
 						___output(ae,0xDD);___output(ae,0xCB);
 						PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);
 						PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x6+o);
 						ae->nop+=7;ae->tick+=23;
-					} else if (strncmp(ae->wl[ae->idx+2].w,"(IY",3)==0 && (ae->wl[ae->idx+2].w[3]=='+' || ae->wl[ae->idx+2].w[3]=='-')) {
+					} else if (strncmp(ae->wl[ae->idx+2].w,"(IY",3)==0 && (ae->wl[ae->idx+2].w[3]=='+' || ae->wl[ae->idx+2].w[3]=='-'  || ae->wl[ae->idx+2].w[3]==')')) {
 						___output(ae,0xFD);___output(ae,0xCB);
 						PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);
 						PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x6+o);
@@ -12681,9 +12681,9 @@ void _RES(struct s_assenv *ae) {
 			}
 			ae->idx+=2;
 		} else if (!ae->wl[ae->idx+1].t && !ae->wl[ae->idx+2].t && ae->wl[ae->idx+3].t==1) {
-			if (strncmp(ae->wl[ae->idx+2].w,"(IX",3)==0 && (ae->wl[ae->idx+2].w[3]=='+' || ae->wl[ae->idx+2].w[3]=='-')) {
+			if (strncmp(ae->wl[ae->idx+2].w,"(IX",3)==0 && (ae->wl[ae->idx+2].w[3]=='+' || ae->wl[ae->idx+2].w[3]=='-'  || ae->wl[ae->idx+2].w[3]==')')) {
 				___output(ae,0xDD);
-			} else if (strncmp(ae->wl[ae->idx+2].w,"(IY",3)==0 && (ae->wl[ae->idx+2].w[3]=='+' || ae->wl[ae->idx+2].w[3]=='-')) {
+			} else if (strncmp(ae->wl[ae->idx+2].w,"(IY",3)==0 && (ae->wl[ae->idx+2].w[3]=='+' || ae->wl[ae->idx+2].w[3]=='-'  || ae->wl[ae->idx+2].w[3]==')')) {
 				___output(ae,0xFD);
 			} else {
 				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is RES n,(IX+n),reg8\n");
@@ -12728,12 +12728,12 @@ void _SET(struct s_assenv *ae) {
 				case CRC_MHL:___output(ae,0xCB);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x6+o);ae->nop+=4;ae->tick+=15;break;
 				case CRC_A:___output(ae,0xCB);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x7+o);ae->nop+=2;ae->tick+=8;break;
 				default:
-					if (strncmp(ae->wl[ae->idx+2].w,"(IX",3)==0 && (ae->wl[ae->idx+2].w[3]=='+' || ae->wl[ae->idx+2].w[3]=='-')) {
+					if (strncmp(ae->wl[ae->idx+2].w,"(IX",3)==0 && (ae->wl[ae->idx+2].w[3]=='+' || ae->wl[ae->idx+2].w[3]=='-'  || ae->wl[ae->idx+2].w[3]==')')) {
 						___output(ae,0xDD);___output(ae,0xCB);
 						PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);
 						PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x6+o);
 						ae->nop+=7;ae->tick+=23;
-					} else if (strncmp(ae->wl[ae->idx+2].w,"(IY",3)==0 && (ae->wl[ae->idx+2].w[3]=='+' || ae->wl[ae->idx+2].w[3]=='-')) {
+					} else if (strncmp(ae->wl[ae->idx+2].w,"(IY",3)==0 && (ae->wl[ae->idx+2].w[3]=='+' || ae->wl[ae->idx+2].w[3]=='-'  || ae->wl[ae->idx+2].w[3]==')')) {
 						___output(ae,0xFD);___output(ae,0xCB);
 						PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);
 						PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x6+o);
@@ -12744,9 +12744,9 @@ void _SET(struct s_assenv *ae) {
 			}
 			ae->idx+=2;
 		} else if (!ae->wl[ae->idx+1].t && !ae->wl[ae->idx+2].t && ae->wl[ae->idx+3].t==1) {
-			if (strncmp(ae->wl[ae->idx+2].w,"(IX",3)==0 && (ae->wl[ae->idx+2].w[3]=='+' || ae->wl[ae->idx+2].w[3]=='-')) {
+			if (strncmp(ae->wl[ae->idx+2].w,"(IX",3)==0 && (ae->wl[ae->idx+2].w[3]=='+' || ae->wl[ae->idx+2].w[3]=='-'  || ae->wl[ae->idx+2].w[3]==')')) {
 				___output(ae,0xDD);
-			} else if (strncmp(ae->wl[ae->idx+2].w,"(IY",3)==0 && (ae->wl[ae->idx+2].w[3]=='+' || ae->wl[ae->idx+2].w[3]=='-')) {
+			} else if (strncmp(ae->wl[ae->idx+2].w,"(IY",3)==0 && (ae->wl[ae->idx+2].w[3]=='+' || ae->wl[ae->idx+2].w[3]=='-'  || ae->wl[ae->idx+2].w[3]==')')) {
 				___output(ae,0xFD);
 			} else {
 				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is SET n,(IX+n),reg8\n");
@@ -12913,9 +12913,9 @@ void _DEFF_struct(struct s_assenv *ae) {
 			ae->idx++;
 			/* conversion des symboles connus */
 			ExpressionFastTranslate(ae,&ae->wl[ae->idx].w,0);
-			/* calcul de la valeur définitive de l'expression */
+			/* calcul de la valeur dÃ©finitive de l'expression */
 			v=ComputeExpressionCore(ae,ae->wl[ae->idx].w,ae->outputadr,0);
-			/* conversion en réel Amsdos */
+			/* conversion en rÃ©el Amsdos */
 			rc=__internal_MakeRosoftREAL(ae,v,0);
 			___output(ae,rc[0]);___output(ae,rc[1]);___output(ae,rc[2]);___output(ae,rc[3]);___output(ae,rc[4]);			
 		} while (ae->wl[ae->idx].t==0);
@@ -12951,9 +12951,9 @@ void _DEFR_struct(struct s_assenv *ae) {
 			ae->idx++;
 			/* conversion des symboles connus */
 			ExpressionFastTranslate(ae,&ae->wl[ae->idx].w,0);
-			/* calcul de la valeur définitive de l'expression */
+			/* calcul de la valeur dÃ©finitive de l'expression */
 			v=ComputeExpressionCore(ae,ae->wl[ae->idx].w,ae->outputadr,0);
-			/* conversion en réel Amsdos */
+			/* conversion en rÃ©el Amsdos */
 			rc=__internal_MakeAmsdosREAL(ae,v,0);
 			___output(ae,rc[0]);___output(ae,rc[1]);___output(ae,rc[2]);___output(ae,rc[3]);___output(ae,rc[4]);			
 		} while (ae->wl[ae->idx].t==0);
@@ -13423,7 +13423,7 @@ void __hfe_init(struct s_assenv *ae, struct s_hfe_action *hfe_action) {
 	struct s_hfe_floppy hfeflop={0};
 	ae->hfeside=0;
 	ae->hfetrack=0;
-	// remplir une struct HFE par défaut
+	// remplir une struct HFE par dÃ©faut
 	ObjectArrayAddDynamicValueConcat((void **)&ae->hfedisk,&ae->nbhfedisk,&ae->maxhfedisk,&hfeflop,sizeof(hfeflop));
 	ae->hfedisk[ae->nbhfedisk-1].filename=hfe_action->filename;
 	// current pointer
@@ -13679,7 +13679,7 @@ void __hfe_add_sector(struct s_assenv *ae, struct s_hfe_action *hfe_action) {
 	printf("%02X\n",zebyte);
 #endif
 
-	// gestion des longueurs à la con
+	// gestion des longueurs Ã  la con
 	switch (sectorsize) {
 		case 0:curlen=128;break;
 		case 1:curlen=256;break;
@@ -14009,7 +14009,7 @@ struct s_edsk_global_struct *edsktool_NewEDSK(char *format) {
         return edsk;
 }
 
-struct s_edsk_global_struct *edsktool_EDSK_load(char *edskfilename) //@@TODO faire un mécanisme de cache
+struct s_edsk_global_struct *edsktool_EDSK_load(char *edskfilename) //@@TODO faire un mÃ©canisme de cache
 {
         #undef FUNC
         #define FUNC "EDSK_load"
@@ -14241,7 +14241,7 @@ void edsktool_EDSK_write_file(struct s_edsk_global_struct *edsk, char *output_fi
 
 	FileRemoveIfExists(output_filename);
 
-        /* écriture header */
+        /* Ã©criture header */
         strcpy((char *)header,"EXTENDED CPC DSK File\r\nDisk-Info\r\n");
         sprintf(headertag,"%-9.9s","edskt");
         strcpy((char *)header+0x22,headertag);
@@ -14265,7 +14265,7 @@ void edsktool_EDSK_write_file(struct s_edsk_global_struct *edsk, char *output_fi
 
 	FileWriteBinary(output_filename,(char*)header,256);
 
-        /* écriture des pistes */
+        /* Ã©criture des pistes */
         for (t=0;t<edsk->tracknumber;t++)
         for (face=0;face<edsk->sidenumber;face++) {
                 curtrack=t*edsk->sidenumber+face;
@@ -15240,7 +15240,7 @@ void __EDSK(struct s_assenv *ae) {
 		// which action?
 		switch (ae->wl[ae->idx+1].w[0]) {
 			case 'A':if (strcmp(ae->wl[ae->idx+1].w,"ADD")==0)	curaction.action=E_EDSK_ACTION_ADD; else cmderr=1;break; // add sector
-			case 'C':if (strcmp(ae->wl[ae->idx+1].w,"CREATE")==0)	curaction.action=E_EDSK_ACTION_CREATE; else cmderr=1;break; // nombre de pistes + format éventuel
+			case 'C':if (strcmp(ae->wl[ae->idx+1].w,"CREATE")==0)	curaction.action=E_EDSK_ACTION_CREATE; else cmderr=1;break; // nombre de pistes + format Ã©ventuel
 			case 'D':if (strcmp(ae->wl[ae->idx+1].w,"DROP")==0)	curaction.action=E_EDSK_ACTION_DROP; else cmderr=1;break; // drop track or sector
 			case 'G':if (strcmp(ae->wl[ae->idx+1].w,"GAPFIX")==0)	curaction.action=E_EDSK_ACTION_GAPFIX; else cmderr=1;break; // fix GAP to fit an ideal track
 			case 'M':if (strcmp(ae->wl[ae->idx+1].w,"MERGE")==0)	curaction.action=E_EDSK_ACTION_MERGE; else // merge edsk
@@ -15294,7 +15294,7 @@ void __EDSK(struct s_assenv *ae) {
 		/*
 		cursave.ioffset=ae->idx+2;
 		cursave.isize=ae->idx+3;
-		ExpressionFastTranslate(ae,&ae->wl[ae->idx+2].w,1); // si on utilise des variables ça évite la grouille post traitement...
+		ExpressionFastTranslate(ae,&ae->wl[ae->idx+2].w,1); // si on utilise des variables Ã§a Ã©vite la grouille post traitement...
 		ExpressionFastTranslate(ae,&ae->wl[ae->idx+3].w,1); // idem
 		*/
 
@@ -17085,14 +17085,14 @@ void __MACRO(struct s_assenv *ae) {
 					}
 				}
 			}
-			// déclencheur inclusif (pas trop laxiste non plus)
+			// dÃ©clencheur inclusif (pas trop laxiste non plus)
 			if (strchr(curmacro.wc[i].w,'{')) {
 				IntArrayAddDynamicValueConcat(&curmacro.replaceidx,&curmacro.nbreplace,&curmacro.maxreplace,i);
 			}
 		}
 
 		ObjectArrayAddDynamicValueConcat((void**)&ae->macro,&ae->imacro,&ae->mmacro,&curmacro,sizeof(curmacro));
-		/* le quicksort n'est pas optimal mais on n'est pas supposé en créer des milliers */
+		/* le quicksort n'est pas optimal mais on n'est pas supposÃ© en crÃ©er des milliers */
 		qsort(ae->macro,ae->imacro,sizeof(struct s_macro),cmpmacros);
 
 		/* ajustement des mots lus */
@@ -17256,7 +17256,7 @@ struct s_wordlist *__MACRO_EXECUTE(struct s_assenv *ae, int imacro) {
 				ae->nbword+=ae->macro[imacro].nbword-1-nbparam-reload;
 				ae->wl=MemRealloc(ae->wl,ae->nbword*sizeof(struct s_wordlist));
 			} else {
-				/* si on réduit pas de realloc pour ne pas perdre de donnees */
+				/* si on rÃ©duit pas de realloc pour ne pas perdre de donnees */
 				ae->nbword+=ae->macro[imacro].nbword-1-nbparam-reload;
 			}
 			iline=ae->wl[ae->idx].l;
@@ -17265,7 +17265,7 @@ struct s_wordlist *__MACRO_EXECUTE(struct s_assenv *ae, int imacro) {
 
 			for (i=0;i<ae->macro[imacro].nbword;i++) {
 				ae->wl[i+ae->idx].w=TxtStrDup(ae->macro[imacro].wc[i].w);
-				ae->wl[i+ae->idx].len=ae->macro[imacro].wc[i].len; // même si pas toujours parfait
+				ae->wl[i+ae->idx].len=ae->macro[imacro].wc[i].len; // mÃªme si pas toujours parfait
 				ae->wl[i+ae->idx].l=iline;
 				ae->wl[i+ae->idx].ifile=ifile;
 				ae->wl[i+ae->idx].ml=ae->macro[imacro].wc[i].l;
@@ -17281,7 +17281,7 @@ struct s_wordlist *__MACRO_EXECUTE(struct s_assenv *ae, int imacro) {
 				for (i=0;i<nbparam;i++) {
 					ae->wl[j].w=TxtReplace(ae->wl[j].w,ae->macro[imacro].param[i],cpybackup[i].w,0);
 				}
-				ae->wl[j].len=strlen(ae->wl[j].w); // car la longueur est susceptible d'avoir changé
+				ae->wl[j].len=strlen(ae->wl[j].w); // car la longueur est susceptible d'avoir changÃ©
 			}
 			for (i=0;i<nbparam;i++) MemFree(cpybackup[i].w);
 			MemFree(cpybackup);
@@ -18242,7 +18242,7 @@ void __WHILE(struct s_assenv *ae) {
 			whilewend.maxim=ae->imacropos;
 			whilewend.while_counter=1;
 			ae->whilecounter++;
-			/* pour gérer les macros situés dans le while précedent après un repeat/while courant */
+			/* pour gÃ©rer les macros situÃ©s dans le while prÃ©cedent aprÃ¨s un repeat/while courant */
 			if (ae->iw) whilewend.maxim=ae->whilewend[ae->iw-1].maxim;
 			if (ae->ir && ae->repeat[ae->ir-1].maxim>whilewend.maxim) whilewend.maxim=ae->repeat[ae->ir-1].maxim;
 			ObjectArrayAddDynamicValueConcat((void**)&ae->whilewend,&ae->iw,&ae->mw,&whilewend,sizeof(whilewend));
@@ -18352,7 +18352,7 @@ void __REPEAT(struct s_assenv *ae) {
 					rvar->v=vstart;
 					rvar->used=1;
 				} else {
-					/* mais ne peut être un label ou un alias */
+					/* mais ne peut Ãªtre un label ou un alias */
 					ExpressionSetDicoVar(ae,ae->wl[ae->idx].w,vstart,0);
 					rvar=SearchDico(ae,ae->wl[ae->idx].w,crc);
 					rvar->used=1;
@@ -18377,7 +18377,7 @@ void __REPEAT(struct s_assenv *ae) {
 		currepeat.value=ae->repeatcounter;
 		currepeat.repeat_counter=1;
 		ae->repeatcounter++;
-		/* pour gérer les macros situés dans le repeat précedent après le repeat courant */
+		/* pour gÃ©rer les macros situÃ©s dans le repeat prÃ©cedent aprÃ¨s le repeat courant */
 		if (ae->ir) currepeat.maxim=ae->repeat[ae->ir-1].maxim;
 		if (ae->iw && ae->whilewend[ae->iw-1].maxim>currepeat.maxim) currepeat.maxim=ae->whilewend[ae->iw-1].maxim;
 		if (ae->imacropos>currepeat.maxim) currepeat.maxim=ae->imacropos;
@@ -19012,7 +19012,7 @@ void ___org_new(struct s_assenv *ae, int nocode) {
 	
 	/* check current ORG request */
 	for (i=0;i<ae->io;i++) {
-		/* aucun contrôle sur les ORG non écrits ou en NOCODE */
+		/* aucun contrÃ´le sur les ORG non Ã©crits ou en NOCODE */
 		if (ae->orgzone[i].memstart!=ae->orgzone[i].memend && !ae->orgzone[i].nocode) {
 			if (ae->orgzone[i].ibank==ae->activebank) {
 				if (ae->outputadr<ae->orgzone[i].memend && ae->outputadr>=ae->orgzone[i].memstart) {
@@ -19798,11 +19798,11 @@ printf("AudioLoadSample filesize=%d st=%d normalize=%.2lf\n",filesize,sample_typ
 		
 		idx=subchunk-data;
 	} else {
-		// lecture brute du fichier car il ne ressemble pas à un WAV :)
+		// lecture brute du fichier car il ne ressemble pas Ã  un WAV :)
 		idx=0;
 		nbchannel=1;
 		nbsample=filesize;
-		_internal_getsample=__internal_getsample8; // 8 bits signés
+		_internal_getsample=__internal_getsample8; // 8 bits signÃ©s
 	}
 
 	switch (sample_type) {
@@ -19825,7 +19825,7 @@ printf("AudioLoadSample filesize=%d st=%d normalize=%.2lf\n",filesize,sample_typ
 			}
 			break;
 		case AUDIOSAMPLE_SM2:
-			/* +1 pour éviter le segfault */
+			/* +1 pour Ã©viter le segfault */
 			for (i=0;i<nbsample+1;i+=2) {
 				for (j=0;j<2;j++) {
 					/* downmixing */
@@ -19852,7 +19852,7 @@ printf("AudioLoadSample filesize=%d st=%d normalize=%.2lf\n",filesize,sample_typ
 				  10 -> 14 // 3/4
 				  11 -> 15 // 4/4			
 			***/
-			/* +3 pour éviter le segfault */
+			/* +3 pour Ã©viter le segfault */
 			for (i=0;i<nbsample+3;i+=4) {
 				for (j=0;j<4;j++) {
 					/* downmixing */
@@ -19954,7 +19954,7 @@ fprintf(stderr,"no AP-Ultra support in this version!\n");
 #endif
 
 /*
-	meta fonction qui gère le INCBIN standard plus les variantes SMP et DMA
+	meta fonction qui gÃ¨re le INCBIN standard plus les variantes SMP et DMA
 */
 void __READ(struct s_assenv *ae) {
 	if (!ae->wl[ae->idx].t) {
@@ -20138,7 +20138,7 @@ printf(" -> VTILES loading\n");
 										rvar->v=ae->hexbin[hbinidx].rawlen;
 										rvar->used=1;
 									} else {
-										/* mais ne peut être un label ou un alias */
+										/* mais ne peut Ãªtre un label ou un alias */
 										ExpressionSetDicoVar(ae,ae->wl[ae->idx+6].w,ae->hexbin[hbinidx].rawlen,0);
 									}
 									ae->idx+=6;
@@ -20178,7 +20178,7 @@ printf("we look for tags in the name of a file which were not found\n");
 			for (lm=touched=0;newfilename[lm];lm++) {
 				if (newfilename[lm]=='{') touched++; else if (newfilename[lm]=='}') touched--; else if (touched) newfilename[lm]=toupper(newfilename[lm]);
 			}
-			/* on essaie d'interpréter le nom du fichier en dynamique */
+			/* on essaie d'interprÃ©ter le nom du fichier en dynamique */
 			newfilename=TranslateTag(ae,newfilename,&touched,1,E_TAGOPTION_REMOVESPACE);
 
 			/* Where is the file to load? */
@@ -20309,7 +20309,7 @@ printf("Hexbin -> %s\n",ae->wl[ae->idx+2].w);
 				/* pre-parametres OK (longueur+IDX struct) */
 				if (size<0) {
 #if TRACE_HEXBIN
-printf("taille négative %d -> conversion en %d\n",size,ae->hexbin[hbinidx].datalen+size);
+printf("taille nÃ©gative %d -> conversion en %d\n",size,ae->hexbin[hbinidx].datalen+size);
 #endif
 					size=ae->hexbin[hbinidx].datalen+size;
 					if (size<1) {
@@ -20319,7 +20319,7 @@ printf("taille négative %d -> conversion en %d\n",size,ae->hexbin[hbinidx].datal
 				/* negative offset conversion */
 				if (offset<0) {
 #if TRACE_HEXBIN
-printf("offset négatif %d -> conversion en %d\n",offset,ae->hexbin[hbinidx].datalen+offset);
+printf("offset nÃ©gatif %d -> conversion en %d\n",offset,ae->hexbin[hbinidx].datalen+offset);
 #endif
 					offset=ae->hexbin[hbinidx].datalen+offset;
 				}
@@ -20344,7 +20344,7 @@ printf("taille nulle et offset=%d -> conversion en %d\n",offset,size);
 						int outputidx=0;
 						outputdata=MemMalloc(ae->hexbin[hbinidx].datalen);
 #if TRACE_HEXBIN
-printf("output fictif pour réorganiser les données\n");
+printf("output fictif pour rÃ©organiser les donnÃ©es\n");
 #endif
 
 						if (revert) {
@@ -20630,7 +20630,7 @@ void __SAVE(struct s_assenv *ae) {
 				if (!ae->wl[ae->idx+2].t && ae->wl[ae->idx+3].t!=2) {
 					cursave.ibank=ae->activebank;
 					cursave.ioffset=ae->idx+2;
-					ExpressionFastTranslate(ae,&ae->wl[ae->idx+2].w,1); // si on utilise des variables ça évite la grouille post traitement...
+					ExpressionFastTranslate(ae,&ae->wl[ae->idx+2].w,1); // si on utilise des variables Ã§a Ã©vite la grouille post traitement...
 					cursave.isize=ae->idx+3;
 					ExpressionFastTranslate(ae,&ae->wl[ae->idx+3].w,1); // idem
 					if (!touched) cursave.iw=ae->idx+1; else cursave.filename=filename;
@@ -22182,7 +22182,7 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 #endif
 
 		for (i=0;i<ae->ilz;i++) {
-			/* on dépile les symboles dans l'ordre mais on ne reloge pas sur les zones intermédiaires ou post-crunched */
+			/* on dÃ©pile les symboles dans l'ordre mais on ne reloge pas sur les zones intermÃ©diaires ou post-crunched */
 			if (ae->lzsection[i].lzversion!=0) {
 				if (ae->lzsection[i].memend==-1) {
 					/* patch idx */
@@ -22522,7 +22522,7 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 		
 		/* enregistrement des fichiers programmes par la directive SAVE */
 		PopAllSave(ae);
-		/* exécution des actions programmées par la directive EDSK */
+		/* exÃ©cution des actions programmÃ©es par la directive EDSK */
 		PopAllEDSK(ae);
 		PopAllHFE(ae);
 
@@ -23075,7 +23075,7 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 									break;
 								}
 							} else {
-								/* compression par défaut avec snapshot v3 */
+								/* compression par dÃ©faut avec snapshot v3 */
 								rlebank=EncodeSnapshotRLE(packed,&ChunkSize,65536);
 								
 								if (bankset>=0 && bankset<=8) {
@@ -23342,7 +23342,7 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 				}
 				FileRemoveIfExists(TMP_filename);
 
-				/* en mode binaire classique on va recherche le dernier espace mémoire dans lequel on a travaillé qui n'est pas en 'nocode' */
+				/* en mode binaire classique on va recherche le dernier espace mÃ©moire dans lequel on a travaillÃ© qui n'est pas en 'nocode' */
 				for (i=0;i<ae->io;i++) {
 					/* uniquement si le ORG a ete suivi d'ecriture */
 					if (ae->orgzone[i].memstart!=ae->orgzone[i].memend && ae->orgzone[i].nocode!=1) {
@@ -24170,7 +24170,7 @@ int EarlyPrepSrc(struct s_assenv *ae, char **listing, char *filename) {
 			}
 
 			if (listing[l][idx]=='\\') {
-				/* fusion avec la ligne suivante qui est obligatoirement présente */
+				/* fusion avec la ligne suivante qui est obligatoirement prÃ©sente */
 				listing[l]=MemRealloc(listing[l],strlen(listing[l])+strlen(listing[l+1])+1);
 				strcpy(listing[l]+idx,listing[l+1]);
 				strcpy(listing[l+1],"");
@@ -24576,7 +24576,7 @@ printf("nbbank=%d initialised\n",ae->nbbank);
 	} else {
 		ae->outputfilename=TxtStrDup("rasmoutput");
 	}
-	/* si on est en ligne de commande ET que le fichier n'est pas trouvé */
+	/* si on est en ligne de commande ET que le fichier n'est pas trouvÃ© */
 	if (param && param->filename && !FileExists(param->filename)) {
 		char *LTryExtension[]={".asm",".z80",".inc",".src",".dam",".mxm",".txt",
 					".ASM",".Z80",".INC",".SRC",".DAM",".MXM",".TXT",".o",".s",".O",".S","",NULL};
@@ -24702,7 +24702,7 @@ printf("nbbank=%d initialised\n",ae->nbbank);
 	Automate[',']=2;
 	Automate['\t']=2;
 	/* end of line */
-	Automate[':']=3; /* les 0x0A et 0x0D seront deja  remplaces en ':' */
+	Automate[':']=3; /* les 0x0A et 0x0D seront deja  remplaces en ':' */
 	/* expression */
 	Automate['=']=4; /* on stocke l'emplacement de l'egalite */
 	Automate['<']=4; /* ou des operateurs */
@@ -24744,7 +24744,7 @@ printf("read file/flux\n");
 		int flux_nblines=0;
 		int flux_curpos;
 
-		/* copie des données */
+		/* copie des donnÃ©es */
 		for (i=0;i<datalen;i++) {
 			if (datain[i]=='\n') flux_nblines++;
 		}
@@ -24757,7 +24757,7 @@ printf("read file/flux\n");
 				zelines[flux_nblines]=MemMalloc(i-flux_curpos+2);
 				/* copy data+CR */
 				memcpy(zelines[flux_nblines],datain+flux_curpos,i-flux_curpos+1);
-				/* et on ajoute un petit zéro à la fin! */
+				/* et on ajoute un petit zÃ©ro Ã  la fin! */
 				zelines[flux_nblines][i-flux_curpos+1]=0;
 #if 0
 if (flux_nblines<50) printf("%02d[%s]\n",flux_nblines,zelines[flux_nblines]);
@@ -25022,7 +25022,7 @@ if (!idx) printf("[%s]\n",listing[l].listing);
 								ae->rawfile[ae->ifile-1]=ae->source_bigbuffer;
 								ae->rawlen[ae->ifile-1]=ae->source_bigbuffer_len;
 							}
-							/* virer les commentaires + pré-traitement */
+							/* virer les commentaires + prÃ©-traitement */
 							newmidx=EarlyPrepSrc(ae,listing_include,ae->filename[ae->ifile-1]);
 							if (newmidx>midx) {
 								midx=newmidx+256;
@@ -25213,7 +25213,7 @@ if (!idx) printf("[%s]\n",listing[l].listing);
 						break;
 
 					case 'U':
-						/* code dupliqué du REND */
+						/* code dupliquÃ© du REND */
 						if (strcmp(bval,"UNTIL")==0) {
 							/* retrouver la structure repeat_index correspondant a l'ouverture */
 							for (ri=nri-1;ri>=0;ri--) {
@@ -25383,7 +25383,7 @@ printf("c='%c' automate[c]=%d\n",c>31?c:'.',Automate[((int)c)&0xFF]);
 #if TRACE_PREPRO
 printf("quote\n");
 #endif
-						/* on finalise le mot si on est en début d'une nouvelle instruction ET que c'est un SAVE */
+						/* on finalise le mot si on est en dÃ©but d'une nouvelle instruction ET que c'est un SAVE */
 						if (strcmp(w,"SAVE")==0) {
 							// on ne break pas pour passer dans le case 2 (separator)
 							idx--;
@@ -25398,7 +25398,7 @@ printf("quote\n");
 #if TRACE_PREPRO
 printf("quote\n");
 #endif
-						/* on finalise le mot si on est en début d'une nouvelle instruction ET que c'est un SAVE */
+						/* on finalise le mot si on est en dÃ©but d'une nouvelle instruction ET que c'est un SAVE */
 						if (strcmp(w,"SAVE")==0) {
 							// on ne break pas pour passer dans le case 2 (separator)
 							idx--;
@@ -25445,7 +25445,7 @@ printf("1/2 Winape maxam operator test for [%s] [%s] %d lw=%d\n",w,w+ispace,ispa
 printf("*** separator='%c'\n",c);
 #endif
 					
-					/* patch argument suit une expression d'évaluation (ASSERT) */
+					/* patch argument suit une expression d'Ã©valuation (ASSERT) */
 					if (c==',') hadcomma=1;
 					
 					if (lw) {
@@ -25596,7 +25596,7 @@ printf("EOL\n");
 					Automate['\t']=2;
 					ispace=0;
 					texpr=0;
-					/* si le mot lu a plus d'un caractère */
+					/* si le mot lu a plus d'un caractÃ¨re */
 					if (lw) {
 						if (!wordlist[nbword-1].t && (wordlist[nbword-1].e || w[0]=='=') && !hadcomma) {
 							/* cas particulier d'ecriture libre */
@@ -25636,7 +25636,7 @@ printf("%s\n",wordlist[nbword].w);
 							Automate[' ']=1;
 							Automate['\t']=1;
 						} else {
-							/* mot de fin de ligne, à priori pas une expression */
+							/* mot de fin de ligne, Ã  priori pas une expression */
 							curw.len=strlen(w); curw.w=MemMalloc(curw.len+1); memcpy(curw.w,w,curw.len+1);
 							curw.l=listing[l].iline;
 							curw.ifile=listing[l].ifile;
@@ -25656,7 +25656,7 @@ if (curw.w[0]=='=') {
 							hadcomma=0;
 						}
 					} else {
-						/* sinon c'est le précédent qui était terminateur d'instruction */
+						/* sinon c'est le prÃ©cÃ©dent qui Ã©tait terminateur d'instruction */
 						wordlist[nbword-1].t=1;
 						w[lw]=0;
 					}
@@ -25698,7 +25698,7 @@ printf("*** patch prepro operator assignment + useless spacing\n");
 							w[lw]=0;
 						}
 					} else {
-						/* 2018.06.06 évolution sur le ! (not) */
+						/* 2018.06.06 Ã©volution sur le ! (not) */
 #if TRACE_PREPRO
 printf("*** operateur commence le mot\n");
 printf("mot precedent=[%s] t=%d\n",wordlist[nbword-1].w,wordlist[nbword-1].t);
@@ -25708,7 +25708,7 @@ printf("mot precedent=[%s] t=%d\n",wordlist[nbword-1].w,wordlist[nbword-1].t);
 							w[lw++]=c;
 							//StateMachineResizeBuffer(&w,lw,&mw);
 							w[lw]=0;
-							/* automate déjà modifié rien de plus */
+							/* automate dÃ©jÃ  modifiÃ© rien de plus */
 						} else if (!wordlist[nbword-1].t) {
 							/* il y avait un mot avant alors on va reorganiser la ligne */
 							/* patch NOT -> SAUF si c'est une directive */
@@ -25815,18 +25815,18 @@ printf("quote start with %c\n",c);
 					if ((unsigned char)w[utidx]>126) {
 						switch ((unsigned char)w[utidx]) {
 							case 0xC2:
-								if ((unsigned char)w[utidx+1]==0xBF) w[utidx]=174; else // ¿
-								if ((unsigned char)w[utidx+1]==0xA1) w[utidx]=175; else // ¡
+								if ((unsigned char)w[utidx+1]==0xBF) w[utidx]=174; else // Â¿
+								if ((unsigned char)w[utidx+1]==0xA1) w[utidx]=175; else // Â¡
 									MakeError(ae,0,ae->filename[listing[l].ifile],listing[l].iline,"Unsupported UTF8 char for quoted string\n");
 								break;
 							case 0xC3:
-								if ((unsigned char)w[utidx+1]==0xB9) w[utidx]=124; else // ù
-								if ((unsigned char)w[utidx+1]==0xA9) w[utidx]=123; else // é
-								if ((unsigned char)w[utidx+1]==0xA8) w[utidx]=125; else // è
-								if ((unsigned char)w[utidx+1]==0xA0) w[utidx]=64; else  // à
-								if ((unsigned char)w[utidx+1]==0x91) w[utidx]=161; else // Ñ
-								if ((unsigned char)w[utidx+1]==0xB1) w[utidx]=171; else // ñ
-								if ((unsigned char)w[utidx+1]==0xA7) {                  // ç
+								if ((unsigned char)w[utidx+1]==0xB9) w[utidx]=124; else // Ã¹
+								if ((unsigned char)w[utidx+1]==0xA9) w[utidx]=123; else // Ã©
+								if ((unsigned char)w[utidx+1]==0xA8) w[utidx]=125; else // Ã¨
+								if ((unsigned char)w[utidx+1]==0xA0) w[utidx]=64; else  // Ã 
+								if ((unsigned char)w[utidx+1]==0x91) w[utidx]=161; else // Ã‘
+								if ((unsigned char)w[utidx+1]==0xB1) w[utidx]=171; else // Ã±
+								if ((unsigned char)w[utidx+1]==0xA7) {                  // Ã§
 									w[utidx]=92;
 									w[utidx+1]=92; // conversion to "\\"
 								} else
@@ -25993,7 +25993,7 @@ int RasmAssembleInfoIntoRAMROM(const char *datain, int lenin, struct s_rasm_info
 
 	ae=PreProcessing(NULL,1,datain,lenin,NULL);
 
-	/* extension 4Mo = 256 slots + 4 slots 64K de RAM par défaut => 260 */
+	/* extension 4Mo = 256 slots + 4 slots 64K de RAM par dÃ©faut => 260 */
 	maxbank=ramsize>>14;
 	for (i=0;i<maxbank;i++) {
 		ramidx=i*16384;
@@ -26026,7 +26026,7 @@ int RasmAssembleInfoIntoRAM(const char *datain, int lenin, struct s_rasm_info **
 
 	ae=PreProcessing(NULL,1,datain,lenin,NULL);
 
-	/* extension 4Mo = 256 slots + 4 slots 64K de RAM par défaut => 260 */
+	/* extension 4Mo = 256 slots + 4 slots 64K de RAM par dÃ©faut => 260 */
 	maxbank=ramsize>>14;
 	for (i=0;i<maxbank;i++) {
 		ramidx=i*16384;
@@ -26075,7 +26075,7 @@ int RasmAssembleInfoParam(const char *datain, int lenin, unsigned char **dataout
 
 #define AUTOTEST_IS_REGISTER "assert is_register('bc')==1 : assert is_register('d')==1 : assert is_register('e')==1 : assert is_register('z')==0 : assert is_register('rr')==0 : nop "
 
-#define AUTOTEST_ACCENT "defb 'grouiké'"
+#define AUTOTEST_ACCENT "defb 'grouikÃ©'"
 
 #define AUTOTEST_QUOTELAST "nop : save'grouik"
 
@@ -26306,7 +26306,7 @@ int RasmAssembleInfoParam(const char *datain, int lenin, unsigned char **dataout
 #define AUTOTEST_DELAYNUM	"macro test  label:    dw {label}:    endm:    repeat 3, idx:idx2 = idx-1:" \
 				" test label_{idx2}:    rend:repeat 3, idx:label_{idx-1}:nop:rend"
 
-#define AUTOTEST_STR		"CHARSET \" !#$%&'()*+,-./0123456789:;<=>?ABCDEFGHIJKLMNOPQRSTUVWXYZ[]^~abcdefghijklmnopqrstuvwxyzéè{}|\",0 : "\
+#define AUTOTEST_STR		"CHARSET \" !#$%&'()*+,-./0123456789:;<=>?ABCDEFGHIJKLMNOPQRSTUVWXYZ[]^~abcdefghijklmnopqrstuvwxyzÃ©Ã¨{}|\",0 : "\
 				"grouik STR 'REGION' : charset : defb 'REGION'"
 
 #define AUTOTEST_STRUCT		"org #1000:label1 :struct male:age    defb 0:height defb 0:endstruct:struct female:" \
@@ -26463,11 +26463,11 @@ int RasmAssembleInfoParam(const char *datain, int lenin, unsigned char **dataout
 
 #define AUTOTEST_CONFINE	"org 0: nop: org 250: confine 10: defb #aa: org 500: confine 12: defb #bb: assert $<512 "
 
-#define AUTOTEST_UTF8		"utf8remap 'é',50 : defb 'é' : assert $==1" // outputed code must be 50 !
+#define AUTOTEST_UTF8		"utf8remap 'Ã©',50 : defb 'Ã©' : assert $==1" // outputed code must be 50 !
 
-#define AUTOTEST_UTF8B		" utf8remap 'é',' ': struct ustruct: lab defb 'édouard': endstruct: assert {sizeof}ustruct==7: struct ustruct edouard: assert $==7"
+#define AUTOTEST_UTF8B		" utf8remap 'Ã©',' ': struct ustruct: lab defb 'Ã©douard': endstruct: assert {sizeof}ustruct==7: struct ustruct edouard: assert $==7"
 
-#define AUTOTEST_UTF8C		" utf8remap 'é',20 : struct s_texte : texte defs 10 :  endstruct : struct s_texte unestruct,1,'éééééééééé' "
+#define AUTOTEST_UTF8C		" utf8remap 'Ã©',20 : struct s_texte : texte defs 10 :  endstruct : struct s_texte unestruct,1,'Ã©Ã©Ã©Ã©Ã©Ã©Ã©Ã©Ã©Ã©' "
 
 
 #define AUTOTEST_SAVEINVALID0	"repeat 256,x : defb x-1 : rend : save 'rasmoutput.bin',0,$"
@@ -27601,7 +27601,7 @@ struct s_autotest_keyword autotest_keyword[]={
 	{"struct machin : unReal defr : endstruct : pouet=50 : struct machin pouet1,1,pouet: assert $==5",0},
 	{"defb '\\xF'",1}, {"defb '\\xFg'",1}, {"defb '\\xF-'",1}, {"defb '\\xF '",1},
 	{"defb '\\x'",1}, {"defb '\\xg'",1}, {"defb '\\x-'",1}, {"defb '\\x '",1},
-	{"defb '\\x\\'",1},	// passer une instruction en tant que paramètre de macro
+	{"defb '\\x\\'",1},	// passer une instruction en tant que paramÃ¨tre de macro
 	{" macro uneInstruction instr: {instr} de: {instr} hl: mend: uneInstruction inc: uneInstruction dec ",0},
 	{"ld a,50 xor 10: ld a,50^10: ld a,50 mod 12: ld a,50%12: ld a,50 % 12 ",0}, // some prepro enforcing ^_^
 	{" repeat 10,x: bank: module truc{x}: oneTwo nop: rend",0}, // flexible module names
@@ -27654,6 +27654,10 @@ struct s_autotest_keyword autotest_keyword[]={
 	{"ixab=5:add (ixab)",1},
 	{"ixab=5:adc (ixab)",1},
 	{"nop : incbin 'ljkhsdlkjksdflkjsdflkjdf.sdfkujhsdjkfh.sdfkjhsdfkjhsfd',EXISTS",0}, // no error with EXISTS option
+	{"cp (ix)",0},{"ld a,(ix)",0},{"ld (ix),a",0}, {"xor (ix)",},{"and (ix)",},{"or (ix)",},{"sub (ix)",},{"adc (ix)",},{"add (ix)",}, {"bit 0,(ix)",},
+	{"set 0,(ix)",},{"res 0,(ix)",},{"rl (ix)",},{"rr (ix)",},{"rlc (ix)",}, {"rrc (ix)",},{"sll (ix)",},{"srl (ix)",}, {"sla (ix)",},{"sra (ix)",},
+	{"cp (iy)",0},{"ld a,(iy)",0},{"ld (iy),a",0}, {"xor (iy)",},{"and (iy)",},{"or (iy)",},{"sub (iy)",},{"adc (iy)",},{"add (iy)",}, {"bit 0,(iy)",},
+	{"set 0,(iy)",},{"res 0,(iy)",},{"rl (iy)",},{"rr (iy)",},{"rlc (iy)",}, {"rrc (iy)",},{"sll (iy)",},{"srl (iy)",}, {"sla (iy)",},{"sra (iy)",},
 	/*
 	 *
 	 * will need to test resize + format then meta review test!
