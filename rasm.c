@@ -24336,7 +24336,7 @@ printf("paramz 1\n");
 		ae->export_equ=param->export_equ;
 		ae->export_sna=param->export_sna;
 		ae->export_snabrk=param->export_snabrk;
-		if (param->export_sna || param->export_snabrk) {
+		if (param->export_sna) {
 			ae->forcesnapshot=1;
 		}
 		ae->export_brk=param->export_brk;
