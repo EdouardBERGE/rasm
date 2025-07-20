@@ -8325,6 +8325,7 @@ void PushExpression(struct s_assenv *ae,int iw,enum e_expression zetype)
 	
 	struct s_expression curexp={0};
 	int startptr=0;
+	unsigned char bakXY=0;
 
 	if (!ae->nocode) {
 		curexp.iw=iw;
@@ -8359,6 +8360,7 @@ void PushExpression(struct s_assenv *ae,int iw,enum e_expression zetype)
 				case E_EXPRESSION_IV8:
 				case E_EXPRESSION_IV81:
 						     // patch IX/IY because they dont exist anymore as constants
+						     bakXY=ae->wl[iw].w[2];
 						     ae->wl[iw].w[1]='%';
 						     ae->wl[iw].w[2]='0';
 				case E_EXPRESSION_IV16:startptr=-2;
@@ -8407,6 +8409,10 @@ void PushExpression(struct s_assenv *ae,int iw,enum e_expression zetype)
 			if (ae->ir || ae->iw || ae->imacro) {
 				curexp.reference=TxtStrDup(ae->wl[iw].w);
 				ExpressionFastTranslate(ae,&curexp.reference,1);
+				if (bakXY) {
+					ae->wl[iw].w[1]='I';
+					ae->wl[iw].w[2]=bakXY;
+				}
 			} else {
 				ExpressionFastTranslate(ae,&ae->wl[iw].w,1);
 			}
@@ -27243,6 +27249,20 @@ int RasmAssembleInfoParam(const char *datain, int lenin, unsigned char **dataout
 ":bank:set 7,(iy+#12),e:assert $==getsize('set 7,(iy+#12),e'):bank:set 7,(iy+#12),h:assert $==getsize('set 7,(iy+#12),h'):bank:set 7,(iy+#12),l:assert $==getsize('set 7,(iy+#12),l')" \
 ":bank:set 7,(iy+#12):assert $==getsize('set 7,(iy+#12)'):bank:set 7,(iy+#12),a:assert $==getsize('set 7,(iy+#12),a'):bank:set 7,(iy+#12),a:assert $==getsize('set 7,(iy+#12),a')"
 
+#define AUTOTEST_XY_PATCH "repeat 2 : " \
+	"cp (ix) : ld a,(ix) : ld (ix),a : xor (ix) : and (ix) : or (ix) : sub (ix) : adc (ix) : add (ix) : bit 0,(ix) : " \
+	"set 0,(ix) : res 0,(ix) : rl (ix) : rr (ix) : rlc (ix) : rrc (ix) : sll (ix) : srl (ix) : sla (ix) : sra (ix) : " \
+	"cp (iy) : ld a,(iy) : ld (iy),a : xor (iy) : and (iy) : or (iy) : sub (iy) : adc (iy) : add (iy) : bit 0,(iy) : " \
+	"set 0,(iy) : res 0,(iy) : rl (iy) : rr (iy) : rlc (iy) : rrc (iy) : sll (iy) : srl (iy) : sla (iy) : sra (iy) : " \
+	"cp (ix+5) : ld a,(ix+5) : ld (ix+5),a : xor (ix+5) : and (ix+5) : or (ix+5) : sub (ix+5) : adc (ix+5) : add (ix+5) : bit 0,(ix+5) : " \
+	"set 0,(ix+5) : res 0,(ix+5) : rl (ix+5) : rr (ix+5) : rlc (ix+5) : rrc (ix+5) : sll (ix+5) : srl (ix+5) : sla (ix+5) : sra (ix+5) : " \
+	"cp (iy+9) : ld a,(iy+9) : ld (iy+9),a : xor (iy+9) : and (iy+9) : or (iy+9) : sub (iy+9) : adc (iy+9) : add (iy+9) : bit 0,(iy+9) : " \
+	"set 0,(iy+9) : res 0,(iy+9) : rl (iy+9) : rr (iy+9) : rlc (iy+9) : rrc (iy+9) : sll (iy+9) : srl (iy+9) : sla (iy+9) : sra (iy+9) : " \
+	"cp (ix-5) : ld a,(ix-5) : ld (ix-5),a : xor (ix-5) : and (ix-5) : or (ix-5) : sub (ix-5) : adc (ix-5) : add (ix-5) : bit 0,(ix-5) : " \
+	"set 0,(ix-5) : res 0,(ix-5) : rl (ix-5) : rr (ix-5) : rlc (ix-5) : rrc (ix-5) : sll (ix-5) : srl (ix-5) : sla (ix-5) : sra (ix-5) : " \
+	"cp (iy-9) : ld a,(iy-9) : ld (iy-9),a : xor (iy-9) : and (iy-9) : or (iy-9) : sub (iy-9) : adc (iy-9) : add (iy-9) : bit 0,(iy-9) : " \
+	"set 0,(iy-9) : res 0,(iy-9) : rl (iy-9) : rr (iy-9) : rlc (iy-9) : rrc (iy-9) : sll (iy-9) : srl (iy-9) : sla (iy-9) : sra (iy-9) : rend"
+
 #define AUTOTEST_REPEAT3 "y=0: repeat 0: y+=1: rend: assert y==0: y=0: repeat 1: y+=1: rend: assert y==1:"\
 	"y=0: repeat 5: y+=1: rend: assert y==5: y=1: repeat 5,x: assert y==x: y+=1: rend: y=2: repeat 5,x,2,2: assert x==y:"\
 	"y+=2: rend: startingindex 5: y=5: repeat 2,x: assert x==y: y+=1: rend: startingindex 5,5: y=10: repeat 3,x,10: assert x==y: "\
@@ -28741,6 +28761,11 @@ printf("testing GETSIZE integrity 7/8 OK\n");
 	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
 	RasmFreeInfoStruct(debug);
 printf("testing GETSIZE integrity 8/8 ALL opcodes OK\n");
+
+	ret=RasmAssemble(AUTOTEST_XY_PATCH,strlen(AUTOTEST_XY_PATCH),&opcode,&opcodelen);
+	if (!ret && memcmp(opcode,opcode+opcodelen/2,opcodelen/2)==0) {} else {printf("Autotest %03d ERROR (IX patch must not alter expression reference for loops)\n",cpt);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing IX/IY patch with repeats OK\n");
 
 	ret=RasmAssemble(AUTOTEST_GETNOP_LD,strlen(AUTOTEST_GETNOP_LD),&opcode,&opcodelen);
 	if (!ret) {} else {printf("Autotest %03d ERROR (math function GETNOP with multiple LD syncronised with TICKER)\n",cpt);exit(-1);}
