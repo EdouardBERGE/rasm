@@ -24701,7 +24701,7 @@ printf("nbbank=%d initialised\n",ae->nbbank);
 
 	for (i=0;CharWord[i];i++) {Automate[((int)CharWord[i])&0xFF]=1;}
 	for (i=0;i<256;i++) {
-		if (((i>='A' && i<='Z') || (i>='0' && i<='9') || i=='@' || i=='_') && !quote_type) AutomatePrepro[i]=1; else AutomatePrepro[i]=0;
+		if ((i>='A' && i<='Z') || (i>='0' && i<='9') || i=='@' || i=='_') AutomatePrepro[i]=1; else AutomatePrepro[i]=0;
 	}
 	 /* separators */
 	Automate[' ']=2;
@@ -25288,7 +25288,8 @@ if (!idx) printf("[%s]\n",listing[l].listing);
 						}
 						break;
 
-					default: if (ae->noampersand && c=='&') {
+					default: 
+						if (!quote_type && ae->noampersand && c=='&') {
 							  listing[l].listing[idx-1]='#';
 #if TRACE_PREPRO
 printf("patch & => #\n");
@@ -27890,6 +27891,13 @@ printf("testing all opcodes OK\n");
 	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
 	RasmFreeInfoStruct(debug);
 printf("testing command line parameter -amper OK\n");
+
+	#define AUTOTEST_AMPER "defb 'machin&truc : ld a,&12 : bidule',0"
+	ret=RasmAssembleInfoParam(AUTOTEST_AMPER,strlen(AUTOTEST_AMPER),&opcode,&opcodelen,&debug,&param);
+	if (!ret && !strchr(opcode,'#')) {} else {printf("Autotest %03d ERROR (testing ampersand with strings)\n",cpt);MiniDump(opcode,opcodelen);for (i=0;i<debug->nberror;i++) printf("%d -> %s\n",i,debug->error[i].msg);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+	RasmFreeInfoStruct(debug);
+printf("testing ampersand with strings OK\n");
 
 	#define AUTOTEST_PARAM_MAXAM "aaa=10+5*3 : assert aaa==45 : nop"
 	memset(&param,0,sizeof(struct s_parameter));
