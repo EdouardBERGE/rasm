@@ -19962,7 +19962,7 @@ fprintf(stderr,"no AP-Ultra support in this version!\n");
 /*
 	meta fonction qui gère le INCBIN standard plus les variantes SMP et DMA
 */
-void __READ(struct s_assenv *ae) {
+void __ERRRD(struct s_assenv *ae) {
 	if (!ae->wl[ae->idx].t) {
 		int idx;
 
@@ -21041,7 +21041,7 @@ struct s_asm_keyword instruction[]={
 {"WHILE",0,0,__WHILE},
 {"WEND",0,0,__WEND},
 //{"READ",0,0,__READ},
-{"INCLUDE",0,0,__READ}, // anti-label
+{"INCLUDE",0,0,__ERRRD}, // anti-label
 {"HEXBIN",0,0,__HEXBIN},
 {"ALIGN",0,0,__ALIGN},
 {"CONFINE",0,0,__CONFINE},
@@ -21136,6 +21136,7 @@ struct s_asm_keyword instruction[]={
 {"ENDRELOCATE",0,0,__ENDRELOCATE},
 {"EDSK",0,0,__EDSK},
 {"HFE",0,0,__HFE},
+{"ERRRD",0,0,__ERRRD},
 {"",0,0,NULL}
 };
 
@@ -25052,7 +25053,7 @@ if (!idx) printf("[%s]\n",listing[l].listing);
 							char tmp_insert[128];
 
 							for (i=rewrite;i<idx;i++) listing[incstartL].listing[i]=' ';
-							sprintf(tmp_insert,"READ %d",ae->ih);
+							sprintf(tmp_insert,"ERRRD %d",ae->ih);
 							memcpy(listing[incstartL].listing+rewrite,tmp_insert,strlen(tmp_insert));
 							
 							filename_toread=MergePath(ae,ae->filename[listing[l].ifile],qval);
@@ -28949,6 +28950,11 @@ printf("testing page tag with generated label name OK\n");
 		MiniDump(opcode,opcodelen);exit(-1);}
 	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
 printf("testing internal error struct OK\n");
+
+#define AUTOTEST_INCLUDE_MISSING "include 'rien' : nop"
+	ret=RasmAssembleInfo(AUTOTEST_INCLUDE_MISSING,strlen(AUTOTEST_INCLUDE_MISSING),&opcode,&opcodelen,&debug);
+	if (debug->nberror==1 && strstr(debug->error[0].msg,"File to include was not found")) {}
+	else {printf("Autotest %03d ERROR (include missing file test)\n",cpt);MiniDump(opcode,opcodelen);exit(-1);}
 
 	ret=RasmAssembleInfo(AUTOTEST_EMBEDDED_LABELS,strlen(AUTOTEST_EMBEDDED_LABELS),&opcode,&opcodelen,&debug);
 	if (!ret && debug->nbsymbol==5) {
