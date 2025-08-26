@@ -7639,7 +7639,7 @@ printf("***********\n");
 						MakeError(ae,ae->idx,GetCurrentFile(ae),GetExpLine(ae,0),"variable name must begin by a letter or '_' [%s]\n",expr);
 						return 0;
 					} else {
-						char *dblexp;
+						char *dblexp,*dexpr;
 						char operatorassignment;
 
 						ptr_exp=expr+idx;
@@ -7662,13 +7662,19 @@ printf("***********\n");
 								operatorassignment=ptr_exp[-1];ptr_exp[-1]=0;break;
 							default:operatorassignment=0;break;
 						}
+						
+						if (strchr(expr,'{')) {
+							dexpr=TranslateTag(ae,TxtStrDup(expr),&touched,0,E_TAGOPTION_NONE);
+						} else {
+							dexpr=expr;
+						}
 
-						crc=GetCRC(expr);
-						if (SearchAlias(ae,crc,expr)) {
+						crc=GetCRC(dexpr);
+						if (SearchAlias(ae,crc,dexpr)) {
 							MakeError(ae,ae->idx,GetCurrentFile(ae),GetExpLine(ae,0),"Variable cannot override existing alias [%s]\n",expr);
 							return 0;
 						}
-						curdic=SearchDico(ae,expr,crc);
+						curdic=SearchDico(ae,dexpr,crc);
 						if (curdic) {
 							switch (operatorassignment) {
 								default:printf("warning remover\n");break;
@@ -7707,11 +7713,12 @@ printf("***********\n");
 									MakeError(ae,ae->idx,GetCurrentFile(ae),GetExpLine(ae,0),"Cannot do an operator assignment on non existing variable [%s]\n",expr);
 									return 0;
 								case 0: /* assign a new variable */
-									ExpressionSetDicoVar(ae,expr,v,0);
+									ExpressionSetDicoVar(ae,dexpr,v,0);
 									break;
 							}
 						}
 						*ptr_exp='=';
+						if (dexpr!=expr) MemFree(dexpr);
 						return v;
 					}
 				}
@@ -25491,22 +25498,27 @@ printf("2/2 Winape maxam operator test for expression [%s]\n",w+ispace);
 							ispace=lw;
 						} else if (strcmp(w,"EQU")==0) {
 							/* il y avait un mot avant alors on va reorganiser la ligne */
-							nbword--;
-							lw=0;
-							for (li=0;wordlist[nbword].w[li];li++) {
-								w[lw++]=wordlist[nbword].w[li];
+							if (!wordlist[nbword-1].t) {
+								nbword--;
+								lw=0;
+								for (li=0;wordlist[nbword].w[li];li++) {
+									w[lw++]=wordlist[nbword].w[li];
+									//StateMachineResizeBuffer(&w,lw,&mw);
+								}
+								MemFree(wordlist[nbword].w);
+								curw.e=lw+1;
+								/* on ajoute l'egalite d'alias*/
+								w[lw++]='~';
 								//StateMachineResizeBuffer(&w,lw,&mw);
+								w[lw]=0;
+								Automate[' ']=1;
+								Automate['\t']=1;
+								ispace=lw;
+								texpr=1;
+							} else {
+								MakeError(ae,0,ae->filename[listing[l].ifile],listing[l].iline,"an alias name must precede the EQU\n");
+								w[lw]=0;
 							}
-							MemFree(wordlist[nbword].w);
-							curw.e=lw+1;
-							/* on ajoute l'egalite d'alias*/
-							w[lw++]='~';
-							//StateMachineResizeBuffer(&w,lw,&mw);
-							w[lw]=0;
-							Automate[' ']=1;
-							Automate['\t']=1;
-							ispace=lw;
-							texpr=1;
 						} else {
 							curw.len=lw; curw.w=MemMalloc(lw+1); memcpy(curw.w,w,lw+1);
 							curw.l=listing[l].iline;
@@ -25626,6 +25638,9 @@ printf("%s\n",wordlist[nbword].w);
 							curw.e=0;
 							lw=0;
 							w[lw]=0;
+					#if 0
+						on n est jamais censé avoir un EQU avant la fin de ligne, ça serait une erreur dans tous (tous?) les cas!
+
 						} else if (nbword && strcmp(w,"EQU")==0) {
 							/* il y avait un mot avant alors on va reorganiser la ligne */
 							nbword--;
@@ -25643,6 +25658,7 @@ printf("%s\n",wordlist[nbword].w);
 							w[lw]=0;
 							Automate[' ']=1;
 							Automate['\t']=1;
+					#endif
 						} else {
 							/* mot de fin de ligne, à priori pas une expression */
 							curw.len=strlen(w); curw.w=MemMalloc(curw.len+1); memcpy(curw.w,w,curw.len+1);
@@ -27680,6 +27696,8 @@ struct s_autotest_keyword autotest_keyword[]={
 	{"set 0,(ix)",},{"res 0,(ix)",},{"rl (ix)",},{"rr (ix)",},{"rlc (ix)",}, {"rrc (ix)",},{"sll (ix)",},{"srl (ix)",}, {"sla (ix)",},{"sra (ix)",},
 	{"cp (iy)",0},{"ld a,(iy)",0},{"ld (iy),a",0}, {"xor (iy)",},{"and (iy)",},{"or (iy)",},{"sub (iy)",},{"adc (iy)",},{"add (iy)",}, {"bit 0,(iy)",},
 	{"set 0,(iy)",},{"res 0,(iy)",},{"rl (iy)",},{"rr (iy)",},{"rlc (iy)",}, {"rrc (iy)",},{"sll (iy)",},{"srl (iy)",}, {"sla (iy)",},{"sra (iy)",},
+	{"varia{cpt}=10",1},
+	{"cpt=1:varia{cpt}=11:cpt+=1:varia{cpt}=22:varcheck=varia1+varia2:assert varcheck==33",0},
 	/*
 	 *
 	 * will need to test resize + format then meta review test!
@@ -28488,6 +28506,14 @@ printf("testing variables in labels OK\n");
 	if (!ret && opcodelen==3) {} else {printf("Autotest %03d ERROR (variables in aliases) r=%d l=%d\n",cpt,ret,opcodelen);MiniDump(opcode,opcodelen);exit(-1);}
 	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
 printf("testing variables in aliases OK\n");
+
+#define AUTOTEST_EQU_PREC "nop : equ 25 : nop"
+	ret=RasmAssembleInfo(AUTOTEST_EQU_PREC,strlen(AUTOTEST_EQU_PREC),&opcode,&opcodelen,&debug);
+	if (ret) {} // must be error
+	else {printf("Autotest %03d ERROR (EQU precedence check failed)\n",cpt);MiniDump(opcode,opcodelen);for (i=0;i<debug->nberror;i++) printf("%d -> %s\n",i,debug->error[i].msg);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+	RasmFreeInfoStruct(debug);
+printf("testing EQU precedence OK\n");
 
 	ret=RasmAssemble(AUTOTEST_EQUDOLLAR,strlen(AUTOTEST_EQUDOLLAR),&opcode,&opcodelen);
 	if (!ret) {} else {printf("Autotest %03d ERROR (delayed EQU + $) r=%d l=%d\n",cpt,ret,opcodelen);MiniDump(opcode,opcodelen);exit(-1);}
