@@ -27698,11 +27698,16 @@ struct s_autotest_keyword autotest_keyword[]={
 	{"set 0,(iy)",},{"res 0,(iy)",},{"rl (iy)",},{"rr (iy)",},{"rlc (iy)",}, {"rrc (iy)",},{"sll (iy)",},{"srl (iy)",}, {"sla (iy)",},{"sra (iy)",},
 	{"varia{cpt}=10",1},
 	{"cpt=1:varia{cpt}=11:cpt+=1:varia{cpt}=22:varcheck=varia1+varia2:assert varcheck==33",0},
+	{"repeat 10,x:mavar{x}=x*5:mavar{x}+=2:rend:total=0:repeat 10,x:total+=mavar{x}:rend:assert total==295:nop",0},
+	{"equ $:nop",1},{"machin equ 50 equ 12:nop",1},{"total=20:equ 40:nop",1}, // invalid EQU
+	{"total=20:bidule=total:equ 20:nop",1},
+
 	/*
 	 *
 	 * will need to test resize + format then meta review test!
 	 *
 	 *
+	{"",},{"",},
 	{"",},{"",},{"",},
 	{"",},{"",},{"",},{"",},{"",},
 	{"",},{"",},{"",},{"",},{"",},{"",},
