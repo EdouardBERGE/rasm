@@ -16624,6 +16624,19 @@ void __ROMBANK(struct s_assenv *ae) {
 	}
 	ae->remu=1; // force REMU output :)
 
+	// enforce correct memory usage
+	__internal_UpdateLZBlockIfAny(ae);
+	if (ae->io) {
+		ae->orgzone[ae->io-1].memend=ae->outputadr;
+	}
+	if (ae->lz>=0) {
+		if (!ae->nowarning) {
+			rasm_printf(ae,KWARNING"[%s:%d] Warning: LZ section wasn't closed before a new ROMBANK directive\n",GetCurrentFile(ae),ae->wl[ae->idx].l);
+			if (ae->erronwarn) MaxError(ae);
+		}
+		__LZCLOSE(ae);
+	}
+
 	if (!ae->wl[ae->idx].t) {
 		if (strcmp(ae->wl[ae->idx+1].w,"NEXT")==0) {
 			// search for an immediate ROM used
@@ -16654,6 +16667,9 @@ void __ROMBANK(struct s_assenv *ae) {
 	} else {
 		// already allocated, just translate ROM number
 		ae->activebank=ae->rombank[rom_select]; ae->maxptr=ae->memsize[ae->activebank]; // inseparable
+		// but we need to get ORG info back!
+		// try to get an old memory settings :)
+		___getbackto_memory_space(ae);
 	}
 }
 
@@ -21356,6 +21372,7 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 	int backbank;
 	int backcode;
 	int backnop,backtick;
+	int idstart,idend;
 
 	for (i=0;i<256;i++) {
 		if (i==0 || (i>='a' && i<='z') || (i>='A' && i<='Z')) AutomateCharStop[i]=1; else AutomateCharStop[i]=0;
@@ -22756,8 +22773,8 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 						if (ae->orgzone[j].protect) continue; /* protected zones exclusion */
 						/* bank data may start anywhere (typically #0000 or #C000) */
 						if (ae->orgzone[j].ibank==i && ae->orgzone[j].memstart!=ae->orgzone[j].memend) {
-							if (ae->orgzone[j].memstart<offset) offset=ae->orgzone[j].memstart;
-							if (ae->orgzone[j].memend>endoffset) endoffset=ae->orgzone[j].memend;
+							if (ae->orgzone[j].memstart<offset) {offset=ae->orgzone[j].memstart;idstart=j;}
+							if (ae->orgzone[j].memend>endoffset) {endoffset=ae->orgzone[j].memend;idend=j;}
 						}
 					}
 					if (ae->snacpr && !i) endoffset=offset=0; // hack
@@ -22770,7 +22787,9 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 						}
 						if (ae->cprinfo) rasm_printf(ae,KVERBOSE"WriteCPR bank %2d of %5d byte%s start at #%04X",ae->snacpr?backi:i,endoffset-offset,endoffset-offset>1?"s":" ",offset);
 						if (endoffset-offset>16384) {
-							rasm_printf(ae,KERROR"\nROM %d is too big!!! (%d byte%s too large)\n"KVERBOSE,i,endoffset-offset-16384,endoffset-offset-16384>1?"s":"");
+							rasm_printf(ae,KERROR"\nROM %d is too big!!! (%d byte%s too large)"KVERBOSE,i,endoffset-offset-16384,endoffset-offset-16384>1?"s":"");
+							rasm_printf(ae,KERROR"lowest  ORG [%s:%d] at #%04X\n"KVERBOSE,ae->filename[ae->orgzone[idstart].ifile],ae->orgzone[idstart].iline,offset);
+							rasm_printf(ae,KERROR"highest ORG [%s:%d] ends at #%04X\n"KVERBOSE,ae->filename[ae->orgzone[idend].ifile],ae->orgzone[idend].iline,endoffset);
 							FileWriteBinaryClose(TMP_filename);
 							FileRemoveIfExists(TMP_filename);
 							FreeAssenv(ae);
@@ -22870,14 +22889,16 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 						if (ae->orgzone[j].protect) continue; /* protected zones exclusion */
 						/* bank data may start anywhere (typically #0000 or #C000) */
 						if (ae->orgzone[j].ibank==i && ae->orgzone[j].memstart!=ae->orgzone[j].memend) {
-							if (ae->orgzone[j].memstart<offset) offset=ae->orgzone[j].memstart;
-							if (ae->orgzone[j].memend>endoffset) endoffset=ae->orgzone[j].memend;
+							if (ae->orgzone[j].memstart<offset) {offset=ae->orgzone[j].memstart;idstart=j;}
+							if (ae->orgzone[j].memend>endoffset) {endoffset=ae->orgzone[j].memend;idend=j;}
 						}
 					}
 					if (endoffset>offset) {
 						/* cannot be bigger than 16K */
 						if (endoffset-offset>16384) {
 							rasm_printf(ae,KERROR"\nROM is too big!!! (%d byte%s too large)\n"KVERBOSE,endoffset-offset-16384,endoffset-offset-16384>1?"s":"");
+							rasm_printf(ae,KERROR"lowest  ORG [%s:%d] at #%04X\n"KVERBOSE,ae->filename[ae->orgzone[idstart].ifile],ae->orgzone[idstart].iline,offset);
+							rasm_printf(ae,KERROR"highest ORG [%s:%d] ends at #%04X\n"KVERBOSE,ae->filename[ae->orgzone[idend].ifile],ae->orgzone[idend].iline,endoffset);
 							FileRemoveIfExists(TMP_filename);
 							FreeAssenv(ae);
 							exit(ABORT_ERROR);
@@ -23025,12 +23046,14 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 										if (ae->orgzone[j].protect) continue; /* protected zones exclusion */
 										/* bank data may start anywhere (typically #0000 or #C000) */
 										if (ae->orgzone[j].ibank==i+k && ae->orgzone[j].memstart!=ae->orgzone[j].memend) {
-											if (ae->orgzone[j].memstart<offset) offset=ae->orgzone[j].memstart;
-											if (ae->orgzone[j].memend>endoffset) endoffset=ae->orgzone[j].memend;
+											if (ae->orgzone[j].memstart<offset) {offset=ae->orgzone[j].memstart;idstart=j;}
+											if (ae->orgzone[j].memend>endoffset) {endoffset=ae->orgzone[j].memend;idend=j;}
 										}
 									}
 									if (endoffset-offset>16384) {
-										rasm_printf(ae,KERROR"\nBANK is too big!!! (%d byte%s too large)\n"KVERBOSE,endoffset-offset-16384,endoffset-offset-16384>1?"s":"");
+										rasm_printf(ae,KERROR"\nRAMBANK is too big!!! (%d byte%s too large)\n"KVERBOSE,endoffset-offset-16384,endoffset-offset-16384>1?"s":"");
+										rasm_printf(ae,KERROR"lowest  ORG [%s:%d] at #%04X\n"KVERBOSE,ae->filename[ae->orgzone[idstart].ifile],ae->orgzone[idstart].iline,offset);
+										rasm_printf(ae,KERROR"highest ORG [%s:%d] ends at #%04X\n"KVERBOSE,ae->filename[ae->orgzone[idend].ifile],ae->orgzone[idend].iline,endoffset);
 										if (!ae->flux) {
 											FileWriteBinaryClose(TMP_filename);
 											FileRemoveIfExists(TMP_filename);
@@ -23061,6 +23084,8 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 										} else if (!noflood) {rasm_printf(ae,KVERBOSE"[...]\n");noflood=1;}
 										if (endoffset-offset>16384) {
 											rasm_printf(ae,KERROR"\nRAM block is too big!!! (%d byte%s too large)\n"KVERBOSE,endoffset-offset-16384,endoffset-offset-16384>1?"s":"");
+											rasm_printf(ae,KERROR"lowest  ORG [%s:%d] at #%04X\n"KVERBOSE,ae->filename[ae->orgzone[idstart].ifile],ae->orgzone[idstart].iline,offset);
+											rasm_printf(ae,KERROR"highest ORG [%s:%d] ends at #%04X\n"KVERBOSE,ae->filename[ae->orgzone[idend].ifile],ae->orgzone[idend].iline,endoffset);
 											if (!ae->flux) {
 												FileWriteBinaryClose(TMP_filename);
 												FileRemoveIfExists(TMP_filename);
@@ -23122,6 +23147,8 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 						for (i=0;i<257;i++) {
 							if (ae->rombank[i]) howmanyrom++;
 						}
+						if (howmanyrom) rasm_printf(ae,KVERBOSE"WriteSNA has %d ROM to export\n",howmanyrom);
+
 						for (i=0;i<257;i++) {
 							if (ae->rombank[i]) {
 								offset=65536;
@@ -23130,12 +23157,14 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 									if (ae->orgzone[j].protect) continue; /* protected zones exclusion */
 									/* bank data may start anywhere (typically #0000 or #C000) */
 									if (ae->orgzone[j].ibank==ae->rombank[i] && ae->orgzone[j].memstart!=ae->orgzone[j].memend) {
-										if (ae->orgzone[j].memstart<offset) offset=ae->orgzone[j].memstart;
-										if (ae->orgzone[j].memend>endoffset) endoffset=ae->orgzone[j].memend;
+										if (ae->orgzone[j].memstart<offset) {offset=ae->orgzone[j].memstart;idstart=j;}
+										if (ae->orgzone[j].memend>endoffset) {endoffset=ae->orgzone[j].memend;idend=j;}
 									}
 								}
 								if (endoffset-offset>16384) {
-									rasm_printf(ae,KERROR"\nBANK is too big!!! (%d byte%s too large)\n"KVERBOSE,endoffset-offset-16384,endoffset-offset-16384>1?"s":"");
+									rasm_printf(ae,KERROR"\nROMBANK %d is too big!!! (%d byte%s too large)\n"KVERBOSE,i,endoffset-offset-16384,endoffset-offset-16384>1?"s":"");
+									rasm_printf(ae,KERROR"lowest  ORG [%s:%d] at #%04X\n"KVERBOSE,ae->filename[ae->orgzone[idstart].ifile],ae->orgzone[idstart].iline,offset);
+									rasm_printf(ae,KERROR"highest ORG [%s:%d] ends at #%04X\n"KVERBOSE,ae->filename[ae->orgzone[idend].ifile],ae->orgzone[idend].iline,endoffset);
 									if (!ae->flux) {
 										FileWriteBinaryClose(TMP_filename);
 										FileRemoveIfExists(TMP_filename);
@@ -26720,6 +26749,8 @@ int RasmAssembleInfoParam(const char *datain, int lenin, unsigned char **dataout
 #define AUTOTEST_MODULE03 "unglobal: nop: .prox: nop: module un: deuxglobal: nop: .prox: nop: djnz .prox: nop: doublon: nop: module deux: troisglobal: nop: " \
 			" .prox: nop: djnz .prox: nop: doublon: nop: assert doublon>troisglobal: endmodule: jr un_doublon: jr deux_doublon: jr un_deuxglobal.prox: jr deux_troisglobal.prox "
 
+#define AUTOTEST_ROMBANK_RECALL "buildsna: bank 0 : nop: rombank 0: nop: rombank 1: nop 5: rombank 0: assert $==1"
+
 #define AUTOTEST_GETNOP_LD "ticker start,testouille:"\
 			"ld a,1: ld a,b: ld b,a: ld a,i: ld i,a: ld a,r: ld r,a:"\
 			"ld a,(5): ld a,(hl): ld a,(de): ld (de),a: ld (hl),h: ld a,lx: ld lx,c:"\
@@ -28074,6 +28105,11 @@ printf("testing error code OK\n");
 	if (!ret) {} else {printf("Autotest %03d ERROR (REBANK)\n",cpt);exit(-1);}
 	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
 printf("testing REBANK OK\n");
+
+	ret=RasmAssemble(AUTOTEST_ROMBANK_RECALL,strlen(AUTOTEST_ROMBANK_RECALL),&opcode,&opcodelen);
+	if (!ret) {} else {printf("Autotest %03d ERROR (ROMBANK RECALL)\n",cpt);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing ROMBANK RECALL OK\n");
 
 	ret=RasmAssemble(AUTOTEST_BANKORG,strlen(AUTOTEST_BANKORG),&opcode,&opcodelen);
 	if (!ret) {} else {printf("Autotest %03d ERROR (BANK org adr)\n",cpt);exit(-1);}
