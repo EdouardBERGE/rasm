@@ -2,13 +2,13 @@
 
 ## Rasm Z80 assembler (is a COMMAND LINE tool)
     
-Rasm was designed to be damn FAST and handle HUGE projects. On a modern machine, it can assemble millions of instructions in a blink of an eye. It's way faster than the best alternatives. Rasm also runs on almost any platform : Linux, MacOS Intel or ARM, Windows 32 bits or 64 bits, MS-DOS and even MorphOS
+Rasm was designed to be damn FAST and handle HUGE projects. On a modern machine, it can assemble millions of instructions in a blink of an eye. It's way faster than the best alternatives. Rasm also runs on almost any platform : Linux x64/ARM, MacOS Intel or ARM, Windows 32 bits or 64 bits, MS-DOS and even MorphOS
 
 ## Integrated crunched sections
 
 - Rasm know how to load&crunch on the fly files when doing INCBIN (including binaries)
 - Rasm is able to assemble and crunch portions of code, and relocate following instructions
-- Rasm can assemble as much code as you want in each memory space and break the 64K barrier before crunch
+- Rasm can assemble as much code as you want in each memory space and break the 64K barrier before crunch!
 - Many crunchers are supported: LZ4, LZ48, LZ49, ZX0, ZX7, Exomizer 2, AP-Ultra, LZSA1, LZSA2
 
 ## Native format
@@ -61,7 +61,7 @@ Each build is tested every release, with more than 1300 automated tests. We use 
 
 ## History
 
-The project was born a few years ago (2017) because i needed a really fast assembler in order to finish my demo before the deadline of the Alchemy 2017. The project was quite huge with approx 350.000 words to assemble but thanks to rasm, the 512K cartridge compiled in a blink of an eye even on my slow Atom CPU. Now Rasm is the reference for huge projects and ultra-fast assembling.
+The project was born a few years ago (2017) because i needed a really fast assembler in order to finish my demo before the deadline of the Alchemy 2017. The project was quite huge with approx 350.000 words to assemble but thanks to rasm, the 512K cartridge compiled in a blink of an eye even on my slow Atom CPU. Now Rasm is the reference for huge projects and ultra-fast assembling. You can expect tens of millions instructions per second on a modern CPU.
 
 ## Links
 
