@@ -218,7 +218,7 @@ E_COMPUTE_OPERATION_GREATER=17,
 E_COMPUTE_OPERATION_EQUAL=18,
 E_COMPUTE_OPERATION_NOTEQUAL=19,
 E_COMPUTE_OPERATION_LOWEREQ=20,
-E_COMPUTE_OPERATION_GREATEREQ=21,
+E_COMPUTE_OPERATION_GREATEREQ=21, // this one MUST be the last before math function!
 /* math functions */
 E_COMPUTE_OPERATION_SIN=22,
 E_COMPUTE_OPERATION_COS=23,
@@ -248,14 +248,28 @@ E_COMPUTE_OPERATION_SOFT2HARD=46,
 E_COMPUTE_OPERATION_HARD2SOFT=47,
 E_COMPUTE_OPERATION_PEEK=48,
 E_COMPUTE_OPERATION_POW2=49,
+E_COMPUTE_OPERATION_POW=50,
+E_COMPUTE_OPERATION_FMOD=51,
+E_COMPUTE_OPERATION_ATAN2=52,
+E_COMPUTE_OPERATION_HYPOT=53,
+E_COMPUTE_OPERATION_LDEXP=54,
+E_COMPUTE_OPERATION_FDIM=55,  // différence positive
+E_COMPUTE_OPERATION_STEP=56, // seuil, valeur
+E_COMPUTE_OPERATION_FMAX=57,
+E_COMPUTE_OPERATION_FMIN=58,
+E_COMPUTE_OPERATION_CLAMP=60, // x min,max contraindre dans l'intervale
+E_COMPUTE_OPERATION_LERP=61, // a,b,x interpolation linéaire  a+x*(b-a)
+E_COMPUTE_OPERATION_ISGREATER=62,
+E_COMPUTE_OPERATION_ISLESS=63, 
+E_COMPUTE_OPERATION_REMAINDER=64,
 /* string functions */
-E_COMPUTE_OPERATION_GETNOP=50,
-E_COMPUTE_OPERATION_GETTICK=51,
-E_COMPUTE_OPERATION_DURATION=52,
-E_COMPUTE_OPERATION_FILESIZE=53,
-E_COMPUTE_OPERATION_GETSIZE=54,
-E_COMPUTE_OPERATION_IS_REGISTER=55,
-E_COMPUTE_OPERATION_END=56
+E_COMPUTE_OPERATION_GETNOP=65,
+E_COMPUTE_OPERATION_GETTICK=66,
+E_COMPUTE_OPERATION_DURATION=67,
+E_COMPUTE_OPERATION_FILESIZE=68,
+E_COMPUTE_OPERATION_GETSIZE=69,
+E_COMPUTE_OPERATION_IS_REGISTER=70,
+E_COMPUTE_OPERATION_END=71
 };
 
 struct s_compute_element {
@@ -1270,6 +1284,21 @@ struct s_math_keyword math_keyword[]={
 {"H2S_INK",0,0,E_COMPUTE_OPERATION_HARD2SOFT},
 {"PEEK",0,0,E_COMPUTE_OPERATION_PEEK},
 {"POW2",0,0,E_COMPUTE_OPERATION_POW2},
+{"POW",0,0,E_COMPUTE_OPERATION_POW},
+{"FMOD",0,0,E_COMPUTE_OPERATION_FMOD},
+{"ATAN2",0,0,E_COMPUTE_OPERATION_ATAN2},
+{"HYPOT",0,0,E_COMPUTE_OPERATION_HYPOT},
+{"LDEXP",0,0,E_COMPUTE_OPERATION_LDEXP},
+{"FDIM",0,0,E_COMPUTE_OPERATION_FDIM},
+{"STEP",0,0,E_COMPUTE_OPERATION_STEP},
+{"FMAX",0,0,E_COMPUTE_OPERATION_FMAX},
+{"FMIN",0,0,E_COMPUTE_OPERATION_FMIN},
+{"CLAMP",0,0,E_COMPUTE_OPERATION_CLAMP},
+{"LERP",0,0,E_COMPUTE_OPERATION_LERP},
+{"ISGREATER",0,0,E_COMPUTE_OPERATION_ISGREATER},
+{"ISLESS",0,0,E_COMPUTE_OPERATION_ISLESS},
+{"REMAINDER",0,0,E_COMPUTE_OPERATION_REMAINDER},
+
 {"GETNOP",0,0,E_COMPUTE_OPERATION_GETNOP},
 {"GETTICK",0,0,E_COMPUTE_OPERATION_GETTICK},
 {"DURATION",0,0,E_COMPUTE_OPERATION_DURATION},
@@ -5862,12 +5891,22 @@ double ComputeExpressionCore(struct s_assenv *ae,char *original_zeexpression,int
 
 			/* parenthesis */
 			case ')':
+#if TRACE_COMPUTE_EXPRESSION
+	printf("parenth--\n");
+#endif
 				/* next to a closing parenthesis, a minus is an operator */
 				allow_minus_as_sign=0;
 				parenth--;
 				break;
 			case '(':
 				parenth++;
+			/* comma */
+			case ',':
+#if TRACE_COMPUTE_EXPRESSION
+	if (c=='(') printf("parenth++\n");
+	if (c==',') printf("comma\n");
+#endif
+				if (!parenth) printf(" invalid comma in expression, must only be used for multiple param functions...\n");
 			/* operator detection */
 			case '*':
 			case '/':
@@ -6062,24 +6101,28 @@ double ComputeExpressionCore(struct s_assenv *ae,char *original_zeexpression,int
 				}
 		}
 		if (c && !ivar) idx++;
+#if TRACE_COMPUTE_EXPRESSION
+	printf("c=%c ivar=%d\n",c>31?c:'.',ivar);
+#endif
 	
 		/************************************
 		   S T A C K   D I S P A T C H E R
 		************************************/
 		/* push operator or stack value */
 		if (!ivar) {
-#if TRACE_COMPUTE_EXPRESSION
-	printf("pushoperator [%c]\n",c);
-#endif
 			/************************************
 			          O P E R A T O R 
 			************************************/
 			stackelement=ae->AutomateElement[c];
 			if (stackelement.operator>E_COMPUTE_OPERATION_GREATEREQ) {
+				if (c==',') continue; // this is a comma, nothing to see here, please disperse to a new value :)
 				MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"expression [%s] has unknown operator %c (%d)\n",TradExpression(zeexpression),c>31?c:'.',c);
 			}
 			/* stackelement.value isn't used */
 			stackelement.string=NULL;
+#if TRACE_COMPUTE_EXPRESSION
+	printf("pushoperator [%c]\n",c);
+#endif
 		} else if (is_string) {
 #if TRACE_COMPUTE_EXPRESSION
 	printf("pushstring [%s]\n",ae->computectx->varbuffer);
@@ -6835,6 +6878,20 @@ printf("DUMP des labels\n");
 			case E_COMPUTE_OPERATION_HARD2SOFT:printf("hard2soft ");break;
 			case E_COMPUTE_OPERATION_PEEK:printf("peek ");break;
 			case E_COMPUTE_OPERATION_POW2:printf("pow2 ");break;
+			case E_COMPUTE_OPERATION_POW:printf("pow ");break;
+			case E_COMPUTE_OPERATION_FMOD:printf("fmod ");break;
+			case E_COMPUTE_OPERATION_ATAN2:printf("atan2 ");break;
+			case E_COMPUTE_OPERATION_HYPOT:printf("hypot ");break;
+			case E_COMPUTE_OPERATION_LDEXP:printf("ldexp ");break;
+			case E_COMPUTE_OPERATION_FDIM:printf("fdim ");break;
+			case E_COMPUTE_OPERATION_STEP:printf("step ");break;
+			case E_COMPUTE_OPERATION_FMAX:printf("fmax ");break;
+			case E_COMPUTE_OPERATION_FMIN:printf("fmin ");break;
+			case E_COMPUTE_OPERATION_CLAMP:printf("clamp ");break;
+			case E_COMPUTE_OPERATION_LERP:printf("lerp ");break;
+			case E_COMPUTE_OPERATION_ISGREATER:printf("isgreater ");break;
+			case E_COMPUTE_OPERATION_ISLESS:printf("isless ");break;
+			case E_COMPUTE_OPERATION_REMAINDER:printf("remainder ");break;
 			case E_COMPUTE_OPERATION_GETNOP:printf("getnop ");break;
 			case E_COMPUTE_OPERATION_GETTICK:printf("gettick ");break;
 			case E_COMPUTE_OPERATION_DURATION:printf("duration ");break;
@@ -6966,6 +7023,21 @@ printf("operator string=%X\n",ae->computectx->operatorstack[o2].string);
 			case E_COMPUTE_OPERATION_HARD2SOFT:
 			case E_COMPUTE_OPERATION_PEEK:
 			case E_COMPUTE_OPERATION_POW2:
+			case E_COMPUTE_OPERATION_POW:
+			case E_COMPUTE_OPERATION_FMOD:
+			case E_COMPUTE_OPERATION_ATAN2:
+			case E_COMPUTE_OPERATION_HYPOT:
+			case E_COMPUTE_OPERATION_LDEXP:
+			case E_COMPUTE_OPERATION_FDIM:
+			case E_COMPUTE_OPERATION_STEP:
+			case E_COMPUTE_OPERATION_FMAX:
+			case E_COMPUTE_OPERATION_FMIN:
+			case E_COMPUTE_OPERATION_CLAMP:
+			case E_COMPUTE_OPERATION_LERP:
+			case E_COMPUTE_OPERATION_ISGREATER:
+			case E_COMPUTE_OPERATION_ISLESS:
+			case E_COMPUTE_OPERATION_REMAINDER:
+				// with strings
 			case E_COMPUTE_OPERATION_GETNOP:
 			case E_COMPUTE_OPERATION_GETTICK:
 			case E_COMPUTE_OPERATION_DURATION:
@@ -7088,6 +7160,8 @@ printf("final POP string=%X\n",ae->computectx->operatorstack[nboperatorstack+1].
 				case E_COMPUTE_OPERATION_HARD2SOFT:if (paccu>0) accu[paccu-1]=__Hard2SoftInk(ae,accu[paccu-1],didx);break;
 				case E_COMPUTE_OPERATION_PEEK:if (paccu>0) accu[paccu-1]=ae->mem[ae->activebank][(unsigned short int)accu[paccu-1]];break;
 				case E_COMPUTE_OPERATION_POW2:if (paccu>0) accu[paccu-1]=(int)pow(2,accu[paccu-1])&workinterval;break;
+				case E_COMPUTE_OPERATION_POW: break;
+							      if (paccu>0) accu[paccu-1]=(int)pow(2,accu[paccu-1])&workinterval;break;
 				/* functions with strings */
 				case E_COMPUTE_OPERATION_GETNOP:if (paccu>0) {
 								      int integeridx;
@@ -7340,6 +7414,35 @@ printf("final POP string=%X\n",ae->computectx->operatorstack[nboperatorstack+1].
 				case E_COMPUTE_OPERATION_HARD2SOFT:if (paccu>0) accu[paccu-1]=__Hard2SoftInk(ae,accu[paccu-1],didx);break;
 				case E_COMPUTE_OPERATION_PEEK:if (paccu>0) accu[paccu-1]=ae->mem[ae->activebank][(unsigned short int)accu[paccu-1]];break;
 				case E_COMPUTE_OPERATION_POW2:if (paccu>0) accu[paccu-1]=pow(2.0,accu[paccu-1]);break;
+				case E_COMPUTE_OPERATION_POW: if (paccu>1) {accu[paccu-2]=pow(accu[paccu-2],accu[paccu-1]); paccu--;} // on ajuste car DEUX paramètres
+								      break;
+				case E_COMPUTE_OPERATION_FMOD: if (paccu>1) {accu[paccu-2]=fmod(accu[paccu-2],accu[paccu-1]); paccu--;} break;
+				case E_COMPUTE_OPERATION_ATAN2:if (paccu>1) {accu[paccu-2]=atan2(accu[paccu-2],accu[paccu-1]); paccu--;} break;
+				case E_COMPUTE_OPERATION_HYPOT:if (paccu>1) {accu[paccu-2]=hypot(accu[paccu-2],accu[paccu-1]); paccu--;} break;
+				case E_COMPUTE_OPERATION_LDEXP:if (paccu>1) {accu[paccu-2]=ldexp(accu[paccu-2],accu[paccu-1]); paccu--;} break;
+				case E_COMPUTE_OPERATION_FDIM: if (paccu>1) {accu[paccu-2]=fdim(accu[paccu-2],accu[paccu-1]); paccu--;} break;
+				case E_COMPUTE_OPERATION_STEP: if (paccu>1) {accu[paccu-2]=(accu[paccu-2]<=accu[paccu-1])?1:0; paccu--;} break;
+
+				case E_COMPUTE_OPERATION_FMAX: if (paccu>1) {accu[paccu-2]=(accu[paccu-2]<accu[paccu-1])?accu[paccu-1]:accu[paccu-2]; paccu--;} break;
+				case E_COMPUTE_OPERATION_FMIN: if (paccu>1) {accu[paccu-2]=(accu[paccu-2]>accu[paccu-1])?accu[paccu-1]:accu[paccu-2]; paccu--;} break;
+				case E_COMPUTE_OPERATION_CLAMP:if (paccu>2) {
+								       if (accu[paccu-3]<accu[paccu-2]) accu[paccu-3]=accu[paccu-2]; else
+								       if (accu[paccu-3]>accu[paccu-1]) accu[paccu-3]=accu[paccu-1];
+								       paccu-=2;
+							       } else {
+									MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"CLAMP need 3 parameters (val,min,max)\n");
+							       }
+							       break;
+				case E_COMPUTE_OPERATION_LERP:if (paccu>2) {
+								      accu[paccu-3]=accu[paccu-3]+accu[paccu-1]*(accu[paccu-2]-accu[paccu-3]);
+								      paccu-=2;
+							       } else {
+									MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"LERP need 3 parameters (x,y,alpha)\n");
+							       }
+							      break;
+				case E_COMPUTE_OPERATION_ISGREATER: if (paccu>1) {accu[paccu-2]=(accu[paccu-2]>accu[paccu-1])?1:0; paccu--;}break;
+				case E_COMPUTE_OPERATION_ISLESS:    if (paccu>1) {accu[paccu-2]=(accu[paccu-2]<accu[paccu-1])?1:0; paccu--;}break;
+				case E_COMPUTE_OPERATION_REMAINDER: if (paccu>1) {accu[paccu-2]=remainder(accu[paccu-2],accu[paccu-1]); paccu--; }break;
 				/* functions with strings */
 				case E_COMPUTE_OPERATION_GETNOP:if (paccu>0) {
 								      int integeridx;
@@ -7866,6 +7969,7 @@ printf("fast [%s]\n",expr);
 			case 'm':
 			case '|':
 			case '&':
+			case ',':
 				idx++;
 				break;
 			default:
@@ -23033,7 +23137,7 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 							if (ae->bankset[bankset]) {
 								memcpy(packed,ae->mem[i],65536);
 								if (i<4 || i+4>maxrom) {
-									if (ae->cprinfo) rasm_printf(ae,KVERBOSE"WriteSNA bank %2d,%d,%d,%d packed",i,i+1,i+2,i+3);
+									if (ae->cprinfo) rasm_printf(ae,KVERBOSE"WriteSNA RAM %2d,%d,%d,%d packed",i,i+1,i+2,i+3);
 									if (ae->cprinfo) if (ae->iwnamebank[i]) rasm_printf(ae," (%s)",ae->wl[ae->iwnamebank[i]].w);
 									if (ae->cprinfo) rasm_printf(ae,"\n");
 								} else if (!noflood) {rasm_printf(ae,KVERBOSE"[...]\n");noflood=1;}
@@ -23078,7 +23182,7 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 											lm=strlen(ae->wl[ae->iwnamebank[i]].w)-2;
 										}
 										if (i<4 || i+4>maxrom) {
-											if (ae->cprinfo) rasm_printf(ae,KVERBOSE"WriteSNA bank %2d of %5d byte%s start at #%04X",i+k,endoffset-offset,endoffset-offset>1?"s":" ",offset);
+											if (ae->cprinfo) rasm_printf(ae,KVERBOSE"WriteSNA RAM %2d of %5d byte%s start at #%04X",i+k,endoffset-offset,endoffset-offset>1?"s":" ",offset);
 											if (ae->cprinfo) if (ae->iwnamebank[i]) rasm_printf(ae," (%s)",ae->wl[ae->iwnamebank[i]].w);
 											if (ae->cprinfo) rasm_printf(ae,"\n");
 										} else if (!noflood) {rasm_printf(ae,KVERBOSE"[...]\n");noflood=1;}
@@ -23099,7 +23203,7 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 											if (i<4 || i+4>maxrom) rasm_printf(ae,"\n");
 										}
 									} else if (ae->cprinfo) {
-										if (i<4 || i+4>maxrom) rasm_printf(ae,KVERBOSE"WriteSNA bank %2d (empty)\n",i+k);
+										if (i<4 || i+4>maxrom) rasm_printf(ae,KVERBOSE"WriteSNA RAM %2d (empty)\n",i+k);
 										else if (!noflood) {rasm_printf(ae,KVERBOSE"[...]\n");noflood=1;}
 									}
 								}
@@ -24342,7 +24446,7 @@ struct s_assenv *PreProcessing(char *filename, int flux, const char *datain, int
 	int waiting_quote=0,lquote=0;
 	int macro_trigger=0;
 	int escape_code=0;
-	int quote_type=0;
+	int quote_type=0,parenth=0;
 	int incbin=0,include=0,crunch=0;
 	int rewrite=0,hadcomma=0;
 	int nbinstruction;
@@ -24352,6 +24456,8 @@ struct s_assenv *PreProcessing(char *filename, int flux, const char *datain, int
 	/* incbin bug */
 	int incstartL=0;
 	char *original_filename=NULL;
+	char errSep1[128]={0};
+	int nobreak=0;
 
 #if TRACE_PREPRO
 printf("start prepro, alloc assenv\n");
@@ -25378,7 +25484,7 @@ printf("check quotes and repeats\n");
 	curw.len=strlen(curw.w);
 	ObjectArrayAddDynamicValueConcat((void**)&wordlist,&nbword,&maxword,&curw,sizeof(curw));
 	curw.e=12;
-	curw.w=TxtStrDup("RASM_VERSION~"PROGRAM_VERSION);
+	curw.w=TxtStrDup("RASM_VERSION~"PROGRAM_VERSION_FLOAT);
 	curw.len=strlen(curw.w);
 	ObjectArrayAddDynamicValueConcat((void**)&wordlist,&nbword,&maxword,&curw,sizeof(curw));
 	curw.e=0;
@@ -25392,7 +25498,7 @@ printf("check quotes and repeats\n");
 #endif	
 
 
-	texpr=quote_type=0;
+	texpr=quote_type=parenth=0;
 	l=lw=idx=0;
 	ispace=0;
 	w[0]=0;
@@ -25406,18 +25512,27 @@ printf("check quotes and repeats\n");
 
 		if (!quote_type) {
 #if TRACE_PREPRO
-//printf("c='%c' automate[c]=%d\n",c>31?c:'.',Automate[((int)c)&0xFF]);			
+//printf("c='%c' automate[c]=%d\n",c>31?c:'.',Automate[((int)c)&0xFF]);
 #endif
 			switch (Automate[((int)c)&0xFF]) {
 				case 0:
-					MakeError(ae,0,ae->filename[listing[l].ifile],listing[l].iline,"invalid char '%c' (%d) char %d\n",c,c,idx);
+					if (idx<126) {
+						int ierrsep;
+						for (ierrsep=0;ierrsep<idx;ierrsep++) errSep1[ierrsep]=' ';
+						errSep1[ierrsep++]='^';
+						errSep1[ierrsep]=0;
+						MakeError(ae,0,ae->filename[listing[l].ifile],listing[l].iline,"invalid char '%c' (%d) char %d\n[%s]\n%s\n",c,c,idx,listing[l].listing,errSep1);
+					} else {
+						MakeError(ae,0,ae->filename[listing[l].ifile],listing[l].iline,"invalid char '%c' (%d) char %d\n[%s]\n",c,c,idx,listing[l].listing);
+					}
 #if TRACE_PREPRO
 printf("c='%c' automate[c]=%d\n",c>31?c:'.',Automate[((int)c)&0xFF]);			
 #endif
 					exit(1);
 					break;
 				case 1:
-					if (c=='\'') {
+					switch (c) {
+						case '\'':
 						if (idx>2 && strncmp(&listing[l].listing[idx-3],"AF'",3)==0) {
 							w[lw++]=c;
 							//StateMachineResizeBuffer(&w,lw,&mw);
@@ -25431,6 +25546,7 @@ printf("quote\n");
 						if (strcmp(w,"SAVE")==0) {
 							// on ne break pas pour passer dans le case 2 (separator)
 							idx--;
+							nobreak=1;
 						} else {
 							quote_type=c;
 							w[lw++]=c;
@@ -25438,7 +25554,9 @@ printf("quote\n");
 							w[lw]=0;
 							break;
 						}
-					} else if (c=='"') {
+						break;
+
+						case '"':
 #if TRACE_PREPRO
 printf("quote\n");
 #endif
@@ -25446,6 +25564,7 @@ printf("quote\n");
 						if (strcmp(w,"SAVE")==0) {
 							// on ne break pas pour passer dans le case 2 (separator)
 							idx--;
+							nobreak=1;
 						} else {
 							quote_type=c;
 							w[lw++]=c;
@@ -25453,12 +25572,23 @@ printf("quote\n");
 							w[lw]=0;
 							break;
 						}
-					} else {
-						if (c!=' ' && c!='\t') {
+						break;
 							w[lw++]=c;
 							//StateMachineResizeBuffer(&w,lw,&mw);
 							w[lw]=0;
-						} else {
+							break;
+						case '(': parenth++;Automate[',']=1; // allow comma as part of the word
+							w[lw++]=c;
+							//StateMachineResizeBuffer(&w,lw,&mw);
+							w[lw]=0;
+							break;
+						case ')': parenth--;if (!parenth) Automate[',']=2; // comma become separator again
+							w[lw++]=c;
+							//StateMachineResizeBuffer(&w,lw,&mw);
+							w[lw]=0;
+							break;
+						case ' ':
+						case '\t':
 #if TRACE_PREPRO
 printf("1/2 Winape maxam operator test for [%s] [%s] %d lw=%d\n",w,w+ispace,ispace,lw);
 #endif
@@ -25480,9 +25610,14 @@ printf("1/2 Winape maxam operator test for [%s] [%s] %d lw=%d\n",w,w+ispace,ispa
 								}
 							}
 							ispace=lw;
-						}
-						break;
+							break;
+						default:
+							w[lw++]=c;
+							//StateMachineResizeBuffer(&w,lw,&mw);
+							w[lw]=0;
+							break;
 					}
+					if (!nobreak) break; else nobreak=0; // besoin de pouvoir passer directement de l'état 1 à l'état 2 pour le SAVE
 				case 2:
 					/* separator (space, tab, comma) */
 #if TRACE_PREPRO
@@ -25498,6 +25633,9 @@ printf("*** separator='%c'\n",c);
 #if TRACE_PREPRO
 printf("2/2 Winape maxam operator test for expression [%s]\n",w+ispace);
 #endif
+
+
+printf("### seems to be dead code here...\n");
 							// winape operator patches before concat
 						#if 0
 							switch (lw) {
@@ -25640,20 +25778,45 @@ printf("instruction en cours\n");
 #if TRACE_PREPRO
 printf("EOL\n");																	
 #endif
-					macro_trigger=0;
+					macro_trigger=parenth=0; // reset parenth in case of trouble...
+					Automate[',']=2; // and comma too!
 					Automate[' ']=2;
 					Automate['\t']=2;
 					ispace=0;
-					texpr=0;
 					/* si le mot lu a plus d'un caractère */
 					if (lw) {
+#if 0
+						if (!wordlist[nbword-1].t && texpr) {
+							int firstWord=nbword-1;
+							int lenouille=lw;
+							int iWord;
+			printf("multiple words with an expression...\n");
+						w[lw]=0;
+						// reorg line
+						while (!wordlist[firstWord-1].t) {
+							firstWord--;
+							lenouille+=wordlist[firstWord].len;
+						}
+						lenouille++;
+			printf("realloc to %d\n",lenouille);
+						wordlist[firstWord].w=MemRealloc(wordlist[firstWord].w,lenouille);
+			printf("concat from %d to %d\n",firstWord,nbword);
+						iWord=firstWord+1;
+						while (iWord<nbword) strcat(wordlist[firstWord].w,wordlist[iWord++].w);
+						strcat(wordlist[firstWord].w,w);
+						nbword=firstWord+1; // need to clean up memory!!!
+
+						} else
+#endif
+
+
 						if (!wordlist[nbword-1].t && (wordlist[nbword-1].e || w[0]=='=') && !hadcomma) {
 							/* cas particulier d'ecriture libre */
 							/* bugfix inhibition 19.06.2018 */
 							/* ajout du terminateur? */
 							w[lw]=0;
 #if TRACE_PREPRO
-printf("nbword=%d w=[%s] ->",nbword,w);fflush(stdout);
+printf("INHIBIT CASE / nbword=%d w=[%s] ->",nbword,w);fflush(stdout);
 #endif
 							nbword--;
 							wordlist[nbword].w=MemRealloc(wordlist[nbword].w,strlen(wordlist[nbword].w)+lw+1);
@@ -25713,6 +25876,7 @@ if (curw.w[0]=='=') {
 						wordlist[nbword-1].t=1;
 						w[lw]=0;
 					}
+					texpr=0;
 					hadcomma=0;
 					break;
 				case 4:
@@ -27733,6 +27897,19 @@ struct s_autotest_keyword autotest_keyword[]={
 	{"equ $:nop",1},{"machin equ 50 equ 12:nop",1},{"total=20:equ 40:nop",1}, // invalid EQU
 	{"total=20:bidule=total:equ 20:nop",1},
 
+	{"nop : assert pow(2,5)==32",0},
+	{"nop : a=atan2(0.5,5) : assert a>0.09 : assert a<0.0999",0},
+	{"nop : assert hypot(3,4)==5",0},
+	{"nop : a=ldexp(4,5)",0}, // @@TODO
+	{"nop : assert fdim(3.1,5.3)==0 : assert fdim(5.3,3.1)==2.2",0},
+	{"nop : assert step(5,4.9)==0 : assert step(5,5.1)==1",0},
+	{"nop : assert fmax(1,2)==2 : assert fmax(2,1)==2",0},
+	{"nop : assert fmin(1,2)==1 : assert fmin(2,1)==1",0},
+	{"nop : assert clamp(33,10,20)==20 : assert clamp(-5,10,20)==10",0},
+	{"nop : assert lerp(0,1,0.5)==0.5 : assert lerp(10,20,0.3)==13",0},
+	{"nop : assert isgreater(5,4)==1 : assert isgreater(4,5)==0",0},
+	{"nop : assert isless(5,4)==0 : assert isless(4,5)==1",0},
+	{"nop : assert remainder(29,9)==2",0},
 	/*
 	 *
 	 * will need to test resize + format then meta review test!
@@ -29669,7 +29846,7 @@ void Usage(int help)
 	#undef FUNC
 	#define FUNC "Usage"
 	
-	printf(KLCYAN"%s - "KLMAGENTA"%s"KLWHITE"\n(c) 2017 Edouard BERGE (use -n option to display all licenses / -autotest for self-testing)\n",RASM_VERSION,RELEASE_NAME);
+	printf(KLCYAN"%s - "KLORANGE"%s"KLWHITE"\n(c) 2017 Edouard BERGE (use -n option to display all licenses / -autotest for self-testing)\n",RASM_VERSION,RELEASE_NAME);
 	#ifndef NO_3RD_PARTIES
 	printf(KLGREEN"LZ4 (c) Yann Collet / ZX0 & ZX7 (c) Einar Saukas / Exomizer 2 (c) Magnus Lind / LZSA & AP-Ultra (c) Emmanuel Marty\n"KNORMAL);
 	#endif
