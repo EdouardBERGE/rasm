@@ -254,7 +254,7 @@ E_COMPUTE_OPERATION_ATAN2=52,
 E_COMPUTE_OPERATION_HYPOT=53,
 E_COMPUTE_OPERATION_LDEXP=54,
 E_COMPUTE_OPERATION_FDIM=55,  // différence positive
-E_COMPUTE_OPERATION_STEP=56, // seuil, valeur
+E_COMPUTE_OPERATION_STEP=56, // seuil, valeur dessous 0, dessus 1
 E_COMPUTE_OPERATION_FMAX=57,
 E_COMPUTE_OPERATION_FMIN=58,
 E_COMPUTE_OPERATION_CLAMP=60, // x min,max contraindre dans l'intervale
@@ -262,6 +262,12 @@ E_COMPUTE_OPERATION_LERP=61, // a,b,x interpolation linéaire  a+x*(b-a)
 E_COMPUTE_OPERATION_ISGREATER=62,
 E_COMPUTE_OPERATION_ISLESS=63, 
 E_COMPUTE_OPERATION_REMAINDER=64,
+// noise x,y,z (perlin 2D/3D) => répétitif
+// rnd borné (min,max)  mod(rnd,max-min)+min
+// wrap(min,max,x) faire boucler valeur dans l'intervale mod(x,max-min)+min
+// fonction de bias pour atténuer les extrêmes bias(x,b) avec x entre 0 et 1 et le bias aussi => return pow(x,log(b)/log(0.5));
+// gain utilise bias pour étaler ou resserer les valeurs autour de 0.5 if x<0.5 return 0.5*bias(2*x,1-g); else return 1-0.5*bias(2-2*x,1-g); @@TOCHECK
+// pulse(edgeMin,edgeMax,v) si v dans l'intervale alors 1 sinon 0
 /* string functions */
 E_COMPUTE_OPERATION_GETNOP=65,
 E_COMPUTE_OPERATION_GETTICK=66,
@@ -5751,6 +5757,85 @@ int __Hard2SoftInk(struct s_assenv *ae,int hard, int didx) {
 	return 0;
 }
 
+char *getOperatorStr(int operator) {
+	static char opStr[128];
+	switch (operator) {
+		case E_COMPUTE_OPERATION_PUSH_DATASTC:strcpy(opStr,"*not an operator (data)*");break;
+			//printf("%lf %s",ae->computectx->tokenstack[itoken].value,ae->computectx->tokenstack[itoken].string?ae->computectx->tokenstack[itoken].string:"(null)");break;
+		case E_COMPUTE_OPERATION_OPEN:strcpy(opStr,"(");break;
+		case E_COMPUTE_OPERATION_CLOSE:strcpy(opStr,")");break;
+		case E_COMPUTE_OPERATION_ADD:strcpy(opStr,"+");break;
+		case E_COMPUTE_OPERATION_SUB:strcpy(opStr,"-");break;
+		case E_COMPUTE_OPERATION_DIV:strcpy(opStr,"/");break;
+		case E_COMPUTE_OPERATION_MUL:strcpy(opStr,"*");break;
+		case E_COMPUTE_OPERATION_AND:strcpy(opStr,"and");break;
+		case E_COMPUTE_OPERATION_OR:strcpy(opStr,"or");break;
+		case E_COMPUTE_OPERATION_MOD:strcpy(opStr,"mod");break;
+		case E_COMPUTE_OPERATION_XOR:strcpy(opStr,"xor");break;
+		case E_COMPUTE_OPERATION_NOT:strcpy(opStr,"!");break;
+		case E_COMPUTE_OPERATION_SHL:strcpy(opStr,"<<");break;
+		case E_COMPUTE_OPERATION_SHR:strcpy(opStr,">>");break;
+		case E_COMPUTE_OPERATION_BAND:strcpy(opStr,"&&");break;
+		case E_COMPUTE_OPERATION_BOR:strcpy(opStr,"||");break;
+		case E_COMPUTE_OPERATION_LOWER:strcpy(opStr,"<");break;
+		case E_COMPUTE_OPERATION_GREATER:strcpy(opStr,">");break;
+		case E_COMPUTE_OPERATION_EQUAL:strcpy(opStr,"==");break;
+		case E_COMPUTE_OPERATION_NOTEQUAL:strcpy(opStr,"!=");break;
+		case E_COMPUTE_OPERATION_LOWEREQ:strcpy(opStr,"<=");break;
+		case E_COMPUTE_OPERATION_GREATEREQ:strcpy(opStr,">=");break;
+		case E_COMPUTE_OPERATION_SIN:strcpy(opStr,"sin");break;
+		case E_COMPUTE_OPERATION_COS:strcpy(opStr,"cos");break;
+		case E_COMPUTE_OPERATION_INT:strcpy(opStr,"int");break;
+		case E_COMPUTE_OPERATION_FLOOR:strcpy(opStr,"floor");break;
+		case E_COMPUTE_OPERATION_ABS:strcpy(opStr,"abs");break;
+		case E_COMPUTE_OPERATION_LN:strcpy(opStr,"ln");break;
+		case E_COMPUTE_OPERATION_LOG10:strcpy(opStr,"log10");break;
+		case E_COMPUTE_OPERATION_SQRT:strcpy(opStr,"sqrt");break;
+		case E_COMPUTE_OPERATION_ASIN:strcpy(opStr,"asin");break;
+		case E_COMPUTE_OPERATION_ACOS:strcpy(opStr,"acos");break;
+		case E_COMPUTE_OPERATION_ATAN:strcpy(opStr,"atan");break;
+		case E_COMPUTE_OPERATION_EXP:strcpy(opStr,"exp");break;
+		case E_COMPUTE_OPERATION_LOW:strcpy(opStr,"low");break;
+		case E_COMPUTE_OPERATION_HIGH:strcpy(opStr,"high");break;
+		case E_COMPUTE_OPERATION_PSG:strcpy(opStr,"psg");break;
+		case E_COMPUTE_OPERATION_RND:strcpy(opStr,"rnd");break;
+		case E_COMPUTE_OPERATION_FRAC:strcpy(opStr,"frac");break;
+		case E_COMPUTE_OPERATION_CEIL:strcpy(opStr,"ceil");break;
+		case E_COMPUTE_OPERATION_GET_R:strcpy(opStr,"get_r");break;
+		case E_COMPUTE_OPERATION_GET_V:strcpy(opStr,"get_v");break;
+		case E_COMPUTE_OPERATION_GET_B:strcpy(opStr,"get_b");break;
+		case E_COMPUTE_OPERATION_SET_R:strcpy(opStr,"set_r");break;
+		case E_COMPUTE_OPERATION_SET_V:strcpy(opStr,"set_v");break;
+		case E_COMPUTE_OPERATION_SET_B:strcpy(opStr,"set_b");break;
+		case E_COMPUTE_OPERATION_SOFT2HARD:strcpy(opStr,"soft2hard");break;
+		case E_COMPUTE_OPERATION_HARD2SOFT:strcpy(opStr,"hard2soft");break;
+		case E_COMPUTE_OPERATION_PEEK:strcpy(opStr,"peek");break;
+		case E_COMPUTE_OPERATION_POW2:strcpy(opStr,"pow2");break;
+		case E_COMPUTE_OPERATION_POW:strcpy(opStr,"pow");break;
+		case E_COMPUTE_OPERATION_FMOD:strcpy(opStr,"fmod");break;
+		case E_COMPUTE_OPERATION_ATAN2:strcpy(opStr,"atan2");break;
+		case E_COMPUTE_OPERATION_HYPOT:strcpy(opStr,"hypot");break;
+		case E_COMPUTE_OPERATION_LDEXP:strcpy(opStr,"ldexp");break;
+		case E_COMPUTE_OPERATION_FDIM:strcpy(opStr,"fdim");break;
+		case E_COMPUTE_OPERATION_STEP:strcpy(opStr,"step");break;
+		case E_COMPUTE_OPERATION_FMAX:strcpy(opStr,"fmax");break;
+		case E_COMPUTE_OPERATION_FMIN:strcpy(opStr,"fmin");break;
+		case E_COMPUTE_OPERATION_CLAMP:strcpy(opStr,"clamp");break;
+		case E_COMPUTE_OPERATION_LERP:strcpy(opStr,"lerp");break;
+		case E_COMPUTE_OPERATION_ISGREATER:strcpy(opStr,"isgreater");break;
+		case E_COMPUTE_OPERATION_ISLESS:strcpy(opStr,"isless");break;
+		case E_COMPUTE_OPERATION_REMAINDER:strcpy(opStr,"remainder");break;
+		case E_COMPUTE_OPERATION_GETNOP:strcpy(opStr,"getnop");break;
+		case E_COMPUTE_OPERATION_GETTICK:strcpy(opStr,"gettick");break;
+		case E_COMPUTE_OPERATION_DURATION:strcpy(opStr,"duration");break;
+		case E_COMPUTE_OPERATION_FILESIZE:strcpy(opStr,"filesize");break;
+		case E_COMPUTE_OPERATION_GETSIZE:strcpy(opStr,"getsize");break;
+		case E_COMPUTE_OPERATION_IS_REGISTER:strcpy(opStr,"is_register");break;
+		default:strcpy(opStr,"*internal error* ");break;
+	}
+	return opStr;
+}
+
 double ComputeExpressionCore(struct s_assenv *ae,char *original_zeexpression,int ptr, int didx)
 {
 	#undef FUNC
@@ -6164,13 +6249,13 @@ double ComputeExpressionCore(struct s_assenv *ae,char *original_zeexpression,int
 						break;
 					}
 					/* 0o octal value hack */
-					if (ae->computectx->varbuffer[minusptr+1]=='O' && (ae->computectx->varbuffer[minusptr+2]>='0' && ae->computectx->varbuffer[minusptr+2]<='5')) {
+					if (ae->computectx->varbuffer[minusptr+1]=='O' && (ae->computectx->varbuffer[minusptr+2]>='0' && ae->computectx->varbuffer[minusptr+2]<='7')) {
 						for (icheck=minusptr+3;ae->computectx->varbuffer[icheck];icheck++) {
-							if (ae->computectx->varbuffer[icheck]>='0' && ae->computectx->varbuffer[icheck]<='5') continue;
+							if (ae->computectx->varbuffer[icheck]>='0' && ae->computectx->varbuffer[icheck]<='7') continue;
 							MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"expression [%s] - %s is not a valid octal number\n",TradExpression(zeexpression),ae->computectx->varbuffer);
 							break;
 						}
-						curval=strtol(ae->computectx->varbuffer+minusptr+2,NULL,2);
+						curval=strtol(ae->computectx->varbuffer+minusptr+2,NULL,8);
 						break;
 					}
 				case '1':
@@ -7160,8 +7245,84 @@ printf("final POP string=%X\n",ae->computectx->operatorstack[nboperatorstack+1].
 				case E_COMPUTE_OPERATION_HARD2SOFT:if (paccu>0) accu[paccu-1]=__Hard2SoftInk(ae,accu[paccu-1],didx);break;
 				case E_COMPUTE_OPERATION_PEEK:if (paccu>0) accu[paccu-1]=ae->mem[ae->activebank][(unsigned short int)accu[paccu-1]];break;
 				case E_COMPUTE_OPERATION_POW2:if (paccu>0) accu[paccu-1]=(int)pow(2,accu[paccu-1])&workinterval;break;
-				case E_COMPUTE_OPERATION_POW: break;
-							      if (paccu>0) accu[paccu-1]=(int)pow(2,accu[paccu-1])&workinterval;break;
+				// multi-param functions
+				case E_COMPUTE_OPERATION_POW: if (paccu>1) {
+								      accu[paccu-2]=(int)pow(accu[paccu-2],accu[paccu-1])&workinterval; paccu--; // on ajuste car DEUX paramètres
+							       } else {
+									MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"POW requires 2 parameters\n");
+							       }
+							      break;
+				case E_COMPUTE_OPERATION_FMOD: if (paccu>1) {accu[paccu-2]=(int)fmod(accu[paccu-2],accu[paccu-1])&workinterval; paccu--;
+							       } else {
+									MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"FMOD requires 2 parameters\n");
+							       }
+							       break;
+				case E_COMPUTE_OPERATION_ATAN2:if (paccu>1) {accu[paccu-2]=(int)atan2(accu[paccu-2],accu[paccu-1])&workinterval; paccu--;
+							       } else {
+									MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"ATAN2 requires 2 parameters\n");
+							       }
+							       break;
+				case E_COMPUTE_OPERATION_HYPOT:if (paccu>1) {accu[paccu-2]=(int)hypot(accu[paccu-2],accu[paccu-1])&workinterval; paccu--;
+							       } else {
+									MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"HYPOT requires 2 parameters\n");
+							       }
+							       break;
+				case E_COMPUTE_OPERATION_LDEXP:if (paccu>1) {accu[paccu-2]=(int)ldexp(accu[paccu-2],accu[paccu-1])&workinterval; paccu--;
+							       } else {
+									MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"LDEXP requires 2 parameters\n");
+							       }
+							       break;
+				case E_COMPUTE_OPERATION_FDIM: if (paccu>1) {accu[paccu-2]=(int)fdim(accu[paccu-2],accu[paccu-1])&workinterval; paccu--;
+							       } else {
+									MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"FDIM requires 2 parameters\n");
+							       }
+							       break;
+				case E_COMPUTE_OPERATION_STEP: if (paccu>1) {accu[paccu-2]=(accu[paccu-2]<=accu[paccu-1])?1:0; paccu--;
+							       } else {
+									MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"STEP requires 2 parameters\n");
+							       }
+							       break;
+				case E_COMPUTE_OPERATION_FMAX: if (paccu>1) {accu[paccu-2]=(accu[paccu-2]<accu[paccu-1])?(int)accu[paccu-1]&workinterval:(int)accu[paccu-2]&workinterval; paccu--;
+							       } else {
+									MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"FMAX requires 2 parameters\n");
+							       }
+							       break;
+				case E_COMPUTE_OPERATION_FMIN: if (paccu>1) {
+								       accu[paccu-2]=(accu[paccu-2]>accu[paccu-1])?(int)accu[paccu-1]&workinterval:(int)accu[paccu-2]&workinterval; paccu--;
+							       } else {
+									MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"FMIN requires 2 parameters\n");
+							       }
+							       break;
+				case E_COMPUTE_OPERATION_CLAMP:if (paccu>2) {
+								       if (accu[paccu-3]<accu[paccu-2]) accu[paccu-3]=(int)accu[paccu-2]&workinterval; else
+								       if (accu[paccu-3]>accu[paccu-1]) accu[paccu-3]=(int)accu[paccu-1]&workinterval;
+								       paccu-=2;
+							       } else {
+									MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"CLAMP requires 3 parameters (val,min,max)\n");
+							       }
+							       break;
+				case E_COMPUTE_OPERATION_LERP:if (paccu>2) {
+								      accu[paccu-3]=(int)(accu[paccu-3]+accu[paccu-1]*(accu[paccu-2]-accu[paccu-3]))&workinterval;
+								      paccu-=2;
+							       } else {
+									MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"LERP requires 3 parameters (x,y,alpha)\n");
+							       }
+							      break;
+				case E_COMPUTE_OPERATION_ISGREATER: if (paccu>1) {accu[paccu-2]=(accu[paccu-2]>accu[paccu-1])?1:0; paccu--;
+							       } else {
+									MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"ISGREATER requires 2 parameters\n");
+							       }
+							       break;
+				case E_COMPUTE_OPERATION_ISLESS:    if (paccu>1) {accu[paccu-2]=(accu[paccu-2]<accu[paccu-1])?1:0; paccu--;
+							       } else {
+									MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"ISLESS requires 2 parameters\n");
+							       }
+							       break;
+				case E_COMPUTE_OPERATION_REMAINDER: if (paccu>1) {accu[paccu-2]=(int)remainder(accu[paccu-2],accu[paccu-1])&workinterval; paccu--;
+							       } else {
+									MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"REMAINDER requires 2 parameters\n");
+							       }
+							       break;
 				/* functions with strings */
 				case E_COMPUTE_OPERATION_GETNOP:if (paccu>0) {
 								      int integeridx;
@@ -7288,7 +7449,9 @@ printf("final POP string=%X\n",ae->computectx->operatorstack[nboperatorstack+1].
 				if (zeexpression[0]=='&') {
 					MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"Missing operand for calculation [%s] Did you use & for an hexadecimal value?\n",TradExpression(zeexpression));
 				} else {
-					MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"Missing operand for calculation [%s]\n",TradExpression(zeexpression));
+					char *operatorStr;
+					operatorStr=getOperatorStr(computestack[i].operator);
+					MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"Missing operand for calculation [%s] at operator or function [%s]\n",TradExpression(zeexpression),operatorStr);
 				}
 				accu_err=1;
 				break;
@@ -7397,7 +7560,7 @@ printf("final POP string=%X\n",ae->computectx->operatorstack[nboperatorstack+1].
 								     if (zemod>0) {
 									     accu[paccu-1]=FastRand()%zemod;
 								     } else {
-									MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"RND function needs a value greater than zero to perform a random value\n");
+									MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"RND function requires a value greater than zero to perform a random value\n");
 								        accu[paccu-1]=0;
 								     }
 							     }
@@ -7414,35 +7577,84 @@ printf("final POP string=%X\n",ae->computectx->operatorstack[nboperatorstack+1].
 				case E_COMPUTE_OPERATION_HARD2SOFT:if (paccu>0) accu[paccu-1]=__Hard2SoftInk(ae,accu[paccu-1],didx);break;
 				case E_COMPUTE_OPERATION_PEEK:if (paccu>0) accu[paccu-1]=ae->mem[ae->activebank][(unsigned short int)accu[paccu-1]];break;
 				case E_COMPUTE_OPERATION_POW2:if (paccu>0) accu[paccu-1]=pow(2.0,accu[paccu-1]);break;
-				case E_COMPUTE_OPERATION_POW: if (paccu>1) {accu[paccu-2]=pow(accu[paccu-2],accu[paccu-1]); paccu--;} // on ajuste car DEUX paramètres
-								      break;
-				case E_COMPUTE_OPERATION_FMOD: if (paccu>1) {accu[paccu-2]=fmod(accu[paccu-2],accu[paccu-1]); paccu--;} break;
-				case E_COMPUTE_OPERATION_ATAN2:if (paccu>1) {accu[paccu-2]=atan2(accu[paccu-2],accu[paccu-1]); paccu--;} break;
-				case E_COMPUTE_OPERATION_HYPOT:if (paccu>1) {accu[paccu-2]=hypot(accu[paccu-2],accu[paccu-1]); paccu--;} break;
-				case E_COMPUTE_OPERATION_LDEXP:if (paccu>1) {accu[paccu-2]=ldexp(accu[paccu-2],accu[paccu-1]); paccu--;} break;
-				case E_COMPUTE_OPERATION_FDIM: if (paccu>1) {accu[paccu-2]=fdim(accu[paccu-2],accu[paccu-1]); paccu--;} break;
-				case E_COMPUTE_OPERATION_STEP: if (paccu>1) {accu[paccu-2]=(accu[paccu-2]<=accu[paccu-1])?1:0; paccu--;} break;
-
-				case E_COMPUTE_OPERATION_FMAX: if (paccu>1) {accu[paccu-2]=(accu[paccu-2]<accu[paccu-1])?accu[paccu-1]:accu[paccu-2]; paccu--;} break;
-				case E_COMPUTE_OPERATION_FMIN: if (paccu>1) {accu[paccu-2]=(accu[paccu-2]>accu[paccu-1])?accu[paccu-1]:accu[paccu-2]; paccu--;} break;
+				// multi-param functions
+				case E_COMPUTE_OPERATION_POW: if (paccu>1) {
+								      accu[paccu-2]=pow(accu[paccu-2],accu[paccu-1]); paccu--; // on ajuste car DEUX paramètres
+							       } else {
+									MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"POW requires 2 parameters\n");
+							       }
+							      break;
+				case E_COMPUTE_OPERATION_FMOD: if (paccu>1) {accu[paccu-2]=fmod(accu[paccu-2],accu[paccu-1]); paccu--;
+							       } else {
+									MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"FMOD requires 2 parameters\n");
+							       }
+							       break;
+				case E_COMPUTE_OPERATION_ATAN2:if (paccu>1) {accu[paccu-2]=atan2(accu[paccu-2],accu[paccu-1]); paccu--;
+							       } else {
+									MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"ATAN2 requires 2 parameters\n");
+							       }
+							       break;
+				case E_COMPUTE_OPERATION_HYPOT:if (paccu>1) {accu[paccu-2]=hypot(accu[paccu-2],accu[paccu-1]); paccu--;
+							       } else {
+									MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"HYPOT requires 2 parameters\n");
+							       }
+							       break;
+				case E_COMPUTE_OPERATION_LDEXP:if (paccu>1) {accu[paccu-2]=ldexp(accu[paccu-2],accu[paccu-1]); paccu--;
+							       } else {
+									MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"LDEXP requires 2 parameters\n");
+							       }
+							       break;
+				case E_COMPUTE_OPERATION_FDIM: if (paccu>1) {accu[paccu-2]=fdim(accu[paccu-2],accu[paccu-1]); paccu--;
+							       } else {
+									MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"FDIM requires 2 parameters\n");
+							       }
+							       break;
+				case E_COMPUTE_OPERATION_STEP: if (paccu>1) {accu[paccu-2]=(accu[paccu-2]<=accu[paccu-1])?1:0; paccu--;
+							       } else {
+									MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"STEP requires 2 parameters\n");
+							       }
+							       break;
+				case E_COMPUTE_OPERATION_FMAX: if (paccu>1) {accu[paccu-2]=(accu[paccu-2]<accu[paccu-1])?accu[paccu-1]:accu[paccu-2]; paccu--;
+							       } else {
+									MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"FMAX requires 2 parameters\n");
+							       }
+							       break;
+				case E_COMPUTE_OPERATION_FMIN: if (paccu>1) {
+								       accu[paccu-2]=(accu[paccu-2]>accu[paccu-1])?accu[paccu-1]:accu[paccu-2]; paccu--;
+							       } else {
+									MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"FMIN requires 2 parameters\n");
+							       }
+							       break;
 				case E_COMPUTE_OPERATION_CLAMP:if (paccu>2) {
 								       if (accu[paccu-3]<accu[paccu-2]) accu[paccu-3]=accu[paccu-2]; else
 								       if (accu[paccu-3]>accu[paccu-1]) accu[paccu-3]=accu[paccu-1];
 								       paccu-=2;
 							       } else {
-									MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"CLAMP need 3 parameters (val,min,max)\n");
+									MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"CLAMP requires 3 parameters (val,min,max)\n");
 							       }
 							       break;
 				case E_COMPUTE_OPERATION_LERP:if (paccu>2) {
 								      accu[paccu-3]=accu[paccu-3]+accu[paccu-1]*(accu[paccu-2]-accu[paccu-3]);
 								      paccu-=2;
 							       } else {
-									MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"LERP need 3 parameters (x,y,alpha)\n");
+									MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"LERP requires 3 parameters (x,y,alpha)\n");
 							       }
 							      break;
-				case E_COMPUTE_OPERATION_ISGREATER: if (paccu>1) {accu[paccu-2]=(accu[paccu-2]>accu[paccu-1])?1:0; paccu--;}break;
-				case E_COMPUTE_OPERATION_ISLESS:    if (paccu>1) {accu[paccu-2]=(accu[paccu-2]<accu[paccu-1])?1:0; paccu--;}break;
-				case E_COMPUTE_OPERATION_REMAINDER: if (paccu>1) {accu[paccu-2]=remainder(accu[paccu-2],accu[paccu-1]); paccu--; }break;
+				case E_COMPUTE_OPERATION_ISGREATER: if (paccu>1) {accu[paccu-2]=(accu[paccu-2]>accu[paccu-1])?1:0; paccu--;
+							       } else {
+									MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"ISGREATER requires 2 parameters\n");
+							       }
+							       break;
+				case E_COMPUTE_OPERATION_ISLESS:    if (paccu>1) {accu[paccu-2]=(accu[paccu-2]<accu[paccu-1])?1:0; paccu--;
+							       } else {
+									MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"ISLESS requires 2 parameters\n");
+							       }
+							       break;
+				case E_COMPUTE_OPERATION_REMAINDER: if (paccu>1) {accu[paccu-2]=remainder(accu[paccu-2],accu[paccu-1]); paccu--;
+							       } else {
+									MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"REMAINDER requires 2 parameters\n");
+							       }
+							       break;
 				/* functions with strings */
 				case E_COMPUTE_OPERATION_GETNOP:if (paccu>0) {
 								      int integeridx;
@@ -7454,7 +7666,7 @@ printf("final POP string=%X\n",ae->computectx->operatorstack[nboperatorstack+1].
 									      computestack[integeridx].string=NULL;
 								      } else {
 									      if (integeridx>=0 && integeridx<nbcomputestack) {
-											MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"GETNOP function needs a proper string\n");
+											MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"GETNOP function requires a proper string\n");
 										} else {
 											MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"GETNOP internal error (wrong string index)\n");
 										}
@@ -7474,7 +7686,7 @@ printf("final POP string=%X\n",ae->computectx->operatorstack[nboperatorstack+1].
 									      computestack[integeridx].string=NULL;
 								      } else {
 									      if (integeridx>=0 && integeridx<nbcomputestack) {
-											MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"GETTICK function needs a proper string\n");
+											MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"GETTICK function requires a proper string\n");
 										} else {
 											MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"GETTICK internal error (wrong string index)\n");
 										}
@@ -7494,7 +7706,7 @@ printf("final POP string=%X\n",ae->computectx->operatorstack[nboperatorstack+1].
 									      computestack[integeridx].string=NULL;
 								      } else {
 									      if (integeridx>=0 && integeridx<nbcomputestack) {
-											MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"DURATION function needs a proper string\n");
+											MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"DURATION function requires a proper string\n");
 										} else {
 											MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"DURATION internal error (wrong string index)\n");
 										}
@@ -7513,7 +7725,7 @@ printf("final POP string=%X\n",ae->computectx->operatorstack[nboperatorstack+1].
 									      computestack[integeridx].string=NULL;
 								      } else {
 									      if (integeridx>=0 && integeridx<nbcomputestack) {
-											MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"FILESIZE function needs a proper string\n");
+											MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"FILESIZE function requires a proper string\n");
 										} else {
 											MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"FILESIZE internal error (wrong string index)\n");
 										}
@@ -7533,7 +7745,7 @@ printf("final POP string=%X\n",ae->computectx->operatorstack[nboperatorstack+1].
 									      computestack[integeridx].string=NULL;
 								      } else {
 									      if (integeridx>=0 && integeridx<nbcomputestack) {
-											MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"GETSIZE function needs a proper string\n");
+											MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"GETSIZE function requires a proper string\n");
 										} else {
 											MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"GETSIZE internal error (wrong string index)\n");
 										}
@@ -7553,7 +7765,7 @@ printf("final POP string=%X\n",ae->computectx->operatorstack[nboperatorstack+1].
 									      computestack[integeridx].string=NULL;
 								      } else {
 									      if (integeridx>=0 && integeridx<nbcomputestack) {
-											MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"IS_REGISTER function needs a proper string\n");
+											MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"IS_REGISTER function requires a proper string\n");
 										} else {
 											MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"IS_REGISTER internal error (wrong string index)\n");
 										}
@@ -7569,7 +7781,9 @@ printf("final POP string=%X\n",ae->computectx->operatorstack[nboperatorstack+1].
 				if (zeexpression[0]=='&') {
 					MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"Missing operand for calculation [%s] Did you use & for an hexadecimal value?\n",TradExpression(zeexpression));
 				} else {
-					MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"Missing operand for calculation [%s]\n",TradExpression(zeexpression));
+					char *operatorStr;
+					operatorStr=getOperatorStr(computestack[i].operator);
+					MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"Missing operand for calculation [%s] at operator or function [%s]\n",TradExpression(zeexpression),operatorStr);
 				}
 				accu_err=1;
 				break;
@@ -10280,10 +10494,10 @@ void _EX(struct s_assenv *ae) {
 				}
 				break;
 			case CRC_AF:
-				if (strcmp(ae->wl[ae->idx+2].w,"AF'")==0) {
+				if (strcmp(ae->wl[ae->idx+2].w,"AF")==0) {
 					___output(ae,0x08);ae->nop+=1;ae->tick+=4;
 				} else {
-					MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is EX AF,AF'\n");
+					MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is EX AF,AF' or EXA\n");
 				}
 				break;
 			case CRC_MSP:
@@ -24195,7 +24409,7 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 	* ******************************************************************/
 	/* get back memory if requested */
 	if (ae->retdebug && ae->debug.emuram && ae->debug.lenram) {
-	       int ramidx,ramend,maxbank;
+	       int ramidx,ramend,maxbank,ochk;
 
 	       maxbank=ae->debug.lenram>>14;
 	       ramidx=0;
@@ -24206,8 +24420,20 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 				       ae->debug.emuram[ramidx++]=ae->mem[i][j];
 			       }
 		       } else {
-			       printf("@@@ simple banking unsupported => todo\n");
-			       /* unsupported now => @@TODO */
+			       // check ORG
+			       // get start addr in bank
+			       // copy 16k in emu RAM place
+			       minmem=65536;maxmem=0;
+				for (ochk=0;ochk<ae->io;ochk++) {
+					if (ae->orgzone[ochk].protect) continue; /* protected zones exclusion */
+					/* uniquement si le ORG a ete suivi d'ecriture et n'est pas en 'nocode' */
+					if (ae->orgzone[ochk].ibank==i && ae->orgzone[ochk].memstart!=ae->orgzone[ochk].memend && ae->orgzone[ochk].nocode!=1) {
+						if (ae->orgzone[ochk].memstart<minmem) minmem=ae->orgzone[ochk].memstart;
+						if (ae->orgzone[ochk].memend>maxmem) maxmem=ae->orgzone[ochk].memend;
+					}
+				}
+				if (minmem+16384>65536) ramend=65536; else ramend=minmem+16384;
+				memcpy(&ae->debug.emuram[i*16384],ae->mem[i]+minmem,ramend-minmem);
 		       }
 	       }
 	}
@@ -24216,51 +24442,141 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 	return ok;
 }
 
-
+/***********************************************************************
+ - remove single line comments
+ - remove multi line comments
+ - merge lines when requested
+ - convert AF' to AF
+ - convert tabs to spaces
+ - convert shifts << & >> to a single bracket
+ - convert code to upper chars (but not in quotes)
+***********************************************************************/
 int EarlyPrepSrc(struct s_assenv *ae, char **listing, char *filename) {
-	int l,idx,c,quote_type=0;
+	int l,idx,c,qopen=0;
 	int mlc_start,mlc_idx;
 	int midx=0;
+	int lastAp=0;
 
-	/* virer les commentaires en ;, // mais aussi multi-lignes et convertir les decalages, passer les chars en upper case */
 	l=idx=0;
 	while (listing[l]) {
 		c=listing[l][idx++];
-
-		if (!c) {
-			l++;
-			if (midx<idx) midx=idx+256;
-			idx=0;
-			continue;
-		} else {
-			if (!quote_type) {
-
-				/* upper case */
-				if (c>='a' && c<='z') {
-					listing[l][idx-1]=c=c-'a'+'A';
-				}
-
-				if (c=='\'') {
-				       if (idx>2 && strncmp(&listing[l][idx-3],"AF'",3)==0) {
-						/* il ne faut rien faire */
-					} else {
-						quote_type=c;
+		switch (c) {
+			/* end of line, test for fusion */
+			case 0: if (idx>1) {
+					if (midx<idx) midx=idx+256; // legacy
+					idx-=2;
+					while (idx && (listing[l][idx]==' ' || (listing[l][idx]<=0x0D && listing[l][idx]))) {
+						idx--;
 					}
-				} else if (c=='"') {
-					quote_type=c;
-				} else if (c==';' || (c=='/' && listing[l][idx]=='/')) {
-					idx--;
-					while (listing[l][idx] && listing[l][idx]!=0x0D && listing[l][idx]!=0x0A) listing[l][idx++]=':';
-					idx--;
-				} else if (c=='>' && listing[l][idx]=='>' && !quote_type) {
-					listing[l][idx-1]=']';
-					listing[l][idx++]=' ';
-					continue;
-				} else if (c=='<' && listing[l][idx]=='<' && !quote_type) {
-					listing[l][idx-1]='[';
-					listing[l][idx++]=' ';
-					continue;
-				} else if (c=='/' && listing[l][idx]=='*' && !quote_type) {
+					if (listing[l][idx]=='\\') {
+						if (listing[l+1]) {
+							/* fusion avec la ligne suivante qui est présente */
+							listing[l]=MemRealloc(listing[l],strlen(listing[l])+strlen(listing[l+1])+1);
+							strcpy(listing[l]+idx,listing[l+1]);
+							strcpy(listing[l+1],"");
+							/* et on continue l'analyse de la ligne après fusion */
+							//idx=strlen(listing[l])+1;
+							//if (midx<idx) midx=idx+256;
+						} else {
+							MakeError(ae,0,filename,l+1,"Cannot merge with next line as there is no more line!\n");
+							idx=0;
+							l++;
+						}
+					} else {
+						// regular EOL
+						idx=0;
+						l++;
+					}
+				} else {
+					// ligne vide
+					if (midx<idx) midx=idx+256;
+					idx=0;
+					l++;
+				}
+				break;
+			/* upper case & AF' */
+			case 'a':listing[l][idx-1]='A';break;
+			case 'b':listing[l][idx-1]='B';break;
+			case 'c':listing[l][idx-1]='C';break;
+			case 'd':listing[l][idx-1]='D';break;
+			case 'e':listing[l][idx-1]='E';break;
+			case 'f':listing[l][idx-1]='F';
+			case 'F':if (listing[l][idx]=='\'' && idx>3 && listing[l][idx-2]=='A') { // ", AF'"
+					int reverseIdx=idx-3;
+					while (reverseIdx && listing[l][reverseIdx]==' ') reverseIdx--;
+					if (listing[l][reverseIdx]==',') listing[l][idx]=' ';
+				 }
+				 break;
+			case 'g':listing[l][idx-1]='G';break;
+			case 'h':listing[l][idx-1]='H';break;
+			case 'i':listing[l][idx-1]='I';break;
+			case 'j':listing[l][idx-1]='J';break;
+			case 'k':listing[l][idx-1]='K';break;
+			case 'l':listing[l][idx-1]='L';break;
+			case 'm':listing[l][idx-1]='M';break;
+			case 'n':listing[l][idx-1]='N';break;
+			case 'o':listing[l][idx-1]='O';break;
+			case 'p':listing[l][idx-1]='P';break;
+			case 'q':listing[l][idx-1]='Q';break;
+			case 'r':listing[l][idx-1]='R';break;
+			case 's':listing[l][idx-1]='S';break;
+			case 't':listing[l][idx-1]='T';break;
+			case 'u':listing[l][idx-1]='U';break;
+			case 'v':listing[l][idx-1]='V';break;
+			case 'w':listing[l][idx-1]='W';break;
+			case 'x':listing[l][idx-1]='X';break;
+			case 'y':listing[l][idx-1]='Y';break;
+			case 'z':listing[l][idx-1]='Z';break;
+			// tab => space
+			case '\t':listing[l][idx-1]=' ';break;
+			// escape
+			case '\\':if (listing[l][idx]) {
+					  idx++;
+				  } else {
+					  // we may escape at the end of the line (to concat lines)
+				  }
+				 break;
+			// quotes
+			case '\'': qopen=1;
+				   while (listing[l][idx]) {
+					   // escape in quotes
+					if (listing[l][idx]=='\\') {
+						if (listing[l][idx+1]) {
+							  idx++;
+						} else {
+							MakeError(ae,0,filename,l+1,"Cannot escape at the end of the line inside a quote\n");
+							break;
+						}
+					} else if (listing[l][idx]=='\'') {
+						qopen=0;
+						idx++;
+						break;
+					}
+					idx++;
+				  }
+				  if (qopen) MakeError(ae,0,filename,l+1,"Quote opened but not closed before the end of the line\n");
+				  break;
+			case '"': qopen=1;
+				  while (listing[l][idx]) {
+					   // escape in quotes
+					if (listing[l][idx]=='\\') {
+						if (listing[l][idx+1]) {
+							  idx++;
+						} else {
+							MakeError(ae,0,filename,l+1,"Cannot escape at the end of the line inside a quote\n");
+							break;
+						}
+					} else if (listing[l][idx]=='"') {
+						qopen=0;
+						idx++;
+						break;
+					}
+					idx++;
+				  }
+				  if (qopen) MakeError(ae,0,filename,l+1,"Quote opened but not closed before the end of the line\n");
+				  break;
+			 // comments
+			case '/':if (listing[l][idx]=='*') {
 					/* multi-line comment */
 					mlc_start=l;
 					mlc_idx=idx-1;
@@ -24292,38 +24608,28 @@ int EarlyPrepSrc(struct s_assenv *ae, char **listing, char *filename) {
 						mlc_idx=0;
 						while (mlc_idx<idx) listing[l][mlc_idx++]=' '; /* raz beginning of the line */
 					}
-				}
-			} else {
-				/* in quote */
-				if (c=='\\') {
-					if (listing[l][idx]) {
-						idx++;
-					}
-				} else if (c==quote_type) {
-					quote_type=0;
-				}
-			}
-		}
-	}
-	l-=2;
-	if (l>0)
-	while (l>=0) {
-		/* patch merge line with '\' only outside quotes */
-		idx=strlen(listing[l])-1;
-		
-		if (idx>0) {
-			while (idx && (listing[l][idx]==' ' || listing[l][idx]==0x0D || listing[l][idx]==0x0A || listing[l][idx]==0x0B)) {
+					break;
+				 } else {
+					if (listing[l][idx]!='/')
+						break;
+				 }
+			case ';': idx--;
+				while (listing[l][idx] && listing[l][idx]!=0x0D && listing[l][idx]!=0x0A) listing[l][idx++]=':';
 				idx--;
-			}
-
-			if (listing[l][idx]=='\\') {
-				/* fusion avec la ligne suivante qui est obligatoirement présente */
-				listing[l]=MemRealloc(listing[l],strlen(listing[l])+strlen(listing[l+1])+1);
-				strcpy(listing[l]+idx,listing[l+1]);
-				strcpy(listing[l+1],"");
-			}
+				break;
+			// shifts
+			case '>':if (listing[l][idx]=='>') {
+					listing[l][idx-1]=']';
+					listing[l][idx++]=' ';
+				}
+				break;
+			case '<':if (listing[l][idx]=='<') {
+					listing[l][idx-1]='[';
+					listing[l][idx++]=' ';
+				}
+				break;
+			default:break;
 		}
-		l--;
 	}
 #if TRACE_LIGHT_PREPRO
 	l=0;
@@ -24436,10 +24742,6 @@ struct s_assenv *PreProcessing(char *filename, int flux, const char *datain, int
 	int ival=0,sval=256;
 	char *qval=NULL;
 	int iqval=0,sqval=256;
-	struct s_repeat_index *TABrindex=NULL;
-	struct s_repeat_index *TABwindex=NULL;
-	struct s_repeat_index rindex={0};
-	struct s_repeat_index windex={0};
 	int nri=0,mri=0,ri=0;
 	int nwi=0,mwi=0,wi=0;
 	/* state machine trigger */
@@ -24447,14 +24749,13 @@ struct s_assenv *PreProcessing(char *filename, int flux, const char *datain, int
 	int macro_trigger=0;
 	int escape_code=0;
 	int quote_type=0,parenth=0;
-	int incbin=0,include=0,crunch=0;
+	int incbin=0,include=0,crunch=0,incCheck;
 	int rewrite=0,hadcomma=0;
 	int nbinstruction;
 	int ifast,texpr;
 	int ispace=0;
 	char opassign=0;
 	/* incbin bug */
-	int incstartL=0;
 	char *original_filename=NULL;
 	char errSep1[128]={0};
 	int nobreak=0;
@@ -24463,14 +24764,6 @@ struct s_assenv *PreProcessing(char *filename, int flux, const char *datain, int
 printf("start prepro, alloc assenv\n");
 #endif
 
-	windex.cl=-1;
-	windex.cidx=-1;
-	rindex.cl=-1;
-	rindex.cidx=-1;
-
-#if TRACE_PREPRO
-printf("malloc+memset\n");
-#endif
 	ae=MemMalloc(sizeof(struct s_assenv));
 	memset(ae,0,sizeof(struct s_assenv));
 
@@ -24846,7 +25139,9 @@ printf("nbbank=%d initialised\n",ae->nbbank);
 	for (i=0;i<256;i++) {
 		if ((i>='A' && i<='Z') || (i>='0' && i<='9') || i=='@' || i=='_') AutomatePrepro[i]=1; else AutomatePrepro[i]=0;
 	}
-	 /* separators */
+	/* string terminator handled in regular char */
+	Automate[0]=1;
+	/* separators */
 	Automate[' ']=2;
 	Automate[',']=2;
 	Automate['\t']=2;
@@ -24929,7 +25224,7 @@ if (flux_nblines<50) printf("%02d[%s]\n",flux_nblines,zelines[flux_nblines]);
 	}	
 
 #if TRACE_PREPRO
-printf("remove comz, do includes\n");
+printf("remove comz, merge lines, upper case for code\n");
 #endif
 	midx=EarlyPrepSrc(ae,zelines,ae->filename[ae->ifile-1]);
 	StateMachineResizeBuffer(&w,midx+256,&mw);
@@ -24952,523 +25247,308 @@ printf("remove comz, do includes\n");
 		listing[ilisting-1].listing[datalen+1]=0;
 	}
 
-	waiting_quote=quote_type=0;
+	waiting_quote=quote_type=include=0;
 
+#if TRACE_PREPRO
+printf("do includes, remove CR => %d line(s) to process\n",ilisting);
+#endif
 	/************************************************************************************/
 	/************************************************************************************/
 	/* simplify case, carriage return and some tricky quotes ****************************/
 	/* also do all sources and binaries includes ****************************************/
 	/************************************************************************************/
+	/*** POLARIS new automate ***********************************************************/
 	/************************************************************************************/
 
 	l=idx=0;
 	while (l<ilisting) {
 
 #if TRACE_PREPRO || TRACE_LIGHT_PREPRO
-if (!idx) printf("[%s]\n",listing[l].listing);
+if (!idx) printf("L%05d=[%s]\n",l,listing[l].listing);
 #endif
 
-		c=listing[l].listing[idx++];
-		if (!c) {
-			l++;
-			if (idx>midx) midx=idx; // longueur maximale de ligne...
-			idx=0;
-			continue;
-		}
-		if (c=='\\' && !waiting_quote) {
-			idx++;
-			continue;
-		}
-		
-		if (c==0x0D || c==0x0A) {
-			listing[l].listing[idx-1]=':';
-			c=':';
-		} else if (c=='\'') {
-			// test this only if there is a single quote
-		       	if (idx>2 && strncmp(&listing[l].listing[idx-3],"AF'",3)==0) {
-				/* nothing */
-			} else {
-				if (!quote_type) {
-					quote_type=c;
-					lquote=l;
-				} else {
-					if (c==quote_type) {
-						quote_type=0;
-					}
-				}
-			}
-		} else if (c=='"') {
-			if (!quote_type) {
-				quote_type=c;
-				lquote=l;
-			} else {
-				if (c==quote_type) {
-					quote_type=0;
-				}
-			}
-		}
+		c=listing[l].listing[idx];
 
-		if (waiting_quote) {
-			/* expecting quote and NOTHING else */
-			switch (waiting_quote) {
-				case 1:
-					if (c==quote_type) waiting_quote=2; else {
-						/* enforce there is only spaces or tabs between READ/INC and string */
-						if (c!=' ' && c!=0x9) {
-							MakeError(ae,0,ae->filename[listing[l].ifile],listing[l].iline,"A quoted string must follow INCLUDE directive\n");
-							waiting_quote=0;
-							idx--;
-							continue;
-						}
-					}
-					break;
-				case 2:
-					if (!quote_type) {
-						waiting_quote=3;
-						qval[iqval]=0;
-					} else {
-						qval[iqval++]=c;
-						//StateMachineResizeBuffer(&qval,iqval,&sqval);
-						qval[iqval]=0;
-					}
-			}
-			if (waiting_quote==3) {
-				if (incbin) {
-					int fileok=0,ilookfile;
-					/* qval contient le nom du fichier a lire */
-					filename_toread=MergePath(ae,ae->filename[listing[l].ifile],qval);
-					if (FileExists(filename_toread)) {
-						fileok=1;
-					} else {
-						for (ilookfile=0;ilookfile<ae->ipath && !fileok;ilookfile++) {
-							filename_toread=MergePath(ae,ae->includepath[ilookfile],qval);
-							if (FileExists(filename_toread)) {
-								fileok=1;
-							}
-						}
-					}
-					curhexbin.filename=TxtStrDup(filename_toread);
-					curhexbin.crunch=crunch;
-					switch (crunch) {
-						case 18:
-							curhexbin.version=1;
-							curhexbin.minmatch=5;
-							break;
-						case 19:
-							curhexbin.crunch=18;
-							curhexbin.version=2;
-							curhexbin.minmatch=2;
-							break;
-						default:break;
-					}
-
-					/* TAG + info */
-					curhexbin.datalen=-1;
-					curhexbin.data=NULL;
-					/* not yet an error, we will know later when executing the code */
-					ObjectArrayAddDynamicValueConcat((void**)&ae->hexbin,&ae->ih,&ae->mh,&curhexbin,sizeof(curhexbin));
-
-					/* v0.130 handling error case with filename on multiple lines */
-					if (incstartL!=l) {
-						int iconcat=incstartL;
-						int ilen;
-
-						MakeError(ae,0,ae->filename[listing[incstartL].ifile],listing[incstartL].iline,"INCBIN filename cannot be on multiple lines\n");
-
-						ilen=strlen(listing[iconcat].listing)+1;
-						idx+=ilen-rewrite;
-						while (iconcat<l) {
-							int tlen;
-							iconcat++;
-							tlen=strlen(listing[iconcat].listing);
-							ilen+=tlen;
-							if (iconcat<l) idx+=tlen;
-						}
-
-						iconcat=incstartL;
-						listing[iconcat].listing=MemRealloc(listing[iconcat].listing,ilen);
-						while (iconcat<l) {
-							iconcat++;
-							strcat(listing[incstartL].listing,listing[iconcat].listing);
-							listing[iconcat].listing[0]=0;
-						}
-						l=incstartL;
-
-						/* patch data to remain Assembler silent about this */
-						for (i=rewrite;i<idx;i++) listing[incstartL].listing[i]=' ';
-						/* delete entry */
-						MemFree(curhexbin.filename);
-						ae->ih--;
-					} else {
-						/* insertion */
-						le=strlen(listing[l].listing);
-
-						newlistingline=MemMalloc(le+32);
-						memcpy(newlistingline,listing[l].listing,rewrite);
-						rewrite+=sprintf(newlistingline+rewrite,"HEXBIN #%X",ae->ih-1);
-						strcat(newlistingline+rewrite,listing[l].listing+idx);
-						idx=rewrite;
-						MemFree(listing[l].listing);
-						listing[l].listing=newlistingline;
-					}
-					incbin=0;
-				} else if (include) {
-					/* qval contient le nom du fichier a lire */
-					int fileok=0,ilookfile;
-					/* cette notion n'existe pas dans le cas normal */
-					curhexbin.datalen=0;
-					/* qval contient le nom du fichier a lire */
-					filename_toread=MergePath(ae,ae->filename[listing[l].ifile],qval);
-					if (FileExists(filename_toread)) {
-						fileok=1;
-					} else {
-						for (ilookfile=0;ilookfile<ae->ipath && !fileok;ilookfile++) {
-							filename_toread=MergePath(ae,ae->includepath[ilookfile],qval);
-							if (FileExists(filename_toread)) {
-								fileok=1;
-							}
-						}
-					}
-
-					/* v0.130 handling error case with filename on multiple lines */
-					if (incstartL!=l) {
-						int iconcat=incstartL;
-						int ilen;
-
-						MakeError(ae,0,ae->filename[listing[incstartL].ifile],listing[incstartL].iline,"INCLUDE filename cannot be on multiple lines\n");
-						ilen=strlen(listing[iconcat].listing)+1;
-						idx+=ilen-rewrite;
-						while (iconcat<l) {
-							int tlen;
-							iconcat++;
-							tlen=strlen(listing[iconcat].listing);
-							ilen+=tlen;
-							if (iconcat<l) idx+=tlen;
-						}
-
-						iconcat=incstartL;
-						listing[iconcat].listing=MemRealloc(listing[iconcat].listing,ilen);
-						while (iconcat<l) {
-							iconcat++;
-							strcat(listing[incstartL].listing,listing[iconcat].listing);
-							listing[iconcat].listing[0]=0;
-						}
-						l=incstartL;
-
-					} else {
-						if (fileok) {
-							int newmidx;
-							#if TRACE_PREPRO
-							rasm_printf(ae,KIO"include [%s]\n",filename_toread);
-							#endif
-							
-							/* lecture */
-							listing_include=FileReadLines(ae,filename_toread);
-							FieldArrayAddDynamicValueConcat(&ae->filename,&ae->ifile,&ae->maxfile,filename_toread);
-							if (ae->enforce_symbol_case) {
-								ae->rawfile=MemRealloc(ae->rawfile,sizeof(char **)*ae->ifile);
-								ae->rawlen=MemRealloc(ae->rawlen,sizeof(int)*ae->ifile);
-								ae->rawfile[ae->ifile-1]=ae->source_bigbuffer;
-								ae->rawlen[ae->ifile-1]=ae->source_bigbuffer_len;
-							}
-							/* virer les commentaires + pré-traitement */
-							newmidx=EarlyPrepSrc(ae,listing_include,ae->filename[ae->ifile-1]);
-							if (newmidx>midx) {
-								midx=newmidx+256;
-								StateMachineResizeBuffer(&w,midx+256,&mw);
-								StateMachineResizeBuffer(&bval,midx+256,&sval);
-								StateMachineResizeBuffer(&qval,midx+256,&sqval);
-							}
-
-							/* split de la ligne en cours + suppression de l'instruction include */
-							PreProcessingSplitListing(&listing,&ilisting,&maxlisting,l,rewrite,idx);
-							/* insertion des nouvelles lignes + reference fichier + numeros de ligne */
-							PreProcessingInsertListing(&listing,&ilisting,&maxlisting,l,listing_include,ae->ifile-1);
-
-							MemFree(listing_include); /* free le tableau mais pas les lignes */
-							listing_include=NULL;
-							idx=0; /* on reste sur la meme ligne mais on se prepare a relire du caractere 0! */
-						} else {
-							/********************************************
-							*      E R R O R    M a n a g e m e n t     *
-							********************************************/
-							char tmp_insert[128];
-
-							for (i=rewrite;i<idx;i++) listing[incstartL].listing[i]=' ';
-							sprintf(tmp_insert,"ERRRD %d",ae->ih);
-							memcpy(listing[incstartL].listing+rewrite,tmp_insert,strlen(tmp_insert));
-							
-							filename_toread=MergePath(ae,ae->filename[listing[l].ifile],qval);
-							curhexbin.filename=TxtStrDup(filename_toread);
-							curhexbin.crunch=crunch;
-
-							/* TAG + info */
-							curhexbin.datalen=-2;
-							curhexbin.data=NULL;
-							/* not yet an error, we will know later when executing the code */
-							ObjectArrayAddDynamicValueConcat((void**)&ae->hexbin,&ae->ih,&ae->mh,&curhexbin,sizeof(curhexbin));
-						}
-					}
-					include=0;
-				}
-				waiting_quote=0;
-				qval[0]=0;
-				iqval=0;
-			}
-		} else {
-			/* classic behaviour */
-
-			/* looking for include/incbin */
-			//if (((c>='A' && c<='Z') || (c>='0' && c<='9') || c=='@' || c=='_')&& !quote_type) {
-			if (AutomatePrepro[((int)c)&0xFF] && !quote_type) {
-				bval[ival++]=c;
-				//StateMachineResizeBuffer(&bval,ival,&sval);
-				bval[ival]=0;
-			} else {
-				switch (bval[0]) {
-					case 'I':
-						if (ival>5 && bval[1]=='N' && bval[2]=='C') {
-							if (strcmp(bval,"INCLUDE")==0) {
-								incstartL=l;
-								include=1;
-								waiting_quote=1;
-								rewrite=idx-7-1;
-								/* quote right after keyword */
-								if (c==quote_type) {
-									waiting_quote=2;
-								}
-							} else if (strcmp(bval,"INCLZSA2")==0) {
-								incstartL=l;
-								incbin=1;
-								crunch=19;
-								waiting_quote=1;
-								rewrite=idx-8-1;
-								/* quote right after keyword */
-								if (c==quote_type) {
-									waiting_quote=2;
-								}
-							} else if (strcmp(bval,"INCLZSA1")==0) {
-								incstartL=l;
-								incbin=1;
-								crunch=18;
-								waiting_quote=1;
-								rewrite=idx-8-1;
-								/* quote right after keyword */
-								if (c==quote_type) {
-									waiting_quote=2;
-								}
-							} else if (strcmp(bval,"INCAPU")==0) {
-								incstartL=l;
-								incbin=1;
-								crunch=17;
-								waiting_quote=1;
-								rewrite=idx-6-1;
-								/* quote right after keyword */
-								if (c==quote_type) {
-									waiting_quote=2;
-								}
-							} else if (strcmp(bval,"INCLZ4")==0) {
-								incstartL=l;
-								incbin=1;
-								crunch=4;
-								waiting_quote=1;
-								rewrite=idx-6-1;
-								/* quote right after keyword */
-								if (c==quote_type) {
-									waiting_quote=2;
-								}
-							} else if (strcmp(bval,"INCEXO")==0) {
-								incstartL=l;
-								incbin=1;
-								crunch=8;
-								waiting_quote=1;
-								rewrite=idx-6-1;
-								/* quote right after keyword */
-								if (c==quote_type) {
-									waiting_quote=2;
-								}
-							} else if (strcmp(bval,"INCZX0")==0) {
-								incstartL=l;
-								incbin=1;
-								crunch=70;
-								waiting_quote=1;
-								rewrite=idx-6-1;
-								/* quote right after keyword */
-								if (c==quote_type) {
-									waiting_quote=2;
-								}
-							} else if (strcmp(bval,"INCZX0B")==0) {
-								incstartL=l;
-								incbin=1;
-								crunch=71;
-								waiting_quote=1;
-								rewrite=idx-7-1;
-								/* quote right after keyword */
-								if (c==quote_type) {
-									waiting_quote=2;
-								}
-							} else if (strcmp(bval,"INCZX7")==0) {
-								incstartL=l;
-								incbin=1;
-								crunch=7;
-								waiting_quote=1;
-								rewrite=idx-6-1;
-								/* quote right after keyword */
-								if (c==quote_type) {
-									waiting_quote=2;
-								}
-							} else if (strcmp(bval,"INCL48")==0) {
-								incstartL=l;
-								incbin=1;
-								crunch=48;
-								waiting_quote=1;
-								rewrite=idx-6-1;
-								/* quote right after keyword */
-								if (c==quote_type) {
-									waiting_quote=2;
-								}
-							} else if (strcmp(bval,"INCL49")==0) {
-								incstartL=l;
-								incbin=1;
-								crunch=49;
-								waiting_quote=1;
-								rewrite=idx-6-1;
-								/* quote right after keyword */
-								if (c==quote_type) {
-									waiting_quote=2;
-								}
-							} else if (strcmp(bval,"INCBIN")==0) {
-								incstartL=l;
-								incbin=1;
-								crunch=0;
-								waiting_quote=1;
-								rewrite=idx-6-1;
-								/* quote right after keyword */
-								if (c==quote_type) {
-									waiting_quote=2;
-								}
-							} else if (strcmp(bval,"INCWAV")==0) {
-								incstartL=l;
-								incbin=1;
-								crunch=0;
-								waiting_quote=1;
-								rewrite=idx-6-1;
-								/* quote right after keyword */
-								if (c==quote_type) {
-									waiting_quote=2;
-								}
-							}
-						}
-						break;
-
-					case 'U':
-						/* code dupliqué du REND */
-						if (strcmp(bval,"UNTIL")==0) {
-							/* retrouver la structure repeat_index correspondant a l'ouverture */
-							for (ri=nri-1;ri>=0;ri--) {
-								if (TABrindex[ri].cl==-1) {
-									TABrindex[ri].cl=c;
-									TABrindex[ri].cidx=idx;
-									break;
-								}
-							}
-							if (ri==-1) {
-								MakeError(ae,0,ae->filename[listing[l].ifile],listing[l].iline,"%s refers to unknown REPEAT\n",bval);
-								//exit(1);
-							}
-						}
-						break;
-
-					case 'F': // freequotes
-						if (ival==10 && strcmp(bval,"FREEQUOTES")==0) {
-							ae->freequote=1;
-						}
-						break;
-					case 'R':
-						if (ival==4 && strcmp(bval,"REND")==0) {
-							/* retrouver la structure repeat_index correspondant a l'ouverture */
-							for (ri=nri-1;ri>=0;ri--) {
-								if (TABrindex[ri].cl==-1) {
-									TABrindex[ri].cl=c;
-									TABrindex[ri].cidx=idx;
-									break;
-								}
-							}
-							if (ri==-1) {
-								MakeError(ae,0,ae->filename[listing[l].ifile],listing[l].iline,"%s refers to unknown REPEAT\n",bval);
-								//exit(1);
-							}
-						} else if (ival==6 && strcmp(bval,"REPEAT")==0) {
-							/* remplir la structure repeat_index */
-							rindex.ol=listing[l].iline;
-							rindex.oidx=idx;
-							rindex.ifile=ae->ifile-1;
-							ObjectArrayAddDynamicValueConcat((void**)&TABrindex,&nri,&mri,&rindex,sizeof(rindex));
-						}
-						break;
-
-					case 'W':
-						if (ival==5 && strcmp(bval,"WHILE")==0) {
-							/* remplir la structure repeat_index */
-							windex.ol=listing[l].iline;
-							windex.oidx=idx;
-							windex.ifile=ae->ifile-1;
-							ObjectArrayAddDynamicValueConcat((void**)&TABwindex,&nwi,&mwi,&windex,sizeof(windex));
-						} else if (ival==4 && strcmp(bval,"WEND")==0) {
-							/* retrouver la structure repeat_index correspondant a l'ouverture */
-							for (wi=nwi-1;wi>=0;wi--) {
-								if (TABwindex[wi].cl==-1) {
-									TABwindex[wi].cl=c;
-									TABwindex[wi].cidx=idx;
-									break;
-								}
-							}
-							if (wi==-1) {
-								MakeError(ae,0,ae->filename[listing[l].ifile],listing[l].iline,"WEND refers to unknown WHILE\n");
-								//exit(1);
-							}
-								
-						}
-						break;
-
-					default: 
-						if (!quote_type && ae->noampersand && c=='&') {
-							  listing[l].listing[idx-1]='#';
-#if TRACE_PREPRO
-printf("patch & => #\n");
-#endif
-						}
-						break;
-				}
-
-#if TRACE_PREPRO
-printf("bval=[%s]\n",bval);
-#endif
-				bval[0]=0;
+		switch (c) {
+			// terminator
+			case 0: l++;
+				idx=-1;
 				ival=0;
-			}
-		}
-	}
-	if (waiting_quote && ilisting) {
-		MakeError(ae,0,ae->filename[listing[ilisting-1].ifile],listing[ilisting-1].iline,"A quoted string must follow INCLUDE directive\n");
-	}
-
-#if TRACE_PREPRO
-printf("check quotes and repeats\n");
+#if TRACE_PREPRO || TRACE_LIGHT_PREPRO
+	printf("Next line\n");
 #endif
-	if (quote_type) {
-		MakeError(ae,0,ae->filename[listing[lquote].ifile],listing[lquote].iline,"quote opened was not closed\n");
-		//exit(1);
-	}
+				break;
+			// escape
+			case '\\': if (listing[l].listing[idx+1]) idx++;
+				break;
+			case 0x0D:
+			case 0x0A: listing[l].listing[idx]=':';
+				ival=0;
+				break;
+			// single quote
+			case '\'':
+				//lquote=l;
+				idx++;
+				// read or skip the quote
+				while (1) {
+					if (!listing[l].listing[idx]) {
+						idx=-1;
+						l++;
+						if (l>=ilisting) break; // end of source
+					} else 	if (listing[l].listing[idx]=='\\' && listing[l].listing[idx+1]) {
+						idx++; // escape
+					} else if (listing[l].listing[idx]=='\'') {
+						break; // end of quote
+					}
+					idx++;
+				}
+				break;
+			case '"':
+				idx++;
+				// read or skip the quote
+				while (1) {
+					if (!listing[l].listing[idx]) {
+						idx=-1;
+						l++;
+						if (l>=ilisting) break; // end of source
+					} else 	if (listing[l].listing[idx]=='\\' && listing[l].listing[idx+1]) {
+						idx++; // escape
+					} else if (listing[l].listing[idx]=='"') {
+						break; // end of quote
+					}
+					idx++;
+				}
+				break;
+			// for these MAXAM coders
+			case '&':if (ae->noampersand) listing[l].listing[idx]='#';
+				break;
+			// INCLUDES
+			case 'I':if (!ival && listing[l].listing[idx+1]=='N' && listing[l].listing[idx+2]=='C' && listing[l].listing[idx+3]!=' ') { // discard as fast as possible regular INC
+					switch (listing[l].listing[idx+3]) {
+						 case 'A': if (strncmp(&listing[l].listing[idx+4],"PU",2)==0) {include=17;incCheck=6;}
+							   break;
+						 case 'B': if (strncmp(&listing[l].listing[idx+4],"IN",2)==0)   {include=10;incCheck=6;}
+							   break;
+						 case 'E': if (strncmp(&listing[l].listing[idx+4],"XO",2)==0)   {include=8;incCheck=6;}
+							   break;
+						 case 'L': if (strncmp(&listing[l].listing[idx+4],"ZSA1",4)==0) {include=18;incCheck=8;} else
+							   if (strncmp(&listing[l].listing[idx+4],"ZSA2",4)==0) {include=19;incCheck=8;} else
+							   if (strncmp(&listing[l].listing[idx+4],"UDE",3)==0)  {include=1;incCheck=7;} else
+							   if (strncmp(&listing[l].listing[idx+4],"48",2)==0)   {include=48;incCheck=6;} else
+							   if (strncmp(&listing[l].listing[idx+4],"49",2)==0)   {include=49;incCheck=6;} else
+							   if (strncmp(&listing[l].listing[idx+4],"Z4",2)==0)   {include=4;incCheck=6;}
+							   break;
+						 case 'W': if (strncmp(&listing[l].listing[idx+4],"AV",2)==0)   {include=10;incCheck=6;}
+							   break;
+						 case 'Z': if (strncmp(&listing[l].listing[idx+4],"X0B",3)==0)  {include=71;incCheck=7;} else
+							   if (strncmp(&listing[l].listing[idx+4],"X0",2)==0)   {include=70;incCheck=6;} else
+							   if (strncmp(&listing[l].listing[idx+4],"X7",2)==0)   {include=7;incCheck=6;}
+							   break;
+						 default:break;
+					}
+					if (include) {
+						if (listing[l].listing[idx+incCheck]==' ' || listing[l].listing[idx+incCheck]=='\'' || listing[l].listing[idx+incCheck]=='"') {
+							// skip spaces
+							while (listing[l].listing[idx+incCheck]==' ') incCheck++; 
+							// check there is a filename
+							if (listing[l].listing[idx+incCheck]=='\'' || listing[l].listing[idx+incCheck]=='"') {
+								quote_type=listing[l].listing[idx+incCheck];
+								incCheck++;
+								iqval=0;
+								// search end of quote to get the filename
+								while (listing[l].listing[idx+incCheck] && listing[l].listing[idx+incCheck]!=quote_type) {
+									qval[iqval++]=listing[l].listing[idx+incCheck];
+									incCheck++;
+								}
+								if (listing[l].listing[idx+incCheck]==quote_type) {
+									// legacy indexes
+									rewrite=idx;
+									idx+=incCheck+1;
 
-	/* repeat expansion check */
-	for (ri=0;ri<nri;ri++) {
-		if (TABrindex[ri].cl==-1) {
-			MakeError(ae,0,ae->filename[TABrindex[ri].ifile],TABrindex[ri].ol,"REPEAT was not closed\n");
+									qval[iqval]=0;
+									// we have the name
+	//printf("INC* [%s]\n",qval);
+									/***********************************************************************
+									 *                      include text file as source
+									***********************************************************************/
+									if (include==1) {
+										/* qval contient le nom du fichier a lire */
+										int fileok=0,ilookfile;
+										/* cette notion n'existe pas dans le cas normal */
+										curhexbin.datalen=0;
+										/* qval contient le nom du fichier a lire */
+										filename_toread=MergePath(ae,ae->filename[listing[l].ifile],qval);
+										if (FileExists(filename_toread)) {
+											fileok=1;
+										} else {
+											for (ilookfile=0;ilookfile<ae->ipath && !fileok;ilookfile++) {
+												filename_toread=MergePath(ae,ae->includepath[ilookfile],qval);
+												if (FileExists(filename_toread)) {
+													fileok=1;
+												}
+											}
+										}
+										if (fileok) {
+											int newmidx;
+						#if TRACE_PREPRO
+						rasm_printf(ae,KIO"include [%s]\n",filename_toread);
+						#endif
+											
+											/* lecture */
+											listing_include=FileReadLines(ae,filename_toread);
+											FieldArrayAddDynamicValueConcat(&ae->filename,&ae->ifile,&ae->maxfile,filename_toread);
+											if (ae->enforce_symbol_case) {
+												ae->rawfile=MemRealloc(ae->rawfile,sizeof(char **)*ae->ifile);
+												ae->rawlen=MemRealloc(ae->rawlen,sizeof(int)*ae->ifile);
+												ae->rawfile[ae->ifile-1]=ae->source_bigbuffer;
+												ae->rawlen[ae->ifile-1]=ae->source_bigbuffer_len;
+											}
+											/* virer les commentaires + pré-traitement */
+											newmidx=EarlyPrepSrc(ae,listing_include,ae->filename[ae->ifile-1]);
+											if (newmidx>midx) {
+												midx=newmidx+256;
+												StateMachineResizeBuffer(&w,midx+256,&mw);
+												StateMachineResizeBuffer(&bval,midx+256,&sval);
+												StateMachineResizeBuffer(&qval,midx+256,&sqval);
+											}
+//printf("before split/insert [%s]\n[%s]\n",listing[l].listing,listing[l+1].listing?listing[l+1].listing:"(null)");
+											/* split de la ligne en cours + suppression de l'instruction include */
+											PreProcessingSplitListing(&listing,&ilisting,&maxlisting,l,rewrite,idx);
+											/* insertion des nouvelles lignes + reference fichier + numeros de ligne */
+											PreProcessingInsertListing(&listing,&ilisting,&maxlisting,l,listing_include,ae->ifile-1);
+//printf("after  split/insert [%s]\n[%s]\n",listing[l].listing,listing[l+1].listing?listing[l+1].listing:"(null)");
+
+											MemFree(listing_include); /* free le tableau mais pas les lignes */
+											listing_include=NULL;
+											idx=-1; /* on reste sur la meme ligne mais on se prepare a relire du caractere 0! */
+										} else {
+											/********************************************
+											*      E R R O R    M a n a g e m e n t     *
+											********************************************/
+											char tmp_insert[128];
+						#if TRACE_PREPRO
+						rasm_printf(ae,KIO"include KO [%s]\n",filename_toread);
+						#endif
+
+											for (i=rewrite;i<idx;i++) listing[l].listing[i]=' ';
+											sprintf(tmp_insert,"ERRRD %d",ae->ih);
+											memcpy(listing[l].listing+rewrite,tmp_insert,strlen(tmp_insert));
+											
+											filename_toread=MergePath(ae,ae->filename[listing[l].ifile],qval);
+											curhexbin.filename=TxtStrDup(filename_toread);
+											curhexbin.crunch=crunch;
+
+											/* TAG + info */
+											curhexbin.datalen=-2;
+											curhexbin.data=NULL;
+											/* not yet an error, we will know later when executing the code */
+											ObjectArrayAddDynamicValueConcat((void**)&ae->hexbin,&ae->ih,&ae->mh,&curhexbin,sizeof(curhexbin));
+											idx--; //@@TOCHECK?
+										}
+									} else {
+										/***********************************************************************
+										 *              include binary files (optionnaly crunched)
+										***********************************************************************/
+										int fileok=0,ilookfile;
+										/* qval contient le nom du fichier a lire */
+										filename_toread=MergePath(ae,ae->filename[listing[l].ifile],qval);
+										if (FileExists(filename_toread)) {
+											fileok=1;
+										} else {
+											for (ilookfile=0;ilookfile<ae->ipath && !fileok;ilookfile++) {
+												filename_toread=MergePath(ae,ae->includepath[ilookfile],qval);
+												if (FileExists(filename_toread)) {
+													fileok=1;
+												}
+											}
+										}
+										curhexbin.filename=TxtStrDup(filename_toread);
+										// legacy crunch value
+										crunch=include;
+										if (crunch==10) crunch=0;
+
+										curhexbin.crunch=crunch;
+										switch (crunch) {
+											case 18:
+												curhexbin.version=1;
+												curhexbin.minmatch=5;
+												break;
+											case 19:
+												curhexbin.crunch=18;
+												curhexbin.version=2;
+												curhexbin.minmatch=2;
+												break;
+											default:break;
+										}
+
+										/* TAG + info */
+										curhexbin.datalen=-1;
+										curhexbin.data=NULL;
+										/* not yet an error, we will know later when executing the code */
+										ObjectArrayAddDynamicValueConcat((void**)&ae->hexbin,&ae->ih,&ae->mh,&curhexbin,sizeof(curhexbin));
+//printf("INCBIN before [%s]\n",listing[l].listing);
+										/* insertion */
+										le=strlen(listing[l].listing);
+										newlistingline=MemMalloc(le+32);
+										memcpy(newlistingline,listing[l].listing,rewrite);
+										rewrite+=sprintf(newlistingline+rewrite,"HEXBIN #%X",ae->ih-1);
+										strcat(newlistingline+rewrite,listing[l].listing+idx);
+										MemFree(listing[l].listing);
+										listing[l].listing=newlistingline;
+										idx=rewrite-1;
+//printf("INCBIN after  [%s]\n",listing[l].listing);
+									}
+
+
+								} else {
+									idx+=incCheck-1;
+									qval[0]=0;
+									MakeError(ae,0,ae->filename[listing[l].ifile],listing[l].iline,"INCLUDE/INC* filename cannot be on multiple lines\n");
+								}
+							} else {
+								MakeError(ae,0,ae->filename[listing[l].ifile],listing[l].iline,"A quoted string must follow any INCLUDE/INC* directive\n");
+							}
+						} else {
+							// else wrong trigger, its another word beginning like INC*
+						       	switch (listing[l].listing[idx+incCheck]) {
+								case 0:
+								case ':':
+								case 0x0A:
+								case 0x0D:
+									MakeError(ae,0,ae->filename[listing[l].ifile],listing[l].iline,"A quoted string must follow any INCLUDE/INC* directive\n");
+									break;
+								default:
+							}
+						}
+						include=0;
+					}
+				 }
+			// Freequotes
+			case 'F': if (!ival && strncmp(&listing[l].listing[idx+1],"REEQUOTES",9)==0 && ( listing[l].listing[idx+10]==' ' || listing[l].listing[idx+10]==':')) {
+					ae->freequote=1;
+				  }
+			// authorized chars
+			case 'A':case 'B':case 'C':case 'D':case 'E':
+			case 'G':case 'H':case 'J':case 'K':case 'L':
+			case 'M':case 'N':case 'O':case 'P':case 'Q':case 'R':
+			case 'S':case 'T':case 'U':case 'V':case 'W':case 'X':
+			case 'Y':case 'Z':
+			case '0':case '1':case '2':case '3':case '4':
+			case '5':case '6':case '7':case '8':case '9':
+			case '@':case '_':
+				ival++;
+				break;
+			// separator (even unknown one)
+			default: ival=0;
 		}
+		idx++;
 	}
 
-	/* creer une liste de mots */
+	/************************************************************************
+	*************************************************************************
+	***** build wordlist ****************************************************
+	*************************************************************************
+	************************************************************************/
 	curw.w=TxtStrDup("BEGIN");
 	//curw.fastptr=NULL;
 	curw.l=0;
@@ -25492,11 +25572,10 @@ printf("check quotes and repeats\n");
 #if TRACE_PREPRO
 	l=0;
 	while (l<ilisting) {
-		rasm_printf(ae,"listing[%d]\n%s\n",l,listing[l].listing);
+		rasm_printf(ae,"listing[%d]=[%s]\n",l,listing[l].listing);
 		l++;
 	}
 #endif	
-
 
 	texpr=quote_type=parenth=0;
 	l=lw=idx=0;
@@ -25504,43 +25583,45 @@ printf("check quotes and repeats\n");
 	w[0]=0;
 	while (l<ilisting) {
 		c=listing[l].listing[idx++];
-		if (!c) {
-			idx=0;
-			l++;
-			continue;
-		}
 
-		if (!quote_type) {
 #if TRACE_PREPRO
 //printf("c='%c' automate[c]=%d\n",c>31?c:'.',Automate[((int)c)&0xFF]);
 #endif
-			switch (Automate[((int)c)&0xFF]) {
-				case 0:
-					if (idx<126) {
-						int ierrsep;
-						for (ierrsep=0;ierrsep<idx;ierrsep++) errSep1[ierrsep]=' ';
-						errSep1[ierrsep++]='^';
-						errSep1[ierrsep]=0;
-						MakeError(ae,0,ae->filename[listing[l].ifile],listing[l].iline,"invalid char '%c' (%d) char %d\n[%s]\n%s\n",c,c,idx,listing[l].listing,errSep1);
-					} else {
-						MakeError(ae,0,ae->filename[listing[l].ifile],listing[l].iline,"invalid char '%c' (%d) char %d\n[%s]\n",c,c,idx,listing[l].listing);
-					}
+		switch (Automate[((int)c)&0xFF]) {
+			/*************************************************************
+			**************************************************************
+			****  invalid char     ***************************************
+			**************************************************************
+			*************************************************************/
+			case 0:
+				if (idx<126) {
+					int ierrsep;
+					for (ierrsep=0;ierrsep<idx;ierrsep++) errSep1[ierrsep]=' ';
+					errSep1[ierrsep++]='^';
+					errSep1[ierrsep]=0;
+					MakeError(ae,0,ae->filename[listing[l].ifile],listing[l].iline,"invalid char '%c' (%d) char %d\n[%s]\n%s\n",c>31?c:'?',c,idx,listing[l].listing,errSep1);
+				} else {
+					MakeError(ae,0,ae->filename[listing[l].ifile],listing[l].iline,"invalid char '%c' (%d) char %d\n[%s]\n",c>31?c:'?',c,idx,listing[l].listing);
+				}
 #if TRACE_PREPRO
 printf("c='%c' automate[c]=%d\n",c>31?c:'.',Automate[((int)c)&0xFF]);			
 #endif
-					exit(1);
-					break;
-				case 1:
-					switch (c) {
-						case '\'':
-						if (idx>2 && strncmp(&listing[l].listing[idx-3],"AF'",3)==0) {
-							w[lw++]=c;
-							//StateMachineResizeBuffer(&w,lw,&mw);
-							w[lw]=0;
-							break;
-						}
+				exit(1);
+				break;
+			/*************************************************************
+			**************************************************************
+			****  regular char     ***************************************
+			**************************************************************
+			*************************************************************/
+			case 1:
+				switch (c) {
+					case 0: idx=0;
+						l++;
+						continue;
+					case '\'':
+					case '"':
 #if TRACE_PREPRO
-printf("quote\n");
+printf("quotes\n");
 #endif
 						/* on finalise le mot si on est en début d'une nouvelle instruction ET que c'est un SAVE */
 						if (strcmp(w,"SAVE")==0) {
@@ -25548,392 +25629,296 @@ printf("quote\n");
 							idx--;
 							nobreak=1;
 						} else {
+							/*************************************************************
+							**************************************************************
+							****  quote processing ***************************************
+							**************************************************************
+							*************************************************************/
 							quote_type=c;
 							w[lw++]=c;
 							//StateMachineResizeBuffer(&w,lw,&mw);
 							w[lw]=0;
-							break;
-						}
-						break;
+#if TRACE_PREPRO
+				printf("quote start with the char [%c] %d\n",c>31?c:'?',c);
+#endif
+							/* quoted string always starts with a single or a double quote */
+							c=listing[l].listing[idx++];
+							w[lw++]=c;
+							//StateMachineResizeBuffer(&w,lw,&mw);
+							if (c=='\\') {
+								escape_code=1;
+							} else if (c==quote_type) {
+								quote_type=0;
+								MakeError(ae,0,ae->filename[listing[l].ifile],listing[l].iline,"Quote cannot be empty!\n");
+							}
 
-						case '"':
-#if TRACE_PREPRO
-printf("quote\n");
-#endif
-						/* on finalise le mot si on est en début d'une nouvelle instruction ET que c'est un SAVE */
-						if (strcmp(w,"SAVE")==0) {
-							// on ne break pas pour passer dans le case 2 (separator)
-							idx--;
-							nobreak=1;
-						} else {
-							quote_type=c;
-							w[lw++]=c;
-							//StateMachineResizeBuffer(&w,lw,&mw);
+							if (quote_type) // should always happend but...
+							do {
+								c=listing[l].listing[idx++];
+								if (!c) {
+									MakeError(ae,0,ae->filename[listing[l].ifile],listing[l].iline,"Quoted string must be on a single line!\n");
+									idx=0;
+									l++;
+									lw=0; // to avoid side effects
+									quote_type=0; // leave anyway
+								} else {
+									w[lw++]=c;
+									//StateMachineResizeBuffer(&w,lw,&mw);
+
+									// string is stored with quotes
+									if (!escape_code) {
+										if (c=='\\') {
+											escape_code=1;
+										} else if (c==quote_type) {
+											quote_type=0;
+										}
+									} else {
+										// if previous char is an escape char, do not take care about ending quote
+										escape_code=0;
+									}
+								}
+							} while (quote_type);
+							// EOL for new word!
 							w[lw]=0;
-							break;
+
+							if (ae->utf8enable) {
+								int utidx;
+								for (utidx=0;w[utidx];utidx++) {
+									if ((unsigned char)w[utidx]>126) {
+										switch ((unsigned char)w[utidx]) {
+											case 0xC2:
+												if ((unsigned char)w[utidx+1]==0xBF) w[utidx]=174; else // ¿
+												if ((unsigned char)w[utidx+1]==0xA1) w[utidx]=175; else // ¡
+													MakeError(ae,0,ae->filename[listing[l].ifile],listing[l].iline,"Unsupported UTF8 char for quoted string\n");
+												break;
+											case 0xC3:
+												if ((unsigned char)w[utidx+1]==0xB9) w[utidx]=124; else // ù
+												if ((unsigned char)w[utidx+1]==0xA9) w[utidx]=123; else // é
+												if ((unsigned char)w[utidx+1]==0xA8) w[utidx]=125; else // è
+												if ((unsigned char)w[utidx+1]==0xA0) w[utidx]=64; else  // à
+												if ((unsigned char)w[utidx+1]==0x91) w[utidx]=161; else // Ñ
+												if ((unsigned char)w[utidx+1]==0xB1) w[utidx]=171; else // ñ
+												if ((unsigned char)w[utidx+1]==0xA7) {                  // ç
+													w[utidx]=92;
+													w[utidx+1]=92; // conversion to "\\"
+												} else
+													MakeError(ae,0,ae->filename[listing[l].ifile],listing[l].iline,"Unsupported UTF8 char for quoted string\n");
+												break;
+											default:
+												MakeError(ae,0,ae->filename[listing[l].ifile],listing[l].iline,"Unsupported UTF8 char for quoted string\n");
+										}
+										// shift string bytes except for \ char
+										if (w[utidx+1] && w[utidx+1]!=92) {
+											int utshift;
+											utshift=utidx+1; do { w[utshift]=w[utshift+1]; utshift++; } while (w[utshift]);
+										}
+									}
+								}
+							} else if (!ae->freequote) {
+								// control special chars except in freequote mode
+								int utidx;
+								for (utidx=0;w[utidx];utidx++) {
+									if ((w[utidx]>=32 && w[utidx]<127) || w[utidx]=='\t') {
+										// is ok
+									} else {
+										char before[16]={0};
+										int bidx=0,backut;
+										backut=utidx;
+										utidx-=15;
+										if (utidx<0) utidx=0;
+										for (;w[utidx];utidx++) {
+											if (w[utidx]>=32 && w[utidx]<127) before[bidx++]=(unsigned char)w[utidx]; else break;
+										}
+
+										MakeError(ae,0,ae->filename[listing[l].ifile],listing[l].iline,"Invalid char for quoted string [%s(%X)] use -fq option to allow UTF8\n",before,w[utidx]);
+										utidx=backut;
+									}
+								}
+							}
+#if TRACE_PREPRO
+				printf("quote end w=%s\n",w);
+#endif
 						}
 						break;
-							w[lw++]=c;
-							//StateMachineResizeBuffer(&w,lw,&mw);
-							w[lw]=0;
-							break;
-						case '(': parenth++;Automate[',']=1; // allow comma as part of the word
-							w[lw++]=c;
-							//StateMachineResizeBuffer(&w,lw,&mw);
-							w[lw]=0;
-							break;
-						case ')': parenth--;if (!parenth) Automate[',']=2; // comma become separator again
-							w[lw++]=c;
-							//StateMachineResizeBuffer(&w,lw,&mw);
-							w[lw]=0;
-							break;
-						case ' ':
-						case '\t':
+					case '(': parenth++;Automate[',']=1; // allow comma as part of the word
+						w[lw++]=c;
+						//StateMachineResizeBuffer(&w,lw,&mw);
+						w[lw]=0;
+						break;
+					case ')': parenth--;if (!parenth) Automate[',']=2; // comma become separator again
+						w[lw++]=c;
+						//StateMachineResizeBuffer(&w,lw,&mw);
+						w[lw]=0;
+						break;
+					case '\t':
+					case ' ':
+						/* Winape/Maxam operator compatibility on expressions */
+						if (texpr) {
 #if TRACE_PREPRO
 printf("1/2 Winape maxam operator test for [%s] [%s] %d lw=%d\n",w,w+ispace,ispace,lw);
 #endif
-							/* Winape/Maxam operator compatibility on expressions */
-							if (texpr) {
-								switch (lw-ispace) {
-									case 1:if (w[ispace]=='%') w[ispace]='m';break;
-									case 2:if (w[ispace]=='O' && w[ispace+1]=='R') {w[ispace]='|';lw=ispace+1;}break;
-									case 3:if (w[ispace]=='A' && w[ispace+1]=='N' && w[ispace+2]=='D') {
-										       w[ispace]='&';lw=ispace+1;
-									       } else if (w[ispace+1]=='O') {
-											if (w[ispace]=='X' && w[ispace+2]=='R') {
-										       		w[ispace]='^';lw=ispace+1;
-											} else if (w[ispace]=='M' && w[ispace+2]=='D') {
-										       		w[ispace]='m';lw=ispace+1;
-											}
-									       }
-									default:;
-								}
+							switch (lw-ispace) {
+								case 1:if (w[ispace]=='%') w[ispace]='m';break;
+								case 2:if (w[ispace]=='O' && w[ispace+1]=='R') {w[ispace]='|';lw=ispace+1;}break;
+								case 3:if (w[ispace]=='A' && w[ispace+1]=='N' && w[ispace+2]=='D') {
+									       w[ispace]='&';lw=ispace+1;
+								       } else if (w[ispace+1]=='O') {
+										if (w[ispace]=='X' && w[ispace+2]=='R') {
+											w[ispace]='^';lw=ispace+1;
+										} else if (w[ispace]=='M' && w[ispace+2]=='D') {
+											w[ispace]='m';lw=ispace+1;
+										}
+								       }
+								default:;
 							}
-							ispace=lw;
-							break;
-						default:
-							w[lw++]=c;
-							//StateMachineResizeBuffer(&w,lw,&mw);
-							w[lw]=0;
-							break;
-					}
-					if (!nobreak) break; else nobreak=0; // besoin de pouvoir passer directement de l'état 1 à l'état 2 pour le SAVE
-				case 2:
-					/* separator (space, tab, comma) */
-#if TRACE_PREPRO
-printf("*** separator='%c'\n",c);
-#endif
-					
-					/* patch argument suit une expression d'évaluation (ASSERT) */
-					if (c==',') hadcomma=1;
-					
-					if (lw) {
+						}
+						ispace=lw;
+						break;
+					default:
+						w[lw++]=c;
+						//StateMachineResizeBuffer(&w,lw,&mw);
 						w[lw]=0;
-						if (texpr && !wordlist[nbword-1].t && wordlist[nbword-1].e && !hadcomma) {
+						break;
+				}
+				if (!nobreak) break; else nobreak=0; // besoin de pouvoir passer directement de l'état 1 à l'état 2 pour le SAVE
+			/*************************************************************
+			**************************************************************
+			****  separator char   ***************************************
+			**************************************************************
+			*************************************************************/
+			case 2:
+				/* separator (space, tab, comma) */
+#if TRACE_PREPRO
+printf("*** separator='%c'   texpr=%d wordlist.t=%d wordlist.e=%d hadcomma=%d\n",c,texpr,wordlist[nbword-1].t, wordlist[nbword-1].e, hadcomma);
+#endif
+				
+				/* patch argument suit une expression d'évaluation (ASSERT) */
+				if (c==',') hadcomma=1;
+				
+				if (lw) {
+					w[lw]=0;
+#if 0
+
+					if (texpr && !wordlist[nbword-1].t && wordlist[nbword-1].e && !hadcomma) {
 #if TRACE_PREPRO
 printf("2/2 Winape maxam operator test for expression [%s]\n",w+ispace);
 #endif
-
-
+printf("#################################\n");
+printf("#################################\n");
 printf("### seems to be dead code here...\n");
-							// winape operator patches before concat
-						#if 0
-							switch (lw) {
-								case 1:if (w[0]=='%') w[0]='m';break;
-								case 2:if (w[0]=='O' && w[1]=='R') {w[0]='|';w[1]=0;lw=1;}break;
-								case 3:if (w[0]=='A' && w[1]=='N' && w[2]=='D') {
-									       w[0]='&';w[1]=0;lw=1;
-								       } else if (w[0]=='X' && w[1]=='O' && w[2]=='R') {
-									       w[0]='^';w[1]=0;lw=1;
-								       }
-								default:
-							}
-						#endif
-							// only one realloc check
-							di=le=wordlist[nbword-1].len;
-							//StateMachineResizeBuffer(&w,lw+di,&mw);
-							nbword--;
-							// move new word
-							for (li=0;li<=lw;li++) w[le++]=w[li];
-							for (li=0;li<di;li++) w[li]=wordlist[nbword].w[li];
-							MemFree(wordlist[nbword].w);
-							lw=di;
-
-							/* et on modifie l'automate pour la suite! */
-							Automate[' ']=1;
-							Automate['\t']=1;
-							ispace=lw;
-						} else if (strcmp(w,"EQU")==0) {
-							/* il y avait un mot avant alors on va reorganiser la ligne */
-							if (!wordlist[nbword-1].t) {
-								nbword--;
-								lw=0;
-								for (li=0;wordlist[nbword].w[li];li++) {
-									w[lw++]=wordlist[nbword].w[li];
-									//StateMachineResizeBuffer(&w,lw,&mw);
-								}
-								MemFree(wordlist[nbword].w);
-								curw.e=lw+1;
-								/* on ajoute l'egalite d'alias*/
-								w[lw++]='~';
-								//StateMachineResizeBuffer(&w,lw,&mw);
-								w[lw]=0;
-								Automate[' ']=1;
-								Automate['\t']=1;
-								ispace=lw;
-								texpr=1;
-							} else {
-								MakeError(ae,0,ae->filename[listing[l].ifile],listing[l].iline,"an alias name must precede the EQU\n");
-								w[lw]=0;
-							}
-						} else {
-							curw.len=lw; curw.w=MemMalloc(lw+1); memcpy(curw.w,w,lw+1);
-							curw.l=listing[l].iline;
-							curw.ifile=listing[l].ifile;
-							curw.t=0;
-#if TRACE_PREPRO
-if (curw.w[0]=='=') {
-	printf("(1) bug prout\n");
-	exit(1);
-}
-printf("ajout du mot [%s]\n",curw.w);
-#endif
-							ObjectArrayAddDynamicValueConcat((void**)&wordlist,&nbword,&maxword,&curw,sizeof(curw));
-							//texpr=0;
-							//curw.fastptr=NULL;
-							curw.e=0;
-							lw=0;
-							w[lw]=0;
-
-							/* match keyword? then next spaces will be ignored*/
-							if (macro_trigger) {
-								struct s_macro_fast curmacrofast;
-								Automate[' ']=1;
-								Automate['\t']=1;
-								ispace=0;
-								texpr=1;
-#if TRACE_PREPRO
-printf("macro trigger w=[%s]\n",curw.w);
-#endif
-								/* add macro name to instruction pool for preprocessor but not struct or write */
-								if (macro_trigger=='M') {
-									curmacrofast.mnemo=curw.w;
-									curmacrofast.crc=GetCRC(curw.w);
-									curmacrofast.len=curw.len;
-									ObjectArrayAddDynamicValueConcat((void**)&MacroFast,&idxmacrofast,&maxmacrofast,&curmacrofast,sizeof(struct s_macro_fast));	
-								}
-								macro_trigger=0;
-							} else {
-								int keymatched=0;
-								if (curw.len<INSTRUCTION_MAXLENGTH && (ifast=ae->fastmatch[(int)curw.w[0]][curw.len])!=-1) {
-									while (instruction[ifast].mnemo[0]==curw.w[0]) {
-										if (strcmp(instruction[ifast].mnemo,curw.w)==0) {
-											keymatched=1;														
-											if (strcmp(curw.w,"MACRO")==0 || strcmp(curw.w,"STRUCT")==0 || strcmp(curw.w,"WRITE")==0) {
-/* @@TODO AS80 compatibility patch!!! */
-												macro_trigger=curw.w[0];
-											} else {
-												//curw.fastptr=instruction[ifast].makemnemo;
-												Automate[' ']=1;
-												Automate['\t']=1;
-												ispace=0;
-												/* instruction en cours, le reste est a interpreter comme une expression */
-#if TRACE_PREPRO
-printf("instruction en cours\n");												
-#endif
-												texpr=1;
-											}
-											break;
-										}
-										ifast++;
-									}
-								}
-								if (!keymatched) {
-									int macrocrc;
-									macrocrc=GetCRC(curw.w);
-									for (keymatched=0;keymatched<idxmacrofast;keymatched++) {
-										if (MacroFast[keymatched].crc==macrocrc)
-										if (strcmp(MacroFast[keymatched].mnemo,curw.w)==0) {
-												Automate[' ']=1;
-												Automate['\t']=1;
-												ispace=0;
-												/* macro en cours, le reste est a interpreter comme une expression */
-												texpr=1;
-												break;
-										}
-									}
-								}
-							}
-						}
-					} else {
-						if (hadcomma) {
-							if (!ae->macro_multi_line) {
-								MakeError(ae,0,ae->filename[listing[l].ifile],listing[l].iline,"empty parameter right after word [%s]\n",nbword>1?wordlist[nbword-1].w:"(null)");
-							}
-						}
-					}
-					break;
-				case 3:
-					/* fin de ligne, on remet l'automate comme il faut */
-#if TRACE_PREPRO
-printf("EOL\n");																	
-#endif
-					macro_trigger=parenth=0; // reset parenth in case of trouble...
-					Automate[',']=2; // and comma too!
-					Automate[' ']=2;
-					Automate['\t']=2;
-					ispace=0;
-					/* si le mot lu a plus d'un caractère */
-					if (lw) {
-#if 0
-						if (!wordlist[nbword-1].t && texpr) {
-							int firstWord=nbword-1;
-							int lenouille=lw;
-							int iWord;
-			printf("multiple words with an expression...\n");
-						w[lw]=0;
-						// reorg line
-						while (!wordlist[firstWord-1].t) {
-							firstWord--;
-							lenouille+=wordlist[firstWord].len;
-						}
-						lenouille++;
-			printf("realloc to %d\n",lenouille);
-						wordlist[firstWord].w=MemRealloc(wordlist[firstWord].w,lenouille);
-			printf("concat from %d to %d\n",firstWord,nbword);
-						iWord=firstWord+1;
-						while (iWord<nbword) strcat(wordlist[firstWord].w,wordlist[iWord++].w);
-						strcat(wordlist[firstWord].w,w);
-						nbword=firstWord+1; // need to clean up memory!!!
-
-						} else
-#endif
-
-
-						if (!wordlist[nbword-1].t && (wordlist[nbword-1].e || w[0]=='=') && !hadcomma) {
-							/* cas particulier d'ecriture libre */
-							/* bugfix inhibition 19.06.2018 */
-							/* ajout du terminateur? */
-							w[lw]=0;
-#if TRACE_PREPRO
-printf("INHIBIT CASE / nbword=%d w=[%s] ->",nbword,w);fflush(stdout);
-#endif
-							nbword--;
-							wordlist[nbword].w=MemRealloc(wordlist[nbword].w,strlen(wordlist[nbword].w)+lw+1);
-							strcat(wordlist[nbword].w,w);
-#if TRACE_PREPRO
-printf("%s\n",wordlist[nbword].w);
-#endif
-							/* on change de type! */
-							wordlist[nbword].t=1;
-							//ObjectArrayAddDynamicValueConcat((void**)&wordlist,&nbword,&maxword,&curw,sizeof(curw));
-							curw.e=0;
-							lw=0;
-							w[lw]=0;
+printf("#################################\n");
+printf("#################################\n");
+						// winape operator patches before concat
 					#if 0
-						on n est jamais censé avoir un EQU avant la fin de ligne, ça serait une erreur dans tous (tous?) les cas!
+						switch (lw) {
+							case 1:if (w[0]=='%') w[0]='m';break;
+							case 2:if (w[0]=='O' && w[1]=='R') {w[0]='|';w[1]=0;lw=1;}break;
+							case 3:if (w[0]=='A' && w[1]=='N' && w[2]=='D') {
+								       w[0]='&';w[1]=0;lw=1;
+							       } else if (w[0]=='X' && w[1]=='O' && w[2]=='R') {
+								       w[0]='^';w[1]=0;lw=1;
+							       }
+							default:
+						}
+					#endif
+						// only one realloc check
+						di=le=wordlist[nbword-1].len;
+						//StateMachineResizeBuffer(&w,lw+di,&mw);
+						nbword--;
+						// move new word
+						for (li=0;li<=lw;li++) w[le++]=w[li];
+						for (li=0;li<di;li++) w[li]=wordlist[nbword].w[li];
+						MemFree(wordlist[nbword].w);
+						lw=di;
 
-						} else if (nbword && strcmp(w,"EQU")==0) {
-							/* il y avait un mot avant alors on va reorganiser la ligne */
+						/* et on modifie l'automate pour la suite! */
+						Automate[' ']=1;
+						Automate['\t']=1;
+						ispace=lw;
+					} else
+#endif
+					if (lw==3 && strcmp(w,"EQU")==0) {
+#if TRACE_PREPRO
+printf("separator => test EQU match!\n",w+ispace);
+#endif
+						/* il y avait un mot avant alors on va reorganiser la ligne */
+						if (!wordlist[nbword-1].t) {
 							nbword--;
 							lw=0;
 							for (li=0;wordlist[nbword].w[li];li++) {
 								w[lw++]=wordlist[nbword].w[li];
 								//StateMachineResizeBuffer(&w,lw,&mw);
-								w[lw]=0;
 							}
 							MemFree(wordlist[nbword].w);
-							/* on ajoute l'egalite ou comparaison! */
 							curw.e=lw+1;
-							w[lw++]='=';
+							/* on ajoute l'egalite d'alias*/
+							w[lw++]='~';
 							//StateMachineResizeBuffer(&w,lw,&mw);
 							w[lw]=0;
 							Automate[' ']=1;
 							Automate['\t']=1;
-					#endif
+							ispace=lw;
+							texpr=1;
 						} else {
-							/* mot de fin de ligne, à priori pas une expression */
-							curw.len=strlen(w); curw.w=MemMalloc(curw.len+1); memcpy(curw.w,w,curw.len+1);
-							curw.l=listing[l].iline;
-							curw.ifile=listing[l].ifile;
-							curw.t=1;
+							MakeError(ae,0,ae->filename[listing[l].ifile],listing[l].iline,"an alias name must precede the EQU\n");
+						}
+					} else {
+						curw.len=lw; curw.w=MemMalloc(lw+1); memcpy(curw.w,w,lw+1);
+						curw.l=listing[l].iline;
+						curw.ifile=listing[l].ifile;
+						curw.t=0;
 #if TRACE_PREPRO
-printf("mot de fin de ligne = [%s]\n",curw.w);							
 if (curw.w[0]=='=') {
-	printf("(3) bug prout\n");
-	exit(1);
+printf("(1) bug prout\n");
+exit(1);
 }
+printf("ajout du mot [%s]\n",curw.w);
 #endif
-							ObjectArrayAddDynamicValueConcat((void**)&wordlist,&nbword,&maxword,&curw,sizeof(curw));
-							//curw.fastptr=NULL;
-							curw.e=0;
-							lw=0;
-							w[lw]=0;
-							hadcomma=0;
-						}
-					} else {
-						/* sinon c'est le précédent qui était terminateur d'instruction */
-						wordlist[nbword-1].t=1;
-						w[lw]=0;
-					}
-					texpr=0;
-					hadcomma=0;
-					break;
-				case 4:
-#if TRACE_PREPRO
-printf("expr operator=%c\n",c);
-#endif
-					/* expression/condition */
-					texpr=1;
+						ObjectArrayAddDynamicValueConcat((void**)&wordlist,&nbword,&maxword,&curw,sizeof(curw));
+						//texpr=0;
+						//curw.fastptr=NULL;
+						curw.e=0;
+						lw=0;
+						w[0]=0;
 
-					/* patch operator assignment with useless spacing v121 */
-					if (lw==1 && c=='=') {
-						switch (w[0]) {
-							case '[':case ']':case '+':case '*':case '-':case '/':case '|':case '&':
+						/* match keyword? then next spaces will be ignored*/
+						if (macro_trigger) {
+							struct s_macro_fast curmacrofast;
+							Automate[' ']=1;
+							Automate['\t']=1;
+							ispace=0;
+							texpr=1;
 #if TRACE_PREPRO
-printf("*** patch prepro operator assignment + useless spacing\n");
+printf("macro trigger w=[%s]\n",curw.w);
 #endif
-								opassign=w[0];lw=0;
-								break;
-							default:opassign=0;break;
-						}
-					} else {
-						opassign=0;
-					}
-
-				    if (lw) {
-						Automate[' ']=1;
-						Automate['\t']=1;
-						if (!curw.e) {
-							curw.e=lw+1;
-							w[lw++]=c;
-							//StateMachineResizeBuffer(&w,lw,&mw);
-							w[lw]=0;
+							/* add macro name to instruction pool for preprocessor but not struct or write */
+							if (macro_trigger=='M') {
+								curmacrofast.mnemo=curw.w;
+								curmacrofast.crc=GetCRC(curw.w);
+								curmacrofast.len=curw.len;
+								ObjectArrayAddDynamicValueConcat((void**)&MacroFast,&idxmacrofast,&maxmacrofast,&curmacrofast,sizeof(struct s_macro_fast));	
+							}
+							macro_trigger=0;
 						} else {
-							w[lw++]=c;
-							//StateMachineResizeBuffer(&w,lw,&mw);
-							w[lw]=0;
-						}
-					} else {
-						/* 2018.06.06 évolution sur le ! (not) */
-#if TRACE_PREPRO
-printf("*** operateur commence le mot\n");
-printf("mot precedent=[%s] t=%d\n",wordlist[nbword-1].w,wordlist[nbword-1].t);
-#endif
-						if (hadcomma && c=='!') {
-							/* on peut commencer un argument par un NOT */
-							w[lw++]=c;
-							//StateMachineResizeBuffer(&w,lw,&mw);
-							w[lw]=0;
-							/* automate déjà modifié rien de plus */
-						} else if (!wordlist[nbword-1].t) {
-							/* il y avait un mot avant alors on va reorganiser la ligne */
-							/* patch NOT -> SAUF si c'est une directive */
 							int keymatched=0;
-							if (wordlist[nbword-1].len<INSTRUCTION_MAXLENGTH && (ifast=ae->fastmatch[(int)wordlist[nbword-1].w[0]][wordlist[nbword-1].len])!=-1) {
-								while (instruction[ifast].mnemo[0]==wordlist[nbword-1].w[0]) {
-									if (strcmp(instruction[ifast].mnemo,wordlist[nbword-1].w)==0) {
+							if (curw.len<INSTRUCTION_MAXLENGTH && (ifast=ae->fastmatch[(int)curw.w[0]][curw.len])!=-1) {
+								while (instruction[ifast].mnemo[0]==curw.w[0]) {
+									if (strcmp(instruction[ifast].mnemo,curw.w)==0) {
 										keymatched=1;														
+										if (strcmp(curw.w,"MACRO")==0 || strcmp(curw.w,"STRUCT")==0 || strcmp(curw.w,"WRITE")==0) {
+/* @@TODO AS80 compatibility patch!!! */
+											macro_trigger=curw.w[0];
+										} else {
+											//curw.fastptr=instruction[ifast].makemnemo;
+											Automate[' ']=1;
+											Automate['\t']=1;
+											ispace=0;
+											/* instruction en cours, le reste est a interpreter comme une expression */
+#if TRACE_PREPRO
+printf("instruction en cours\n");												
+#endif
+											texpr=1;
+										}
 										break;
 									}
 									ifast++;
@@ -25941,149 +25926,213 @@ printf("mot precedent=[%s] t=%d\n",wordlist[nbword-1].w,wordlist[nbword-1].t);
 							}
 							if (!keymatched) {
 								int macrocrc;
-								macrocrc=GetCRC(wordlist[nbword-1].w);
-								for (i=0;i<idxmacrofast;i++) {
-									if (MacroFast[i].crc==macrocrc)
-									if (strcmp(MacroFast[i].mnemo,wordlist[nbword-1].w)==0) {
-										keymatched=1;
-										break;
+								macrocrc=GetCRC(curw.w);
+								for (keymatched=0;keymatched<idxmacrofast;keymatched++) {
+									if (MacroFast[keymatched].crc==macrocrc)
+									if (strcmp(MacroFast[keymatched].mnemo,curw.w)==0) {
+											Automate[' ']=1;
+											Automate['\t']=1;
+											ispace=0;
+											/* macro en cours, le reste est a interpreter comme une expression */
+											texpr=1;
+#if TRACE_PREPRO
+printf("macro en cours\n");												
+#endif
+											break;
 									}
-								}
-								if (!keymatched) {
-									nbword--;
-									//StateMachineResizeBuffer(&w,lw+wordlist[nbword].len+1,&mw);
-									for (li=0;wordlist[nbword].w[li];li++) {
-										w[lw++]=wordlist[nbword].w[li];
-										w[lw]=0;
-									}
-									MemFree(wordlist[nbword].w);
-									/* on ajoute l'egalite ou comparaison! */
-									if (opassign) {
-										#if TRACE_PREPRO
-										printf("*** patch opassign en finalisation de mot\n");
-										#endif
-										w[lw++]=opassign;
-										//StateMachineResizeBuffer(&w,lw,&mw);
-										w[lw]=0;
-									}
-									curw.e=lw+1;
 								}
 							}
-							w[lw++]=c;
-							//StateMachineResizeBuffer(&w,lw,&mw);
-							w[lw]=0;
-							/* et on modifie l'automate pour la suite! */
-							Automate[' ']=1;
-							Automate['\t']=1;
-						} else {
-							MakeError(ae,0,ae->filename[listing[l].ifile],listing[l].iline,"cannot start expression with '=','!','<','>'\n");
 						}
 					}
-					break;
-				default:
-					rasm_printf(ae,KERROR"Internal error (Automate wrong value=%d)\n",Automate[c]);
-					exit(-1);
-			}
-		} else {
-#if TRACE_PREPRO
-printf("quote start with %c\n",c);
-#endif
-			/* quoted string always starts with a single or a double quote */
-			w[lw++]=c;
-			//StateMachineResizeBuffer(&w,lw,&mw);
-			if (c=='\\') {
-				escape_code=1;
-			} else if (c==quote_type) {
-				quote_type=0;
-			}
-
-			if (quote_type) // should not happend but...
-			do {
-				c=listing[l].listing[idx++];
-				if (!c) {
-					MakeError(ae,0,ae->filename[listing[l].ifile],listing[l].iline,"Quoted string must be on a single line!\n");
-					idx=0;
-					l++;
-					lw=0; // to avoid side effects
-					quote_type=0; // leave anyway
 				} else {
-					w[lw++]=c;
-					//StateMachineResizeBuffer(&w,lw,&mw);
-
-					// string is stored with quotes
-					if (!escape_code) {
-						if (c=='\\') {
-							escape_code=1;
-						} else if (c==quote_type) {
-							quote_type=0;
-						}
-					} else {
-						// if previous char is an escape char, do not take care about ending quote
-						escape_code=0;
-					}
-				}
-			} while (quote_type);
-			// EOL for new word!
-			w[lw]=0;
-
-			if (ae->utf8enable) {
-				int utidx;
-				for (utidx=0;w[utidx];utidx++) {
-					if ((unsigned char)w[utidx]>126) {
-						switch ((unsigned char)w[utidx]) {
-							case 0xC2:
-								if ((unsigned char)w[utidx+1]==0xBF) w[utidx]=174; else // ¿
-								if ((unsigned char)w[utidx+1]==0xA1) w[utidx]=175; else // ¡
-									MakeError(ae,0,ae->filename[listing[l].ifile],listing[l].iline,"Unsupported UTF8 char for quoted string\n");
-								break;
-							case 0xC3:
-								if ((unsigned char)w[utidx+1]==0xB9) w[utidx]=124; else // ù
-								if ((unsigned char)w[utidx+1]==0xA9) w[utidx]=123; else // é
-								if ((unsigned char)w[utidx+1]==0xA8) w[utidx]=125; else // è
-								if ((unsigned char)w[utidx+1]==0xA0) w[utidx]=64; else  // à
-								if ((unsigned char)w[utidx+1]==0x91) w[utidx]=161; else // Ñ
-								if ((unsigned char)w[utidx+1]==0xB1) w[utidx]=171; else // ñ
-								if ((unsigned char)w[utidx+1]==0xA7) {                  // ç
-									w[utidx]=92;
-									w[utidx+1]=92; // conversion to "\\"
-								} else
-									MakeError(ae,0,ae->filename[listing[l].ifile],listing[l].iline,"Unsupported UTF8 char for quoted string\n");
-								break;
-							default:
-								MakeError(ae,0,ae->filename[listing[l].ifile],listing[l].iline,"Unsupported UTF8 char for quoted string\n");
-						}
-						// shift string bytes except for \ char
-						if (w[utidx+1] && w[utidx+1]!=92) {
-							int utshift;
-							utshift=utidx+1; do { w[utshift]=w[utshift+1]; utshift++; } while (w[utshift]);
+					if (hadcomma) {
+						if (!ae->macro_multi_line) {
+							MakeError(ae,0,ae->filename[listing[l].ifile],listing[l].iline,"empty parameter right after word [%s]\n",nbword>1?wordlist[nbword-1].w:"(null)");
 						}
 					}
 				}
-			} else if (!ae->freequote) {
-				// control special chars except in freequote mode
-				int utidx;
-				for (utidx=0;w[utidx];utidx++) {
-					if ((w[utidx]>=32 && w[utidx]<127) || w[utidx]=='\t') {
-						// is ok
-					} else {
-						char before[16]={0};
-						int bidx=0,backut;
-						backut=utidx;
-						utidx-=15;
-						if (utidx<0) utidx=0;
-						for (;w[utidx];utidx++) {
-							if (w[utidx]>=32 && w[utidx]<127) before[bidx++]=(unsigned char)w[utidx]; else break;
-						}
-
-						MakeError(ae,0,ae->filename[listing[l].ifile],listing[l].iline,"Invalid char for quoted string [%s(%X)] use -fq option to allow UTF8\n",before,w[utidx]);
-						utidx=backut;
-					}
-				}
-			}
-
+				break;
+			/*************************************************************
+			**************************************************************
+			****  end of line char ***************************************
+			**************************************************************
+			*************************************************************/
+			case 3:
+				/* fin de ligne, on remet l'automate comme il faut */
 #if TRACE_PREPRO
-printf("quote end w=%s\n",w);
+printf("=============== EOL ================================\n");																	
+printf("*** EOL='%c'   wordlist.t=%d wordlist.e=%d w=[%s] hadcomma=%d\n",c,wordlist[nbword-1].t, wordlist[nbword-1].e, w,hadcomma);
 #endif
+				macro_trigger=parenth=0; // reset parenth in case of trouble...
+				Automate[',']=2; // and comma too!
+				Automate[' ']=2;
+				Automate['\t']=2;
+				ispace=0;
+				/* si le mot lu a plus d'un caractère */
+				if (lw) {
+#if 0
+					// le mot d'avant 
+					if (!wordlist[nbword-1].t && (wordlist[nbword-1].e || w[0]=='=') && !hadcomma) {
+						/* cas particulier d'ecriture libre */
+						/* bugfix inhibition 19.06.2018 */
+						/* ajout du terminateur? */
+						w[lw]=0;
+#if TRACE_PREPRO
+printf("INHIBIT CASE / nbword=%d w=[%s] ->",nbword,w);fflush(stdout);
+#endif
+printf("INHIBIT\n");
+						nbword--;
+						wordlist[nbword].w=MemRealloc(wordlist[nbword].w,wordlist[nbword].len+lw+1);
+						strcat(wordlist[nbword].w,w);
+						wordlist[nbword].len+=lw+1;
+#if TRACE_PREPRO
+printf("after concat [%s]\n",wordlist[nbword].w);
+#endif
+						/* on change de type! => le mot termine l'instruction */
+						wordlist[nbword].t=1;
+						//ObjectArrayAddDynamicValueConcat((void**)&wordlist,&nbword,&maxword,&curw,sizeof(curw));
+						curw.e=0;
+						lw=0;
+						w[lw]=0;
+					} else {
+#endif
+						{
+						/* mot de fin de ligne */
+						curw.len=strlen(w); curw.w=MemMalloc(curw.len+1); memcpy(curw.w,w,curw.len+1);
+						curw.l=listing[l].iline;
+						curw.ifile=listing[l].ifile;
+						curw.t=1;
+						ObjectArrayAddDynamicValueConcat((void**)&wordlist,&nbword,&maxword,&curw,sizeof(curw));
+#if TRACE_PREPRO
+printf("mot de fin de ligne = [%s]\n",curw.w);							
+if (curw.w[0]=='=') {
+printf("(3) bug prout\n");
+exit(1);
+}
+#endif
+						//curw.fastptr=NULL;
+						curw.e=0;
+						lw=0;
+						w[lw]=0;
+						hadcomma=0;
+					}
+				} else {
+					/* sinon c'est le précédent qui était terminateur d'instruction */
+					wordlist[nbword-1].t=1;
+					w[lw]=0;
+				}
+				texpr=0;
+				hadcomma=0;
+				break;
+			/*************************************************************
+			**************************************************************
+			****  operator char    ***************************************
+			**************************************************************
+			*************************************************************/
+			case 4:
+#if TRACE_PREPRO
+printf("============ expr operator=%c ===============\n",c);
+#endif
+				/* expression/condition */
+				texpr=1;
+
+				/* patch operator assignment with useless spacing v121 */
+				if (lw==1 && c=='=') {
+					switch (w[0]) {
+						case '[':case ']':case '+':case '*':case '-':case '/':case '|':case '&':
+#if TRACE_PREPRO
+printf("*** patch prepro operator assignment + useless spacing\n");
+#endif
+							opassign=w[0];lw=0;
+							break;
+						default:opassign=0;break;
+					}
+				} else {
+					opassign=0;
+				}
+
+			    if (lw) {
+					Automate[' ']=1;
+					Automate['\t']=1;
+					if (!curw.e) {
+						curw.e=lw+1;
+						w[lw++]=c;
+						//StateMachineResizeBuffer(&w,lw,&mw);
+						w[lw]=0;
+					} else {
+						w[lw++]=c;
+						//StateMachineResizeBuffer(&w,lw,&mw);
+						w[lw]=0;
+					}
+				} else {
+					/* 2018.06.06 évolution sur le ! (not) */
+#if TRACE_PREPRO
+printf("*** operateur commence le mot\n");
+printf("mot precedent=[%s] t=%d\n",wordlist[nbword-1].w,wordlist[nbword-1].t);
+#endif
+					if (hadcomma && c=='!') {
+						/* on peut commencer un argument par un NOT */
+						w[lw++]=c;
+						//StateMachineResizeBuffer(&w,lw,&mw);
+						w[lw]=0;
+						/* automate déjà modifié rien de plus */
+					} else if (!wordlist[nbword-1].t) {
+						/* il y avait un mot avant alors on va reorganiser la ligne */
+						/* patch NOT -> SAUF si c'est une directive */
+						int keymatched=0;
+						if (wordlist[nbword-1].len<INSTRUCTION_MAXLENGTH && (ifast=ae->fastmatch[(int)wordlist[nbword-1].w[0]][wordlist[nbword-1].len])!=-1) {
+							while (instruction[ifast].mnemo[0]==wordlist[nbword-1].w[0]) {
+								if (strcmp(instruction[ifast].mnemo,wordlist[nbword-1].w)==0) {
+									keymatched=1;														
+									break;
+								}
+								ifast++;
+							}
+						}
+						if (!keymatched) {
+							int macrocrc;
+							macrocrc=GetCRC(wordlist[nbword-1].w);
+							for (i=0;i<idxmacrofast;i++) {
+								if (MacroFast[i].crc==macrocrc)
+								if (strcmp(MacroFast[i].mnemo,wordlist[nbword-1].w)==0) {
+									keymatched=1;
+									break;
+								}
+							}
+							if (!keymatched) {
+								nbword--;
+								//StateMachineResizeBuffer(&w,lw+wordlist[nbword].len+1,&mw);
+								for (li=0;wordlist[nbword].w[li];li++) {
+									w[lw++]=wordlist[nbword].w[li];
+									w[lw]=0;
+								}
+								MemFree(wordlist[nbword].w);
+								/* on ajoute l'egalite ou comparaison! */
+								if (opassign) {
+									#if TRACE_PREPRO
+									printf("*** patch opassign en finalisation de mot\n");
+									#endif
+									w[lw++]=opassign;
+									//StateMachineResizeBuffer(&w,lw,&mw);
+									w[lw]=0;
+								}
+								curw.e=lw+1;
+							}
+						}
+						w[lw++]=c;
+						//StateMachineResizeBuffer(&w,lw,&mw);
+						w[lw]=0;
+						/* et on modifie l'automate pour la suite! */
+						Automate[' ']=1;
+						Automate['\t']=1;
+					} else {
+						MakeError(ae,0,ae->filename[listing[l].ifile],listing[l].iline,"cannot start expression with '=','!','<','>'\n");
+					}
+				}
+				break;
+			default:
+				rasm_printf(ae,KERROR"Internal error (Automate wrong value=%d)\n",Automate[c]);
+				exit(-1);
 		}
 	}
 
@@ -26152,8 +26201,6 @@ printf("free\n");
 		MemFree(param->filename);
 	}
 	if (MacroFast) MemFree(MacroFast);
-	if (TABwindex) MemFree(TABwindex);
-	if (TABrindex) MemFree(TABrindex);
 #if TRACE_PREPRO
 printf("return ae\n");
 #endif
@@ -26316,7 +26363,7 @@ int RasmAssembleInfoParam(const char *datain, int lenin, unsigned char **dataout
 
 #define AUTOTEST_UNDEF "mavar=10: ifdef mavar: undef mavar: endif: ifdef mavar: fail 'undef did not work': endif:nop "
 
-#define AUTOTEST_INSTRMUSTFAILED "ld a,b,c:ldi a: ldir bc:exx hl,de:exx de:ex bc,hl:ex hl,bc:ex af,af:ex hl,hl:ex hl:exx hl: "\
+#define AUTOTEST_INSTRMUSTFAILED "ld a,b,c:ldi a: ldir bc:exx hl,de:exx de:ex bc,hl:ex hl,bc:ex af,bc:ex bc,af:ex hl,hl:ex hl:exx hl: "\
 	"neg b:push b:push:pop:pop c:sub ix:add ix:add:sub:di 2:ei 3:ld i,c:ld r,e:rl:rr:rlca a:sla:sll:"\
 	"ldd e:lddr hl:adc ix:adc b,a:xor 12,13:xor b,1:xor:or 12,13:or b,1:or:and 12,13:and b,1:and:inc:dec"
 
@@ -27756,7 +27803,7 @@ struct s_autotest_keyword autotest_keyword[]={
 	{"glop=rnd(5):nop",0},{"glop=rnd(0):nop",1},{"glop=rnd():nop",1},{"glop=rnd(-1):nop",1},{"pifou=8:glop=rnd(pifou):defb glop",0},
 	/* wrong include usage */
 	{"incbin",1},{"include",1},{"incbin'",1},{"include'",1},{"'include",1}, {"'incbin",1},
-	{"incexo",1},{"inczx7",1},{"incaaa",0}, {"inc",1}, {"incl48",1},{"incl49",1},{"incapu",1},{"inclz4",1},
+	{"incexo",1},{"inczx7",1},{"incaaa",0}, {"inc",1}, {"incl48",1},{"incl49",1},{"incapu",1},{"inclz4",1},{"inczx0",1},{"inczx0b",1},
 	{"incexo'",1},{"inczx7'",1},{"incaaa'",1}, {"inc'",1}, {"incl48'",1},{"incl49'",1},{"incapu'",1},{"inclz4'",1},
 	{"incexb",0}, {"includee",0}, {"incexb'",1}, {"includee'",1}, 
 	/* EDSK core simple tests */
@@ -27899,6 +27946,7 @@ struct s_autotest_keyword autotest_keyword[]={
 
 	{"nop : assert pow(2,5)==32",0},
 	{"nop : a=atan2(0.5,5) : assert a>0.09 : assert a<0.0999",0},
+	{"nop : assert fmod(105,10)==5",0},
 	{"nop : assert hypot(3,4)==5",0},
 	{"nop : a=ldexp(4,5)",0}, // @@TODO
 	{"nop : assert fdim(3.1,5.3)==0 : assert fdim(5.3,3.1)==2.2",0},
@@ -27910,6 +27958,106 @@ struct s_autotest_keyword autotest_keyword[]={
 	{"nop : assert isgreater(5,4)==1 : assert isgreater(4,5)==0",0},
 	{"nop : assert isless(5,4)==0 : assert isless(4,5)==1",0},
 	{"nop : assert remainder(29,9)==2",0},
+	{"nop : a=10 and fmin(5,6)",0},
+	{"ld a,10 and fmin(5,6)",0},
+	{"defb 5 and 7,fmin(5,6),5",0},
+	{"defb '(',5.4,5",0},
+	{"defb ')',')',fmin(5,6),5",0},
+	{"nop:print fmin(5,6,7)",1},
+	{"nop:print fmin(7)",1},
+	{"nop:print fmin(5+5*fmin(7)",1},
+	{"form1 equ fmin(5,6) : ld a,form1+fmin(5,6) : assert form1==fmin(5,6)",0},
+	// test des erreurs en cas de manque de paramètres
+	{"nop : a=pow(2)",1},
+	{"nop : a=5*pow(2)",1},
+	{"nop : a=pow()",1},
+	{"nop : a=fmod(2)",1},
+	{"nop : a=5*fmod(2)",1},
+	{"nop : a=fmod()",1},
+	{"nop : a=atan2(0.5) ",1},
+	{"nop : a=5*atan2(0.5) ",1},
+	{"nop : a=atan2() ",1},
+	{"nop : a=hypot(3)",1},
+	{"nop : a=5*hypot(3)",1},
+	{"nop : a=hypot()",1},
+	{"nop : a=ldexp(4)",1},
+	{"nop : a=5*ldexp(4)",1},
+	{"nop : a=ldexp()",1},
+	{"nop : a=fdim(3.1)",1},
+	{"nop : a=5*fdim(3.1)",1},
+	{"nop : a=fdim()",1},
+	{"nop : a=step(5) ",1},
+	{"nop : a=5*step(5) ",1},
+	{"nop : a=step() ",1},
+	{"nop : a=fmax(1)",1},
+	{"nop : a=5*fmax(1)",1},
+	{"nop : a=fmax()",1},
+	{"nop : a=fmin(1)",1},
+	{"nop : a=5*fmin(1)",1},
+	{"nop : a=fmin()",1},
+	{"nop : a=clamp(33,20)",1},
+	{"nop : a=5*clamp(33,20)",1},
+	{"nop : a=clamp(33)",1},
+	{"nop : a=clamp()",1},
+	{"nop : a=clamp()",1},
+	{"nop : a=lerp(0,1)",1},
+	{"nop : a=5*lerp(0,1)",1},
+	{"nop : a=lerp(0)",1},
+	{"nop : a=lerp()",1},
+	{"nop : a=isgreater(5)",1},
+	{"nop : a=5*isgreater(5)",1},
+	{"nop : a=isgreater()",1},
+	{"nop : a=isless(5)",1},
+	{"nop : a=5*isless(5)",1},
+	{"nop : a=isless()",1},
+	{"nop : a=remainder(29)",1},
+	{"nop : a=5*remainder(29)",1},
+	{"nop : a=remainder()",1},
+
+	{"nop : a=rnd()",1},
+	{"nop : a=5+rnd()",1},
+	{"nop : a=5*rnd()",1},
+	{"nop : a=hi()",1},
+	{"nop : a=5+hi()",1},
+	{"nop : a=5*hi()",1},
+
+	// binary, octal, decimal, hex check
+	{"nop : assert %1010==10 : assert %1001==9",0},
+	{"nop : assert 1010b==10 : assert 1001b==9",0},
+	{"nop : assert 37==5+5+5+5+5+5+7",0},
+	{"nop : assert 0o45==37",0},
+	{"nop : assert @45==37",0},
+	{"nop : assert @45==0o45",0},
+	{"nop : assert 0xAA==AAh : assert #AA==0xAA",0},
+	{"nop : ld hl,%101010101010",0},
+	{"nop : ld hl,%101012101010",1},
+	{"nop : ld hl,101010101010b",0},
+	{"nop : ld hl,101012101010b",1},
+	{"nop : ld hl,11b : assert 11b==%11",0}, // try suffix confusion
+	{"nop : ld hl,0o777",0},
+	{"nop : ld hl,0o787",1},
+	{"nop : ld hl,@777",0},
+	{"nop : ld hl,@787",1},
+	{"nop : ld hl,#00",0},
+	{"nop : ld hl,#11",0},
+	{"nop : ld hl,#21",0},
+	{"nop : ld hl,11h : assert 11h==0x11",0}, // try suffix confusion
+	{"nop : ld hl,#FF",0},
+	{"nop : ld hl,FFh",0},
+	{"nop : ld hl,#GG",1},
+	{"nop : ld hl,0xGG",1},
+	{"nop : ld hl,GGh",1},
+	
+	{"ex af,af'",0}, // testing quote as last char for AF'
+	{"defb 'roudoudou'",0},
+	{"defb \"roudoudou\"",0},
+	{"defb 'roudo\nudou'",1},
+	{"defb \"roudo\nudou\"",1},
+	{"defb 'roudo\ndefb 'udou'",1},
+	{"defb \"roudo\ndefb \"udou\"",1},
+
+	{"defb 'virgule', 	 \\ 	 	 \n'dessus'\\\n,'dessous'",0},
+	{"defb 'virgule\\\ndessous'",1},
 	/*
 	 *
 	 * will need to test resize + format then meta review test!
@@ -27956,7 +28104,7 @@ void RasmAutotest(void)
 		0xBE,0xF6,0xCC,0x12,0x73};
 	unsigned char crlfbug[32]={0x20,0x0d,0x0a,0x0d,0x0a,0xa,0xa,0xd,0xd,0x20,0x0d,0x0a,0x0d,0x0a,0xa,0xa,
 				0x20,0x0d,0x0a,0x0d,0x0a,0xa,0xa,0xd,0xd,0x20,0x0d,0x0a,0x0d,0x0a,0xa,0xa};
-
+	unsigned char *include01="ld a,5";
 
 #ifdef RDD
 	printf("\n%d bytes\n",_static_library_memory_used);
@@ -28033,7 +28181,18 @@ printf("testing rasm source integrity : activebank and maxptr update OK\n");
 	if (StringIsQuote("'grou'ik")) {printf("Autotest %03d ERROR (StringIsQuote KO)\n",cpt);exit(-1);} else cpt++;
 	printf("testing StringIsQuote (8 tests) OK\n");
 
+	
 	/* Autotest preprocessing */
+	FileRemoveIfExists("rasmTesting01.asm");
+	FileWriteBinary("rasmTesting01.asm",(char *)include01,strlen(include01));
+	FileWriteBinaryClose("rasmTesting01.asm");
+#define AUTOTEST_PROPER_INCLUDE "nop:include'rasmTesting01.asm':nop:include 'rasmTesting01.asm' : nop"
+	ret=RasmAssemble(AUTOTEST_PROPER_INCLUDE,strlen(AUTOTEST_PROPER_INCLUDE),&opcode,&opcodelen);
+	FileRemoveIfExists("rasmTesting01.asm");
+	if (!ret && opcodelen==7 && opcode[5]==5) {} else {printf("Autotest %03d ERROR (include text files) ret=%d\n",cpt,ret);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing preprocessor text file inclusion OK\n");
+
 	ret=RasmAssemble(AUTOTEST_VIRGULE,strlen(AUTOTEST_VIRGULE),&opcode,&opcodelen);
 	if (ret) {} else {printf("Autotest %03d ERROR (double comma must trigger an error) ret=%d\n",cpt,ret);exit(-1);}
 	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
@@ -28249,6 +28408,7 @@ printf("testing %d various opcode tests OK\n",i);
 		}
 		if (opcode) MemFree(opcode);opcode=NULL;
 		idx++;
+		if ((idx%100)==0) printf("testing %d moar various opcode tests...\n",idx);
 	}
 	cpt++;
 printf("testing %d moar various opcode tests OK\n",idx);
