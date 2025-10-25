@@ -24465,8 +24465,9 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 int EarlyPrepSrc(struct s_assenv *ae, char **listing, char *filename) {
 	int l,idx,c,qopen=0;
 	int mlc_start,mlc_idx;
-	int midx=0;
+	int midx=0,nextidx,previdx,superFusion;
 	int lastAp=0;
+	unsigned char zeQuote;
 
 	l=idx=0;
 	while (listing[l]) {
@@ -24481,11 +24482,45 @@ int EarlyPrepSrc(struct s_assenv *ae, char **listing, char *filename) {
 					}
 					if (listing[l][idx]=='\\') {
 						if (listing[l+1]) {
-							/* fusion avec la ligne suivante qui est présente */
-							listing[l]=MemRealloc(listing[l],strlen(listing[l])+strlen(listing[l+1])+1);
-							strcpy(listing[l]+idx,listing[l+1]);
+							/* fusion avec la ligne suivante qui est présente + trim */
+							superFusion=nextidx=0;
+							while (listing[l+1][nextidx]==' ' || listing[l+1][nextidx]==0x09) nextidx++;
+							if (idx) previdx=idx-1; else previdx=0;
+							while (previdx && (listing[l][previdx]==' ' || listing[l][previdx]==0x09)) previdx--;
+							if (listing[l][previdx]=='\'' || listing[l][previdx]=='"') {
+								if (listing[l][previdx]==listing[l+1][nextidx]) {
+									// fusion des quotes identiques
+									zeQuote=listing[l][previdx];
+									idx=previdx;
+									nextidx++;
+									superFusion=1;
+								}
+							}
+
+							listing[l]=MemRealloc(listing[l],strlen(listing[l])+strlen(listing[l+1]+nextidx)+1);
+							strcpy(listing[l]+idx,listing[l+1]+nextidx);
 							strcpy(listing[l+1],"");
-							/* et on continue l'analyse de la ligne après fusion */
+							/* et on continue l'analyse de la ligne après fusion MAIS pas après une super fusion */
+							if (superFusion) {
+								qopen=1;
+								while (listing[l][idx]) {
+									// escape in quotes
+									if (listing[l][idx]=='\\') {
+										if (listing[l][idx+1]) {
+											  idx++;
+										} else {
+											MakeError(ae,0,filename,l+1,"Cannot escape at the end of the line inside a quote\n");
+											break;
+										}
+									} else if (listing[l][idx]==zeQuote) {
+										qopen=0;
+										idx++;
+										break;
+									}
+									idx++;
+								}
+								if (qopen) MakeError(ae,0,filename,l+1,"Quote opened but not closed before the end of the line\n");
+							}
 							//idx=strlen(listing[l])+1;
 							//if (midx<idx) midx=idx+256;
 						} else {
@@ -28070,7 +28105,7 @@ struct s_autotest_keyword autotest_keyword[]={
 	{"defb \"roudo\nudou\"",1},
 	{"defb 'roudo\ndefb 'udou'",1},
 	{"defb \"roudo\ndefb \"udou\"",1},
-
+	{"defb \"roudoudou\" 	 \\   \n  \"-grouik\"",0}, // merge strings
 	{"defb 'virgule', 	 \\ 	 	 \n'dessus'\\\n,'dessous'",0},
 	{"defb 'virgule\\\ndessous'",1},
 	{"nop : defb ''",0},{"nop : str ''",0}, // empty strings are OK but will warn user
