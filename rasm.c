@@ -2088,7 +2088,6 @@ char *MergePath(struct s_assenv *ae,char *dadfilename, char *filename) {
 
 	static char curpath[PATH_MAX];
 
-
 #ifdef OS_WIN
 	TxtReplace(filename,"/","\\",1);
 
@@ -2108,6 +2107,18 @@ char *MergePath(struct s_assenv *ae,char *dadfilename, char *filename) {
 		}
 	}
 #else
+	int idxr;
+	for (idxr=0;filename[idxr];idxr++) {
+		if (filename[idxr]=='\\' && (
+			filename[idxr+1]=='-' ||
+			filename[idxr+1]=='_' ||
+			(filename[idxr+1]>='0' && filename[idxr+1]<='9') ||
+			(filename[idxr+1]>='a' && filename[idxr+1]<='z') ||
+			(filename[idxr+1]>='A' && filename[idxr+1]<='Z')
+		)) {
+			filename[idxr]='/';
+		}
+	}
 	if (filename[0]=='/') {
 		/* chemin absolu */
 		strcpy(curpath,filename);
@@ -25649,7 +25660,11 @@ printf("quotes\n");
 								escape_code=1;
 							} else if (c==quote_type) {
 								quote_type=0;
-								MakeError(ae,0,ae->filename[listing[l].ifile],listing[l].iline,"Quote cannot be empty!\n");
+								//MakeError(ae,0,ae->filename[listing[l].ifile],listing[l].iline,"Quote cannot be empty!\n");
+								if (!ae->nowarning) {
+									rasm_printf(ae,KWARNING"Warning - Quote is empty\n");
+									if (ae->erronwarn) MaxError(ae);
+								}
 							}
 
 							if (quote_type) // should always happend but...
@@ -28058,6 +28073,8 @@ struct s_autotest_keyword autotest_keyword[]={
 
 	{"defb 'virgule', 	 \\ 	 	 \n'dessus'\\\n,'dessous'",0},
 	{"defb 'virgule\\\ndessous'",1},
+	{"nop : defb ''",0},{"nop : str ''",0}, // empty strings are OK but will warn user
+	{"nop : defb 'grouik','','pifou'",0},{"nop : str 'grouik','','pifou'",0},
 	/*
 	 *
 	 * will need to test resize + format then meta review test!
