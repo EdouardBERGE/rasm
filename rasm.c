@@ -13184,6 +13184,7 @@ void _DEFS_struct(struct s_assenv *ae) {
 }
 
 void _STR(struct s_assenv *ae) {
+	unsigned char hexValue;
 	unsigned char c;
 	int i,tquote;
 
@@ -13205,26 +13206,53 @@ void _STR(struct s_assenv *ae) {
 							case 'r':c='\r';break;
 							case 'n':c='\n';break;
 							case 't':c='\t';break;
+							case 'x':// hexadecimal output
+								i++;
+								c=tolower(ae->wl[ae->idx].w[i]);
+								if ((c>='0' && c<='9') || (c>='a' && c<='f')) {
+									if (c<='9') hexValue=c-'0'; else hexValue=c-'a'+10;
+									i++;
+									c=tolower(ae->wl[ae->idx].w[i]);
+									if ((c>='0' && c<='9') || (c>='a' && c<='f')) {
+										hexValue<<=4;
+										if (c<='9') hexValue|=c-'0'; else hexValue|=c-'a'+10;
+										//___output(ae,hexValue);
+										c=hexValue;
+									} else {
+										MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"DEFB invalid escaped hexadecimal value!\n");
+										i--; // in case of zero or quote!
+									}
+								} else {
+									MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"DEFB invalid escaped hexadecimal value!\n");
+									i--; // in case of zero of quote!
+								}
+								break;
 							default:break;
 						}						
-						if (ae->wl[ae->idx].w[i+1]!=tquote) {
-							___output(ae,c);
-						} else {
-							___output(ae,c|0x80);
-						}
 					} else {
 						/* charset conversion on the fly */
-						if (ae->wl[ae->idx].w[i+1]!=tquote) {
-							___output(ae,ae->charset[((unsigned int)ae->wl[ae->idx].w[i])&0xFF]);
-						} else {
-							___output(ae,ae->charset[((unsigned int)ae->wl[ae->idx].w[i])&0xFF]|0x80);
-						}
+						c=ae->charset[((unsigned int)ae->wl[ae->idx].w[i])&0xFF];
 					}
 
+					if (ae->wl[ae->idx].w[i+1]==tquote) {
+						// this is the end of the quote, is there something left?
+						if (ae->wl[ae->idx].t==0) {
+							// another quote, then we need to mark the end of this one
+							if (StringIsQuote(ae->wl[ae->idx+1].w)!=0) {
+								c|=0x80;
+							}
+						} else {
+							// last arg, mark the end
+							c|=0x80;
+						}
+					}
+					___output(ae,c);
+					ae->nop+=1;
 					i++;
 				}
 			} else {
-				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"STR handle only quoted strings!\n");
+				PushExpression(ae,ae->idx,E_EXPRESSION_0V8);
+				ae->nop+=1;
 			}
 		} while (ae->wl[ae->idx].t==0);
 	} else {
@@ -28756,6 +28784,30 @@ printf("testing LZ4 segment OK\n");
 	if (!ret && opcodelen==256 && opcode[0]==0) {} else {printf("Autotest %03d ERROR (defs)\n",cpt);exit(-1);}
 	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
 printf("testing DEFS OK\n");
+
+#define AUTOTEST_STRCHAR0 "str 'roudou',0+'d','ou'"
+	ret=RasmAssemble(AUTOTEST_STRCHAR0,strlen(AUTOTEST_STRCHAR0),&opcode,&opcodelen);
+	if (!ret && opcodelen==9 && strncmp(opcode,"roudoudo",8)==0 && opcode[8]==('u'|0x80)) {} else {printf("Autotest %03d ERROR (STR+single byte)\n",cpt);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing STR evolution (single byte) OK\n");
+
+#define AUTOTEST_STRCHAR1 "str 'roudou','grouik'"
+	ret=RasmAssemble(AUTOTEST_STRCHAR1,strlen(AUTOTEST_STRCHAR1),&opcode,&opcodelen);
+	if (!ret && opcodelen==12 && opcode[5]==('u'|0x80) && opcode[11]==('k'|0x80)) {} else {printf("Autotest %03d ERROR (STR+single byte bis)\n",cpt);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing STR evolution (single byte bis) OK\n");
+
+#define AUTOTEST_STRCHAR2 "str 'roudou','grouik',45"
+	ret=RasmAssemble(AUTOTEST_STRCHAR2,strlen(AUTOTEST_STRCHAR2),&opcode,&opcodelen);
+	if (!ret && opcodelen==13 && opcode[5]==('u'|0x80) && opcode[11]=='k' && opcode[12]==45) {} else {printf("Autotest %03d ERROR (STR+single byte ter)\n",cpt);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing STR evolution (single byte ter) OK\n");
+
+#define AUTOTEST_STRHEX "str 'roud\x4Fudou'"
+	ret=RasmAssemble(AUTOTEST_STRHEX,strlen(AUTOTEST_STRHEX),&opcode,&opcodelen);
+	if (!ret && opcodelen==9 && strncmp(opcode,"roudOudo",8)==0 && opcode[8]==('u'|0x80)) {} else {printf("Autotest %03d ERROR (STR+Hex escape sequence)\n",cpt);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing STR evolution (Hex escape sequence) OK\n");
 
 	ret=RasmAssemble(AUTOTEST_BANKSET,strlen(AUTOTEST_BANKSET),&opcode,&opcodelen);
 	if (!ret) {} else {printf("Autotest %03d ERROR (bank/bankset)\n",cpt);exit(-1);}
