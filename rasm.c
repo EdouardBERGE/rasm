@@ -268,6 +268,11 @@ E_COMPUTE_OPERATION_REMAINDER=64,
 // fonction de bias pour atténuer les extrêmes bias(x,b) avec x entre 0 et 1 et le bias aussi => return pow(x,log(b)/log(0.5));
 // gain utilise bias pour étaler ou resserer les valeurs autour de 0.5 if x<0.5 return 0.5*bias(2*x,1-g); else return 1-0.5*bias(2-2*x,1-g); @@TOCHECK
 // pulse(edgeMin,edgeMax,v) si v dans l'intervale alors 1 sinon 0
+// gravity(x,gx)
+// 	d=abs(gx-x) ; distance
+// 	influence=1/(1+d)*(1+d) ; influence entre 1 et tend vers zéro + on s'éloigne
+// 	x=x+(gx-x)*influence
+//
 /* string functions */
 E_COMPUTE_OPERATION_GETNOP=65,
 E_COMPUTE_OPERATION_GETTICK=66,
@@ -550,6 +555,44 @@ struct s_hfe_floppy {
 /**************************************************
           e d s k    m a n a g e m e n t        
 **************************************************/
+
+struct s_amsdos_block {
+        unsigned char track1,sectorID1;
+        unsigned char track2,sectorID2;
+        unsigned char data[1024];
+        int isdata; // 0:vendor 1:data
+        int isvalid; // 0:invalid 1:1st sector 2:2nd sector 3:both sects
+        int isallocated; // is used by a dir entry
+	int istowrite;
+};
+
+// rasm legacy
+//it is given multiple entries, distinguished by their EX and S2 bytes. The
+//    formula is: Entry number = ((32*S2)+EX) / (exm+1) where exm is the
+//    extent mask value from the Disc Parameter Block.
+struct s_amsdos_dir_wrapper_entry {
+unsigned char user;     // 0-15 user => 0xE5 is deleted file
+unsigned char filename[11];
+unsigned char subcpt;        // value 0-31
+unsigned char S1;            // set to 0
+unsigned char extendcounter; // upper part of subcpt
+unsigned char rc;            // 128 bytes records in this entry
+unsigned char blocks[16];
+};
+
+struct s_amsdos_reentry {
+	unsigned char user;
+	char filename[13];
+	int allocsize;
+	int realsize;
+	int isprotected;
+	int ishidden;
+	int isdisplayable;
+	int isondisk;
+	int wrapentry; // start of wrapper_entry
+	unsigned char *data; // size == realsize
+};
+
 struct s_edsk_sector_global_struct {
 unsigned char track;
 unsigned char side;
@@ -581,6 +624,11 @@ int tracknumber;
 int sidenumber;
 int tracksize; /* DSK legacy */
 struct s_edsk_track_global_struct *track;
+// amsdos layer
+struct s_amsdos_block floppy_block[180]; // DATA format Max legacy size
+struct s_amsdos_dir_wrapper_entry floppy_directory[64];
+struct s_amsdos_reentry floppy_entries[64];
+int bstart;
 };
 
 struct s_edsk_location {
@@ -603,6 +651,7 @@ enum e_edsk_action {
 	E_EDSK_ACTION_RESIZE,
 	E_EDSK_ACTION_GAPFIX,
 	E_EDSK_ACTION_REORDER,
+	E_EDSK_ACTION_CHECK,
 	E_EDSK_ACTION_END
 };
 
@@ -647,6 +696,7 @@ struct s_save {
 	int ioffset;
 	int isize;
 	int iw,irun;
+	int iprotect,ihidden;
 	char *filename;
 	int amsdos,hobeta;
 	int tape,dsk,face,iwdskname;
@@ -8976,7 +9026,7 @@ char *MakeAMSDOS_name(struct s_assenv *ae, char *reference_filename, int *amsdos
 }
 
 
-void EDSK_load(struct s_assenv *ae,struct s_edsk_wrapper *curwrap, char *edskfilename, int face)
+void _deprecated_EDSK_load(struct s_assenv *ae,struct s_edsk_wrapper *curwrap, char *edskfilename, int face)
 {
 	#undef FUNC
 	#define FUNC "EDSK_load"
@@ -9217,49 +9267,32 @@ void EDSK_load(struct s_assenv *ae,struct s_edsk_wrapper *curwrap, char *edskfil
 #endif
 }
 
-struct s_edsk_wrapper *EDSK_select(struct s_assenv *ae,char *edskfilename, int facenumber)
-{
-	#undef FUNC
-	#define FUNC "EDSK_select"
-	
-	struct s_edsk_wrapper newwrap={0},*curwrap=NULL;
-	int i;
-#if TRACE_EDSK
-	printf("EDSK_select('%s',%d);\n",edskfilename,facenumber);
-#endif
-	/* check if there is a DSK in memory */
-	for (i=0;i<ae->nbedskwrapper;i++) {
-		if (!strcmp(ae->edsk_wrapper[i].edsk_filename,edskfilename)) {
-#if TRACE_EDSK
-	printf("Found! return %d\n",i);
-#endif
-			return &ae->edsk_wrapper[i];
-		}
-	}
-	/* not in memory, create an empty struct */
-	newwrap.edsk_filename=TxtStrDup(edskfilename);
-	memset(newwrap.entry,0xE5,sizeof(struct s_edsk_wrapper_entry)*64);
-	memset(newwrap.blocks[0],0xE5,1024);
-	memset(newwrap.blocks[1],0xE5,1024);
-#if TRACE_EDSK
-	printf("Not found! create empty struct\n");
-#endif
-	newwrap.face=facenumber;
-	ObjectArrayAddDynamicValueConcat((void**)&ae->edsk_wrapper,&ae->nbedskwrapper,&ae->maxedskwrapper,&newwrap,sizeof(struct s_edsk_wrapper));
-	/* and load files if the DSK exists on disk */
-	curwrap=&ae->edsk_wrapper[ae->nbedskwrapper-1];
-	if (FileExists(edskfilename)) {
-		EDSK_load(ae,curwrap,edskfilename,facenumber);
-	}
-	return curwrap;
-}
 
-int EDSK_addfile(struct s_assenv *ae,char *edskfilename,int facenumber, char *filename,unsigned char *indata,int insize, int offset, int run)
+struct s_edsk_global_struct *edsktool_NewEDSK(char *format, int nbside);
+struct s_edsk_global_struct *edsktool_EDSK_load(char *edskfilename);
+void edsktool_EDSK_write_file(struct s_edsk_global_struct *edsk, char *output_filename);
+
+void amsdos_init_entries(struct s_edsk_global_struct *edsk);
+void amsdos_init_block(struct s_edsk_global_struct *edsk);
+void amsdos_init_directory(struct s_edsk_global_struct *edsk);
+int amsdos_get_free_block(struct s_edsk_global_struct *edsk);
+int amsdos_available_space(struct s_edsk_global_struct *edsk);
+unsigned char *amsdos_get_free_entry(struct s_edsk_global_struct *edsk);
+int amsdos_available_entries(struct s_edsk_global_struct *edsk);
+void amsdos_update_edsk(struct s_edsk_global_struct *edsk);
+int amsdos_can_write(struct s_edsk_global_struct *edsk,int filesize);
+void amsdos_write_file(struct s_edsk_global_struct *edsk, int side, int user, char *filename, int protection, int hidden, unsigned char *data, int datalen);
+void amsdos_set_flags(struct s_edsk_global_struct *edsk, int side, unsigned char *entry, int protection, int hidden);
+void amsdos_remove_entry(struct s_edsk_global_struct *edsk, int side, unsigned char *entry);
+int amsdos_entry_exists(struct s_edsk_global_struct *edsk, int side, unsigned char *entry);
+void amsdos_build_entries(struct s_edsk_global_struct *edsk);
+
+int EDSK_addfile(struct s_assenv *ae,char *edskfilename,int facenumber, char *filename,unsigned char *indata,int insize, int offset, int run, int tag_protection, int tag_hidden)
 {
 	#undef FUNC
 	#define FUNC "EDSK_addfile"
 
-	struct s_edsk_wrapper *curwrap=NULL;
+	struct s_edsk_global_struct *edsk;
 	char amsdos_name[12]={0};
 	int j,i,ia,mia,ib,ie,filesize,idxdata;
 	int fb[180],rc,idxb;
@@ -9267,7 +9300,15 @@ int EDSK_addfile(struct s_assenv *ae,char *edskfilename,int facenumber, char *fi
 	int size=0;
 	int firstblock,amsdos_user=0;
 
-	curwrap=EDSK_select(ae,edskfilename,facenumber);
+	if (!FileExists(edskfilename)) {
+		//printf("new DATA because [%s] does not exists");
+		edsk=edsktool_NewEDSK("DATA",facenumber+1);
+	} else {
+		//printf("load [%s]\n",edskfilename);
+		edsk=edsktool_EDSK_load(edskfilename);
+	}
+	amsdos_build_entries(edsk);
+
 	/* update struct */
 	size=insize+128;
 	data=MemMalloc(size);
@@ -9275,136 +9316,17 @@ int EDSK_addfile(struct s_assenv *ae,char *edskfilename,int facenumber, char *fi
 	memcpy(data,MakeAMSDOSHeader(run,offset,offset+insize,amsdos_name,amsdos_user),128);
 	memcpy(data+128,indata,insize);
 	/* overwrite check */
-#if TRACE_EDSK
-	printf("EDSK_addfile will checks %d entr%s for [%s]\n",curwrap->nbentry,curwrap->nbentry>1?"ies":"y",amsdos_name);
-#endif
-	for (i=0;i<curwrap->nbentry;i++) {
-		if (!strncmp((char *)curwrap->entry[i].filename,amsdos_name,11)) {
-			if (!ae->edskoverwrite) {
-				MakeError(ae,0,NULL,0,"Error - Cannot save [%s] in edsk [%s] with overwrite disabled as the file already exists (use -eo command line option)\n",amsdos_name,edskfilename);
-				MemFree(data);
-				return 0;
-			} else {
-				/* overwriting previous file */
-#if TRACE_EDSK
-	printf(" -> reset previous entry %d with 0xE5\n",i);
-#endif
-				memset(&curwrap->entry[i],0xE5,sizeof(struct s_edsk_wrapper_entry));
-			}
-		}
+	if (amsdos_entry_exists(edsk,facenumber,amsdos_name) && !ae->edskoverwrite) {
+		MakeError(ae,0,NULL,0,"Error - Cannot save [%s] in edsk [%s] with overwrite disabled as the file already exists (use -eo command line option)\n",amsdos_name,edskfilename);
+		MemFree(data);
+		return 0;
 	}
-	/* find free blocks */
-#if TRACE_EDSK
-	printf("EDSK_addfile find free blocks\n");
-#endif
-	fb[0]=fb[1]=0;
-	for (i=2;i<180;i++) fb[i]=1;
-	for (i=0;i<curwrap->nbentry;i++) {
-		if (curwrap->entry[i].rc!=0xE5 && curwrap->entry[i].rc!=0) {
-			/* entry found, compute number of blocks to read */
-			rc=curwrap->entry[i].rc>>3; // no rounding!
-			if (curwrap->entry[i].rc%8) rc++; /* adjust value */
-			/* mark as used */
-			for (j=0;j<rc;j++) {
-				fb[curwrap->entry[i].blocks[j]]=0;
-			}
-		}
-	}
-	/* set directory, blocks and data in blocks */
-	firstblock=-1;
-	filesize=size;
-	idxdata=0;
-	ia=mia=0;
 
-#if TRACE_EDSK
-	printf("Writing [%s] size=%d\n",amsdos_name,size);
-#endif
-
-	while (filesize>0) {
-		if (filesize>16384) {
-			/* extended entry */
-#if TRACE_EDSK
-	printf("extended entry for file (filesize=%d)\nblocklist: ",filesize);
-#endif
-			if ((ie=EDSK_getdirid(curwrap))==-1)  {
-				MakeError(ae,0,NULL,0,"Error - edsk [%s] DIRECTORY FULL\n",edskfilename);
-				MemFree(data);
-				return 0;
-			}
-			if (curwrap->nbentry<=ie) curwrap->nbentry=ie+1;
-			idxb=0;
-			for (i=0;i<16;i++) {
-				if ((ib=EDSK_getblockid(fb))==-1) {
-					MakeError(ae,0,NULL,0,"Error - edsk [%s] DISK FULL\n",edskfilename);
-					MemFree(data);
-					return 0;
-				} else {
-					if (firstblock==-1) firstblock=ib;
-
-#if TRACE_EDSK
-	printf("%02X ",ib);
-#endif
-					memcpy(curwrap->blocks[ib],data+idxdata,1024);
-					idxdata+=1024;
-					filesize-=1024;
-					fb[ib]=0;
-					curwrap->entry[ie].blocks[idxb++]=ib;
-				}
-			}
-#if TRACE_EDSK
-	printf("\n");
-#endif
-			memcpy(curwrap->entry[ie].filename,amsdos_name,11);
-			curwrap->entry[ie].subcpt=ia;
-			curwrap->entry[ie].extendcounter=mia;
-			curwrap->entry[ie].rc=0x80;
-			curwrap->entry[ie].user=amsdos_user;
-			ia++;if (ia>31) {ia=0;mia++;}
-			idxb=0;
-		} else {
-			/* last entry */
-#if TRACE_EDSK
-	printf("last entry for file (filesize=%d)\nblocklist: ",filesize);
-#endif
-			if ((ie=EDSK_getdirid(curwrap))==-1)  {
-				MakeError(ae,0,NULL,0,"Error - edsk [%s] DIRECTORY FULL\n",edskfilename);
-				MemFree(data);
-				return 0;
-			}
-			if (curwrap->nbentry<=ie) curwrap->nbentry=ie+1;
-			/* calcul du nombre de sous blocs de 128 octets */
-			curwrap->entry[ie].rc=filesize/128;
-			if (filesize%128) {
-				curwrap->entry[ie].rc+=1;
-			}
-			idxb=0;
-			for (i=0;i<16 && filesize>0;i++) {
-				if ((ib=EDSK_getblockid(fb))==-1) {
-					MakeError(ae,0,NULL,0,"Error - edsk [%s] DISK FULL\n",edskfilename);
-					MemFree(data);
-					return 0;
-				} else {
-					if (firstblock==-1) firstblock=ib;
-#if TRACE_EDSK
-	printf("%02X ",ib);
-#endif
-
-					memcpy(curwrap->blocks[ib],&data[idxdata],filesize>1024?1024:filesize);
-					idxdata+=1024;
-					filesize-=1024;
-					fb[ib]=0;
-					curwrap->entry[ie].blocks[idxb++]=ib;
-				}
-			}
-#if TRACE_EDSK
-	printf("\n");
-#endif
-			filesize=0;
-			memcpy(curwrap->entry[ie].filename,amsdos_name,11);
-			curwrap->entry[ie].subcpt=ia;
-			curwrap->entry[ie].extendcounter=mia;
-			curwrap->entry[ie].user=amsdos_user;
-		}
+	if (amsdos_can_write(edsk,size)) {
+		amsdos_write_file(edsk,facenumber,0 /* user */, amsdos_name, tag_protection, tag_hidden, data, size);
+		edsktool_EDSK_write_file(edsk,edskfilename);
+	} else {
+		MakeError(ae,0,NULL,0,"Error - Cannot save [%s] in edsk [%s] because there is not enough free blocks available\n",amsdos_name,edskfilename);
 	}
 
 	MemFree(data);
@@ -9781,6 +9703,7 @@ void PopAllSave(struct s_assenv *ae)
 	char *filename;
 	int offset,size,run;
 	int i,is,erreur=0,touched,dummy_user=0;
+	int tag_protect=0, tag_hidden=0;
 	
 	for (is=0;is<ae->nbsave;is++) {
 		/* avoid quotes */
@@ -9795,6 +9718,9 @@ void PopAllSave(struct s_assenv *ae)
 #if TRACE_EDSK
 	printf("woff=[%s](%d) wsize=[%s](%d)\n",ae->wl[ae->save[is].ioffset].w,ae->save[is].ioffset,ae->wl[ae->save[is].isize].w,ae->save[is].isize);
 #endif
+
+		if (ae->save[is].iprotect) tag_protect=1; else tag_protect=0;
+		if (ae->save[is].ihidden) tag_hidden=1; else tag_hidden=0;
 
 		ae->idx=ae->save[is].ioffset; /* exp hack */
 		//ExpressionFastTranslate(ae,&ae->wl[ae->idx].w,0);
@@ -9833,7 +9759,7 @@ void PopAllSave(struct s_assenv *ae)
 				/* obligé de dupliquer à cause du reuse */
 				dskfilename=TxtStrDup(ae->wl[ae->save[is].iwdskname].w);
 				dskfilename[strlen(dskfilename)-1]=0;
-				if (!EDSK_addfile(ae,dskfilename+1,ae->save[is].face,filename,ae->mem[ae->save[is].ibank]+offset,size,offset,run)) {
+				if (!EDSK_addfile(ae,dskfilename+1,ae->save[is].face,filename,ae->mem[ae->save[is].ibank]+offset,size,offset,run,tag_protect,tag_hidden)) {
 					erreur++;
 					//break;
 				}
@@ -9869,7 +9795,7 @@ void PopAllSave(struct s_assenv *ae)
 		}
 		MemFree(filename);
 	}
-	if (!erreur) EDSK_write(ae);
+	//if (!erreur) EDSK_write(ae);
 	
 	for (i=0;i<ae->nbedskwrapper;i++) {
 		MemFree(ae->edsk_wrapper[i].edsk_filename);
@@ -11107,9 +11033,10 @@ void _AND(struct s_assenv *ae) {
 						PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
 						ae->nop+=5;ae->tick+=19;
 					} else {
-						MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"invalid AND addressing mode, use only A,B,C,D,E,H,L,XH,XL,YH,YL,(HL),(IX+n),(IY+n)\n");
-						ae->idx++;
-						return;
+						___output(ae,0xE6);
+						EnforceNoAddressingMode(ae->idx+1);
+						PushExpression(ae,ae->idx+1,E_EXPRESSION_V8);
+						ae->nop+=2;ae->tick+=7;
 					}
 				} else {
 					___output(ae,0xE6);
@@ -11153,9 +11080,10 @@ void _OR(struct s_assenv *ae) {
 						PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
 						ae->nop+=5;ae->tick+=19;
 					} else {
-						MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"invalid OR addressing mode, use only A,B,C,D,E,H,L,XH,XL,YH,YL,(HL),(IX+n),(IY+n)\n");
-						ae->idx++;
-						return;
+						___output(ae,0xF6);
+						EnforceNoAddressingMode(ae->idx+1);
+						PushExpression(ae,ae->idx+1,E_EXPRESSION_V8);
+						ae->nop+=2;ae->tick+=7;
 					}
 				} else {
 					___output(ae,0xF6);
@@ -11199,9 +11127,10 @@ void _XOR(struct s_assenv *ae) {
 						PushExpression(ae,ae->idx+1,E_EXPRESSION_IV8);
 						ae->nop+=5;ae->tick+=19;
 					} else {
-						MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"invalid XOR addressing mode, use only A,B,C,D,E,H,L,XH,XL,YH,YL,(HL),(IX+n),(IY+n)\n");
-						ae->idx++;
-						return;
+						___output(ae,0xEE);
+						EnforceNoAddressingMode(ae->idx+1);
+						PushExpression(ae,ae->idx+1,E_EXPRESSION_V8);
+						ae->nop+=2;ae->tick+=7;
 					}
 				} else {
 					___output(ae,0xEE);
@@ -14229,6 +14158,417 @@ void PopAllHFE(struct s_assenv *ae) {
 //************************************************************************************************************************************
 //************************************************************************************************************************************
 							#undef FUNC
+						#define FUNC "Amsdos CORE"
+//************************************************************************************************************************************
+//************************************************************************************************************************************
+
+
+void amsdos_init(struct s_edsk_global_struct *edsk) {
+	amsdos_init_block(edsk);
+	amsdos_init_directory(edsk);
+}
+
+void amsdos_init_entries(struct s_edsk_global_struct *edsk) { // USELESS ?
+	memset(edsk->floppy_entries,0,sizeof(edsk->floppy_entries));
+}
+void amsdos_init_block(struct s_edsk_global_struct *edsk) {
+        int track=0,sector=1,block=0;
+        int j;
+
+        while (block<180) {
+                edsk->floppy_block[block].track1=track; edsk->floppy_block[block].sectorID1=sector; sector++;if (sector>9) {sector=1;track++;}
+                edsk->floppy_block[block].track2=track; edsk->floppy_block[block].sectorID2=sector; sector++;if (sector>9) {sector=1;track++;}
+                for (j=0;j<1024;j++) edsk->floppy_block[block].data[j]=0xE5;
+                edsk->floppy_block[block].isdata=0;
+                edsk->floppy_block[block].isvalid=0;
+                edsk->floppy_block[block].isallocated=0;
+                block++;
+        }
+}
+
+void amsdos_init_directory(struct s_edsk_global_struct *edsk) {
+	int i,t,s,ob,isdata=0,isvendor=0,idSect=0;
+
+	edsk->bstart=-1;
+	// fill blocks with sectors when they are here
+	//mfm_amsdos_extract(floppy,zeside); @@TOREPLACE
+
+	for (t=0;t<2 && t<edsk->tracknumber;t++) {
+		for (s=0;s<edsk->track[0].sectornumber;s++) {
+			if ((edsk->track[0].sector[s].id&0xF0)==0xC0) isdata++; else
+			if ((edsk->track[0].sector[s].id&0xF0)==0x40) isvendor++;
+		}
+	}
+
+	if (isdata>isvendor) {
+		isdata=1;
+		idSect=0xC0;
+	} else {
+		isdata=0; // legacy
+		idSect=0x40;
+	}
+
+	for (ob=0;ob<180;ob++) {
+		t=edsk->floppy_block[ob].track1;
+		if (t<edsk->tracknumber) for (s=0;s<edsk->track[t].sectornumber;s++) {
+			if (edsk->track[t].sector[s].id==(edsk->floppy_block[ob].sectorID1+idSect)) {
+				if (edsk->track[t].sector[s].size==2 && edsk->track[t].sector[s].length==512) {
+					// copy data to block
+					memcpy(edsk->floppy_block[ob].data,edsk->track[t].sector[s].data,512);
+					edsk->floppy_block[ob].isvalid|=1;
+					edsk->floppy_block[ob].isdata=isdata;
+				}
+			}
+		}
+		t=edsk->floppy_block[ob].track2;
+		if (t<edsk->tracknumber) for (s=0;s<edsk->track[t].sectornumber;s++) {
+			if (edsk->track[t].sector[s].id==(edsk->floppy_block[ob].sectorID2+idSect)) {
+				if (edsk->track[t].sector[s].size==2 && edsk->track[t].sector[s].length==512) {
+					// copy data to block
+					memcpy(edsk->floppy_block[ob].data+512,edsk->track[t].sector[s].data,512);
+					edsk->floppy_block[ob].isvalid|=2;
+					edsk->floppy_block[ob].isdata=isdata;
+				}
+			}
+		}
+	}
+	// keep full blocks and partial blocks when the 1st sector is OK
+	for (i=0;i<180;i++) {
+		if (edsk->floppy_block[i].isvalid==2) edsk->floppy_block[i].isvalid=0;
+	}
+	// get DIR if any relevant (must have full block OK)
+        if (edsk->floppy_block[0].isvalid==3 && edsk->floppy_block[0].isdata && edsk->floppy_block[1].isvalid==3 && edsk->floppy_block[1].isdata) {
+                edsk->bstart=0; // DATA
+        } if (edsk->floppy_block[9].isvalid==3 && !edsk->floppy_block[9].isdata && edsk->floppy_block[10].isvalid==3 && !edsk->floppy_block[10].isdata) {
+                edsk->bstart=9; // VENDOR
+        }
+}
+
+int amsdos_get_free_block(struct s_edsk_global_struct *edsk) {
+	int i,available=0;
+	for (i=edsk->bstart+2;i<180;i++) {
+		if (edsk->floppy_block[i].isvalid && !edsk->floppy_block[i].isallocated) return i;
+	}
+	return 0; // cannot return block 0 for a file so...
+}
+int amsdos_available_space(struct s_edsk_global_struct *edsk) {
+	int i,available=0;
+	for (i=edsk->bstart+2;i<180;i++) {
+		if (edsk->floppy_block[i].isvalid && !edsk->floppy_block[i].isallocated) available++;
+	}
+	return available;
+}
+unsigned char *amsdos_get_free_entry(struct s_edsk_global_struct *edsk) {
+	int i,available=0;
+	if (edsk->floppy_block[edsk->bstart].isvalid && edsk->floppy_block[edsk->bstart+1].isvalid) {
+		// scan in logical order
+		for (i=0;i<32;i++) {
+			if (edsk->floppy_block[edsk->bstart].data[i*32]==0xE5) return &edsk->floppy_block[edsk->bstart].data[i*32];
+		}
+		for (i=0;i<32;i++) {
+			if (edsk->floppy_block[edsk->bstart+1].data[i*32]==0xE5) return &edsk->floppy_block[edsk->bstart+1].data[i*32];
+		}
+	}
+	return NULL;
+}
+int amsdos_available_entries(struct s_edsk_global_struct *edsk) {
+	int i,available=0;
+	if (edsk->floppy_block[edsk->bstart].isvalid && edsk->floppy_block[edsk->bstart+1].isvalid) {
+		for (i=0;i<32;i++) {
+			if (edsk->floppy_block[edsk->bstart].data[i*32]==0xE5) available++;
+			if (edsk->floppy_block[edsk->bstart+1].data[i*32]==0xE5) available++;
+		}
+	}
+	return available;
+}
+void amsdos_update_edsk(struct s_edsk_global_struct *edsk) {
+	int i;
+
+	// EDSK write
+	for (i=0;i<180;i++) {
+		if (edsk->floppy_block[i].istowrite) {
+			int idSect,s,t;
+			edsk->floppy_block[i].istowrite=0;
+			// ecriture physique du block
+			if (edsk->floppy_block[i].isdata) idSect=0xC0; else idSect=0x40;
+			t=edsk->floppy_block[i].track1;
+			for (s=0;s<edsk->track[t].sectornumber;s++) {
+				if (edsk->track[t].sector[s].id==edsk->floppy_block[i].sectorID1+idSect) break; 
+			}
+			if (s<edsk->track[t].sectornumber) {
+				memcpy(edsk->track[t].sector[s].data,edsk->floppy_block[i].data,512);
+			} else {
+				fprintf(stderr,"INTERNAL ERROR : sector to write not found track %d ID #%02X!\n",t,edsk->floppy_block[i].sectorID1); //@@TODO
+			}
+			t=edsk->floppy_block[i].track2;
+			for (s=0;s<edsk->track[t].sectornumber;s++) {
+				if (edsk->track[t].sector[s].id==edsk->floppy_block[i].sectorID2+idSect) break; 
+			}
+			if (s<edsk->track[t].sectornumber) {
+				memcpy(edsk->track[t].sector[s].data,edsk->floppy_block[i].data+512,512);
+			} else {
+				fprintf(stderr,"INTERNAL ERROR : sector to write not found track %d ID #%02X!\n",t,edsk->floppy_block[i].sectorID2); //@@TODO
+			}
+			//mfm_push_data(floppy,side,floppy_block[i].track1,floppy_block[i].sectorID1+idSect,floppy_block[i].data,512);
+			//mfm_push_data(floppy,side,floppy_block[i].track2,floppy_block[i].sectorID2+idSect,floppy_block[i].data+512,512);
+		}
+	}
+}
+int amsdos_can_write(struct s_edsk_global_struct *edsk,int filesize) {
+	int requested_entries;
+	if (amsdos_available_space(edsk)*1024<filesize) return 0; // no space left
+	requested_entries=filesize>>14;
+	if (filesize&0x3FFF) requested_entries++;
+	if (amsdos_available_entries(edsk)<requested_entries) return 0; // no space left
+	return 1;
+}
+void amsdos_write_file(struct s_edsk_global_struct *edsk, int side, int user, char *filename, int protection, int hidden, unsigned char *data, int datalen) {
+	struct s_amsdos_dir_wrapper_entry catentry={0};
+	int zecounter=0,idx=0,wblock,nbblock=0,rc,i;
+
+	if (strlen(filename)!=11) {
+		fprintf(stderr,"INTERNAL ERROR : amsdos filename MUST be 11 chars long => [%s]\n",filename);
+		return; // fuck
+	}
+
+	catentry.user=user;
+	if (protection) filename[9]|=0x80;
+	if (hidden) filename[10]|=0x80;
+	memcpy(catentry.filename,filename,11);
+
+//printf("AmsdosWriteFile bstart=%d datalen=%d protect=%d hidden=%d\n",edsk->bstart,datalen,protection,hidden);
+	while (datalen>0) {
+		// block allocation
+		wblock=amsdos_get_free_block(edsk);if (!wblock) return;
+		catentry.blocks[nbblock++]=wblock-edsk->bstart;
+
+		if (datalen>=1024) {
+			memcpy(edsk->floppy_block[wblock].data,data+idx,1024);
+		} else {
+			memset(edsk->floppy_block[wblock].data,0,1024);
+			memcpy(edsk->floppy_block[wblock].data,data+idx,datalen);
+		}
+		edsk->floppy_block[wblock].isallocated=1;
+		edsk->floppy_block[wblock].istowrite=1;
+		idx+=1024;
+
+		//rc=(datalen>>7); if (rc>0x80) rc=0x80; else if (datalen&127) rc++;
+		if (datalen>=1024) catentry.rc+=8; else {catentry.rc+=datalen>>7;if (datalen&127) catentry.rc++;if (catentry.rc>0x80) {catentry.rc=0x80;printf("0x80 bug\n");}}
+		datalen-=1024;
+
+		// next block, reinit struct
+		if (nbblock==16) {
+			// flush
+			unsigned char *catnt;
+			catnt=amsdos_get_free_entry(edsk); if (!catnt) return; // should never happen
+			memcpy(catnt,&catentry,32);
+			/*
+			printf("%02X %02X %02X %02X -",catentry.subcpt,catentry.S1,catentry.extendcounter,catentry.rc);
+			for (i=0;i<16;i++) printf(" %d",catentry.blocks[i]);
+			printf("\n");
+			*/
+			memset(catentry.blocks,0,16);
+			nbblock=0;
+			zecounter++;
+			catentry.rc=0;
+			catentry.subcpt=zecounter&31;
+			catentry.extendcounter=zecounter>>5;
+		}
+	}
+	if (nbblock) {
+		// flush
+		unsigned char *catnt;
+		catnt=amsdos_get_free_entry(edsk); if (!catnt) return; // should never happen
+		memcpy(catnt,&catentry,32);
+		/*
+		printf("%02X %02X %02X %02X -",catentry.subcpt,catentry.S1,catentry.extendcounter,catentry.rc);
+		for (i=0;i<16;i++) printf(" %d",catentry.blocks[i]);
+		printf("\n");
+		*/
+	}
+
+#if 0
+	for (i=0;i<32*8;i++) {
+		if (!(i&15)) printf("\n");
+		printf(" %02X",floppy_block[bstart].data[i]);
+	}
+	printf("\n");
+#endif
+
+	// ecriture du catalogue forcee + ecriture des blocks modifies
+	edsk->floppy_block[edsk->bstart].istowrite=1;
+	edsk->floppy_block[edsk->bstart+1].istowrite=1;
+	amsdos_update_edsk(edsk);
+}
+
+void amsdos_set_flags(struct s_edsk_global_struct *edsk, int side, unsigned char *entry, int protection, int hidden) {
+	int i;
+	for (i=0;i<32;i++) {
+		if (!memcmp(&edsk->floppy_block[edsk->bstart].data[i*32],entry,9)) { // user+filename without extension
+			if ((edsk->floppy_block[edsk->bstart].data[i*32+9]&0x7F)==entry[10] && (edsk->floppy_block[edsk->bstart].data[i*32+10]&0x7F)==entry[11]) {
+				if (protection) edsk->floppy_block[edsk->bstart].data[i*32+9]|=0x80; else edsk->floppy_block[edsk->bstart].data[i*32+9]&=0x7F;
+				if (hidden) edsk->floppy_block[edsk->bstart].data[i*32+10]|=0x80; else edsk->floppy_block[edsk->bstart].data[i*32+10]&=0x7F;
+			}
+		}
+		if (!memcmp(&edsk->floppy_block[edsk->bstart+1].data[i*32],entry,9)) {
+			if ((edsk->floppy_block[edsk->bstart+1].data[i*32+9]&0x7F)==entry[10] && (edsk->floppy_block[edsk->bstart+1].data[i*32+10]&0x7F)==entry[11]) {
+				if (protection) edsk->floppy_block[edsk->bstart+1].data[i*32+9]|=0x80; else edsk->floppy_block[edsk->bstart+1].data[i*32+9]&=0x7F;
+				if (hidden) edsk->floppy_block[edsk->bstart+1].data[i*32+10]|=0x80; else edsk->floppy_block[edsk->bstart+1].data[i*32+10]&=0x7F;
+			}
+		}
+	}
+	// écriture du catalogue
+	edsk->floppy_block[edsk->bstart].istowrite=1;
+	edsk->floppy_block[edsk->bstart+1].istowrite=1;
+	amsdos_update_edsk(edsk);
+}
+void amsdos_remove_entry(struct s_edsk_global_struct *edsk, int side, unsigned char *entry) {
+	int i;
+	for (i=0;i<32;i++) {
+		if (!memcmp(&edsk->floppy_block[edsk->bstart].data[i*32],entry,9)) { // user+filename without extension
+			if ((edsk->floppy_block[edsk->bstart].data[i*32+9]&0x7F)==entry[10] && (edsk->floppy_block[edsk->bstart].data[i*32+10]&0x7F)==entry[11]) {
+				edsk->floppy_block[edsk->bstart].data[i*32]=0xE5;
+			}
+		}
+		if (!memcmp(&edsk->floppy_block[edsk->bstart+1].data[i*32],entry,9)) {
+			if ((edsk->floppy_block[edsk->bstart+1].data[i*32+9]&0x7F)==entry[10] && (edsk->floppy_block[edsk->bstart+1].data[i*32+10]&0x7F)==entry[11]) {
+				edsk->floppy_block[edsk->bstart+1].data[i*32]=0xE5;
+			}
+		}
+	}
+	edsk->floppy_block[edsk->bstart].istowrite=1;
+	edsk->floppy_block[edsk->bstart+1].istowrite=1;
+	amsdos_update_edsk(edsk);
+}
+int amsdos_entry_exists(struct s_edsk_global_struct *edsk, int side, unsigned char *entry) {
+	int i;
+
+	for (i=0;i<32;i++) {
+		if (!memcmp(&edsk->floppy_block[edsk->bstart].data[i*32],entry,9)) { // user+filename without extension
+			if ((edsk->floppy_block[edsk->bstart].data[i*32+9]&0x7F)==entry[10] && (edsk->floppy_block[edsk->bstart].data[i*32+10]&0x7F)==entry[11] && edsk->floppy_block[edsk->bstart].data[i*32+11]==entry[12]) {
+				return 1;
+			}
+		}
+		if (!memcmp(&edsk->floppy_block[edsk->bstart+1].data[i*32],entry,9)) {
+			if ((edsk->floppy_block[edsk->bstart+1].data[i*32+9]&0x7F)==entry[10] && (edsk->floppy_block[edsk->bstart+1].data[i*32+10]&0x7F)==entry[11] && edsk->floppy_block[edsk->bstart].data[i*32+11]==entry[12]) {
+				return 1;
+			}
+		}
+	}
+	return 0;
+}
+
+
+void amsdos_build_entries(struct s_edsk_global_struct *edsk) {
+	unsigned char fullname[16],curfullname[16];
+	int i,j,k,counter,isprotected,ishidden,curuser;
+	int filesize=0,filealloc=0,wrapentry=0;//warning remover
+	int iname=0,nextoffset,remaining;
+	int block2run;
+
+	//***********************************************************************************************
+	//                                     make directory
+	//***********************************************************************************************
+	if (edsk->bstart!=-1) {
+		// copy vendor/data directory
+		memcpy(&edsk->floppy_directory[0] ,edsk->floppy_block[edsk->bstart].data,1024);
+		memcpy(&edsk->floppy_directory[32],edsk->floppy_block[edsk->bstart+1].data,1024);
+		qsort(edsk->floppy_directory,64,sizeof(struct s_amsdos_dir_wrapper_entry),cmpAmsdosentry);
+
+		amsdos_init_entries(edsk);
+
+		strcpy(fullname,"");
+		curuser=-1;
+		for (i=0;i<64;i++) {
+			if (edsk->floppy_directory[i].user<16) { // valid user
+				memcpy(curfullname,edsk->floppy_directory[i].filename,8);
+				curfullname[8]='.';
+				memcpy(curfullname+9,edsk->floppy_directory[i].filename+8,3);
+				curfullname[12]=0;
+
+				if (strcmp(curfullname,fullname) || curuser!=edsk->floppy_directory[i].user) { // new entry, flush entry!
+					// flush
+#define PUSH_ENTRY	if (fullname[0]) { \
+						edsk->floppy_entries[iname].isprotected=fullname[9]&0x80;fullname[9]&=0x7F; \
+						edsk->floppy_entries[iname].ishidden=fullname[10]&0x80;fullname[10]&=0x7F; \
+						edsk->floppy_entries[iname].user=curuser; \
+						edsk->floppy_entries[iname].wrapentry=wrapentry; \
+						if (fullname[0]<0x80 && fullname[1]<0x80 && fullname[2]<0x80 && fullname[3]<0x80 && fullname[4]<0x80 && fullname[5]<0x80 && fullname[6]<0x80 && fullname[7]<0x80) { \
+							strcpy(edsk->floppy_entries[iname].filename,fullname); \
+							edsk->floppy_entries[iname].allocsize=filealloc; \
+							edsk->floppy_entries[iname].realsize=filesize; \
+							edsk->floppy_entries[iname].isdisplayable=1; \
+							edsk->floppy_entries[iname].data=calloc(1,filealloc*1024); \
+						} else { \
+							strcpy(edsk->floppy_entries[iname].filename,"Invalid Name"); \
+							edsk->floppy_entries[iname].allocsize=filealloc; \
+						} \
+						iname++; \
+					}
+					PUSH_ENTRY; // push previous entry
+						    //
+					curuser=edsk->floppy_directory[i].user;
+					strcpy(fullname,curfullname);
+					filesize=edsk->floppy_directory[i].rc*128;
+					filealloc=0;
+					wrapentry=i;
+					for (j=0;j<16;j++) {
+						if (edsk->floppy_directory[i].blocks[j]) filealloc++;
+					}
+				} else { // same entry, next chunk
+					filesize+=edsk->floppy_directory[i].rc*128;
+					for (j=0;j<16;j++) {
+						if (edsk->floppy_directory[i].blocks[j]) filealloc++;
+					}
+					free(edsk->floppy_entries[iname].data);
+					edsk->floppy_entries[iname].data=calloc(1,filealloc*1024); \
+				}
+			}
+		}
+		PUSH_ENTRY;
+	}
+	for (i=0;i<iname;i++) {
+		// only 'normal' file can be saved
+		if (edsk->floppy_entries[i].isdisplayable) {
+			edsk->floppy_entries[i].isondisk=1; // default, then we will see
+			j=edsk->floppy_entries[i].wrapentry;
+			nextoffset=0;
+			remaining=edsk->floppy_entries[i].realsize;
+			for (counter=0;edsk->floppy_directory[j].subcpt==counter;counter++,j++) { // pas ouf mais difficile a corrompre quand meme
+				block2run=edsk->floppy_directory[j].rc>>3;
+				if (edsk->floppy_directory[j].rc&7) block2run++;
+				for (k=0;k<block2run;k++) {
+					if (edsk->floppy_directory[j].blocks[k] && edsk->floppy_directory[j].blocks[k]<180-edsk->bstart) {
+						if (edsk->floppy_block[edsk->floppy_directory[j].blocks[k]+edsk->bstart].isvalid) { // @@TODO secure this!!!
+							edsk->floppy_block[edsk->floppy_directory[j].blocks[k]+edsk->bstart].isallocated=1;
+					//printf("block #%02X used\n",edsk->floppy_directory[j].blocks[k]+edsk->bstart);
+
+							memcpy(edsk->floppy_entries[i].data+nextoffset,edsk->floppy_block[edsk->floppy_directory[j].blocks[k]+edsk->bstart].data,remaining>1024?1024:remaining);
+							nextoffset+=1024;
+							remaining-=1024;
+#if 0	
+							printf("copy block to entry[%d] (%d) remaining %d   SRC=#%02X (%d) #%02X (%d)\n",i,nextoffset,remaining>0?remaining:0,
+									floppy_block[floppy_directory[j].blocks[k]-bstart].sectorID1, floppy_block[floppy_directory[j].blocks[k]-bstart].track1,
+									floppy_block[floppy_directory[j].blocks[k]-bstart].sectorID2, floppy_block[floppy_directory[j].blocks[k]-bstart].track2);
+#endif
+							
+						} else {
+							printf("block [%d] for file [%s] does not exist on disk!\n",edsk->floppy_directory[j].blocks[k]+edsk->bstart,edsk->floppy_entries[i].filename);
+							edsk->floppy_entries[i].isondisk=0; // block does not exists!
+						}
+					} else {
+						edsk->floppy_entries[i].isondisk=0; // invalid entry!
+					}
+				}
+			}
+		}
+	}
+}
+
+
+//************************************************************************************************************************************
+//************************************************************************************************************************************
+							#undef FUNC
 						#define FUNC "EdskTool CORE"
 //************************************************************************************************************************************
 //************************************************************************************************************************************
@@ -14306,45 +14646,67 @@ void edsktool_MAPEDSK(struct s_edsk_global_struct *edsk) {
 		}
 	}
 }
-struct s_edsk_global_struct *edsktool_NewEDSK(char *format) {
+struct s_edsk_global_struct *edsktool_NewEDSK(char *format, int nbside) {
         struct s_edsk_global_struct *edsk;
         int i,t,s;
 
         edsk=MemMalloc(sizeof(struct s_edsk_global_struct));
         memset(edsk,0,sizeof(struct s_edsk_global_struct));
         if (!format) {
-                // empty EDSK
+                // empty EDSK, no mather what for the side number
                 return edsk;
         }
 
         if (strcmp(format,"DATA")==0 || strcmp(format,"VENDOR")==0) {
                 edsk->tracknumber=42;
-                edsk->sidenumber=1;
+                edsk->sidenumber=nbside;
                 edsk->track=MemMalloc(sizeof(struct s_edsk_track_global_struct)*edsk->tracknumber*edsk->sidenumber);
                 memset(edsk->track,0,sizeof(struct s_edsk_track_global_struct)*edsk->tracknumber*edsk->sidenumber);
                 for (t=0;t<=39;t++) {
-                        edsk->track[t].track=t;
-                        edsk->track[t].side=0;
-                        edsk->track[t].sectornumber=9;
-                        edsk->track[t].sectorsize=2;
-                        edsk->track[t].gap3length=0x50;
-                        edsk->track[t].fillerbyte=0xE5;
-                        edsk->track[t].sector=MemMalloc(edsk->track[t].sectornumber*sizeof(struct s_edsk_sector_global_struct));
+                        edsk->track[t*edsk->sidenumber].track=t;
+                        edsk->track[t*edsk->sidenumber].side=0;
+                        edsk->track[t*edsk->sidenumber].sectornumber=9;
+                        edsk->track[t*edsk->sidenumber].sectorsize=2;
+                        edsk->track[t*edsk->sidenumber].gap3length=0x50;
+                        edsk->track[t*edsk->sidenumber].fillerbyte=0xE5;
+                        edsk->track[t*edsk->sidenumber].sector=MemMalloc(edsk->track[t*edsk->sidenumber].sectornumber*sizeof(struct s_edsk_sector_global_struct));
                         for (s=0;s<9;s++) {
-                                edsk->track[t].sector[s].track=t;
-                                edsk->track[t].sector[s].side=0;
-                                if (strcmp(format,"DATA")==0) edsk->track[t].sector[s].id=0xC1+s; else
-                                if (strcmp(format,"VENDOR")==0) edsk->track[t].sector[s].id=0x41+s;
-                                edsk->track[t].sector[s].size=2;
-                                edsk->track[t].sector[s].st1=0;
-                                edsk->track[t].sector[s].st2=0;
-                                edsk->track[t].sector[s].length=512;
-                                edsk->track[t].sector[s].data=MemMalloc(edsk->track[t].sector[s].length);
-                                for (i=0;i<edsk->track[t].sector[s].length;i++) edsk->track[t].sector[s].data[i]=edsk->track[t].fillerbyte;
+                                edsk->track[t*edsk->sidenumber].sector[s].track=t;
+                                edsk->track[t*edsk->sidenumber].sector[s].side=0;
+                                if (strcmp(format,"DATA")==0) edsk->track[t*edsk->sidenumber].sector[s].id=0xC1+s; else
+                                if (strcmp(format,"VENDOR")==0) edsk->track[t*edsk->sidenumber].sector[s].id=0x41+s;
+                                edsk->track[t*edsk->sidenumber].sector[s].size=2;
+                                edsk->track[t*edsk->sidenumber].sector[s].st1=0;
+                                edsk->track[t*edsk->sidenumber].sector[s].st2=0;
+                                edsk->track[t*edsk->sidenumber].sector[s].length=512;
+                                edsk->track[t*edsk->sidenumber].sector[s].data=MemMalloc(edsk->track[t*edsk->sidenumber].sector[s].length);
+                                for (i=0;i<edsk->track[t*edsk->sidenumber].sector[s].length;i++) edsk->track[t*edsk->sidenumber].sector[s].data[i]=edsk->track[t*edsk->sidenumber].fillerbyte;
                         }
+                        if (edsk->sidenumber==2) {
+				edsk->track[1+t*edsk->sidenumber].track=t;
+				edsk->track[1+t*edsk->sidenumber].side=1;
+				edsk->track[1+t*edsk->sidenumber].sectornumber=9;
+				edsk->track[1+t*edsk->sidenumber].sectorsize=2;
+				edsk->track[1+t*edsk->sidenumber].gap3length=0x50;
+				edsk->track[1+t*edsk->sidenumber].fillerbyte=0xE5;
+				edsk->track[1+t*edsk->sidenumber].sector=MemMalloc(edsk->track[1+t*edsk->sidenumber].sectornumber*sizeof(struct s_edsk_sector_global_struct));
+				for (s=0;s<9;s++) {
+					edsk->track[1+t*edsk->sidenumber].sector[s].track=t;
+					edsk->track[1+t*edsk->sidenumber].sector[s].side=1;
+					if (strcmp(format,"DATA")==0) edsk->track[1+t*edsk->sidenumber].sector[s].id=0xC1+s; else
+					if (strcmp(format,"VENDOR")==0) edsk->track[1+t*edsk->sidenumber].sector[s].id=0x41+s;
+					edsk->track[1+t*edsk->sidenumber].sector[s].size=2;
+					edsk->track[1+t*edsk->sidenumber].sector[s].st1=0;
+					edsk->track[1+t*edsk->sidenumber].sector[s].st2=0;
+					edsk->track[1+t*edsk->sidenumber].sector[s].length=512;
+					edsk->track[1+t*edsk->sidenumber].sector[s].data=MemMalloc(edsk->track[1+t*edsk->sidenumber].sector[s].length);
+					for (i=0;i<edsk->track[1+t*edsk->sidenumber].sector[s].length;i++) edsk->track[1+t*edsk->sidenumber].sector[s].data[i]=edsk->track[1+t*edsk->sidenumber].fillerbyte;
+				}
+			}
                 }
                 for (t=40;t<=41;t++) {
-                        edsk->track[t].unformated=1;
+                        edsk->track[t*edsk->sidenumber].unformated=1;
+                        if (edsk->sidenumber==2) edsk->track[1+t*edsk->sidenumber].unformated=1;
                 }
         } else if (strcmp(format,"DIX")==0) {
                 edsk->tracknumber=42;
@@ -14376,6 +14738,7 @@ struct s_edsk_global_struct *edsktool_NewEDSK(char *format) {
                 }
         }
 
+	amsdos_init(edsk);
         return edsk;
 }
 
@@ -14394,7 +14757,7 @@ struct s_edsk_global_struct *edsktool_EDSK_load(char *edskfilename) //@@TODO fai
         FILE *f;
         struct s_edsk_global_struct *edsk;
 
-        edsk=edsktool_NewEDSK(NULL);
+        edsk=edsktool_NewEDSK(NULL,1);
 
         f=fopen(edskfilename,"rb");
         if (!f) {
@@ -14595,6 +14958,7 @@ struct s_edsk_global_struct *edsktool_EDSK_load(char *edskfilename) //@@TODO fai
                 exit(ABORT_ERROR);
         }
         fclose(f);
+	amsdos_init(edsk);
         return edsk;
 }
 
@@ -14610,7 +14974,7 @@ void edsktool_EDSK_write_file(struct s_edsk_global_struct *edsk, char *output_fi
         if (!edsk) return;
 
 	FileRemoveIfExists(output_filename);
-
+//printf("write edsk %s (first sector ID #%02X\n",output_filename,edsk->track[0].sector[0].id);
         /* écriture header */
         strcpy((char *)header,"EXTENDED CPC DSK File\r\nDisk-Info\r\n");
         sprintf(headertag,"%-9.9s","edskt");
@@ -14716,9 +15080,14 @@ void __internal_edsk_free_side(struct s_assenv *ae,struct s_edsk_global_struct *
 	}
 }
 void __edsk_free(struct s_assenv *ae,struct s_edsk_global_struct *edsk) {
+	int i;
 	if (edsk->sidenumber>1) __internal_edsk_free_side(ae,edsk,1);
 	__internal_edsk_free_side(ae,edsk,0);
 	MemFree(edsk->track);
+	// amsdos things
+	for (i=0;i<64;i++) {
+		if (edsk->floppy_entries[i].data && edsk->floppy_entries[i].isondisk) free(edsk->floppy_entries[i].data);
+	}
 	MemFree(edsk);
 }
 
@@ -15148,6 +15517,94 @@ void __edsk_gapfix(struct s_assenv *ae, struct s_edsk_action *action) {
 }
 
 
+void __edsk_check(struct s_assenv *ae, struct s_edsk_action *action) {
+	struct s_edsk_global_struct *edsk;
+	struct s_edsk_location *location;
+	int nblocation,side;
+	int iloc,i,j,k;
+	int zebank,offset,size;
+
+ 	if (action->nbparam!=5) {
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Usage is : EDSK CHECK,'edskfilename:side','location',<size>,<addr>\n");
+		return;
+	}
+	side=__edsk_get_side_from_name(action->filename);
+	edsk=edsktool_EDSK_load(action->filename);
+	if (!edsk) {
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Error loading [%s]\n",action->filename);
+		return;
+	}
+	if (side+1>edsk->sidenumber) {
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Cannot CHECK sector/trackbecause floppy image [%s] does not have 2 sides!\n",action->filename);
+		return;
+	}
+	// get location
+	location=__edsk_get_location(ae,ae->wl[ae->idx+3].w,&nblocation);
+	if (!location) {
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"EDSK CHECK error, invalid location!\n");
+		return;
+	}
+
+	// check action
+	if (action->ioffset<0 || action->ioffset+action->isize>65536) {
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"EDSK WRITESECT error, invalid offset/size!\n");
+		return;
+	}
+	offset=action->ioffset;
+	size=action->isize;
+	zebank=action->ibank;
+
+	for (iloc=0;iloc<nblocation;iloc++) {
+		i=location[iloc].track;
+		if (i>=edsk->tracknumber) {
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"EDSK CHECK error, track %d cannot be processed as the floppy image has %d track(s)\n",i,edsk->tracknumber);
+			return;
+		}
+		// unformated special case
+		if (edsk->track[i*edsk->sidenumber+side].unformated) {
+			rasm_printf(ae,KWARNING"[%s:%d] Warning: Track %d wasn't formated, nothing to check!\n",GetCurrentFile(ae),ae->wl[ae->idx].l,i);
+			if (ae->erronwarn) MaxError(ae);
+		} else {
+			if (location[iloc].istrack) {
+				// check track
+				for (j=0;j<edsk->track[i*edsk->sidenumber+side].sectornumber && size;j++) {
+					for (k=0;k<edsk->track[i*edsk->sidenumber+side].sector[j].length && size;k++) {
+						if (edsk->track[i*edsk->sidenumber+side].sector[j].data[k]!=ae->mem[zebank][offset]) {
+							MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"EDSK CHECK error track %d offset #%04X\n",i,offset);
+							return;
+						}
+						offset++;
+						size--;
+					}
+				}
+			} else {
+				// check sector
+				int wasfound=0;
+				for (j=0;j<edsk->track[i*edsk->sidenumber+side].sectornumber;j++) {
+					if (edsk->track[i*edsk->sidenumber+side].sector[j].id==location[iloc].sectorID) {
+						for (k=0;k<edsk->track[i*edsk->sidenumber+side].sector[j].length && size;k++) {
+							if (edsk->track[i*edsk->sidenumber+side].sector[j].data[k]!=ae->mem[zebank][offset]) {
+								MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"EDSK CHECK error track %d sector #%02X offset #%04X\n",i,location[iloc].sectorID,offset);
+								return;
+							}
+							offset++;
+							size--;
+						}
+						wasfound=1;
+					}
+				}
+				if (!wasfound) {
+					MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"EDSK CHECK error, sector #%02X track %d not found!\n",location[iloc].sectorID,i);
+				}
+			}
+		}
+	}
+
+
+	MemFree(location);
+	edsktool_EDSK_write_file(edsk,action->filename);
+	__edsk_free(ae,edsk);
+}
 void __edsk_drop(struct s_assenv *ae, struct s_edsk_action *action) {
 	struct s_edsk_global_struct *edsk;
 	struct s_edsk_location *location;
@@ -15599,6 +16056,7 @@ void __edsk_writesect(struct s_assenv *ae, struct s_edsk_action *action) {
  * EDSK    RESIZE,'filename.dsk','location',<size>,...
  * EDSK   REORDER,'filename.dsk','location',position,...
  * EDSK     MERGE,'filename.dsk:side','filename.dsk:side','outputfilename.dsk'
+ * EDSK     CHECK,'filename.dsk','location',<size>,<start_addr> @@TODO => la doc!
 ***************************************************************************************************************************/
 void __EDSK(struct s_assenv *ae) {
 	if (!ae->wl[ae->idx].t && !ae->wl[ae->idx+1].t) {
@@ -15610,7 +16068,8 @@ void __EDSK(struct s_assenv *ae) {
 		// which action?
 		switch (ae->wl[ae->idx+1].w[0]) {
 			case 'A':if (strcmp(ae->wl[ae->idx+1].w,"ADD")==0)	curaction.action=E_EDSK_ACTION_ADD; else cmderr=1;break; // add sector
-			case 'C':if (strcmp(ae->wl[ae->idx+1].w,"CREATE")==0)	curaction.action=E_EDSK_ACTION_CREATE; else cmderr=1;break; // nombre de pistes + format éventuel
+			case 'C':if (strcmp(ae->wl[ae->idx+1].w,"CREATE")==0)	curaction.action=E_EDSK_ACTION_CREATE; else // nombre de pistes + format éventuel
+			         if (strcmp(ae->wl[ae->idx+1].w,"CHECK")==0)	curaction.action=E_EDSK_ACTION_CHECK; else cmderr=1;break; // location, size, memory address
 			case 'D':if (strcmp(ae->wl[ae->idx+1].w,"DROP")==0)	curaction.action=E_EDSK_ACTION_DROP; else cmderr=1;break; // drop track or sector
 			case 'G':if (strcmp(ae->wl[ae->idx+1].w,"GAPFIX")==0)	curaction.action=E_EDSK_ACTION_GAPFIX; else cmderr=1;break; // fix GAP to fit an ideal track
 			case 'M':if (strcmp(ae->wl[ae->idx+1].w,"MERGE")==0)	curaction.action=E_EDSK_ACTION_MERGE; else // merge edsk
@@ -15629,7 +16088,7 @@ void __EDSK(struct s_assenv *ae) {
 		// some action need more than one filename
 		switch (curaction.action) {
 			case E_EDSK_ACTION_ADD: case E_EDSK_ACTION_CREATE: case E_EDSK_ACTION_DROP: case E_EDSK_ACTION_MAP: case E_EDSK_ACTION_REORDER:
-			case E_EDSK_ACTION_RESIZE: case E_EDSK_ACTION_READSECT: case E_EDSK_ACTION_WRITESECT: case E_EDSK_ACTION_GAPFIX:
+			case E_EDSK_ACTION_RESIZE: case E_EDSK_ACTION_READSECT: case E_EDSK_ACTION_WRITESECT: case E_EDSK_ACTION_GAPFIX: case E_EDSK_ACTION_CHECK:
 				nbfilename=1;break;
 			case E_EDSK_ACTION_UPGRADE:
 				nbfilename=2;break;
@@ -15687,6 +16146,11 @@ void __EDSK(struct s_assenv *ae) {
 			case E_EDSK_ACTION_WRITESECT:
 			case E_EDSK_ACTION_ADD:
 			case E_EDSK_ACTION_GAPFIX:
+			case E_EDSK_ACTION_CHECK:
+				if (curaction.action==E_EDSK_ACTION_CHECK && curaction.nbparam==5) {
+					curaction.isize  =RoundComputeExpression(ae,ae->wl[ae->idx+4].w,ae->outputadr,0,0);
+					curaction.ioffset=RoundComputeExpression(ae,ae->wl[ae->idx+5].w,ae->outputadr,0,0);
+				}
 				if (curaction.action==E_EDSK_ACTION_GAPFIX && curaction.nbparam==4) {
 					ExpressionFastTranslate(ae,&ae->wl[ae->idx+4].w,1); // track conversion
 				}
@@ -15717,6 +16181,7 @@ void PopAllEDSK(struct s_assenv *ae) {
 			case E_EDSK_ACTION_DROP:	__edsk_drop(ae,&ae->edsk_action[i]);break;
 			case E_EDSK_ACTION_WRITESECT:	__edsk_writesect(ae,&ae->edsk_action[i]);break;
 			case E_EDSK_ACTION_ADD:		__edsk_add(ae,&ae->edsk_action[i]);break;
+			case E_EDSK_ACTION_CHECK:	__edsk_check(ae,&ae->edsk_action[i]);break;
 			default:MakeError(ae,0,"(PopAllEDSK)",0,"internal error during EDSK deferred execution, please report\n");
 				break;
 		}
@@ -21053,6 +21518,14 @@ void __SAVE(struct s_assenv *ae) {
 										default:
 											cursave.face=0;
 											break;
+									}
+								}
+								if (!ae->wl[ae->idx+5].t) {
+						 			if (strncmp(ae->wl[ae->idx+6].w,"PROT",4)==0) cursave.iprotect=ae->idx+6; else
+						 			if (strcmp(ae->wl[ae->idx+6].w,"HIDDEN")==0) cursave.ihidden=ae->idx+6;
+									if (!ae->wl[ae->idx+6].t) {
+										if (strncmp(ae->wl[ae->idx+7].w,"PROT",4)==0) cursave.iprotect=ae->idx+7; else
+										if (strcmp(ae->wl[ae->idx+7].w,"HIDDEN")==0) cursave.ihidden=ae->idx+7;
 									}
 								}
 							} else {
@@ -28138,6 +28611,19 @@ struct s_autotest_keyword autotest_keyword[]={
 	{"defb 'virgule\\\ndessous'",1},
 	{"nop : defb ''",0},{"nop : str ''",0}, // empty strings are OK but will warn user
 	{"nop : defb 'grouik','','pifou'",0},{"nop : str 'grouik','','pifou'",0},
+	{"ixabelle=10: xor (ixabelle)*5",0},
+	{"ixabelle=10: or (ixabelle)*5",0},
+	{"ixabelle=10: and (ixabelle)*5",0},
+	{"ixabelle=10: sub (ixabelle)*5",0},
+	{"ixabelle=10: add (ixabelle)*5",0},
+	{"ixabelle=10: adc (ixabelle)*5",0},
+	{"ixabelle=10: sbc (ixabelle)*5",0},
+	{"ixabelle=10: bit (ixabelle)-5,a",0},
+	{"ixabelle=10: res (ixabelle)-5,a",0},
+	{"ixabelle=10: set (ixabelle)-5,a",0},
+	{"ixabelle=10: ld a,(ixabelle)-5",0},
+	{"ixabelle=10: ld (hl),(ixabelle)-5",0},
+
 	/*
 	 *
 	 * will need to test resize + format then meta review test!
