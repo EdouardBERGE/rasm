@@ -30071,6 +30071,68 @@ printf("testing EDSK readfile\n");
 	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
 printf("testing EDSK delfile\n");
 
+
+
+#define AUTOTEST_EDSK_READFILE00V "EDSK create,'rasmoutput_test.dsk',VENDOR,OVERWRITE:bank" \
+":defs 4096,#DD: defs 16384-4096,#EE: defs 24000,#FF:"\
+"save 'g4k.bin',0,4096,DSK,'rasmoutput_test.dsk': save 'g16k.bin',0,16384,DSK,'rasmoutput_test.dsk': save 'g36k.bin',0,1024*36,DSK,'rasmoutput_test.dsk' "
+
+	ret=RasmAssemble(AUTOTEST_EDSK_READFILE00V,strlen(AUTOTEST_EDSK_READFILE00V),&opcode,&opcodelen);
+	if (!ret) {} else {printf("Autotest %03d ERROR (testing EDSK create+save+overwrite) vendor\n",cpt);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing EDSK create+save+overwrite (vendor)\n");
+
+#define AUTOTEST_EDSK_READFILE01V "contreMesure:"\
+"defb #00,#47,#34,#4b,#20,#20,#20,#20,#20,#42,#49,#4e,#00,#00,#00,#21 :"\
+"defb #02,#03,#04,#05,#06,#00,#00,#00,#00,#00,#00,#00,#00,#00,#00,#00 :"\
+"defb #00,#47,#31,#36,#4b,#20,#20,#20,#20,#42,#49,#4e,#00,#00,#00,#80 :"\
+"defb #07,#08,#09,#0a,#0b,#0c,#0d,#0e,#0f,#10,#11,#12,#13,#14,#15,#16:"\
+"defb #00,#47,#31,#36,#4b,#20,#20,#20,#20,#42,#49,#4e,#01,#00,#00,#01:"\
+"defb #17,#00,#00,#00,#00,#00,#00,#00,#00,#00,#00,#00,#00,#00,#00,#00:"\
+"defb #00,#47,#33,#36,#4b,#20,#20,#20,#20,#42,#49,#4e,#00,#00,#00,#80:"\
+"defb #18,#19,#1a,#1b,#1c,#1d,#1e,#1f,#20,#21,#22,#23,#24,#25,#26,#27:"\
+"defb #00,#47,#33,#36,#4b,#20,#20,#20,#20,#42,#49,#4e,#01,#00,#00,#80:"\
+"defb #28,#29,#2a,#2b,#2c,#2d,#2e,#2f,#30,#31,#32,#33,#34,#35,#36,#37:"\
+"defb #00,#47,#33,#36,#4b,#20,#20,#20,#20,#42,#49,#4e,#02,#00,#00,#21:"\
+"defb #38,#39,#3a,#3b,#3c,#00,#00,#00,#00,#00,#00,#00,#00,#00,#00,#00:"\
+"lafin:"\
+"edsk check,'rasmoutput_test.dsk','2:#41',lafin-contreMesure,contreMesure"
+
+	ret=RasmAssemble(AUTOTEST_EDSK_READFILE01V,strlen(AUTOTEST_EDSK_READFILE01V),&opcode,&opcodelen);
+	if (!ret && opcodelen==6*32) {} else {printf("Autotest %03d ERROR (testing EDSK check+generated edsk) vendor\n",cpt);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing EDSK check+generated edsk (vendor)\n");
+
+	ret=RasmAssemble(AUTOTEST_EDSK_READFILE02,strlen(AUTOTEST_EDSK_READFILE02),&opcode,&opcodelen);
+	if (!ret && opcodelen==16384-4096) {} else {printf("Autotest %03d ERROR (testing EDSK readfile) vendor\n",cpt);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing EDSK readfile on vendor\n");
+
+#define AUTOTEST_EDSK_READFILE03V "EDSK delfile,'rasmoutput_test.dsk','g4k.bin':"\
+"EDSK delfile,'rasmoutput_test.dsk','g16k.bin':"\
+"EDSK delfile,'rasmoutput_test.dsk','g36k.bin':"\
+"contreMesure:"\
+"defb #E5,#47,#34,#4b,#20,#20,#20,#20,#20,#42,#49,#4e,#00,#00,#00,#21:"\
+"defb #02,#03,#04,#05,#06,#00,#00,#00,#00,#00,#00,#00,#00,#00,#00,#00:"\
+"defb #E5,#47,#31,#36,#4b,#20,#20,#20,#20,#42,#49,#4e,#00,#00,#00,#80:"\
+"defb #07,#08,#09,#0a,#0b,#0c,#0d,#0e,#0f,#10,#11,#12,#13,#14,#15,#16:"\
+"defb #E5,#47,#31,#36,#4b,#20,#20,#20,#20,#42,#49,#4e,#01,#00,#00,#01:"\
+"defb #17,#00,#00,#00,#00,#00,#00,#00,#00,#00,#00,#00,#00,#00,#00,#00:"\
+"defb #E5,#47,#33,#36,#4b,#20,#20,#20,#20,#42,#49,#4e,#00,#00,#00,#80:"\
+"defb #18,#19,#1a,#1b,#1c,#1d,#1e,#1f,#20,#21,#22,#23,#24,#25,#26,#27:"\
+"defb #E5,#47,#33,#36,#4b,#20,#20,#20,#20,#42,#49,#4e,#01,#00,#00,#80:"\
+"defb #28,#29,#2a,#2b,#2c,#2d,#2e,#2f,#30,#31,#32,#33,#34,#35,#36,#37:"\
+"defb #E5,#47,#33,#36,#4b,#20,#20,#20,#20,#42,#49,#4e,#02,#00,#00,#21:"\
+"defb #38,#39,#3a,#3b,#3c,#00,#00,#00,#00,#00,#00,#00,#00,#00,#00,#00:"\
+"defb #E5:"\
+"lafin:"\
+"edsk check,'rasmoutput_test.dsk','2:#41',lafin-contreMesure,contreMesure"
+
+	ret=RasmAssemble(AUTOTEST_EDSK_READFILE03V,strlen(AUTOTEST_EDSK_READFILE03V),&opcode,&opcodelen);
+	if (!ret && opcodelen==6*32+1) {} else {printf("Autotest %03d ERROR (testing EDSK delfile) vendor\n",cpt);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing EDSK delfile on vendor\n");
+
         ret=RasmAssemble(AUTOTEST_UNDERVAR,strlen(AUTOTEST_UNDERVAR),&opcode,&opcodelen);
         if (!ret && opcodelen==4) {} else {printf("Autotest %03d ERROR (var starting with _)\n",cpt);exit(-1);}
 	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
