@@ -10841,14 +10841,11 @@ void _JP(struct s_assenv *ae) {
 			case CRC_IX:case CRC_MIX:___output(ae,0xDD);___output(ae,0xE9);ae->nop+=2;ae->tick+=8;break;
 			case CRC_IY:case CRC_MIY:___output(ae,0xFD);___output(ae,0xE9);ae->nop+=2;ae->tick+=8;break;
 			default:
-				if (strncmp(ae->wl[ae->idx+1].w,"(IX",3)==0 || strncmp(ae->wl[ae->idx+1].w,"(IY",3)==0) {
-					MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"JP (IX) or JP (IY) only\n");
-				} else {
-					___output(ae,0xC3);
-					PushExpression(ae,ae->idx+1,E_EXPRESSION_J16);
-					ae->tick+=10;
-					ae->nop+=3;
-				}
+				EnforceNoAddressingMode(ae->idx+1);
+				___output(ae,0xC3);
+				PushExpression(ae,ae->idx+1,E_EXPRESSION_J16);
+				ae->tick+=10;
+				ae->nop+=3;
 		}
 		ae->idx++;
 		ae->deadend=1;
@@ -28808,7 +28805,8 @@ struct s_autotest_keyword autotest_keyword[]={
 	{"nop : defb ''",0},{"nop : str ''",0}, // empty strings are OK but will warn user
 	{"nop : defb 'grouik','','pifou'",0},{"nop : str 'grouik','','pifou'",0},
 	{"ixabelle=10: xor (ixabelle)*5",0},
-	{"ixabelle=10: or (ixabelle)*5",0},
+	{"ixabelle=10: or  (ixabelle)*5",0},
+	{"ixabelle=10: cp  (ixabelle)*5",0},
 	{"ixabelle=10: and (ixabelle)*5",0},
 	{"ixabelle=10: sub (ixabelle)*5",0},
 	{"ixabelle=10: add (ixabelle)*5",0},
@@ -28820,6 +28818,28 @@ struct s_autotest_keyword autotest_keyword[]={
 	{"ixabelle=10: ld a,(ixabelle)-5",0},
 	{"ixabelle=10: ld (hl),(ixabelle)-5",0},
 
+	{"iyabelle=10: xor (iyabelle)*5",0},
+	{"iyabelle=10: or  (iyabelle)*5",0},
+	{"iyabelle=10: cp  (iyabelle)*5",0},
+	{"iyabelle=10: and (iyabelle)*5",0},
+	{"iyabelle=10: sub (iyabelle)*5",0},
+	{"iyabelle=10: add (iyabelle)*5",0},
+	{"iyabelle=10: adc (iyabelle)*5",0},
+	{"iyabelle=10: sbc (iyabelle)*5",0},
+	{"iyabelle=10: bit (iyabelle)-5,a",0},
+	{"iyabelle=10: res (iyabelle)-5,a",0},
+	{"iyabelle=10: set (iyabelle)-5,a",0},
+	{"iyabelle=10: ld a,(iyabelle)-5",0},
+	{"iyabelle=10: ld (hl),(iyabelle)-5",0},
+
+	{"ixabelle=10: jp (ixabelle+2)*5",0},
+	{"ixabelle=10: jp z,(ixabelle+2)*5",0},
+	{"iyabelle=10: jp (iyabelle+2)*5",0},
+	{"iyabelle=10: jp z,(iyabelle+2)*5",0},
+	{"jp (ix) : jp ix",0}, // is ok
+	{"jp (iy) : jp iy",0}, // is ok
+	{"jp z,(ix)",1}, // must fail
+	{"jp z,(iy)",1}, // must fail
 	/*
 	 *
 	 * will need to test resize + format then meta review test!
