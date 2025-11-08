@@ -254,14 +254,14 @@ E_COMPUTE_OPERATION_ATAN2=52,
 E_COMPUTE_OPERATION_HYPOT=53,
 E_COMPUTE_OPERATION_LDEXP=54,
 E_COMPUTE_OPERATION_FDIM=55,  // différence positive
-E_COMPUTE_OPERATION_STEP=56, // seuil, valeur dessous 0, dessus 1
+E_COMPUTE_OPERATION_FSTEP=56, // seuil, valeur dessous 0, dessus 1
 E_COMPUTE_OPERATION_FMAX=57,
 E_COMPUTE_OPERATION_FMIN=58,
 E_COMPUTE_OPERATION_CLAMP=60, // x min,max contraindre dans l'intervale
 E_COMPUTE_OPERATION_LERP=61, // a,b,x interpolation linéaire  a+x*(b-a)
 E_COMPUTE_OPERATION_ISGREATER=62,
 E_COMPUTE_OPERATION_ISLESS=63, 
-E_COMPUTE_OPERATION_REMAINDER=64,
+E_COMPUTE_OPERATION_FREMAIN=64,
 // noise x,y,z (perlin 2D/3D) => répétitif
 // rnd borné (min,max)  mod(rnd,max-min)+min
 // wrap(min,max,x) faire boucler valeur dans l'intervale mod(x,max-min)+min
@@ -1348,14 +1348,14 @@ struct s_math_keyword math_keyword[]={
 {"HYPOT",0,0,E_COMPUTE_OPERATION_HYPOT},
 {"LDEXP",0,0,E_COMPUTE_OPERATION_LDEXP},
 {"FDIM",0,0,E_COMPUTE_OPERATION_FDIM},
-{"STEP",0,0,E_COMPUTE_OPERATION_STEP},
+{"FSTEP",0,0,E_COMPUTE_OPERATION_FSTEP},
 {"FMAX",0,0,E_COMPUTE_OPERATION_FMAX},
 {"FMIN",0,0,E_COMPUTE_OPERATION_FMIN},
 {"CLAMP",0,0,E_COMPUTE_OPERATION_CLAMP},
 {"LERP",0,0,E_COMPUTE_OPERATION_LERP},
 {"ISGREATER",0,0,E_COMPUTE_OPERATION_ISGREATER},
 {"ISLESS",0,0,E_COMPUTE_OPERATION_ISLESS},
-{"REMAINDER",0,0,E_COMPUTE_OPERATION_REMAINDER},
+{"FREMAIN",0,0,E_COMPUTE_OPERATION_FREMAIN},
 
 {"GETNOP",0,0,E_COMPUTE_OPERATION_GETNOP},
 {"GETTICK",0,0,E_COMPUTE_OPERATION_GETTICK},
@@ -5880,14 +5880,14 @@ char *getOperatorStr(int operator) {
 		case E_COMPUTE_OPERATION_HYPOT:strcpy(opStr,"hypot");break;
 		case E_COMPUTE_OPERATION_LDEXP:strcpy(opStr,"ldexp");break;
 		case E_COMPUTE_OPERATION_FDIM:strcpy(opStr,"fdim");break;
-		case E_COMPUTE_OPERATION_STEP:strcpy(opStr,"step");break;
+		case E_COMPUTE_OPERATION_FSTEP:strcpy(opStr,"fstep");break;
 		case E_COMPUTE_OPERATION_FMAX:strcpy(opStr,"fmax");break;
 		case E_COMPUTE_OPERATION_FMIN:strcpy(opStr,"fmin");break;
 		case E_COMPUTE_OPERATION_CLAMP:strcpy(opStr,"clamp");break;
 		case E_COMPUTE_OPERATION_LERP:strcpy(opStr,"lerp");break;
 		case E_COMPUTE_OPERATION_ISGREATER:strcpy(opStr,"isgreater");break;
 		case E_COMPUTE_OPERATION_ISLESS:strcpy(opStr,"isless");break;
-		case E_COMPUTE_OPERATION_REMAINDER:strcpy(opStr,"remainder");break;
+		case E_COMPUTE_OPERATION_FREMAIN:strcpy(opStr,"fremain");break;
 		case E_COMPUTE_OPERATION_GETNOP:strcpy(opStr,"getnop");break;
 		case E_COMPUTE_OPERATION_GETTICK:strcpy(opStr,"gettick");break;
 		case E_COMPUTE_OPERATION_DURATION:strcpy(opStr,"duration");break;
@@ -7032,14 +7032,14 @@ printf("DUMP des labels\n");
 			case E_COMPUTE_OPERATION_HYPOT:printf("hypot ");break;
 			case E_COMPUTE_OPERATION_LDEXP:printf("ldexp ");break;
 			case E_COMPUTE_OPERATION_FDIM:printf("fdim ");break;
-			case E_COMPUTE_OPERATION_STEP:printf("step ");break;
+			case E_COMPUTE_OPERATION_FSTEP:printf("fstep ");break;
 			case E_COMPUTE_OPERATION_FMAX:printf("fmax ");break;
 			case E_COMPUTE_OPERATION_FMIN:printf("fmin ");break;
 			case E_COMPUTE_OPERATION_CLAMP:printf("clamp ");break;
 			case E_COMPUTE_OPERATION_LERP:printf("lerp ");break;
 			case E_COMPUTE_OPERATION_ISGREATER:printf("isgreater ");break;
 			case E_COMPUTE_OPERATION_ISLESS:printf("isless ");break;
-			case E_COMPUTE_OPERATION_REMAINDER:printf("remainder ");break;
+			case E_COMPUTE_OPERATION_FREMAIN:printf("fremain ");break;
 			case E_COMPUTE_OPERATION_GETNOP:printf("getnop ");break;
 			case E_COMPUTE_OPERATION_GETTICK:printf("gettick ");break;
 			case E_COMPUTE_OPERATION_DURATION:printf("duration ");break;
@@ -7177,14 +7177,14 @@ printf("operator string=%X\n",ae->computectx->operatorstack[o2].string);
 			case E_COMPUTE_OPERATION_HYPOT:
 			case E_COMPUTE_OPERATION_LDEXP:
 			case E_COMPUTE_OPERATION_FDIM:
-			case E_COMPUTE_OPERATION_STEP:
+			case E_COMPUTE_OPERATION_FSTEP:
 			case E_COMPUTE_OPERATION_FMAX:
 			case E_COMPUTE_OPERATION_FMIN:
 			case E_COMPUTE_OPERATION_CLAMP:
 			case E_COMPUTE_OPERATION_LERP:
 			case E_COMPUTE_OPERATION_ISGREATER:
 			case E_COMPUTE_OPERATION_ISLESS:
-			case E_COMPUTE_OPERATION_REMAINDER:
+			case E_COMPUTE_OPERATION_FREMAIN:
 				// with strings
 			case E_COMPUTE_OPERATION_GETNOP:
 			case E_COMPUTE_OPERATION_GETTICK:
@@ -7340,9 +7340,9 @@ printf("final POP string=%X\n",ae->computectx->operatorstack[nboperatorstack+1].
 									MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"FDIM requires 2 parameters\n");
 							       }
 							       break;
-				case E_COMPUTE_OPERATION_STEP: if (paccu>1) {accu[paccu-2]=(accu[paccu-2]<=accu[paccu-1])?1:0; paccu--;
+				case E_COMPUTE_OPERATION_FSTEP: if (paccu>1) {accu[paccu-2]=(accu[paccu-2]<=accu[paccu-1])?1:0; paccu--;
 							       } else {
-									MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"STEP requires 2 parameters\n");
+									MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"FSTEP requires 2 parameters\n");
 							       }
 							       break;
 				case E_COMPUTE_OPERATION_FMAX: if (paccu>1) {accu[paccu-2]=(accu[paccu-2]<accu[paccu-1])?(int)accu[paccu-1]&workinterval:(int)accu[paccu-2]&workinterval; paccu--;
@@ -7381,9 +7381,9 @@ printf("final POP string=%X\n",ae->computectx->operatorstack[nboperatorstack+1].
 									MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"ISLESS requires 2 parameters\n");
 							       }
 							       break;
-				case E_COMPUTE_OPERATION_REMAINDER: if (paccu>1) {accu[paccu-2]=(int)remainder(accu[paccu-2],accu[paccu-1])&workinterval; paccu--;
+				case E_COMPUTE_OPERATION_FREMAIN: if (paccu>1) {accu[paccu-2]=(int)remainder(accu[paccu-2],accu[paccu-1])&workinterval; paccu--;
 							       } else {
-									MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"REMAINDER requires 2 parameters\n");
+									MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"FREMAIN requires 2 parameters\n");
 							       }
 							       break;
 				/* functions with strings */
@@ -7672,9 +7672,9 @@ printf("final POP string=%X\n",ae->computectx->operatorstack[nboperatorstack+1].
 									MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"FDIM requires 2 parameters\n");
 							       }
 							       break;
-				case E_COMPUTE_OPERATION_STEP: if (paccu>1) {accu[paccu-2]=(accu[paccu-2]<=accu[paccu-1])?1:0; paccu--;
+				case E_COMPUTE_OPERATION_FSTEP: if (paccu>1) {accu[paccu-2]=(accu[paccu-2]<=accu[paccu-1])?1:0; paccu--;
 							       } else {
-									MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"STEP requires 2 parameters\n");
+									MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"FSTEP requires 2 parameters\n");
 							       }
 							       break;
 				case E_COMPUTE_OPERATION_FMAX: if (paccu>1) {accu[paccu-2]=(accu[paccu-2]<accu[paccu-1])?accu[paccu-1]:accu[paccu-2]; paccu--;
@@ -7713,9 +7713,9 @@ printf("final POP string=%X\n",ae->computectx->operatorstack[nboperatorstack+1].
 									MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"ISLESS requires 2 parameters\n");
 							       }
 							       break;
-				case E_COMPUTE_OPERATION_REMAINDER: if (paccu>1) {accu[paccu-2]=remainder(accu[paccu-2],accu[paccu-1]); paccu--;
+				case E_COMPUTE_OPERATION_FREMAIN: if (paccu>1) {accu[paccu-2]=remainder(accu[paccu-2],accu[paccu-1]); paccu--;
 							       } else {
-									MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"REMAINDER requires 2 parameters\n");
+									MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"FREMAIN requires 2 parameters\n");
 							       }
 							       break;
 				/* functions with strings */
@@ -28694,14 +28694,14 @@ struct s_autotest_keyword autotest_keyword[]={
 	{"nop : assert hypot(3,4)==5",0},
 	{"nop : a=ldexp(4,5)",0}, // @@TODO
 	{"nop : assert fdim(3.1,5.3)==0 : assert fdim(5.3,3.1)==2.2",0},
-	{"nop : assert step(5,4.9)==0 : assert step(5,5.1)==1",0},
+	{"nop : assert fstep(5,4.9)==0 : assert fstep(5,5.1)==1",0},
 	{"nop : assert fmax(1,2)==2 : assert fmax(2,1)==2",0},
 	{"nop : assert fmin(1,2)==1 : assert fmin(2,1)==1",0},
 	{"nop : assert clamp(33,10,20)==20 : assert clamp(-5,10,20)==10",0},
 	{"nop : assert lerp(0,1,0.5)==0.5 : assert lerp(10,20,0.3)==13",0},
 	{"nop : assert isgreater(5,4)==1 : assert isgreater(4,5)==0",0},
 	{"nop : assert isless(5,4)==0 : assert isless(4,5)==1",0},
-	{"nop : assert remainder(29,9)==2",0},
+	{"nop : assert fremain(29,9)==2",0},
 	{"nop : a=10 and fmin(5,6)",0},
 	{"ld a,10 and fmin(5,6)",0},
 	{"defb 5 and 7,fmin(5,6),5",0},
@@ -28730,9 +28730,9 @@ struct s_autotest_keyword autotest_keyword[]={
 	{"nop : a=fdim(3.1)",1},
 	{"nop : a=5*fdim(3.1)",1},
 	{"nop : a=fdim()",1},
-	{"nop : a=step(5) ",1},
-	{"nop : a=5*step(5) ",1},
-	{"nop : a=step() ",1},
+	{"nop : a=fstep(5) ",1},
+	{"nop : a=5*fstep(5) ",1},
+	{"nop : a=fstep() ",1},
 	{"nop : a=fmax(1)",1},
 	{"nop : a=5*fmax(1)",1},
 	{"nop : a=fmax()",1},
@@ -28754,9 +28754,9 @@ struct s_autotest_keyword autotest_keyword[]={
 	{"nop : a=isless(5)",1},
 	{"nop : a=5*isless(5)",1},
 	{"nop : a=isless()",1},
-	{"nop : a=remainder(29)",1},
-	{"nop : a=5*remainder(29)",1},
-	{"nop : a=remainder()",1},
+	{"nop : a=fremain(29)",1},
+	{"nop : a=5*fremain(29)",1},
+	{"nop : a=fremain()",1},
 
 	{"nop : a=rnd()",1},
 	{"nop : a=5+rnd()",1},
