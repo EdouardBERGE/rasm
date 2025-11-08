@@ -112,9 +112,11 @@ BLOCK *allocate(int bits, int index, int offset, BLOCK *chain);
 
 void assign(BLOCK **ptr, BLOCK *chain);
 
-BLOCK *zx0_optimize(unsigned char *input_data, int input_size, int skip, int offset_limit);
+//BLOCK *zx0_optimize(unsigned char *input_data, int input_size, int skip, int offset_limit);
+//unsigned char *zx0_compress(BLOCK *optimal, unsigned char *input_data, int input_size, int skip, int backwards_mode, int invert_mode, int *output_size, int *delta);
 
-unsigned char *zx0_compress(BLOCK *optimal, unsigned char *input_data, int input_size, int skip, int backwards_mode, int invert_mode, int *output_size, int *delta);
+size_t salvador_compress(const unsigned char *pInputData, unsigned char *pOutBuffer, const size_t nInputSize, const size_t nMaxOutBufferSize,
+   const unsigned int nFlags, const size_t nMaxOffset, const size_t nDictionarySize, void(*progress)(long long nOriginalSize, long long nCompressedSize), void *pStats);
 
 #endif
 
@@ -21494,14 +21496,15 @@ if (curhexbin->crunch) printf("CRUNCHED! (%d)\n",curhexbin->crunch);
 
 								case 70:
 									{
-									int delta,slzlen;
+									unsigned char *input_data;
 
 									if (!ae->nowarning)
-									if (!ae->nocrunchwarning && outputidx>=1024 && MAX_OFFSET_ZX0>5000) rasm_printf(ae,KWARNING"ZX0 is crunching %.1fkb this may take a while, be patient...\n",outputidx/1024.0);
-									newdata=zx0_compress(zx0_optimize(outputdata, outputidx, 0, MAX_OFFSET_ZX0), outputdata, outputidx, 0, 0, 1, &slzlen, &delta);
-									outputidx=slzlen;
-									MemFree(outputdata);
-									outputdata=newdata;
+									if (!ae->nocrunchwarning && outputidx>=20000) rasm_printf(ae,KWARNING"ZX0 is crunching %.1fkb this may take a while, be patient...\n",outputidx/1024.0);
+									input_data=MemMalloc(outputidx);
+									memcpy(input_data,outputdata,outputidx);
+									memset(outputdata,0,outputidx);
+									outputidx=salvador_compress(input_data,outputdata,outputidx,outputidx,0,32640,0,NULL,NULL);
+									MemFree(input_data);
 									#if TRACE_PREPRO
 									rasm_printf(ae,KVERBOSE"crunched with ZX0 into %d byte(s) delta=%d\n",outputidx,delta);
 									#endif
@@ -21509,16 +21512,17 @@ if (curhexbin->crunch) printf("CRUNCHED! (%d)\n",curhexbin->crunch);
 									break;
 								case 71:
 									{
-									int delta,slzlen;
+									unsigned char *input_data;
 
 									if (!ae->nowarning)
-									if (!ae->nocrunchwarning && outputidx>=1024 && MAX_OFFSET_ZX0>5000) rasm_printf(ae,KWARNING"ZX0 is crunching %.1fkb this may take a while, be patient...\n",outputidx/1024.0);
+									if (!ae->nocrunchwarning && outputidx>=20000) rasm_printf(ae,KWARNING"ZX0 is crunching %.1fkb this may take a while, be patient...\n",outputidx/1024.0);
+									input_data=MemMalloc(outputidx);
+									memcpy(input_data,outputdata,outputidx);
+									memset(outputdata,0,outputidx);
+									zx0_reverse(input_data,input_data+outputidx-1);
+									outputidx=salvador_compress(input_data,outputdata,outputidx,outputidx,2 /* FLG_IS_BACKWARD */ ,32640,0,NULL,NULL);
 									zx0_reverse(outputdata,outputdata+outputidx-1);
-									newdata=zx0_compress(zx0_optimize(outputdata, outputidx, 0, MAX_OFFSET_ZX0), outputdata, outputidx, 0, 1, 0,&slzlen, &delta);
-        								zx0_reverse(newdata,newdata+slzlen-1);
-									outputidx=slzlen;
-									MemFree(outputdata);
-									outputdata=newdata;
+									MemFree(input_data);
 									#if TRACE_PREPRO
 									rasm_printf(ae,KVERBOSE"crunched with ZX0 backward into %d byte(s) delta=%d\n",outputidx,delta);
 									#endif
@@ -23263,18 +23267,24 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 							#ifndef NO_3RD_PARTIES
 							if (!ae->nowarning)
 							if (!ae->nocrunchwarning && input_size>=1024 && MAX_OFFSET_ZX0>5000) rasm_printf(ae,KWARNING"ZX0 is crunching %.1fkb this may take a while, be patient...\n",input_size/1024.0);
-							lzdata=zx0_compress(zx0_optimize(input_data, input_size, 0, MAX_OFFSET_ZX0), input_data, input_size, 0, 0, 1,&slzlen, &delta);
-							lzlen=slzlen;
+							//lzdata=zx0_compress(zx0_optimize(input_data, input_size, 0, MAX_OFFSET_ZX0), input_data, input_size, 0, 0, 1,&slzlen, &delta);
+							//lzlen=slzlen;
+							lzdata=MemMalloc(input_size+16);
+							lzlen=salvador_compress(input_data,lzdata,input_size,input_size,0,32640,0,NULL,NULL);
 							#endif
 							break;
 						case 71:
 							#ifndef NO_3RD_PARTIES
 							if (!ae->nowarning)
 							if (!ae->nocrunchwarning && input_size>=1024 && MAX_OFFSET_ZX0>5000) rasm_printf(ae,KWARNING"ZX0 is crunching %.1fkb this may take a while, be patient...\n",input_size/1024.0);
+							//zx0_reverse(input_data,input_data+input_size-1);
+							//lzdata=zx0_compress(zx0_optimize(input_data, input_size, 0, MAX_OFFSET_ZX0), input_data, input_size, 0, 1, 0,&slzlen, &delta);
+       							//zx0_reverse(lzdata,lzdata+slzlen-1);
+							//lzlen=slzlen;
 							zx0_reverse(input_data,input_data+input_size-1);
-							lzdata=zx0_compress(zx0_optimize(input_data, input_size, 0, MAX_OFFSET_ZX0), input_data, input_size, 0, 1, 0,&slzlen, &delta);
+							lzdata=MemMalloc(input_size+16);
+							lzlen=salvador_compress(input_data,lzdata,input_size,input_size,2,32640,0,NULL,NULL);
        							zx0_reverse(lzdata,lzdata+slzlen-1);
-							lzlen=slzlen;
 							#endif
 							break;
 						case 7:
@@ -30939,9 +30949,9 @@ void Usage(int help)
 	#undef FUNC
 	#define FUNC "Usage"
 	
-	printf(KLCYAN"%s - "KLORANGE"%s"KLWHITE"\n(c) 2017 Edouard BERGE (use -n option to display all licenses / -autotest for self-testing)\n",RASM_VERSION,RELEASE_NAME);
+	printf(KLCYAN"%s - "KLORANGE"%s"KLWHITE"\n(c) 2017 Edouard BERGE (use -n option to display all licenses\n",RASM_VERSION,RELEASE_NAME);
 	#ifndef NO_3RD_PARTIES
-	printf(KLGREEN"LZ4 (c) Yann Collet / ZX0 & ZX7 (c) Einar Saukas / Exomizer 2 (c) Magnus Lind / LZSA & AP-Ultra (c) Emmanuel Marty\n"KNORMAL);
+	printf(KLGREEN"Thanks to Yann Collet, Einar Saukas, Magnus Lind and Emmanuel Marty for their respective crunchers\n"KNORMAL);
 	#endif
 	printf("\n");
 	printf(KLWHITE"SYNTAX:"KNORMAL" rasm <inputfile> [options]\n");

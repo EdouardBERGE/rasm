@@ -8,7 +8,7 @@ CFLAGS_3RD = $(CFLAGS) -g -pthread -DNO_3RD_PARTIES
 
 SRC_APUDIR=./apultra-master/src
 SRC_LZSADIR=./lzsa-master/src
-SRC_ZX0DIR=./ZX0-main/src
+SRC_SALVADOR=./salvador/src
 
 APU_FLAGS=-c -O3 -fomit-frame-pointer -I$(SRC_LZSADIR)/libdivsufsort/include -I$(SRC_APUDIR)
 
@@ -35,10 +35,11 @@ LZSA_OBJ+=$(SRC_LZSADIR)/shrink_context.o
 LZSA_OBJ+=$(SRC_LZSADIR)/shrink_inmem.o
 LZSA_OBJ+=$(SRC_LZSADIR)/stream.o
 
-ZX0_FLAGS=-c -O2 -I$(SRC_ZX0DIR)
-ZX0_OBJ =$(SRC_ZX0DIR)/optimize.o
-ZX0_OBJ+=$(SRC_ZX0DIR)/compress.o
-ZX0_OBJ+=$(SRC_ZX0DIR)/memory.o
+SALVADOR_FLAGS=-c -O3 -fomit-frame-pointer -I$(SRC_LZSADIR)/libdivsufsort/include -I$(SRC_SALVADOR)
+
+SALVADOR_OBJ =$(SRC_SALVADOR)/expand.o
+SALVADOR_OBJ+=$(SRC_SALVADOR)/matchfinder.o
+SALVADOR_OBJ+=$(SRC_SALVADOR)/shrink.o
 
 .PHONY: prod third debug clean
 
@@ -48,9 +49,9 @@ third:
 	$(CC) rasm.c $(CFLAGS_3RD)
 
 debug:
-	$(CC) $(SRC_ZX0DIR)/optimize.c $(ZX0_FLAGS)           -o $(SRC_ZX0DIR)/optimize.o
-	$(CC) $(SRC_ZX0DIR)/compress.c $(ZX0_FLAGS)           -o $(SRC_ZX0DIR)/compress.o
-	$(CC) $(SRC_ZX0DIR)/memory.c $(ZX0_FLAGS)             -o $(SRC_ZX0DIR)/memory.o
+	$(CC) $(SRC_SALVADOR)/matchfinder.c $(SALVADOR_FLAGS) -o $(SRC_SALVADOR)/matchfinder.o
+	$(CC) $(SRC_SALVADOR)/expand.c      $(SALVADOR_FLAGS) -o $(SRC_SALVADOR)/expand.o
+	$(CC) $(SRC_SALVADOR)/shrink.c      $(SALVADOR_FLAGS) -o $(SRC_SALVADOR)/shrink.o
 
 	$(CC) $(SRC_APUDIR)/expand.c $(APU_FLAGS)                                -o $(SRC_APUDIR)/expand.o
 	$(CC) $(SRC_APUDIR)/matchfinder.c $(APU_FLAGS)                           -o $(SRC_APUDIR)/matchfinder.o
@@ -74,12 +75,12 @@ debug:
 	$(CC) $(SRC_LZSADIR)/shrink_inmem.c $(LZSA_FLAGS)      -o $(SRC_LZSADIR)/shrink_inmem.o
 	$(CC) $(SRC_LZSADIR)/stream.c $(LZSA_FLAGS)            -o $(SRC_LZSADIR)/stream.o
 
-	$(CC) rasm.c $(CFLAGS_DBG) $(APU_OBJ) $(LZSA_OBJ) $(ZX0_OBJ)
+	$(CC) rasm.c $(CFLAGS_DBG) $(APU_OBJ) $(LZSA_OBJ) $(SALVADOR_OBJ)
 
 prod:
-	$(CC) $(SRC_ZX0DIR)/optimize.c $(ZX0_FLAGS)           -o $(SRC_ZX0DIR)/optimize.o
-	$(CC) $(SRC_ZX0DIR)/compress.c $(ZX0_FLAGS)           -o $(SRC_ZX0DIR)/compress.o
-	$(CC) $(SRC_ZX0DIR)/memory.c $(ZX0_FLAGS)             -o $(SRC_ZX0DIR)/memory.o
+	$(CC) $(SRC_SALVADOR)/matchfinder.c $(SALVADOR_FLAGS) -o $(SRC_SALVADOR)/matchfinder.o
+	$(CC) $(SRC_SALVADOR)/expand.c      $(SALVADOR_FLAGS) -o $(SRC_SALVADOR)/expand.o
+	$(CC) $(SRC_SALVADOR)/shrink.c      $(SALVADOR_FLAGS) -o $(SRC_SALVADOR)/shrink.o
 
 	$(CC) $(SRC_APUDIR)/expand.c $(APU_FLAGS)                                -o $(SRC_APUDIR)/expand.o
 	$(CC) $(SRC_APUDIR)/matchfinder.c $(APU_FLAGS)                           -o $(SRC_APUDIR)/matchfinder.o
@@ -103,20 +104,20 @@ prod:
 	$(CC) $(SRC_LZSADIR)/shrink_inmem.c $(LZSA_FLAGS)      -o $(SRC_LZSADIR)/shrink_inmem.o
 	$(CC) $(SRC_LZSADIR)/stream.c $(LZSA_FLAGS)            -o $(SRC_LZSADIR)/stream.o
 
-	$(CC) rasm.c $(CFLAGS_OPT) $(APU_OBJ) $(LZSA_OBJ) $(ZX0_OBJ)
+	$(CC) rasm.c $(CFLAGS_OPT) $(APU_OBJ) $(LZSA_OBJ) $(SALVADOR_OBJ)
 	strip $(EXEC)
 
 reloadd:
-	$(CC) rasm.c $(CFLAGS_DBG) $(APU_OBJ) $(LZSA_OBJ) $(ZX0_OBJ)
+	$(CC) rasm.c $(CFLAGS_DBG) $(APU_OBJ) $(LZSA_OBJ) $(SALVADOR_OBJ)
 
 reload:
-	$(CC) rasm.c $(CFLAGS_OPT) $(APU_OBJ) $(LZSA_OBJ) $(ZX0_OBJ)
+	$(CC) rasm.c $(CFLAGS_OPT) $(APU_OBJ) $(LZSA_OBJ) $(SALVADOR_OBJ)
 	strip $(EXEC)
 
 release:
-	$(CC) $(SRC_ZX0DIR)/optimize.c $(ZX0_FLAGS)           -o $(SRC_ZX0DIR)/optimize.o
-	$(CC) $(SRC_ZX0DIR)/compress.c $(ZX0_FLAGS)           -o $(SRC_ZX0DIR)/compress.o
-	$(CC) $(SRC_ZX0DIR)/memory.c $(ZX0_FLAGS)             -o $(SRC_ZX0DIR)/memory.o
+	$(CC) $(SRC_SALVADOR)/matchfinder.c $(SALVADOR_FLAGS) -o $(SRC_SALVADOR)/matchfinder.o
+	$(CC) $(SRC_SALVADOR)/expand.c      $(SALVADOR_FLAGS) -o $(SRC_SALVADOR)/expand.o
+	$(CC) $(SRC_SALVADOR)/shrink.c      $(SALVADOR_FLAGS) -o $(SRC_SALVADOR)/shrink.o
 
 	$(CC) $(SRC_APUDIR)/expand.c $(APU_FLAGS)                                -o $(SRC_APUDIR)/expand.o
 	$(CC) $(SRC_APUDIR)/matchfinder.c $(APU_FLAGS)                           -o $(SRC_APUDIR)/matchfinder.o
@@ -139,7 +140,7 @@ release:
 	$(CC) $(SRC_LZSADIR)/shrink_context.c $(LZSA_FLAGS)    -o $(SRC_LZSADIR)/shrink_context.o
 	$(CC) $(SRC_LZSADIR)/shrink_inmem.c $(LZSA_FLAGS)      -o $(SRC_LZSADIR)/shrink_inmem.o
 	$(CC) $(SRC_LZSADIR)/stream.c $(LZSA_FLAGS)            -o $(SRC_LZSADIR)/stream.o
-	$(CC) rasm.c $(CFLAGS_OPT) $(APU_OBJ) $(LZSA_OBJ) $(ZX0_OBJ)
+	$(CC) rasm.c $(CFLAGS_OPT) $(APU_OBJ) $(LZSA_OBJ) $(SALVADOR_OBJ)
 	strip $(EXEC)
 
 clean:

@@ -190,10 +190,20 @@ Optimal* zx7_optimize(unsigned char *input_data, int input_size) {
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-extern unsigned char* output_data;
-extern int output_index;
-extern int bit_index;
-extern int bit_mask;
+//extern unsigned char* output_data;
+//extern int output_index;
+//extern int bit_index;
+//extern int bit_mask;
+
+// previously on ZX0-main
+unsigned char* output_data;
+int output_index;
+int input_index;
+int bit_index;
+int bit_mask;
+int diff;
+int backtrack;
+
 
 void zx7_write_byte(int value) {
     output_data[output_index++] = value;
