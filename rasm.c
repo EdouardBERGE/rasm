@@ -30782,7 +30782,7 @@ printf("testing LZSA-1 (assembling decruncher with crunched lzDataTest) OK\n");c
 	lzCompare=_internal_readbinaryfile("./decrunch/lzDataTest.bin",&lzSize);
 	//printf("nbinstr=%ld\n",myCPU.nbinstructions);
 	if (myCPU.nbinstructions!=57574 || lzSize!=29158 || memcmp(lzCompare,&myCPU.userdata[0]+0x1000,29158)) { printf("Autotest %d ERROR : Z80 emulation for LZSA-1 decrunch failed (size=%d)\n",cpt,lzSize);exit(-1); } 
-printf("testing LZSA-1 (Z80 simulation with dzx0_standard) OK\n");cpt++;
+printf("testing LZSA-1 (Z80 simulation with unlzsa1_fast) OK\n");cpt++;
 
 	FileRemoveIfExists("./decrunch/lzDataTest.lzsa1");
 
@@ -30800,7 +30800,7 @@ printf("testing LZSA-1 (crunching with LZSA1) OK\n");
 	lzCompare=_internal_readbinaryfile("./decrunch/lzDataTest.bin",&lzSize);
 	//printf("nbinstr=%ld\n",myCPU.nbinstructions);
 	if (myCPU.nbinstructions!=57574 || lzSize!=29158 || memcmp(lzCompare,&myCPU.userdata[0]+0x1000,29158)) { printf("Autotest %d ERROR : Z80 emulation for LZSA-1 decrunch failed (size=%d)\n",cpt,lzSize);exit(-1); } 
-printf("testing LZSA-1 (Z80 simulation with dzx0_standard) OK\n");cpt++;
+printf("testing LZSA-1 (Z80 simulation with unlzsa1_fast) OK\n");cpt++;
 
 	FileRemoveIfExists("./decrunch/lzDataTest.lzsa1");
 
@@ -30822,7 +30822,7 @@ printf("testing LZSA-2 (assembling decruncher with crunched lzDataTest) OK\n");c
 	lzCompare=_internal_readbinaryfile("./decrunch/lzDataTest.bin",&lzSize);
 	//printf("nbinstr=%ld\n",myCPU.nbinstructions);
 	if (myCPU.nbinstructions!=130585 || lzSize!=29158 || memcmp(lzCompare,&myCPU.userdata[0]+0x1000,29158)) { printf("Autotest %d ERROR : Z80 emulation for LZSA-2 decrunch failed (size=%d)\n",cpt,lzSize);exit(-1); } 
-printf("testing LZSA-2 (Z80 simulation with dzx0_standard) OK\n");cpt++;
+printf("testing LZSA-2 (Z80 simulation with unlzsa2_fast) OK\n");cpt++;
 
 	FileRemoveIfExists("./decrunch/lzDataTest.lzsa2");
 
@@ -30840,9 +30840,54 @@ printf("testing LZSA-2 (crunching with LZSA2) OK\n");
 	lzCompare=_internal_readbinaryfile("./decrunch/lzDataTest.bin",&lzSize);
 	//printf("nbinstr=%ld\n",myCPU.nbinstructions);
 	if (myCPU.nbinstructions!=130585 || lzSize!=29158 || memcmp(lzCompare,&myCPU.userdata[0]+0x1000,29158)) { printf("Autotest %d ERROR : Z80 emulation for LZSA-2 decrunch failed (size=%d)\n",cpt,lzSize);exit(-1); } 
-printf("testing LZSA-2 (Z80 simulation with dzx0_standard) OK\n");cpt++;
+printf("testing LZSA-2 (Z80 simulation with unlzsa2_fast) OK\n");cpt++;
 
 	FileRemoveIfExists("./decrunch/lzDataTest.lzsa2");
+
+	// AP-Ultra
+
+	#define AUTOTEST_Z80_APULT_CRUNCH "incapu './decrunch/lzDataTest.bin' : save './decrunch/lzDataTest.apu',0,$ "
+	ret=RasmAssemble(AUTOTEST_Z80_APULT_CRUNCH,strlen(AUTOTEST_Z80_APULT_CRUNCH),&opcode,&opcodelen);
+	if (!ret && FileGetSize("./decrunch/lzDataTest.apu")==11032) {} else {printf("Autotest %03d ERROR (crunching lzDataTest with APULTRA ret=%d len=%d)\n",cpt,ret,opcodelen);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing AP-Ultra (crunching with INCAPU) OK\n");
+
+	#define AUTOTEST_Z80_APULT_DECRUNCH "org #100 : ld sp,#38 : ld hl,#C000 : ld de,#1000 : call depack : jr #FE : include 'decrunch/unaplib.asm' : org #C000 : incbin './decrunch/lzDataTest.apu' "
+	ret=RasmAssemble(AUTOTEST_Z80_APULT_DECRUNCH,strlen(AUTOTEST_Z80_APULT_DECRUNCH),&opcode,&opcodelen);
+	if (!ret) {} else {printf("Autotest %03d ERROR (assembling decrunch tester for Z80 simulation)\n",cpt);exit(-1);}
+printf("testing AP-Ultra (assembling decruncher with crunched lzDataTest) OK\n");cpt++;
+	if (!z80_runTest(&myCPU,0x100, 0xFE, 20000000,opcode,0x100,opcodelen,0xFE,0x280)) { printf("Autotest %d ERROR : Z80 emulation took too much time\n",cpt);exit(-1); }
+	if (opcode) MemFree(opcode);opcode=NULL;
+	// check decrunched data is valid
+	lzCompare=_internal_readbinaryfile("./decrunch/lzDataTest.bin",&lzSize);
+	//printf("nbinstr=%ld\n",myCPU.nbinstructions);
+	if (myCPU.nbinstructions!=644166 || lzSize!=29158 || memcmp(lzCompare,&myCPU.userdata[0]+0x1000,29158)) { printf("Autotest %d ERROR : Z80 emulation for APULTRA decrunch failed (size=%d)\n",cpt,lzSize);exit(-1); } 
+printf("testing AP-Ultra (Z80 simulation with unaplib) OK\n");cpt++;
+
+	FileRemoveIfExists("./decrunch/lzDataTest.apu");
+
+	#define AUTOTEST_Z80_APULTi_CRUNCH "lzapu : incbin './decrunch/lzDataTest.bin' : lzclose : lafin : save './decrunch/lzDataTest.apu',0,lafin "
+	ret=RasmAssemble(AUTOTEST_Z80_APULTi_CRUNCH,strlen(AUTOTEST_Z80_APULTi_CRUNCH),&opcode,&opcodelen);
+	if (!ret && FileGetSize("./decrunch/lzDataTest.apu")==11032) {} else {printf("Autotest %03d ERROR (crunching lzDataTest with APULTRA ret=%d len=%d)\n",cpt,ret,opcodelen);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing AP-Ultra (crunching with APULTRA) OK\n");
+
+	#define AUTOTEST_Z80_APULT_DECRUNCHF "org #100 : ld sp,#38 : ld hl,#C000 : ld de,#1000 : call depack : jr #FE : include 'decrunch/unaplib_fast.asm' : depack ApUnpack (void) : org #C000 : incbin './decrunch/lzDataTest.apu' "
+	ret=RasmAssemble(AUTOTEST_Z80_APULT_DECRUNCHF,strlen(AUTOTEST_Z80_APULT_DECRUNCHF),&opcode,&opcodelen);
+	if (!ret) {} else {printf("Autotest %03d ERROR (assembling decrunch tester for Z80 simulation)\n",cpt);exit(-1);}
+printf("testing AP-Ultra (assembling decruncher with crunched lzDataTest) OK\n");cpt++;
+	if (!z80_runTest(&myCPU,0x100, 0xFE, 20000000,opcode,0x100,opcodelen,0xFE,0x280)) { printf("Autotest %d ERROR : Z80 emulation took too much time\n",cpt);exit(-1); }
+	if (opcode) MemFree(opcode);opcode=NULL;
+	// check decrunched data is valid
+	lzCompare=_internal_readbinaryfile("./decrunch/lzDataTest.bin",&lzSize);
+	//printf("nbinstr=%ld\n",myCPU.nbinstructions);
+	if (myCPU.nbinstructions!=259190 || lzSize!=29158 || memcmp(lzCompare,&myCPU.userdata[0]+0x1000,29158)) { printf("Autotest %d ERROR : Z80 emulation for APULTRA fast decrunch failed (size=%d)\n",cpt,lzSize);exit(-1); } 
+printf("testing AP-Ultra (Z80 simulation with unaplib_fast) OK\n");cpt++;
+
+	FileRemoveIfExists("./decrunch/lzDataTest.apu");
+
+
+
 
 #endif
 
