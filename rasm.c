@@ -85,6 +85,7 @@ int MAX_OFFSET_ZX0=32640;
 #ifndef NO_3RD_PARTIES
 #define __FILENAME__ "3rd parties"
 /* 3rd parties compression */
+#include"z80-master/z80.h"
 #include"zx7.h"
 #include"lz4.h"
 #include"exomizer.h"
@@ -117,7 +118,7 @@ void assign(BLOCK **ptr, BLOCK *chain);
 
 size_t salvador_compress(const unsigned char *pInputData, unsigned char *pOutBuffer, const size_t nInputSize, const size_t nMaxOutBufferSize,
    const unsigned int nFlags, const size_t nMaxOffset, const size_t nDictionarySize, void(*progress)(long long nOriginalSize, long long nCompressedSize), void *pStats);
-
+size_t salvador_get_max_compressed_size(const size_t nInputSize);
 #endif
 
 #ifdef __MORPHOS__
@@ -21500,13 +21501,13 @@ if (curhexbin->crunch) printf("CRUNCHED! (%d)\n",curhexbin->crunch);
 
 									if (!ae->nowarning)
 									if (!ae->nocrunchwarning && outputidx>=20000) rasm_printf(ae,KWARNING"ZX0 is crunching %.1fkb this may take a while, be patient...\n",outputidx/1024.0);
-									input_data=MemMalloc(outputidx);
-									memcpy(input_data,outputdata,outputidx);
-									memset(outputdata,0,outputidx);
-									outputidx=salvador_compress(input_data,outputdata,outputidx,outputidx,0,32640,0,NULL,NULL);
+									input_data=MemMalloc(outputidx); memcpy(input_data,outputdata,outputidx); // copy buffer to input
+									outputdata=MemRealloc(outputdata,salvador_get_max_compressed_size(outputidx)); // enlarge output buffer
+									memset(outputdata,0,salvador_get_max_compressed_size(outputidx)); // then raz !
+									outputidx=salvador_compress(input_data,outputdata,outputidx,salvador_get_max_compressed_size(outputidx),1,32640,0,NULL,NULL);
 									MemFree(input_data);
 									#if TRACE_PREPRO
-									rasm_printf(ae,KVERBOSE"crunched with ZX0 into %d byte(s) delta=%d\n",outputidx,delta);
+									rasm_printf(ae,KVERBOSE"crunched with ZX0 into %d byte(s)\n",outputidx);
 									#endif
 									}
 									break;
@@ -21520,11 +21521,11 @@ if (curhexbin->crunch) printf("CRUNCHED! (%d)\n",curhexbin->crunch);
 									memcpy(input_data,outputdata,outputidx);
 									memset(outputdata,0,outputidx);
 									zx0_reverse(input_data,input_data+outputidx-1);
-									outputidx=salvador_compress(input_data,outputdata,outputidx,outputidx,2 /* FLG_IS_BACKWARD */ ,32640,0,NULL,NULL);
+									outputidx=salvador_compress(input_data,outputdata,outputidx,outputidx,1+2 /* FLG_IS_BACKWARD */ ,32640,0,NULL,NULL);
 									zx0_reverse(outputdata,outputdata+outputidx-1);
 									MemFree(input_data);
 									#if TRACE_PREPRO
-									rasm_printf(ae,KVERBOSE"crunched with ZX0 backward into %d byte(s) delta=%d\n",outputidx,delta);
+									rasm_printf(ae,KVERBOSE"crunched with ZX0 backward into %d byte(s)\n",outputidx);
 									#endif
 									}
 									break;
@@ -23270,7 +23271,7 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 							//lzdata=zx0_compress(zx0_optimize(input_data, input_size, 0, MAX_OFFSET_ZX0), input_data, input_size, 0, 0, 1,&slzlen, &delta);
 							//lzlen=slzlen;
 							lzdata=MemMalloc(input_size+16);
-							lzlen=salvador_compress(input_data,lzdata,input_size,input_size,0,32640,0,NULL,NULL);
+							lzlen=salvador_compress(input_data,lzdata,input_size,input_size,1,32640,0,NULL,NULL);
 							#endif
 							break;
 						case 71:
@@ -23283,7 +23284,7 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 							//lzlen=slzlen;
 							zx0_reverse(input_data,input_data+input_size-1);
 							lzdata=MemMalloc(input_size+16);
-							lzlen=salvador_compress(input_data,lzdata,input_size,input_size,2,32640,0,NULL,NULL);
+							lzlen=salvador_compress(input_data,lzdata,input_size,input_size,1+2,32640,0,NULL,NULL);
        							zx0_reverse(lzdata,lzdata+slzlen-1);
 							#endif
 							break;
@@ -28877,12 +28878,36 @@ void MiniDump(unsigned char *opcode, int opcodelen) {
 	}
 	printf("\n");
 }
-						
+
+#ifndef NO_3RD_PARTIES
+int z80_runTest( z80* const z, unsigned short int z80pc, unsigned short int z80pcEnd, long nbInstrMax, unsigned char *binaryData, int dataStart, int dataLen, unsigned short int minPC, unsigned short int maxPC) {
+  z80_init(z);
+  z->pc = z80pc;
+
+  if (dataStart+dataLen<=65536) memcpy(&z->userdata[0]+dataStart,binaryData,dataLen); else { printf("Z80 simulation ERROR : cannot store %d len to #%04X\n",dataLen,dataStart);return 0;}
+
+  while (z->nbinstructions<nbInstrMax && z->pc!=z80pcEnd) {
+    // warning: the following line will output dozens of GB of data.
+    //z80_debug_output(z);
+    z80_step(z);
+    z->nbinstructions++;
+    if (z->pc<minPC || z->pc>maxPC) {printf("z80 PC out of limits!\n");exit(1);}
+  }
+
+  if (z->pc==z80pcEnd) return 1; else return 0;
+}
+#endif
+
 void RasmAutotest(void)
 {
 	#undef FUNC
 	#define FUNC "RasmAutotest"
 
+#ifndef NO_3RD_PARTIES
+	z80 myCPU;
+	unsigned char *lzCompare;
+	int lzSize;
+#endif
 	struct s_parameter param;
 	struct s_rasm_info *debug;
 	unsigned char *opcode=NULL;
@@ -30679,6 +30704,70 @@ printf("*** LZSA2 and INCLZSA2 tests disabled as there is no LZSA v2 support for
 #endif
 
 
+	/********************************************************************************************
+	 *
+	 *     autotestings with z80 simulator
+	 *
+	 *******************************************************************************************/
+#ifndef NO_3RD_PARTIES
+
+printf("###########################################################\n");
+printf("#  using z80 simulator to validate crunchers+decrunchers  #\n");
+printf("###########################################################\n");
+
+	#define AUTOTEST_Z80_LZX0_CRUNCH "inczx0 './decrunch/lzDataTest.bin' : save './decrunch/lzDataTest.zx0',0,$ "
+	ret=RasmAssemble(AUTOTEST_Z80_LZX0_CRUNCH,strlen(AUTOTEST_Z80_LZX0_CRUNCH),&opcode,&opcodelen);
+	if (!ret && FileGetSize("./decrunch/lzDataTest.zx0")==10860) {} else {printf("Autotest %03d ERROR (crunching lzDataTest with ZX0 ret=%d len=%d)\n",cpt,ret,opcodelen);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing ZX0 (crunching with INCZX0) OK\n");
+
+	#define AUTOTEST_Z80_ZX0_DECRUNCH "org #100 : include './decrunch/dzx0_standard.asm' : ld sp,#38 : ld hl,#C000 : ld de,#1000 : call unzx0 : jr #FE : unzx0 dzx0_standard (void) : org #C000 : incbin './decrunch/lzDataTest.zx0' "
+	ret=RasmAssemble(AUTOTEST_Z80_ZX0_DECRUNCH,strlen(AUTOTEST_Z80_ZX0_DECRUNCH),&opcode,&opcodelen);
+	if (!ret) {} else {printf("Autotest %03d ERROR (assembling decrunch tester for Z80 simulation)\n",cpt);exit(-1);}
+printf("testing ZX0 (assembling decruncher with crunched lzDataTest) OK\n");cpt++;
+	if (!z80_runTest(&myCPU,0x100, 0xFE, 20000000,opcode,0x100,opcodelen,0xFE,0x180)) { printf("Autotest %d ERROR : Z80 emulation took too much time\n",cpt);exit(-1); }
+	if (opcode) MemFree(opcode);opcode=NULL;
+	// check decrunched data is valid
+	lzCompare=_internal_readbinaryfile("./decrunch/lzDataTest.bin",&lzSize);
+	if (myCPU.nbinstructions!=188550 || lzSize!=29158 || memcmp(lzCompare,&myCPU.userdata[0]+0x1000,29158)) { printf("Autotest %d ERROR : Z80 emulation for ZX0 decrunch failed (size=%d)\n",cpt,lzSize);exit(-1); } 
+printf("testing ZX0 (Z80 simulation with dzx0_standard) OK\n");cpt++;
+
+	#define AUTOTEST_Z80_ZX0F_DECRUNCH "org #100 : include './decrunch/dzx0_fast.asm' : ld sp,#38 : ld hl,#C000 : ld de,#1000 : call unzx0 : jr #FE : unzx0 decompresszx0 (void) : org #C000 : incbin './decrunch/lzDataTest.zx0' "
+	ret=RasmAssemble(AUTOTEST_Z80_ZX0F_DECRUNCH,strlen(AUTOTEST_Z80_ZX0F_DECRUNCH),&opcode,&opcodelen);
+	if (!ret) {} else {printf("Autotest %03d ERROR (assembling decrunch tester for Z80 simulation)\n",cpt);exit(-1);}
+printf("testing ZX0 (assembling fast decruncher with crunched lzDataTest) OK\n");cpt++;
+	if (!z80_runTest(&myCPU,0x100, 0xFE, 20000000,opcode,0x100,opcodelen,0xFE,0x280)) { printf("Autotest %d ERROR : Z80 emulation took too much time\n",cpt);exit(-1); }
+	if (opcode) MemFree(opcode);opcode=NULL;
+	// check decrunched data is valid
+	lzCompare=_internal_readbinaryfile("./decrunch/lzDataTest.bin",&lzSize);
+	//printf("nbinstr=%ld\n",myCPU.nbinstructions);
+	if (myCPU.nbinstructions!=150154 || lzSize!=29158 || memcmp(lzCompare,&myCPU.userdata[0]+0x1000,29158)) { printf("Autotest %d ERROR : Z80 emulation for ZX0 decrunch failed (size=%d)\n",cpt,lzSize);exit(-1); } 
+printf("testing ZX0 (Z80 simulation with dzx0_fast) OK\n");cpt++;
+
+	FileRemoveIfExists("./decrunch/lzDataTest.zx0");
+
+	#define AUTOTEST_Z80_LZX0I_CRUNCH "lzx0 : incbin './decrunch/lzDataTest.bin' : lzclose : lafin : save './decrunch/lzDataTest.zx0',0,lafin "
+	ret=RasmAssemble(AUTOTEST_Z80_LZX0I_CRUNCH,strlen(AUTOTEST_Z80_LZX0I_CRUNCH),&opcode,&opcodelen);
+	if (!ret && FileGetSize("./decrunch/lzDataTest.zx0")==10860) {} else {printf("Autotest %03d ERROR (crunching lzDataTest with LZZX0 ret=%d len=%d)\n",cpt,ret,opcodelen);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing ZX0 (crunching with LZX0) OK\n");
+
+	#define AUTOTEST_Z80_ZX0_DECRUNCH "org #100 : include './decrunch/dzx0_standard.asm' : ld sp,#38 : ld hl,#C000 : ld de,#1000 : call unzx0 : jr #FE : unzx0 dzx0_standard (void) : org #C000 : incbin './decrunch/lzDataTest.zx0' "
+	ret=RasmAssemble(AUTOTEST_Z80_ZX0_DECRUNCH,strlen(AUTOTEST_Z80_ZX0_DECRUNCH),&opcode,&opcodelen);
+	if (!ret) {} else {printf("Autotest %03d ERROR (assembling decrunch tester for Z80 simulation)\n",cpt);exit(-1);}
+	if (!z80_runTest(&myCPU,0x100, 0xFE, 20000000,opcode,0x100,opcodelen,0xFE,0x180)) { printf("Autotest %d ERROR : Z80 emulation took too much time\n",cpt);exit(-1); }
+	if (opcode) MemFree(opcode);opcode=NULL;
+	// check decrunched data is valid
+	lzCompare=_internal_readbinaryfile("./decrunch/lzDataTest.bin",&lzSize);
+	if (myCPU.nbinstructions!=188550 || lzSize!=29158 || memcmp(lzCompare,&myCPU.userdata[0]+0x1000,29158)) { printf("Autotest %d ERROR : Z80 emulation for ZX0 decrunch failed (size=%d)\n",cpt,lzSize);exit(-1); } 
+printf("testing decrunch again OK\n");cpt++;
+
+	FileRemoveIfExists("./decrunch/lzDataTest.zx0");
+
+
+#endif
+
+
 	ret=RasmAssemble(AUTOTEST_ECPR1,strlen(AUTOTEST_ECPR1),&opcode,&opcodelen);
 	if (!ret) {} else {printf("Autotest %03d ERROR (extended CPR test 1)\n",cpt);exit(-1);}
 	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
@@ -31113,7 +31202,7 @@ printf(" - LZ4 source repository : https://github.com/lz4/lz4\n");
 
 
 printf("\n\n\n\n");
-printf("******* license for ZX0 / ZX7 cruncher / sources were modified ***********\n\n\n\n");
+printf("******* license for ZX7 cruncher / sources were modified ***********\n\n\n\n");
 printf("BSD 3-Clause License\n");
 printf(" * (c) Copyright 2012/2021 by Einar Saukas. All rights reserved.\n");
 printf(" *\n");
@@ -31169,7 +31258,7 @@ printf(" *   specific prior written permission.\n");
 
 
 printf("\n\n\n\n");
-printf("******* license for AP-Ultra & LZSA crunchers ****************************\n\n\n\n");
+printf("******* license for ZX0 Salvador, AP-Ultra & LZSA crunchers ********************\n\n\n\n");
 printf(" * apultra.c - command line compression utility for the apultra library\n");
 printf(" * Copyright (C) 2019 Emmanuel Marty\n");
 printf(" *          https://github.com/emmanuel-marty\n");
@@ -31203,6 +31292,29 @@ printf(" * With help and support from spke <zxintrospec@gmail.com>\n");
 printf("\n\n\n\n");
 printf("*** license for CDT export (record11() function and some other code extracts) ***\n\n\n\n");
 printf("Author: CNGSoft http://cngsoft.no-ip.org , the tool is in GPL2 licence,\nCopyright (C) 2007 Free Software Foundation, Inc. https://fsf.org\n");
+printf("\n");
+printf("******* license for Z80 emulator, used for testing purpose *****************\n\n\n\n");
+printf("MIT License\n");
+printf("\n");
+printf("Copyright (c) 2019 Nicolas Allemand\n");
+printf("\n");
+printf("Permission is hereby granted, free of charge, to any person obtaining a copy\n");
+printf("of this software and associated documentation files (the \"Software\"), to deal\n");
+printf("in the Software without restriction, including without limitation the rights\n");
+printf("to use, copy, modify, merge, publish, distribute, sublicense, and/or sell\n");
+printf("copies of the Software, and to permit persons to whom the Software is\n");
+printf("furnished to do so, subject to the following conditions:\n");
+printf("\n");
+printf("The above copyright notice and this permission notice shall be included in all\n");
+printf("copies or substantial portions of the Software.\n");
+printf("\n");
+printf("THE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\n");
+printf("IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\n");
+printf("FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\n");
+printf("AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\n");
+printf("LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\n");
+printf("OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\n");
+printf("SOFTWARE.\n");
 printf("\n");
 printf("\n");
 #endif
