@@ -279,7 +279,6 @@ E_COMPUTE_OPERATION_CLAMP=60, // x min,max contraindre dans l'intervale
 E_COMPUTE_OPERATION_LERP=61, // a,b,x interpolation linéaire  a+x*(b-a)
 E_COMPUTE_OPERATION_ISGREATER=62,
 E_COMPUTE_OPERATION_ISLESS=63, 
-E_COMPUTE_OPERATION_FREMAIN=64,
 // noise x,y,z (perlin 2D/3D) => répétitif
 // rnd borné (min,max)  mod(rnd,max-min)+min
 // wrap(min,max,x) faire boucler valeur dans l'intervale mod(x,max-min)+min
@@ -292,13 +291,13 @@ E_COMPUTE_OPERATION_FREMAIN=64,
 // 	x=x+(gx-x)*influence
 //
 /* string functions */
-E_COMPUTE_OPERATION_GETNOP=65,
-E_COMPUTE_OPERATION_GETTICK=66,
-E_COMPUTE_OPERATION_DURATION=67,
-E_COMPUTE_OPERATION_FILESIZE=68,
-E_COMPUTE_OPERATION_GETSIZE=69,
-E_COMPUTE_OPERATION_IS_REGISTER=70,
-E_COMPUTE_OPERATION_END=71
+E_COMPUTE_OPERATION_GETNOP=64,
+E_COMPUTE_OPERATION_GETTICK=65,
+E_COMPUTE_OPERATION_DURATION=66,
+E_COMPUTE_OPERATION_FILESIZE=67,
+E_COMPUTE_OPERATION_GETSIZE=68,
+E_COMPUTE_OPERATION_IS_REGISTER=69,
+E_COMPUTE_OPERATION_END=70
 };
 
 struct s_compute_element {
@@ -1373,7 +1372,7 @@ struct s_math_keyword math_keyword[]={
 {"LERP",0,0,E_COMPUTE_OPERATION_LERP},
 {"ISGREATER",0,0,E_COMPUTE_OPERATION_ISGREATER},
 {"ISLESS",0,0,E_COMPUTE_OPERATION_ISLESS},
-{"FREMAIN",0,0,E_COMPUTE_OPERATION_FREMAIN},
+{"FREMAIN",0,0,E_COMPUTE_OPERATION_FMOD},
 
 {"GETNOP",0,0,E_COMPUTE_OPERATION_GETNOP},
 {"GETTICK",0,0,E_COMPUTE_OPERATION_GETTICK},
@@ -5905,7 +5904,6 @@ char *getOperatorStr(int operator) {
 		case E_COMPUTE_OPERATION_LERP:strcpy(opStr,"lerp");break;
 		case E_COMPUTE_OPERATION_ISGREATER:strcpy(opStr,"isgreater");break;
 		case E_COMPUTE_OPERATION_ISLESS:strcpy(opStr,"isless");break;
-		case E_COMPUTE_OPERATION_FREMAIN:strcpy(opStr,"fremain");break;
 		case E_COMPUTE_OPERATION_GETNOP:strcpy(opStr,"getnop");break;
 		case E_COMPUTE_OPERATION_GETTICK:strcpy(opStr,"gettick");break;
 		case E_COMPUTE_OPERATION_DURATION:strcpy(opStr,"duration");break;
@@ -7057,7 +7055,6 @@ printf("DUMP des labels\n");
 			case E_COMPUTE_OPERATION_LERP:printf("lerp ");break;
 			case E_COMPUTE_OPERATION_ISGREATER:printf("isgreater ");break;
 			case E_COMPUTE_OPERATION_ISLESS:printf("isless ");break;
-			case E_COMPUTE_OPERATION_FREMAIN:printf("fremain ");break;
 			case E_COMPUTE_OPERATION_GETNOP:printf("getnop ");break;
 			case E_COMPUTE_OPERATION_GETTICK:printf("gettick ");break;
 			case E_COMPUTE_OPERATION_DURATION:printf("duration ");break;
@@ -7202,7 +7199,6 @@ printf("operator string=%X\n",ae->computectx->operatorstack[o2].string);
 			case E_COMPUTE_OPERATION_LERP:
 			case E_COMPUTE_OPERATION_ISGREATER:
 			case E_COMPUTE_OPERATION_ISLESS:
-			case E_COMPUTE_OPERATION_FREMAIN:
 				// with strings
 			case E_COMPUTE_OPERATION_GETNOP:
 			case E_COMPUTE_OPERATION_GETTICK:
@@ -7397,11 +7393,6 @@ printf("final POP string=%X\n",ae->computectx->operatorstack[nboperatorstack+1].
 				case E_COMPUTE_OPERATION_ISLESS:    if (paccu>1) {accu[paccu-2]=(accu[paccu-2]<accu[paccu-1])?1:0; paccu--;
 							       } else {
 									MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"ISLESS requires 2 parameters\n");
-							       }
-							       break;
-				case E_COMPUTE_OPERATION_FREMAIN: if (paccu>1) {accu[paccu-2]=(int)remainder(accu[paccu-2],accu[paccu-1])&workinterval; paccu--;
-							       } else {
-									MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"FREMAIN requires 2 parameters\n");
 							       }
 							       break;
 				/* functions with strings */
@@ -7729,11 +7720,6 @@ printf("final POP string=%X\n",ae->computectx->operatorstack[nboperatorstack+1].
 				case E_COMPUTE_OPERATION_ISLESS:    if (paccu>1) {accu[paccu-2]=(accu[paccu-2]<accu[paccu-1])?1:0; paccu--;
 							       } else {
 									MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"ISLESS requires 2 parameters\n");
-							       }
-							       break;
-				case E_COMPUTE_OPERATION_FREMAIN: if (paccu>1) {accu[paccu-2]=remainder(accu[paccu-2],accu[paccu-1]); paccu--;
-							       } else {
-									MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"FREMAIN requires 2 parameters\n");
 							       }
 							       break;
 				/* functions with strings */
