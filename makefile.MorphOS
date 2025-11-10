@@ -7,7 +7,7 @@ CFLAGS=-g -noixemul -Ofast -Wall -W
 #
 SRC_APUDIR=./apultra-master/src
 SRC_LZSADIR=./lzsa-master/src
-SRC_ZX0DIR=./ZX0-main/src
+SRC_SALVADORDIR=./salvador/src
 
 #
 RASM_CFLAGS=$(CFLAGS) -lm
@@ -40,38 +40,44 @@ LZSA_OBJ+=$(SRC_LZSADIR)/shrink_inmem.o
 LZSA_OBJ+=$(SRC_LZSADIR)/stream.o
 
 #
-ZX0_FLAGS=$(CFLAGS) -I$(SRC_ZX0DIR)
+SALVADOR_FLAGS=-c -Ofast -fomit-frame-pointer -I$(SRC_LZSADIR)/libdivsufsort/include -I$(SRC_SALVADORDIR)
 
-ZX0_OBJ =$(SRC_ZX0DIR)/optimize.o
-ZX0_OBJ+=$(SRC_ZX0DIR)/compress.o
-ZX0_OBJ+=$(SRC_ZX0DIR)/memory.o
+SALVADOR_OBJ =$(SRC_SALVADORDIR)/expand.o
+SALVADOR_OBJ+=$(SRC_SALVADORDIR)/matchfinder.o
+SALVADOR_OBJ+=$(SRC_SALVADORDIR)/shrink.o
+
 
 .PHONY: all clean
 
 all: $(EXEC)
 
 clean:
-	@rm $(APU_OBJ) $(LZSA_OBJ) $(ZX0_OBJ) rasm.o
+	@rm $(APU_OBJ) $(LZSA_OBJ) $(SALVADOR_OBJ) rasm.o
 
 #
-$(EXEC): rasm.o $(APU_OBJ) $(LZSA_OBJ) $(ZX0_OBJ)
+$(EXEC): rasm.o $(APU_OBJ) $(LZSA_OBJ) $(SALVADOR_OBJ)
 	@echo "Linking $@..."
-	@$(CC) -o $(EXEC).db rasm.o $(APU_OBJ) $(LZSA_OBJ) $(ZX0_OBJ)
+	@$(CC) -o $(EXEC).db rasm.o $(APU_OBJ) $(LZSA_OBJ) $(SALVADOR_OBJ) z80-master/z80.o
 	@$(STRIP) -o $(EXEC) $(EXEC).db
 	@echo "Done $@"
 
-# ZX0
-$(SRC_ZX0DIR)/optimize.o: $(SRC_ZX0DIR)/optimize.c $(SRC_ZX0DIR)/zx0.h
+# Z80
+z80-master/z80.o: z80-master/z80.c
 	@echo "Compiling $@..."
-	@$(CC) $(ZX0_FLAGS) -c -o $@ $<
+	@$(CC) $(SALVADOR_FLAGS) -c -o $@ $<
 
-$(SRC_ZX0DIR)/compress.o: $(SRC_ZX0DIR)/compress.c $(SRC_ZX0DIR)/zx0.h
+# SALVADOR
+$(SRC_SALVADORDIR)/matchfinder.o: $(SRC_SALVADORDIR)/matchfinder.c
 	@echo "Compiling $@..."
-	@$(CC) $(ZX0_FLAGS) -c -o $@ $<
+	@$(CC) $(SALVADOR_FLAGS) -c -o $@ $<
 
-$(SRC_ZX0DIR)/memory.o: $(SRC_ZX0DIR)/memory.c $(SRC_ZX0DIR)/zx0.h
+$(SRC_SALVADORDIR)/expand.o: $(SRC_SALVADORDIR)/expand.c
 	@echo "Compiling $@..."
-	@$(CC) $(ZX0_FLAGS) -c -o $@ $<
+	@$(CC) $(SALVADOR_FLAGS) -c -o $@ $<
+
+$(SRC_SALVADORDIR)/shrink.o: $(SRC_SALVADORDIR)/shrink.c
+	@echo "Compiling $@..."
+	@$(CC) $(SALVADOR_FLAGS) -c -o $@ $<
 
 #APU
 $(SRC_APUDIR)/expand.o: $(SRC_APUDIR)/expand.c $(SRC_APUDIR)/expand.h $(SRC_APUDIR)/format.h $(SRC_APUDIR)/libapultra.h
