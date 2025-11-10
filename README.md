@@ -13,8 +13,8 @@ Rasm was designed to be damn FAST and handle HUGE projects. On a modern machine,
 
 ## Native format
 
-- CPC cartridge
-- CPC snapshots up to 4M
+- CPC regular and extended cartridges
+- CPC snapshots up to 4M with RAM and ROM support
 - CPC EDSK (as many as you want in update or generation mode)
 - floppy HFE engine to manage ANY particular format
 - CPC/ZX TAPE output
