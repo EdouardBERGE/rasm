@@ -1,5 +1,5 @@
 ;
-; LZ48 decrunch
+; LZ49 decrunch
 ; input
 ; hl  compressed data adress
 ; de  output adress of data
@@ -11,25 +11,6 @@
 ; a     always zero
 ; lx    undetermined
 ; flags (inc a -> 0)
-
-org #8000
-
-; CALL #8000,source,destination
-di
-
-; parameters
-ld h,(ix+3)
-ld l,(ix+2)
-ld d,(ix+1)
-ld e,(ix+0)
-
-call LZ49_decrunch
-
-ei
-ret
-
-
-
 
 
 LZ49_decrunch
