@@ -85,10 +85,26 @@ int MAX_OFFSET_ZX0=32640;
 #ifndef NO_3RD_PARTIES
 #define __FILENAME__ "3rd parties"
 /* 3rd parties compression */
+#ifndef NOAPULTRA
 #include"z80-master/z80.h"
+#endif
 #include"zx7.h"
 #include"lz4.h"
 #include"exomizer.h"
+
+#ifndef remainder
+double remainder(double x, double y) {
+	if (!y) return 0.0; // not really correct but hey...
+	return fmod(x,y);
+}
+#endif
+
+#ifndef fdim
+double fdim(double x,double y) {
+	if (x-y>0) return x-y; else return 0.0;
+}
+#endif
+
 
 void zx0_reverse(unsigned char *first, unsigned char *last) {
     unsigned char c;
@@ -116,9 +132,11 @@ void assign(BLOCK **ptr, BLOCK *chain);
 //BLOCK *zx0_optimize(unsigned char *input_data, int input_size, int skip, int offset_limit);
 //unsigned char *zx0_compress(BLOCK *optimal, unsigned char *input_data, int input_size, int skip, int backwards_mode, int invert_mode, int *output_size, int *delta);
 
+#ifndef _WIN32
 size_t salvador_compress(const unsigned char *pInputData, unsigned char *pOutBuffer, const size_t nInputSize, const size_t nMaxOutBufferSize,
    const unsigned int nFlags, const size_t nMaxOffset, const size_t nDictionarySize, void(*progress)(long long nOriginalSize, long long nCompressedSize), void *pStats);
 size_t salvador_get_max_compressed_size(const size_t nInputSize);
+#endif
 #endif
 
 #ifdef __MORPHOS__
@@ -21494,7 +21512,7 @@ if (curhexbin->crunch) printf("CRUNCHED! (%d)\n",curhexbin->crunch);
 									rasm_printf(ae,KVERBOSE"crunched with LZ4 into %d byte(s)\n",outputidx);
 									#endif
 									break;
-
+#ifndef NOAPULTRA
 								case 70:
 									{
 									unsigned char *input_data;
@@ -21529,6 +21547,7 @@ if (curhexbin->crunch) printf("CRUNCHED! (%d)\n",curhexbin->crunch);
 									#endif
 									}
 									break;
+#endif // NOAPULTRA
 								case 7:
 									{
 									int slzlen;
@@ -21551,6 +21570,7 @@ if (curhexbin->crunch) printf("CRUNCHED! (%d)\n",curhexbin->crunch);
 									rasm_printf(ae,KVERBOSE"crunched with Exomizer into %d byte(s)\n",outputidx);
 									#endif
 									break;
+#ifndef NOAPULTRA
 								case 17:
 									if (!ae->nowarning)
 									if (!ae->nocrunchwarning && outputidx>=1024) rasm_printf(ae,KWARNING"AP-Ultra is crunching %.1fkb this may take a while, be patient...\n",outputidx/1024.0);
@@ -21580,6 +21600,7 @@ if (curhexbin->crunch) printf("CRUNCHED! (%d)\n",curhexbin->crunch);
 									#endif
 									break;
 								#endif
+#endif
 								case 48:
 									newdata=LZ48_crunch(outputdata,outputidx,&outputidx);
 									MemFree(outputdata);
@@ -23264,18 +23285,17 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 				} else {
 					switch (ae->lzsection[i].lzversion) {
 
+	#ifndef NO_3RD_PARTIES
+	#ifndef NOAPULTRA
 						case 70:
-							#ifndef NO_3RD_PARTIES
 							if (!ae->nowarning)
 							if (!ae->nocrunchwarning && input_size>=1024 && MAX_OFFSET_ZX0>5000) rasm_printf(ae,KWARNING"ZX0 is crunching %.1fkb this may take a while, be patient...\n",input_size/1024.0);
 							//lzdata=zx0_compress(zx0_optimize(input_data, input_size, 0, MAX_OFFSET_ZX0), input_data, input_size, 0, 0, 1,&slzlen, &delta);
 							//lzlen=slzlen;
 							lzdata=MemMalloc(input_size+16);
 							lzlen=salvador_compress(input_data,lzdata,input_size,input_size,1,32640,0,NULL,NULL);
-							#endif
 							break;
 						case 71:
-							#ifndef NO_3RD_PARTIES
 							if (!ae->nowarning)
 							if (!ae->nocrunchwarning && input_size>=1024 && MAX_OFFSET_ZX0>5000) rasm_printf(ae,KWARNING"ZX0 is crunching %.1fkb this may take a while, be patient...\n",input_size/1024.0);
 							//zx0_reverse(input_data,input_data+input_size-1);
@@ -23286,40 +23306,37 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 							lzdata=MemMalloc(input_size+16);
 							lzlen=salvador_compress(input_data,lzdata,input_size,input_size,1+2,32640,0,NULL,NULL);
        							zx0_reverse(lzdata,lzdata+slzlen-1);
-							#endif
 							break;
+	#endif
+	#endif
+	#ifndef NO_3RD_PARTIES
 						case 7:
-							#ifndef NO_3RD_PARTIES
 							lzdata=ZX7_compress(zx7_optimize(input_data, input_size), input_data, input_size, &slzlen);
 							lzlen=slzlen;
-							#endif
 							break;
 						case 4:
-							#ifndef NO_3RD_PARTIES
 							lzdata=LZ4_crunch(input_data,input_size,&lzlen);
-							#endif
 							break;
 						case 8:
-							#ifndef NO_3RD_PARTIES
 							if (!ae->nowarning)
 							if (!ae->nocrunchwarning && input_size>=512) rasm_printf(ae,KWARNING"Exomizer is crunching %.1fkb this may take a while, be patient...\n",input_size/1024.0);
 							lzdata=Exomizer_crunch(input_data,input_size,&lzlen);
-							#endif
 							break;
+	#endif
+	#ifndef NO_3RD_PARTIES
+	#ifndef NOAPULTRA
 						case 17:
-							#ifndef NO_3RD_PARTIES
 							if (!ae->nowarning)
 							if (!ae->nocrunchwarning && input_size>=1024) rasm_printf(ae,KWARNING"AP-Ultra is crunching %.1fkb this may take a while, be patient...\n",input_size/1024.0);
 							APULTRA_crunch(input_data,input_size,&lzdata,&lzlen);
-							#endif
 							break;
 						case 18:
-							#ifndef NO_3RD_PARTIES
 							if (!ae->nowarning)
 							if (!ae->nocrunchwarning && input_size>=16384 && ae->lzsection[i].version==2) rasm_printf(ae,KWARNING"LZSA is crunching %.1fkb this may take a while, be patient...\n",input_size/1024.0);
 							LZSA_crunch(input_data,input_size,&lzdata,&lzlen,ae->lzsection[i].version,ae->lzsection[i].minmatch);
-							#endif
 							break;
+	#endif
+	#endif
 						case 48:
 							lzdata=LZ48_crunch(input_data,input_size,&lzlen);
 							break;
@@ -26268,7 +26285,7 @@ if (!idx) printf("L%05d=[%s]\n",l,listing[l].listing);
 								case 0x0D:
 									MakeError(ae,0,ae->filename[listing[l].ifile],listing[l].iline,"A quoted string must follow any INCLUDE/INC* directive\n");
 									break;
-								default:; // win hack
+								default:;
 							}
 						}
 						include=0;
@@ -28880,6 +28897,7 @@ void MiniDump(unsigned char *opcode, int opcodelen) {
 }
 
 #ifndef NO_3RD_PARTIES
+#ifndef NOAPULTRA
 int z80_runTest( z80* const z, unsigned short int z80pc, unsigned short int z80pcEnd, long nbInstrMax, unsigned char *binaryData, int dataStart, int dataLen, unsigned short int minPC, unsigned short int maxPC) {
   z80_init(z);
   z->pc = z80pc;
@@ -28897,6 +28915,7 @@ int z80_runTest( z80* const z, unsigned short int z80pc, unsigned short int z80p
   if (z->pc==z80pcEnd) return 1; else return 0;
 }
 #endif
+#endif
 
 void RasmAutotest(void)
 {
@@ -28904,9 +28923,11 @@ void RasmAutotest(void)
 	#define FUNC "RasmAutotest"
 
 #ifndef NO_3RD_PARTIES
+#ifndef NOAPULTRA
 	z80 myCPU;
 	unsigned char *lzCompare;
 	int lzSize;
+#endif
 #endif
 	struct s_parameter param;
 	struct s_rasm_info *debug;
@@ -30710,6 +30731,7 @@ printf("*** LZSA2 and INCLZSA2 tests disabled as there is no LZSA v2 support for
 	 *
 	 *******************************************************************************************/
 #ifndef NO_3RD_PARTIES
+#ifndef NOAPULTRA
 
 printf("###########################################################\n");
 printf("#  using z80 simulator to validate crunchers+decrunchers  #\n");
@@ -31086,6 +31108,7 @@ printf("testing EXO (Z80 simulation with exo_docent) OK\n");cpt++;
 
 	FileRemoveIfExists("./decrunch/lzDataTest.exo");
 
+#endif
 #endif
 
 
