@@ -26268,7 +26268,7 @@ if (!idx) printf("L%05d=[%s]\n",l,listing[l].listing);
 								case 0x0D:
 									MakeError(ae,0,ae->filename[listing[l].ifile],listing[l].iline,"A quoted string must follow any INCLUDE/INC* directive\n");
 									break;
-								default:
+								default:; // win hack
 							}
 						}
 						include=0;
