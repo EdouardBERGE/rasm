@@ -93,10 +93,7 @@ int MAX_OFFSET_ZX0=32640;
 #include"exomizer.h"
 
 #ifndef remainder
-double remainder(double x, double y) {
-	if (!y) return 0.0; // not really correct but hey...
-	return fmod(x,y);
-}
+	#define remainder fmod
 #endif
 
 #ifndef fdim
