@@ -30903,7 +30903,7 @@ printf("testing ZX7 (assembling decruncher with crunched lzDataTest) OK\n");cpt+
 	// check decrunched data is valid
 	lzCompare=_internal_readbinaryfile("./decrunch/lzDataTest.bin",&lzSize);
 	//printf("nbinstr=%ld\n",myCPU.nbinstructions);
-	if (myCPU.nbinstructions==208094 || lzSize!=29158 || memcmp(lzCompare,&myCPU.userdata[0]+0x1000,29158)) { printf("Autotest %d ERROR : Z80 emulation for ZX7 decrunch failed (size=%d)\n",cpt,lzSize);exit(-1); } 
+	if (myCPU.nbinstructions!=208094 || lzSize!=29158 || memcmp(lzCompare,&myCPU.userdata[0]+0x1000,29158)) { printf("Autotest %d ERROR : Z80 emulation for ZX7 decrunch failed (size=%d)\n",cpt,lzSize);exit(-1); } 
 printf("testing ZX7 (Z80 simulation with dzx7_turbo) OK\n");cpt++;
 
 	FileRemoveIfExists("./decrunch/lzDataTest.zx7");
@@ -30921,11 +30921,170 @@ printf("testing ZX7 (crunching with ZX7) OK\n");
 	// check decrunched data is valid
 	lzCompare=_internal_readbinaryfile("./decrunch/lzDataTest.bin",&lzSize);
 	//printf("nbinstr=%ld\n",myCPU.nbinstructions);
-	if (myCPU.nbinstructions==208094 || lzSize!=29158 || memcmp(lzCompare,&myCPU.userdata[0]+0x1000,29158)) { printf("Autotest %d ERROR : Z80 emulation for ZX7 fast decrunch failed (size=%d)\n",cpt,lzSize);exit(-1); } 
+	if (myCPU.nbinstructions!=208094 || lzSize!=29158 || memcmp(lzCompare,&myCPU.userdata[0]+0x1000,29158)) { printf("Autotest %d ERROR : Z80 emulation for ZX7 decrunch failed (size=%d)\n",cpt,lzSize);exit(-1); } 
 printf("testing ZX7 (Z80 simulation with dzx7_turbo) OK\n");cpt++;
 
 	FileRemoveIfExists("./decrunch/lzDataTest.zx7");
 
+	// LZ48
+
+	#define AUTOTEST_Z80_LZ48__CRUNCH "incl48 './decrunch/lzDataTest.bin' : save './decrunch/lzDataTest.l48',0,$ "
+	ret=RasmAssemble(AUTOTEST_Z80_LZ48__CRUNCH,strlen(AUTOTEST_Z80_LZ48__CRUNCH),&opcode,&opcodelen);
+	if (!ret && FileGetSize("./decrunch/lzDataTest.l48")==14167) {} else {printf("Autotest %03d ERROR (crunching lzDataTest with LZ48 ret=%d len=%d)\n",cpt,ret,opcodelen);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing LZ48 (crunching with INCLZ48 OK\n");
+
+	#define AUTOTEST_Z80_LZ48__DECRUNCH "org #100 : ld sp,#38 : ld hl,#C000 : ld de,#1000 : call LZ48_decrunch : jr #FE : include 'decrunch/lz48decrunch_v006b.asm' : org #C000 : incbin './decrunch/lzDataTest.l48' "
+	ret=RasmAssemble(AUTOTEST_Z80_LZ48__DECRUNCH,strlen(AUTOTEST_Z80_LZ48__DECRUNCH),&opcode,&opcodelen);
+	if (!ret) {} else {printf("Autotest %03d ERROR (assembling decrunch tester for Z80 simulation)\n",cpt);exit(-1);}
+printf("testing LZ48 (assembling decruncher with crunched lzDataTest) OK\n");cpt++;
+	if (!z80_runTest(&myCPU,0x100, 0xFE, 20000000,opcode,0x100,opcodelen,0xFE,0x180)) { printf("Autotest %d ERROR : Z80 emulation took too much time\n",cpt);exit(-1); }
+	if (opcode) MemFree(opcode);opcode=NULL;
+	// check decrunched data is valid
+	lzCompare=_internal_readbinaryfile("./decrunch/lzDataTest.bin",&lzSize);
+	//printf("nbinstr=%ld\n",myCPU.nbinstructions);
+	if (myCPU.nbinstructions!=86471 || lzSize!=29158 || memcmp(lzCompare,&myCPU.userdata[0]+0x1000,29158)) { printf("Autotest %d ERROR : Z80 emulation for LZ48 decrunch failed (size=%d)\n",cpt,lzSize);exit(-1); } 
+printf("testing LZ48 (Z80 simulation with lz48_decrunch) OK\n");cpt++;
+
+	FileRemoveIfExists("./decrunch/lzDataTest.l48");
+
+	#define AUTOTEST_Z80_LZ48_i_CRUNCH "lz48 : incbin './decrunch/lzDataTest.bin' : lzclose : lafin : save './decrunch/lzDataTest.l48',0,lafin "
+	ret=RasmAssemble(AUTOTEST_Z80_LZ48_i_CRUNCH,strlen(AUTOTEST_Z80_LZ48_i_CRUNCH),&opcode,&opcodelen);
+	if (!ret && FileGetSize("./decrunch/lzDataTest.l48")==14167) {} else {printf("Autotest %03d ERROR (crunching lzDataTest with LZ48ret=%d len=%d)\n",cpt,ret,opcodelen);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing LZ48 (crunching with LZ48 OK\n");
+
+	ret=RasmAssemble(AUTOTEST_Z80_LZ48__DECRUNCH,strlen(AUTOTEST_Z80_LZ48__DECRUNCH),&opcode,&opcodelen);
+	if (!ret) {} else {printf("Autotest %03d ERROR (assembling decrunch tester for Z80 simulation)\n",cpt);exit(-1);}
+	if (!z80_runTest(&myCPU,0x100, 0xFE, 20000000,opcode,0x100,opcodelen,0xFE,0x180)) { printf("Autotest %d ERROR : Z80 emulation took too much time\n",cpt);exit(-1); }
+	if (opcode) MemFree(opcode);opcode=NULL;
+	// check decrunched data is valid
+	lzCompare=_internal_readbinaryfile("./decrunch/lzDataTest.bin",&lzSize);
+	//printf("nbinstr=%ld\n",myCPU.nbinstructions);
+	if (myCPU.nbinstructions!=86471 || lzSize!=29158 || memcmp(lzCompare,&myCPU.userdata[0]+0x1000,29158)) { printf("Autotest %d ERROR : Z80 emulation for LZ48 decrunch failed (size=%d)\n",cpt,lzSize);exit(-1); } 
+printf("testing LZ48 (Z80 simulation with lz48_decrunch) OK\n");cpt++;
+
+	FileRemoveIfExists("./decrunch/lzDataTest.l48");
+
+	// LZ49
+
+	#define AUTOTEST_Z80_LZ49__CRUNCH "incl49 './decrunch/lzDataTest.bin' : save './decrunch/lzDataTest.l49',0,$ "
+	ret=RasmAssemble(AUTOTEST_Z80_LZ49__CRUNCH,strlen(AUTOTEST_Z80_LZ49__CRUNCH),&opcode,&opcodelen);
+	if (!ret && FileGetSize("./decrunch/lzDataTest.l49")==13493) {} else {printf("Autotest %03d ERROR (crunching lzDataTest with LZ49 ret=%d len=%d)\n",cpt,ret,opcodelen);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing LZ49 (crunching with INCLZ49 OK\n");
+
+	#define AUTOTEST_Z80_LZ49__DECRUNCH "org #100 : ld sp,#38 : ld hl,#C000 : ld de,#1000 : call LZ49_decrunch : jr #FE : include 'decrunch/lz49decrunch_v001.asm' : org #C000 : incbin './decrunch/lzDataTest.l49' "
+	ret=RasmAssemble(AUTOTEST_Z80_LZ49__DECRUNCH,strlen(AUTOTEST_Z80_LZ49__DECRUNCH),&opcode,&opcodelen);
+	if (!ret) {} else {printf("Autotest %03d ERROR (assembling decrunch tester for Z80 simulation)\n",cpt);exit(-1);}
+printf("testing LZ49 (assembling decruncher with crunched lzDataTest) OK\n");cpt++;
+	if (!z80_runTest(&myCPU,0x100, 0xFE, 20000000,opcode,0x100,opcodelen,0xFE,0x180)) { printf("Autotest %d ERROR : Z80 emulation took too much time\n",cpt);exit(-1); }
+	if (opcode) MemFree(opcode);opcode=NULL;
+	// check decrunched data is valid
+	lzCompare=_internal_readbinaryfile("./decrunch/lzDataTest.bin",&lzSize);
+	//printf("nbinstr=%ld\n",myCPU.nbinstructions);
+	if (myCPU.nbinstructions!=102176 || lzSize!=29158 || memcmp(lzCompare,&myCPU.userdata[0]+0x1000,29158)) { printf("Autotest %d ERROR : Z80 emulation for LZ49 decrunch failed (size=%d)\n",cpt,lzSize);exit(-1); } 
+printf("testing LZ49 (Z80 simulation with lz49_decrunch) OK\n");cpt++;
+
+	FileRemoveIfExists("./decrunch/lzDataTest.l49");
+
+	#define AUTOTEST_Z80_LZ49_i_CRUNCH "lz49 : incbin './decrunch/lzDataTest.bin' : lzclose : lafin : save './decrunch/lzDataTest.l49',0,lafin "
+	ret=RasmAssemble(AUTOTEST_Z80_LZ49_i_CRUNCH,strlen(AUTOTEST_Z80_LZ49_i_CRUNCH),&opcode,&opcodelen);
+	if (!ret && FileGetSize("./decrunch/lzDataTest.l49")==13493) {} else {printf("Autotest %03d ERROR (crunching lzDataTest with LZ49ret=%d len=%d)\n",cpt,ret,opcodelen);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing LZ49 (crunching with LZ49 OK\n");
+
+	ret=RasmAssemble(AUTOTEST_Z80_LZ49__DECRUNCH,strlen(AUTOTEST_Z80_LZ49__DECRUNCH),&opcode,&opcodelen);
+	if (!ret) {} else {printf("Autotest %03d ERROR (assembling decrunch tester for Z80 simulation)\n",cpt);exit(-1);}
+	if (!z80_runTest(&myCPU,0x100, 0xFE, 20000000,opcode,0x100,opcodelen,0xFE,0x180)) { printf("Autotest %d ERROR : Z80 emulation took too much time\n",cpt);exit(-1); }
+	if (opcode) MemFree(opcode);opcode=NULL;
+	// check decrunched data is valid
+	lzCompare=_internal_readbinaryfile("./decrunch/lzDataTest.bin",&lzSize);
+	//printf("nbinstr=%ld\n",myCPU.nbinstructions);
+	if (myCPU.nbinstructions!=102176 || lzSize!=29158 || memcmp(lzCompare,&myCPU.userdata[0]+0x1000,29158)) { printf("Autotest %d ERROR : Z80 emulation for LZ49 decrunch failed (size=%d)\n",cpt,lzSize);exit(-1); } 
+printf("testing LZ49 (Z80 simulation with lz49_decrunch) OK\n");cpt++;
+
+	FileRemoveIfExists("./decrunch/lzDataTest.l49");
+
+	// LZ4
+
+	#define AUTOTEST_Z80_LZ4__CRUNCH "inclz4 './decrunch/lzDataTest.bin' : save './decrunch/lzDataTest.lz4',0,$ "
+	ret=RasmAssemble(AUTOTEST_Z80_LZ4__CRUNCH,strlen(AUTOTEST_Z80_LZ4__CRUNCH),&opcode,&opcodelen);
+	if (!ret && FileGetSize("./decrunch/lzDataTest.lz4")==14160) {} else {printf("Autotest %03d ERROR (crunching lzDataTest with LZ4 ret=%d len=%d)\n",cpt,ret,opcodelen);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing LZ4 (crunching with INCLZ4 OK\n");
+
+	#define AUTOTEST_Z80_LZ4__DECRUNCH "org #100 : ld sp,#38 : ld hl,#C000 : ld de,#1000 : ld bc,14160 : call unlz4 : jr #FE : unlz4 include 'decrunch/lz4_docent.asm' : org #C000 : incbin './decrunch/lzDataTest.lz4' "
+	ret=RasmAssemble(AUTOTEST_Z80_LZ4__DECRUNCH,strlen(AUTOTEST_Z80_LZ4__DECRUNCH),&opcode,&opcodelen);
+	if (!ret) {} else {printf("Autotest %03d ERROR (assembling decrunch tester for Z80 simulation)\n",cpt);exit(-1);}
+printf("testing LZ4 (assembling decruncher with crunched lzDataTest) OK\n");cpt++;
+	if (!z80_runTest(&myCPU,0x100, 0xFE, 20000000,opcode,0x100,opcodelen,0xFE,0x1A0)) { printf("Autotest %d ERROR : Z80 emulation took too much time\n",cpt);exit(-1); }
+	if (opcode) MemFree(opcode);opcode=NULL;
+	// check decrunched data is valid
+	lzCompare=_internal_readbinaryfile("./decrunch/lzDataTest.bin",&lzSize);
+	//printf("nbinstr=%ld\n",myCPU.nbinstructions);
+	if (myCPU.nbinstructions!=95351 || lzSize!=29158 || memcmp(lzCompare,&myCPU.userdata[0]+0x1000,29158)) { printf("Autotest %d ERROR : Z80 emulation for LZ4 decrunch failed (size=%d)\n",cpt,lzSize);exit(-1); } 
+printf("testing LZ4 (Z80 simulation with lz4_docent) OK\n");cpt++;
+
+	FileRemoveIfExists("./decrunch/lzDataTest.lz4");
+
+	#define AUTOTEST_Z80_LZ4_i_CRUNCH "lz4 : incbin './decrunch/lzDataTest.bin' : lzclose : lafin : save './decrunch/lzDataTest.lz4',0,lafin "
+	ret=RasmAssemble(AUTOTEST_Z80_LZ4_i_CRUNCH,strlen(AUTOTEST_Z80_LZ4_i_CRUNCH),&opcode,&opcodelen);
+	if (!ret && FileGetSize("./decrunch/lzDataTest.lz4")==14160) {} else {printf("Autotest %03d ERROR (crunching lzDataTest with LZ4 ret=%d len=%d)\n",cpt,ret,opcodelen);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing LZ4 (crunching with LZ4 OK\n");
+
+	ret=RasmAssemble(AUTOTEST_Z80_LZ4__DECRUNCH,strlen(AUTOTEST_Z80_LZ4__DECRUNCH),&opcode,&opcodelen);
+	if (!ret) {} else {printf("Autotest %03d ERROR (assembling decrunch tester for Z80 simulation)\n",cpt);exit(-1);}
+	if (!z80_runTest(&myCPU,0x100, 0xFE, 20000000,opcode,0x100,opcodelen,0xFE,0x1A0)) { printf("Autotest %d ERROR : Z80 emulation took too much time\n",cpt);exit(-1); }
+	if (opcode) MemFree(opcode);opcode=NULL;
+	// check decrunched data is valid
+	lzCompare=_internal_readbinaryfile("./decrunch/lzDataTest.bin",&lzSize);
+	//printf("nbinstr=%ld\n",myCPU.nbinstructions);
+	if (myCPU.nbinstructions!=95351 || lzSize!=29158 || memcmp(lzCompare,&myCPU.userdata[0]+0x1000,29158)) { printf("Autotest %d ERROR : Z80 emulation for LZ4 decrunch failed (size=%d)\n",cpt,lzSize);exit(-1); } 
+printf("testing LZ4 (Z80 simulation with lz4_docent) OK\n");cpt++;
+
+	FileRemoveIfExists("./decrunch/lzDataTest.lz4");
+
+	// EXO (v2 almost deprecated also, but overall usage far away from unusable v3)
+
+	#define AUTOTEST_Z80_EXO__CRUNCH "incexo './decrunch/lzDataTest.bin' : save './decrunch/lzDataTest.exo',0,$ "
+	ret=RasmAssemble(AUTOTEST_Z80_EXO__CRUNCH,strlen(AUTOTEST_Z80_EXO__CRUNCH),&opcode,&opcodelen);
+	if (!ret && FileGetSize("./decrunch/lzDataTest.exo")==11162) {} else {printf("Autotest %03d ERROR (crunching lzDataTest with EXO ret=%d len=%d)\n",cpt,ret,opcodelen);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing EXO (crunching with INCEXO OK\n");
+
+	#define AUTOTEST_Z80_EXO__DECRUNCH "org #100 : ld sp,#38 : ld hl,#C000 : ld de,#1000 : call mizou : jr #FE : mizou include 'decrunch/deexo.asm' : Mizoumizeur (void) : org #C000 : incbin './decrunch/lzDataTest.exo' "
+	ret=RasmAssemble(AUTOTEST_Z80_EXO__DECRUNCH,strlen(AUTOTEST_Z80_EXO__DECRUNCH),&opcode,&opcodelen);
+	if (!ret) {} else {printf("Autotest %03d ERROR (assembling decrunch tester for Z80 simulation)\n",cpt);exit(-1);}
+printf("testing EXO (assembling decruncher with crunched lzDataTest) OK\n");cpt++;
+	if (!z80_runTest(&myCPU,0x100, 0xFE, 20000000,opcode,0x100,opcodelen,0xFE,0x2A0)) { printf("Autotest %d ERROR : Z80 emulation took too much time\n",cpt);exit(-1); }
+	if (opcode) MemFree(opcode);opcode=NULL;
+	// check decrunched data is valid
+	lzCompare=_internal_readbinaryfile("./decrunch/lzDataTest.bin",&lzSize);
+	//printf("nbinstr=%ld\n",myCPU.nbinstructions);
+	if (myCPU.nbinstructions!=618822 || lzSize!=29158 || memcmp(lzCompare,&myCPU.userdata[0]+0x1000,29158)) { printf("Autotest %d ERROR : Z80 emulation for EXO decrunch failed (size=%d)\n",cpt,lzSize);exit(-1); } 
+printf("testing EXO (Z80 simulation with exo_docent) OK\n");cpt++;
+
+	FileRemoveIfExists("./decrunch/lzDataTest.exo");
+
+	#define AUTOTEST_Z80_EXO_i_CRUNCH "lzexo : incbin './decrunch/lzDataTest.bin' : lzclose : lafin : save './decrunch/lzDataTest.exo',0,lafin "
+	ret=RasmAssemble(AUTOTEST_Z80_EXO_i_CRUNCH,strlen(AUTOTEST_Z80_EXO_i_CRUNCH),&opcode,&opcodelen);
+	if (!ret && FileGetSize("./decrunch/lzDataTest.exo")==11162) {} else {printf("Autotest %03d ERROR (crunching lzDataTest with EXO ret=%d len=%d)\n",cpt,ret,opcodelen);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing EXO (crunching with EXO OK\n");
+
+	ret=RasmAssemble(AUTOTEST_Z80_EXO__DECRUNCH,strlen(AUTOTEST_Z80_EXO__DECRUNCH),&opcode,&opcodelen);
+	if (!ret) {} else {printf("Autotest %03d ERROR (assembling decrunch tester for Z80 simulation)\n",cpt);exit(-1);}
+	if (!z80_runTest(&myCPU,0x100, 0xFE, 20000000,opcode,0x100,opcodelen,0xFE,0x2A0)) { printf("Autotest %d ERROR : Z80 emulation took too much time\n",cpt);exit(-1); }
+	if (opcode) MemFree(opcode);opcode=NULL;
+	// check decrunched data is valid
+	lzCompare=_internal_readbinaryfile("./decrunch/lzDataTest.bin",&lzSize);
+	//printf("nbinstr=%ld\n",myCPU.nbinstructions);
+	if (myCPU.nbinstructions!=618822 || lzSize!=29158 || memcmp(lzCompare,&myCPU.userdata[0]+0x1000,29158)) { printf("Autotest %d ERROR : Z80 emulation for EXO decrunch failed (size=%d)\n",cpt,lzSize);exit(-1); } 
+printf("testing EXO (Z80 simulation with exo_docent) OK\n");cpt++;
+
+	FileRemoveIfExists("./decrunch/lzDataTest.exo");
 
 #endif
 
