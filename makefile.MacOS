@@ -1,7 +1,8 @@
 CC=gcc
 EXEC=rasm
 
-CFLAGS=-lm -mcpu=native -o $(EXEC) -w
+ARCH= -arch arm64 -arch x86_64
+CFLAGS=-lm -mcpu=native -o $(EXEC) -w  ${ARCH}
 CFLAGS_OPT = $(CFLAGS) -O2
 CFLAGS_DBG = $(CFLAGS) -g -pthread -DRDD
 
@@ -9,7 +10,7 @@ SRC_APUDIR=./apultra-master/src
 SRC_LZSADIR=./lzsa-master/src
 SRC_SALVADOR=./salvador/src
 
-APU_FLAGS=-c -O3 -fomit-frame-pointer -I$(SRC_LZSADIR)/libdivsufsort/include -I$(SRC_APUDIR)
+APU_FLAGS=-c -O3 -fomit-frame-pointer  $(ARCH) -I$(SRC_LZSADIR)/libdivsufsort/include -I$(SRC_APUDIR)
 
 APU_OBJ =$(SRC_APUDIR)/expand.o
 APU_OBJ+=$(SRC_APUDIR)/matchfinder.o
@@ -19,7 +20,7 @@ APU_OBJ+=$(SRC_APUDIR)/libdivsufsort/lib/divsufsort_utils.o
 APU_OBJ+=$(SRC_APUDIR)/libdivsufsort/lib/sssort.o
 APU_OBJ+=$(SRC_APUDIR)/libdivsufsort/lib/trsort.o
 
-LZSA_FLAGS=-c -O3 -fomit-frame-pointer -I$(SRC_LZSADIR)/libdivsufsort/include -I$(SRC_LZSADIR)
+LZSA_FLAGS=-c -O3 -fomit-frame-pointer  $(ARCH) -I$(SRC_LZSADIR)/libdivsufsort/include -I$(SRC_LZSADIR)
 
 LZSA_OBJ =$(SRC_LZSADIR)/dictionary.o
 LZSA_OBJ+=$(SRC_LZSADIR)/expand_block_v1.o
@@ -34,7 +35,7 @@ LZSA_OBJ+=$(SRC_LZSADIR)/shrink_context.o
 LZSA_OBJ+=$(SRC_LZSADIR)/shrink_inmem.o
 LZSA_OBJ+=$(SRC_LZSADIR)/stream.o
 
-SALVADOR_FLAGS=-c -O3 -fomit-frame-pointer -I$(SRC_LZSADIR)/libdivsufsort/include -I$(SRC_SALVADOR)
+SALVADOR_FLAGS=-c -O3 -fomit-frame-pointer $(ARCH) -I$(SRC_LZSADIR)/libdivsufsort/include -I$(SRC_SALVADOR)
 
 SALVADOR_OBJ =$(SRC_SALVADOR)/expand.o
 SALVADOR_OBJ+=$(SRC_SALVADOR)/matchfinder.o
@@ -46,11 +47,10 @@ SALVADOR_OBJ+=$(SRC_SALVADOR)/shrink.o
 default: prod
 
 prod: 
-	$(CC) z80-master/z80.c -O2 -c -o z80-master/z80.o
-
-        $(CC) $(SRC_SALVADOR)/matchfinder.c $(SALVADOR_FLAGS) -o $(SRC_SALVADOR)/matchfinder.o
-        $(CC) $(SRC_SALVADOR)/expand.c      $(SALVADOR_FLAGS) -o $(SRC_SALVADOR)/expand.o
-        $(CC) $(SRC_SALVADOR)/shrink.c      $(SALVADOR_FLAGS) -o $(SRC_SALVADOR)/shrink.o
+	$(CC) z80-master/z80.c -O2 $(ARCH)  -c -o z80-master/z80.o
+	$(CC) $(SRC_SALVADOR)/matchfinder.c $(SALVADOR_FLAGS) -o $(SRC_SALVADOR)/matchfinder.o
+	$(CC) $(SRC_SALVADOR)/expand.c      $(SALVADOR_FLAGS) -o $(SRC_SALVADOR)/expand.o
+	$(CC) $(SRC_SALVADOR)/shrink.c      $(SALVADOR_FLAGS) -o $(SRC_SALVADOR)/shrink.o
 
 	$(CC) $(SRC_APUDIR)/expand.c $(APU_FLAGS)                                -o $(SRC_APUDIR)/expand.o
 	$(CC) $(SRC_APUDIR)/matchfinder.c $(APU_FLAGS)                           -o $(SRC_APUDIR)/matchfinder.o
@@ -61,7 +61,7 @@ prod:
 	$(CC) $(SRC_LZSADIR)/libdivsufsort/lib/trsort.c $(APU_FLAGS)             -o $(SRC_APUDIR)/libdivsufsort/lib/trsort.o
 	$(CC) $(SRC_LZSADIR)/matchfinder.c $(LZSA_FLAGS)       -o $(SRC_LZSADIR)/matchfinder.o
 	$(CC) $(SRC_LZSADIR)/dictionary.c $(LZSA_FLAGS)        -o $(SRC_LZSADIR)/dictionary.o
-	$(CC) $(SRC_LZSADIR)/expand_block_v1.c $(LZSA_FLAGS)   -o $(SRC_LZSADIR)/expand_block_v1.o
+	$(CC) $(SRC_LZSADIR)/expand_block_v1.c $(LZSA_FLAGS)    -o $(SRC_LZSADIR)/expand_block_v1.o
 	$(CC) $(SRC_LZSADIR)/expand_block_v2.c $(LZSA_FLAGS)   -o $(SRC_LZSADIR)/expand_block_v2.o
 	$(CC) $(SRC_LZSADIR)/expand_context.c $(LZSA_FLAGS)    -o $(SRC_LZSADIR)/expand_context.o
 	$(CC) $(SRC_LZSADIR)/expand_inmem.c $(LZSA_FLAGS)      -o $(SRC_LZSADIR)/expand_inmem.o
@@ -71,7 +71,7 @@ prod:
 	$(CC) $(SRC_LZSADIR)/shrink_context.c $(LZSA_FLAGS)    -o $(SRC_LZSADIR)/shrink_context.o
 	$(CC) $(SRC_LZSADIR)/shrink_inmem.c $(LZSA_FLAGS)      -o $(SRC_LZSADIR)/shrink_inmem.o
 	$(CC) $(SRC_LZSADIR)/stream.c $(LZSA_FLAGS)            -o $(SRC_LZSADIR)/stream.o
-	$(CC) rasm.c $(CFLAGS_OPT) $(APU_OBJ) $(LZSA_OBJ) $(SALVADOR_OBJ)
+	$(CC) rasm.c $(CFLAGS_OPT) $(APU_OBJ) $(LZSA_OBJ) $(SALVADOR_OBJ) z80-master/z80.o
 	strip $(EXEC)
 
 install:
