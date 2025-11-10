@@ -7,6 +7,7 @@ CFLAGS_DBG = $(CFLAGS) -g -pthread -DRDD
 
 SRC_APUDIR=./apultra-master/src
 SRC_LZSADIR=./lzsa-master/src
+SRC_SALVADOR=./salvador/src
 
 APU_FLAGS=-c -O3 -fomit-frame-pointer -I$(SRC_LZSADIR)/libdivsufsort/include -I$(SRC_APUDIR)
 
