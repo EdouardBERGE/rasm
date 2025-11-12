@@ -5969,6 +5969,10 @@ double ComputeExpressionCore(struct s_assenv *ae,char *original_zeexpression,int
 	/* be sure to have at least some bytes allocated */
 	//StateMachineResizeBuffer(&ae->computectx->varbuffer,128,&ae->computectx->maxivar);
 
+#define DEBUG_STACK 0
+#if DEBUG_STACK
+	printf("-------------------------------------\n");
+#endif
 
 #if TRACE_COMPUTE_EXPRESSION
 	printf("expression=[%s]\n",original_zeexpression);
@@ -6156,6 +6160,33 @@ double ComputeExpressionCore(struct s_assenv *ae,char *original_zeexpression,int
 							ae->computectx->varbuffer[ivar++]=c;
 							//StateMachineResizeBuffer(&ae->computectx->varbuffer,ivar,&ae->computectx->maxivar);
 							c=zeexpression[++idx];
+						}
+					} else {
+#if 0
+						// hack " (-( " model
+						if (c=='(') {
+							zeexpression=TxtReplace(zeexpression,"(-(","(0-(",0);
+							original=0; // not an original string anymore
+							// restart engine in a proper state...
+							nboperatorstack=parenth=ivar=idx=maccu=accu_err=0;
+							startvar=is_string=allow_minus_as_sign=0;
+							nbtokenstack=nbcomputestack=0;
+							continue;
+						}
+#endif
+						//  handling properly this particular case without realloc or restarting engine
+						if (c=='(' && idx>1 && zeexpression[idx-2]=='(') {
+							// add a literal value ZERO in the stack before minus sign
+							stackelement.operator=E_COMPUTE_OPERATION_PUSH_DATASTC;
+							stackelement.value=0;
+							stackelement.string=NULL;
+							ObjectArrayAddDynamicValueConcat((void **)&ae->computectx->tokenstack,&nbtokenstack,&ae->computectx->maxtokenstack,&stackelement,sizeof(stackelement));
+							allow_minus_as_sign=0;
+							ivar=0;
+							// cheat parser to let him continue like it is supposed to be
+							c='-';
+							idx--; // because there is a ++ afterward
+							break;
 						}
 					}
 					ae->computectx->varbuffer[ivar]=0;
@@ -6988,9 +7019,9 @@ printf("DUMP des labels\n");
 	/*******************************************************
 	      C R E A T E    E X E C U T I O N    S T A C K
 	*******************************************************/
-#define DEBUG_STACK 0
 #if DEBUG_STACK
 	for (itoken=0;itoken<nbtokenstack;itoken++) {
+		if (itoken) printf(" | ");
 		switch (ae->computectx->tokenstack[itoken].operator) {
 			case E_COMPUTE_OPERATION_PUSH_DATASTC:printf("%lf %s",ae->computectx->tokenstack[itoken].value,ae->computectx->tokenstack[itoken].string?ae->computectx->tokenstack[itoken].string:"(null)");break;
 			case E_COMPUTE_OPERATION_OPEN:printf("(");break;
@@ -20980,27 +21011,6 @@ printf("AudioLoadSample filesize=%d st=%d normalize=%.2lf\n",filesize,sample_typ
 }
 
 
-#ifdef NOAPULTRA
-  int LZSA_crunch(unsigned char *input_data,int input_size,unsigned char **lzdata,int *lzlen) {
-	  lzdata=MemMalloc(4);
-	  *lzlen=0;
-
-printf("no LZSA support in this version!\n");
-fprintf(stderr,"no LZSA support in this version!\n");
-
-	  return 0;
-  }
-  int APULTRA_crunch(unsigned char *input_data,int input_size,unsigned char **lzdata,int *lzlen) {
-	  lzdata=MemMalloc(4);
-	  *lzlen=0;
-
-printf("no AP-Ultra support in this version!\n");
-fprintf(stderr,"no AP-Ultra support in this version!\n");
-
-	  return 0;
-  }
-#endif
-
 /*
 	meta fonction qui gère le INCBIN standard plus les variantes SMP et DMA
 */
@@ -28851,11 +28861,17 @@ struct s_autotest_keyword autotest_keyword[]={
 	{"jp (iy) : jp iy",0}, // is ok
 	{"jp z,(ix)",1}, // must fail
 	{"jp z,(iy)",1}, // must fail
+	{"vara=-(-(8)) : assert vara==8 : nop",0},
+	{"vara equ -(-(8)) : assert vara==8 : nop",0},
+	{"equa=8 : assert equa==8 : nop",0},
+	{"vara equ -(-(-(8))) : assert vara==-8 : nop",0},
 	/*
 	 *
 	 * will need to test resize + format then meta review test!
 	 *
 	 *
+	{"",},{"",},
+	{"",},{"",},
 	{"",},{"",},
 	{"",},{"",},{"",},
 	{"",},{"",},{"",},{"",},{"",},
