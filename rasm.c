@@ -1617,14 +1617,15 @@ int APULTRA_crunch(unsigned char *data, int len, unsigned char **dataout, int *l
 
 size_t lzsa_compress_inmem(unsigned char *pInputData, unsigned char *pOutBuffer, size_t nInputSize, size_t nMaxOutBufferSize,
                              const unsigned int nFlags, const int nMinMatchSize, const int nFormatVersion);
+size_t lzsa_get_max_compressed_size_inmem(size_t nInputSize);
 
 int LZSA_crunch(unsigned char *datain, int lenin, unsigned char **dataout, int *lenout, int version, int matchsize) {
    size_t nCompressedSize = 0L, nMaxCompressedSize;
    int nFlags = 0;
    unsigned char *pCompressedData;
 
-pCompressedData=(unsigned char *)MemMalloc(65536);
-nMaxCompressedSize=65536;
+nMaxCompressedSize=lzsa_get_max_compressed_size_inmem(lenin);
+pCompressedData=(unsigned char *)MemMalloc(nMaxCompressedSize);
 
 /* RAW */
 nFlags=1<<1; // nFlags=LZSA_FLAG_RAW_BLOCK;
@@ -1640,10 +1641,10 @@ if (matchsize<2 || matchsize>5) {
 	}
 }
 
-nCompressedSize=lzsa_compress_inmem(datain, pCompressedData, lenin, nMaxCompressedSize, nFlags, matchsize, version);
+	nCompressedSize=lzsa_compress_inmem(datain, pCompressedData, lenin, nMaxCompressedSize, nFlags, matchsize, version);
 
-   if (nCompressedSize == -1) {
-      fprintf(stderr, "LZSA compression error\n");
+   if (nCompressedSize == -1 || nCompressedSize>65536) {
+      //fprintf(stderr, KERROR"LZSA compression error (outsize=%ld maxOut=%ld)\n"KNORMAL,nCompressedSize,nMaxCompressedSize);
       *lenout=0;
       *dataout=NULL;
       return 100;
@@ -21584,6 +21585,12 @@ if (curhexbin->crunch) printf("CRUNCHED! (%d)\n",curhexbin->crunch);
 									{
 									int nnewlen;
 									LZSA_crunch(outputdata,outputidx,&newdata,&nnewlen,curhexbin->version,curhexbin->minmatch);
+									if (nnewlen==0) {
+										if (outputidx>65536)
+										MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"LZSA cannot crunch more than 64K in RAW MODE\n");
+										else
+										MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"LZSA cannot crunch this and i dont know why!\n");
+									}
 									outputidx=nnewlen;
 									}
 									MemFree(outputdata);
@@ -23327,6 +23334,11 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 							if (!ae->nowarning)
 							if (!ae->nocrunchwarning && input_size>=16384 && ae->lzsection[i].version==2) rasm_printf(ae,KWARNING"LZSA is crunching %.1fkb this may take a while, be patient...\n",input_size/1024.0);
 							LZSA_crunch(input_data,input_size,&lzdata,&lzlen,ae->lzsection[i].version,ae->lzsection[i].minmatch);
+							if (lzlen==0) {
+								if (input_size>65536)
+								MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"LZSA cannot crunch more than 64K in RAW MODE\n");
+								else MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"LZSA cannot crunch and i dont know why\n");
+							}
 							break;
 	#endif
 	#endif
@@ -28865,12 +28877,16 @@ struct s_autotest_keyword autotest_keyword[]={
 	{"vara equ -(-(8)) : assert vara==8 : nop",0},
 	{"equa=8 : assert equa==8 : nop",0},
 	{"vara equ -(-(-(8))) : assert vara==-8 : nop",0},
+	{"lzsa1 : repeat 40000 : xor a : inc a : rend : lzclose : grouik : ret ",1}, // LZSA cannot crunch moar than 64K
+	{"lzsa2 : repeat 40000 : xor a : inc a : rend : lzclose : grouik : ret ",1}, // LZSA cannot crunch moar than 64K
+	{"lz49 : repeat 40000 : xor a : inc a : rend : lzclose : grouik : ret ",0}, // but LZ49 can ^_^
+
 	/*
 	 *
 	 * will need to test resize + format then meta review test!
 	 *
 	 *
-	{"",},{"",},
+	 *
 	{"",},{"",},
 	{"",},{"",},
 	{"",},{"",},{"",},
