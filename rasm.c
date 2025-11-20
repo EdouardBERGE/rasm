@@ -3009,7 +3009,7 @@ void FreeAssenv(struct s_assenv *ae)
 	}
 
 	for (i=0;i<ae->nbbank;i++) {
-		MemFree(ae->mem[i]);
+		if (ae->mem[i]) MemFree(ae->mem[i]);
 	}
 	MemFree(ae->mem);
 	
@@ -17616,6 +17616,11 @@ void __BANK(struct s_assenv *ae) {
 			ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
 			ae->lastbank=ae->activebank; // track last bank used
 			ae->activebank=RoundComputeExpression(ae,ae->wl[ae->idx+1].w,ae->codeadr,0,0); ae->maxptr=ae->memsize[ae->activebank]; // inseparable
+			// go dynamic :)
+			if (!ae->mem[ae->activebank]) {
+				ae->mem[ae->activebank]=MemMalloc(65536);
+				memset(ae->mem[ae->activebank],0,65536);
+			}
 		}
 		if (ae->forcecpr && (ae->activebank<0 || ae->activebank>31) && !ae->extendedCPR) {
 			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"FATAL - Bank selection must be from 0 to 31 in cartridge mode\n");
@@ -17752,6 +17757,11 @@ void __BANKSET(struct s_assenv *ae) {
 		ae->lastbank=ae->activebank; // track last bank used
 		ae->activebank=RoundComputeExpression(ae,ae->wl[ae->idx+1].w,ae->codeadr,0,0); // inseparable particulier (see next line)
 		ae->activebank*=4; ae->maxptr=ae->memsize[ae->activebank]; // inseparable
+		// go dynamic :)
+		if (!ae->mem[ae->activebank]) {
+			ae->mem[ae->activebank]=MemMalloc(65536);
+			memset(ae->mem[ae->activebank],0,65536);
+		}
 		if (ae->forcesnapshot && (ae->activebank<0 || ae->activebank>=260)) {
 			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"FATAL - Bank set selection must be from 0 to 64 in snapshot mode\n");
 			FreeAssenv(ae);
@@ -17765,6 +17775,10 @@ void __BANKSET(struct s_assenv *ae) {
 				ae->idx++;
 				return;
 			} else {
+				// go dynamic :)
+				if (!ae->mem[ibank+1]) { ae->mem[ibank+1]=MemMalloc(65536); memset(ae->mem[ibank+1],0,65536); }
+				if (!ae->mem[ibank+2]) { ae->mem[ibank+2]=MemMalloc(65536); memset(ae->mem[ibank+2],0,65536); }
+				if (!ae->mem[ibank+3]) { ae->mem[ibank+3]=MemMalloc(65536); memset(ae->mem[ibank+3],0,65536); }
 				/* in case of EMURAM, rebuild bankset with existing data (this is done only once) */
 				ae->bankset[ibank>>2]=1;
 				for (i=16384;i<32768;i++) {
@@ -23305,7 +23319,7 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 							zx0_reverse(input_data,input_data+input_size-1);
 							lzdata=MemMalloc(input_size+16);
 							lzlen=salvador_compress(input_data,lzdata,input_size,input_size,1+2,32640,0,NULL,NULL);
-       							zx0_reverse(lzdata,lzdata+slzlen-1);
+       							zx0_reverse(lzdata,lzdata+lzlen-1);
 							break;
 	#endif
 	#endif
@@ -25763,15 +25777,13 @@ printf("init 3\n");
 #endif
 	/* 32 CPR default roms but 260+ max snapshot RAM pages + one workspace */
 	for (i=0;i<BANK_MAX_NUMBER+1;i++) {
-		mem=MemMalloc(65536);
-		memset(mem,0,65536);
+		mem=NULL;
 		ObjectArrayAddDynamicValueConcat((void**)&ae->mem,&ae->nbbank,&ae->maxbank,&mem,sizeof(mem));
 		IntArrayAddDynamicValueConcat(&ae->memsize,&ae->nbmemsize,&ae->maxmemsize,65536);
 	}
-#if TRACE_PREPRO
-printf("nbbank=%d initialised\n",ae->nbbank);
-#endif
 	ae->activebank=BANK_MAX_NUMBER; ae->maxptr=ae->memsize[ae->activebank]; // inseparable
+	ae->mem[ae->activebank]=MemMalloc(65536);
+	memset(ae->mem[ae->activebank],0,65536);
 	for (i=0;i<256;i++) { ae->charset[i]=(unsigned char)i; }
 
 	if (param && param->outputfilename) {
@@ -25932,7 +25944,8 @@ printf("nbbank=%d initialised\n",ae->nbbank);
 	w[0]=0;
 	bval[0]=0;
 	qval[0]=0;
-	
+
+
 #if TRACE_PREPRO
 printf("read file/flux\n");
 #endif
@@ -26990,7 +27003,6 @@ int Rasm(struct s_parameter *param)
 	#define FUNC "Rasm"
 
 	struct s_assenv *ae=NULL;
-
 	/* read and preprocess source */
 	ae=PreProcessing(param->filename,0,NULL,0,param);
 	/* assemble */
@@ -27036,6 +27048,13 @@ int RasmAssembleInfoIntoRAMROM(const char *datain, int lenin, struct s_rasm_info
 
 	/* extension 4Mo = 256 slots + 4 slots 64K de RAM par défaut => 260 */
 	maxbank=ramsize>>14;
+	for (i=0;i<maxbank+1;i++) {
+		// go dynamic :)
+		if (!ae->mem[i]) {
+			ae->mem[i]=MemMalloc(65536);
+			memset(ae->mem[i],0,65536);
+		}
+	}
 	for (i=0;i<maxbank;i++) {
 		ramidx=i*16384;
 		for (j=0;j<16384;j++) {
@@ -27069,6 +27088,13 @@ int RasmAssembleInfoIntoRAM(const char *datain, int lenin, struct s_rasm_info **
 
 	/* extension 4Mo = 256 slots + 4 slots 64K de RAM par défaut => 260 */
 	maxbank=ramsize>>14;
+	for (i=0;i<maxbank+1;i++) {
+		// go dynamic :)
+		if (!ae->mem[i]) {
+			ae->mem[i]=MemMalloc(65536);
+			memset(ae->mem[i],0,65536);
+		}
+	}
 	for (i=0;i<maxbank;i++) {
 		ramidx=i*16384;
 		for (j=0;j<16384;j++) {
