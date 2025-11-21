@@ -17616,11 +17616,11 @@ void __BANK(struct s_assenv *ae) {
 			ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
 			ae->lastbank=ae->activebank; // track last bank used
 			ae->activebank=RoundComputeExpression(ae,ae->wl[ae->idx+1].w,ae->codeadr,0,0); ae->maxptr=ae->memsize[ae->activebank]; // inseparable
-			// go dynamic :)
-			if (!ae->mem[ae->activebank]) {
-				ae->mem[ae->activebank]=MemMalloc(65536);
-				memset(ae->mem[ae->activebank],0,65536);
-			}
+		}
+		// go dynamic :)
+		if (!ae->mem[ae->activebank]) {
+			ae->mem[ae->activebank]=MemMalloc(65536);
+			memset(ae->mem[ae->activebank],0,65536);
 		}
 		if (ae->forcecpr && (ae->activebank<0 || ae->activebank>31) && !ae->extendedCPR) {
 			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"FATAL - Bank selection must be from 0 to 31 in cartridge mode\n");
@@ -28906,6 +28906,11 @@ struct s_autotest_keyword autotest_keyword[]={
 	{"lzsa1 : repeat 40000 : xor a : inc a : rend : lzclose : grouik : ret ",1}, // LZSA cannot crunch moar than 64K
 	{"lzsa2 : repeat 40000 : xor a : inc a : rend : lzclose : grouik : ret ",1}, // LZSA cannot crunch moar than 64K
 	{"lz49 : repeat 40000 : xor a : inc a : rend : lzclose : grouik : ret ",0}, // but LZ49 can ^_^
+										    //
+	{"bank 0 : nop : bank next : nop ",0},
+	{"bank 0 : nop : bank 10 : nop ",0},
+	{"bank : nop : bank next : nop",0},
+	{"bank : nop : bank 10 : nop",0},
 
 	/*
 	 *
@@ -28913,7 +28918,7 @@ struct s_autotest_keyword autotest_keyword[]={
 	 *
 	 *
 	 *
-	{"",},{"",},
+	{"",},
 	{"",},{"",},
 	{"",},{"",},{"",},
 	{"",},{"",},{"",},{"",},{"",},
