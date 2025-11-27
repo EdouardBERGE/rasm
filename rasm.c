@@ -18878,7 +18878,11 @@ void __REDEFINE_BRK(struct s_assenv *ae) {
 	if (!ae->wl[ae->idx].t) {
 		ae->winapeBRKidx=0; // reset
 		do {
-			o=RoundComputeExpressionCore(ae,ae->wl[ae->idx+1].w,ae->codeadr,0);
+			if (!StringIsQuote(ae->wl[ae->idx+1].w) || strlen(ae->wl[ae->idx+1].w)==3) {
+				o=RoundComputeExpressionCore(ae,ae->wl[ae->idx+1].w,ae->codeadr,0);
+			} else {
+				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"REDEFINE_BRK needs one or more parameters but NOT strings\n");
+			}
 			IntArrayAddDynamicValueConcat(&ae->winapeBRK,&ae->winapeBRKidx,&ae->winapeBRKmax,o);
 			ae->idx++;
 		} while (ae->wl[ae->idx].t==0);
@@ -28941,6 +28945,10 @@ struct s_autotest_keyword autotest_keyword[]={
 	{"bank : nop : bank next : nop",0},
 	{"bank : nop : bank 10 : nop",0},
 
+	{"redefine_brk : nop",1}, // need one param or more
+	{"redefine_brk 'grouik' : nop",1}, // no string with this
+	{"redefine_brk ' ' : nop",0}, // but single char is OK
+	{"redefine_brk 0,1,2,3,4,5,6,7,8 : brk : redefine_brk 9 : brk : redefine_brk 0,1,2,3,4,5,6,7,8,9,10,11,12,13 : brk : assert $==24",0}, // multiple redefine is ok + size
 	/*
 	 *
 	 * will need to test resize + format then meta review test!
@@ -30392,6 +30400,13 @@ printf("testing delayed alias regression bugfix OK\n");
 #define AUTOTEST_REDEFINE_BRK "brk:redefine_brk 0xCF:brk:brk"
 	ret=RasmAssembleInfo(AUTOTEST_REDEFINE_BRK,strlen(AUTOTEST_REDEFINE_BRK),&opcode,&opcodelen,&debug);
 	if (!ret && opcodelen==4 && opcode[2]==opcode[3] && opcode[3]==0xCF) {} else {printf("Autotest %03d ERROR (REDEFINE_BRK)\n",cpt);MiniDump(opcode,opcodelen);for (i=0;i<debug->nberror;i++) printf("%d -> %s\n",i,debug->error[i].msg);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+	RasmFreeInfoStruct(debug);
+printf("testing REDEFINE_BRK directive OK\n");
+
+#define AUTOTEST_REDEFINE_BRKX "brk:redefine_brk 0xCF:brk:brk:redefine_brk 0xED,#FF:brk"
+	ret=RasmAssembleInfo(AUTOTEST_REDEFINE_BRKX,strlen(AUTOTEST_REDEFINE_BRKX),&opcode,&opcodelen,&debug);
+	if (!ret && opcodelen==6 && opcode[2]==opcode[3] && opcode[3]==0xCF && opcode[0]==opcode[4] && opcode[1]==opcode[5]) {} else {printf("Autotest %03d ERROR (REDEFINE_BRK extended test)\n",cpt);MiniDump(opcode,opcodelen);for (i=0;i<debug->nberror;i++) printf("%d -> %s\n",i,debug->error[i].msg);exit(-1);}
 	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
 	RasmFreeInfoStruct(debug);
 printf("testing REDEFINE_BRK directive OK\n");
