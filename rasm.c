@@ -1266,6 +1266,8 @@ struct s_assenv {
 	int current_run_idx;
 	struct s_ace_breakpoint *acebrk;
 	int iacebrk,macebrk;
+	int *winapeBRK;
+	int winapeBRKidx,winapeBRKmax;
 	/* HFE */
 	struct s_hfe_action *hfe_action;
 	int nbhfeaction,maxhfeaction;
@@ -18871,12 +18873,38 @@ void __NOLIST(struct s_assenv *ae) {
 	}
 }
 
+void __REDEFINE_BRK(struct s_assenv *ae) {
+	int o;
+	if (!ae->wl[ae->idx].t) {
+		ae->winapeBRKidx=0; // reset
+		do {
+			o=RoundComputeExpressionCore(ae,ae->wl[ae->idx+1].w,ae->codeadr,0);
+			IntArrayAddDynamicValueConcat(&ae->winapeBRK,&ae->winapeBRKidx,&ae->winapeBRKmax,o);
+			ae->idx++;
+		} while (ae->wl[ae->idx].t==0);
+	} else {
+		if (ae->getstruct) {
+			___output(ae,0);
+		} else {
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"REDEFINE_BRK needs one or more parameters\n");
+		}
+	}
+}
 void __BRK(struct s_assenv *ae) {
 	if (!ae->wl[ae->idx].t) {
 		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"BRK Winape directive does not need parameter\n");
 	} else {
-		___output(ae,0xED);
-		___output(ae,0xFF);
+		if (!ae->winapeBRKidx) {
+			___output(ae,0xED);
+			___output(ae,0xFF);
+			ae->nop+=2;
+		} else {
+			int i;
+			for (i=0;i<ae->winapeBRKidx;i++) {
+				___output(ae,ae->winapeBRK[i]);
+				ae->nop++;
+			}
+		}
 	}
 }
 
@@ -22159,6 +22187,7 @@ struct s_asm_keyword instruction[]={
 {"UTF8REMAP",0,0,__UTF8REMAP},
 {"RUN",0,0,__RUN},
 {"SAVE",0,0,__SAVE},
+{"REDEFINE_BRK",0,0,__REDEFINE_BRK},
 {"BRK",0,0,__BRK},
 {"NOLIST",0,0,__NOLIST},
 {"LIST",0,0,__LIST},
@@ -30359,6 +30388,13 @@ printf("testing delayed alias regression bugfix OK\n");
 
 /*************************************************************/
 
+
+#define AUTOTEST_REDEFINE_BRK "brk:redefine_brk 0xCF:brk:brk"
+	ret=RasmAssembleInfo(AUTOTEST_REDEFINE_BRK,strlen(AUTOTEST_REDEFINE_BRK),&opcode,&opcodelen,&debug);
+	if (!ret && opcodelen==4 && opcode[2]==opcode[3] && opcode[3]==0xCF) {} else {printf("Autotest %03d ERROR (REDEFINE_BRK)\n",cpt);MiniDump(opcode,opcodelen);for (i=0;i<debug->nberror;i++) printf("%d -> %s\n",i,debug->error[i].msg);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+	RasmFreeInfoStruct(debug);
+printf("testing REDEFINE_BRK directive OK\n");
 
 	ret=RasmAssembleInfo(AUTOTEST_SNASET,strlen(AUTOTEST_SNASET),&opcode,&opcodelen,&debug);
 	if (!ret) {} else {printf("Autotest %03d ERROR (snapshot settings)\n",cpt);MiniDump(opcode,opcodelen);for (i=0;i<debug->nberror;i++) printf("%d -> %s\n",i,debug->error[i].msg);exit(-1);}
