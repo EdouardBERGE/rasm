@@ -297,7 +297,8 @@ E_COMPUTE_OPERATION_DURATION=66,
 E_COMPUTE_OPERATION_FILESIZE=67,
 E_COMPUTE_OPERATION_GETSIZE=68,
 E_COMPUTE_OPERATION_IS_REGISTER=69,
-E_COMPUTE_OPERATION_END=70
+E_COMPUTE_OPERATION_FILEBYTE=70,
+E_COMPUTE_OPERATION_END=71
 };
 
 struct s_compute_element {
@@ -1095,6 +1096,14 @@ struct s_utf8Remap {
 	unsigned char ccode;
 };
 
+struct s_filebyte_cache {
+	char *zename;
+	unsigned char *data;
+	unsigned int zelen;
+	unsigned int occ;
+};
+
+
 /*******************************************
         G L O B A L     S T R U C T
 *******************************************/
@@ -1232,6 +1241,9 @@ struct s_assenv {
 	int ih,mh;
 	char **includepath;
 	int ipath,mpath;
+	/* file cache */
+	struct s_filebyte_cache *fbcache;
+	int nbfbcache,maxfbcache;
 	/* automates */
 	char AutomateExpressionValidCharExtended[256];
 	char AutomateExpressionValidCharFirst[256];
@@ -1382,6 +1394,7 @@ struct s_math_keyword math_keyword[]={
 {"FILESIZE",0,0,E_COMPUTE_OPERATION_FILESIZE},
 {"GETSIZE",0,0,E_COMPUTE_OPERATION_GETSIZE},
 {"IS_REGISTER",0,0,E_COMPUTE_OPERATION_IS_REGISTER},
+{"FILEBYTE",0,0,E_COMPUTE_OPERATION_FILEBYTE},
 {"",0,0,-1}
 };
 
@@ -3159,6 +3172,11 @@ void FreeAssenv(struct s_assenv *ae)
 	}
 	if (ae->mticker) MemFree(ae->ticker);
 
+	for (i=0;i<ae->nbfbcache;i++) {
+		MemFree(ae->fbcache[i].zename);
+		MemFree(ae->fbcache[i].data);
+	}
+	MemFree(ae->fbcache);
 	MemFree(ae->outputfilename);
 	FreeLabelTree(ae);
 	FreeAliasTree(ae);
@@ -5313,7 +5331,7 @@ int __GETTICK(struct s_assenv *ae,char *oplist, int didx)
 							}
 					}
 				} else {
-					MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported opcode LD for GETTICK, need 2 arguments [%s]\n",zearg);
+					MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported opcode LD for GETTICK, requires 2 arguments [%s]\n",zearg);
 				}
 				break;
 
@@ -5325,6 +5343,65 @@ int __GETTICK(struct s_assenv *ae,char *oplist, int didx)
 	MemFree(opref);
 	if (opcode) MemFree(opcode);
 	return tick;
+}
+
+int __FILEBYTE(struct s_assenv *ae,char *argstr, unsigned int offset, int didx)
+{
+	#undef FUNC
+	#define FUNC "__FILEBYTE"
+
+	struct s_filebyte_cache newcache={0};
+	FILE *f;
+	int i;
+	unsigned char zebyte;
+
+	for (i=0;i<ae->nbfbcache;i++) {
+		if (strcmp(argstr,ae->fbcache[i].zename)==0) {
+			if (offset<ae->fbcache[i].zelen) {
+				return (int)ae->fbcache[i].data[offset]&0xFF;
+			} else {
+				MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"invalid offset %d for FILEBYTE function and file [%s]\n",offset,argstr);
+				return 0;
+			}
+		}
+	}
+	// no entry in cache, how bgi is the file?
+	f=fopen(argstr,"rb");
+	if (!f) {
+		MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"invalid filename [%s] for FILEBYTE function \n",argstr);
+		return 0;
+	}
+#ifdef OS_WIN
+sr=_setmode(_fileno(f), _O_BINARY );
+if (sr==-1) {
+logerr("FATAL: cannot set binary mode for reading");
+exit(ABORT_ERROR);
+}
+#endif
+	fseek(f,0,SEEK_END);
+	newcache.zelen=ftell(f);
+
+	// no cache for files bigger than 128k
+	if (newcache.zelen>128*1024) {
+		fseek(f,offset,SEEK_SET);
+		if (fread(&zebyte,1,1,f)!=1) MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"FILEBYTE function had read error with file [%s]\n",argstr);
+		fclose(f);
+		return (int)zebyte&0xFF;
+	}
+
+	newcache.zename=strdup(argstr);
+	newcache.data=MemMalloc(newcache.zelen);
+	fseek(f,0,SEEK_SET);
+	if (fread(newcache.data,1,newcache.zelen,f)!=newcache.zelen) MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"FILEBYTE function had read error with file [%s]\n",argstr);
+	fclose(f);
+
+	ObjectArrayAddDynamicValueConcat((void **)&ae->fbcache,&ae->nbfbcache,&ae->maxfbcache,&newcache,sizeof(newcache));
+	if (offset<newcache.zelen) {
+		return (int)newcache.data[offset]&0xFF;
+	} else {
+		MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"invalid offset %d for FILEBYTE function and file [%s]\n",offset,argstr);
+		return 0;
+	}
 }
 int __IS_REGISTER(struct s_assenv *ae,char *argstr)
 {
@@ -5913,6 +5990,7 @@ char *getOperatorStr(int operator) {
 		case E_COMPUTE_OPERATION_FILESIZE:strcpy(opStr,"filesize");break;
 		case E_COMPUTE_OPERATION_GETSIZE:strcpy(opStr,"getsize");break;
 		case E_COMPUTE_OPERATION_IS_REGISTER:strcpy(opStr,"is_register");break;
+		case E_COMPUTE_OPERATION_FILEBYTE:strcpy(opStr,"filebyte");break;
 		default:strcpy(opStr,"*internal error* ");break;
 	}
 	return opStr;
@@ -7095,6 +7173,7 @@ printf("DUMP des labels\n");
 			case E_COMPUTE_OPERATION_FILESIZE:printf("filesize ");break;
 			case E_COMPUTE_OPERATION_GETSIZE:printf("getsize ");break;
 			case E_COMPUTE_OPERATION_IS_REGISTER:printf("is_register ");break;
+			case E_COMPUTE_OPERATION_FILEBYTE:printf("filebyte ");break;
 			default:printf("bug\n");break;
 		}
 		
@@ -7240,6 +7319,7 @@ printf("operator string=%X\n",ae->computectx->operatorstack[o2].string);
 			case E_COMPUTE_OPERATION_FILESIZE:
 			case E_COMPUTE_OPERATION_GETSIZE:
 			case E_COMPUTE_OPERATION_IS_REGISTER:
+			case E_COMPUTE_OPERATION_FILEBYTE:
 #if DEBUG_STACK
 printf("ajout de la fonction\n");
 #endif
@@ -7273,7 +7353,7 @@ printf("final POP string=%X\n",ae->computectx->operatorstack[nboperatorstack+1].
 				************************************************/
 				case E_COMPUTE_OPERATION_PUSH_DATASTC:
 					if (computestack[i].string) {
-						/* string hack */
+						/* string hack => store string index in the computestack array */
 						accu[paccu]=i+0.1;
 					} else {
 						accu[paccu]=computestack[i].value;
@@ -7539,16 +7619,35 @@ printf("final POP string=%X\n",ae->computectx->operatorstack[nboperatorstack+1].
 									      computestack[integeridx].string=NULL;
 								      } else {
 									      if (integeridx>=0 && integeridx<nbcomputestack) {
-											MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"IS_REGISTER function needs a proper string\n");
+											MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"IS_REGISTER function requires a proper string\n");
 										} else {
 											MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"IS_REGISTER internal error (wrong string index)\n");
 										}
 									}
 								} else {
-									MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"IS_REGISTERGETTICK is empty\n");
+									MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"IS_REGISTER is empty\n");
 								}
 							       break;
 							       /* CC GETNOP */
+				case E_COMPUTE_OPERATION_FILEBYTE:if (paccu>1) {
+								      int integeridx;
+								      integeridx=floor(accu[paccu-2]);
+								      if (integeridx>=0 && integeridx<nbcomputestack && computestack[integeridx].string) {
+									      accu[paccu-2]=__FILEBYTE(ae,computestack[integeridx].string,accu[paccu-1]+0.5,didx);
+									      MemFree(computestack[integeridx].string);
+									      computestack[integeridx].string=NULL;
+									      paccu--;
+								      } else {
+									      if (integeridx>=0 && integeridx<nbcomputestack) {
+											MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"FILEBYTE function needs a proper string\n");
+										} else {
+											MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"FILEBYTE internal error (wrong string index)\n");
+										}
+									}
+								} else {
+									MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"FILEBYTE need 2 parameters, '<filename>' and offset\n");
+								}
+							       break;
 				default:MakeError(ae,GetExpIdx(ae,didx),GetCurrentFile(ae),GetExpLine(ae,didx),"invalid computing state! (%d)\n",computestack[i].operator);paccu=0;
 			}
 			if (!paccu) {
@@ -7599,7 +7698,7 @@ printf("final POP string=%X\n",ae->computectx->operatorstack[nboperatorstack+1].
 			switch (computestack[i].operator) {
 				case E_COMPUTE_OPERATION_PUSH_DATASTC:
 					if (computestack[i].string) {
-						/* string hack */
+						/* string hack => send string index in the computestack array */
 						accu[paccu]=i+0.1;
 					} else {
 						accu[paccu]=computestack[i].value;
@@ -7872,10 +7971,29 @@ printf("final POP string=%X\n",ae->computectx->operatorstack[nboperatorstack+1].
 										}
 									}
 								} else {
-									MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"IS_REGISTERGETTICK is empty\n");
+									MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"IS_REGISTER is empty\n");
 								}
 							       break;
 							       /* CC GETNOP */
+				case E_COMPUTE_OPERATION_FILEBYTE:if (paccu>1) {
+								      int integeridx;
+								      integeridx=floor(accu[paccu-2]);
+								      if (integeridx>=0 && integeridx<nbcomputestack && computestack[integeridx].string) {
+									      accu[paccu-2]=__FILEBYTE(ae,computestack[integeridx].string,accu[paccu-1]+0.5,didx);
+									      MemFree(computestack[integeridx].string);
+									      computestack[integeridx].string=NULL;
+									      paccu--;
+								      } else {
+									      if (integeridx>=0 && integeridx<nbcomputestack) {
+											MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"FILEBYTE function needs a proper string\n");
+										} else {
+											MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"FILEBYTE internal error (wrong string index)\n");
+										}
+									}
+								} else {
+									MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"FILEBYTE need 2 parameters, '<filename>' and offset\n");
+								}
+							       break;
 				default:MakeError(ae,GetExpIdx(ae,didx),GetCurrentFile(ae),GetExpLine(ae,didx),"invalid computing state! (%d)\n",computestack[i].operator);paccu=0;
 			}
 			if (!paccu) {
@@ -28949,6 +29067,12 @@ struct s_autotest_keyword autotest_keyword[]={
 	{"redefine_brk 'grouik' : nop",1}, // no string with this
 	{"redefine_brk ' ' : nop",0}, // but single char is OK
 	{"redefine_brk 0,1,2,3,4,5,6,7,8 : brk : redefine_brk 9 : brk : redefine_brk 0,1,2,3,4,5,6,7,8,9,10,11,12,13 : brk : assert $==24",0}, // multiple redefine is ok + size
+																	       //
+	{"repeat 256,x:defb x-1:rend:save 'autotest_fast.raw',0,$ : save 'autotest_fast2.raw',0,$ ",0}, // write all bytes
+	{"incbin 'autotest_fast.raw' : assert $==256",0}, // check size
+	{"assert filebyte('autotest_fast.raw',200)==200",0}, // check one byte
+	{"repeat 256,x : assert filebyte('autotest_fast.raw',x-1)==x-1 : rend ",0}, // check all bytes
+	{"repeat 256,x : assert filebyte('autotest_fast.raw',x-1)==x-1 : assert filebyte('autotest_fast2.raw',x-1)==x-1 : rend ",0}, // check all bytes on multiple files
 	/*
 	 *
 	 * will need to test resize + format then meta review test!
@@ -31258,6 +31382,8 @@ printf("testing simple extended CPR behaviour OK\n");
 
 
 	// remove workfiles
+	FileRemoveIfExists("autotest_fast.raw");
+	FileRemoveIfExists("autotest_fast2.raw");
 	FileRemoveIfExists("autotest_include.raw");
 	FileRemoveIfExists("rasmoutput.xpr");
 	FileRemoveIfExists("rasmoutput.cpr");
