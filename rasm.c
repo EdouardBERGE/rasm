@@ -5354,6 +5354,9 @@ int __FILEBYTE(struct s_assenv *ae,char *argstr, unsigned int offset, int didx)
 	FILE *f;
 	int i;
 	unsigned char zebyte;
+#ifdef OS_WIN
+	int sr;
+#endif
 
 	for (i=0;i<ae->nbfbcache;i++) {
 		if (strcmp(argstr,ae->fbcache[i].zename)==0) {
