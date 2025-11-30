@@ -9474,14 +9474,18 @@ int EDSK_addfile(struct s_assenv *ae,char *edskfilename,int facenumber, char *fi
 	memcpy(data,MakeAMSDOSHeader(run,offset,offset+insize,amsdos_name,amsdos_user),128);
 	memcpy(data+128,indata,insize);
 	/* overwrite check */
-	if (amsdos_entry_exists(edsk,facenumber,amsdos_name,amsdos_user) && !ae->edskoverwrite) {
-		MakeError(ae,0,NULL,0,"Error - Cannot save [%s] in edsk [%s] with overwrite disabled as the file already exists (use -eo command line option)\n",amsdos_name,edskfilename);
-		MemFree(data);
-		return 0;
+	if (amsdos_entry_exists(edsk,facenumber,amsdos_name,amsdos_user)) {
+		if (!ae->edskoverwrite) {
+			MakeError(ae,0,NULL,0,"Error - Cannot save [%s] in edsk [%s] with overwrite disabled as the file already exists (use -eo command line option)\n",amsdos_name,edskfilename);
+			MemFree(data);
+			return 0;
+		} else {
+			amsdos_remove_entry(edsk,facenumber,amsdos_name,amsdos_user);
+		}
 	}
 
 	if (amsdos_can_write(edsk,size)) {
-		amsdos_write_file(edsk,facenumber,0 /* user */, amsdos_name, tag_protection, tag_hidden, data, size);
+		amsdos_write_file(edsk,facenumber,amsdos_user /* user */, amsdos_name, tag_protection, tag_hidden, data, size);
 		edsktool_EDSK_write_file(edsk,edskfilename);
 		rasm_printf(ae,KIO"Write file [%s] on EDSK %s\n",amsdos_name,edskfilename);
 	} else {
@@ -14324,8 +14328,13 @@ void amsdos_init(struct s_edsk_global_struct *edsk) {
 	amsdos_init_directory(edsk);
 }
 
-void amsdos_init_entries(struct s_edsk_global_struct *edsk) { // USELESS ?
+void amsdos_init_entries(struct s_edsk_global_struct *edsk) {
+	int i;
 	memset(edsk->floppy_entries,0,sizeof(edsk->floppy_entries));
+	// init des entrées, reinit de l'alloc...
+	for (i=0;i<180;i++) {
+		edsk->floppy_block[i].isallocated=0;
+	}
 }
 void amsdos_init_block(struct s_edsk_global_struct *edsk) {
         int track=0,sector=1,block=0;
@@ -14600,6 +14609,8 @@ void amsdos_remove_entry(struct s_edsk_global_struct *edsk, int side, unsigned c
 	edsk->floppy_block[edsk->bstart].istowrite=1;
 	edsk->floppy_block[edsk->bstart+1].istowrite=1;
 	amsdos_update_edsk(edsk);
+	// rebuild because there is more free space now!
+	amsdos_build_entries(edsk);
 }
 int amsdos_entry_exists(struct s_edsk_global_struct *edsk, int side, unsigned char *entryName, int amsdos_user) {
 	unsigned char entry[16];
@@ -14636,7 +14647,6 @@ void amsdos_build_entries(struct s_edsk_global_struct *edsk) {
 	int filesize=0,filealloc=0,wrapentry=0;//warning remover
 	int iname=0,nextoffset,remaining;
 	int block2run;
-
 	//***********************************************************************************************
 	//                                     make directory
 	//***********************************************************************************************
@@ -14712,7 +14722,7 @@ void amsdos_build_entries(struct s_edsk_global_struct *edsk) {
 					if (edsk->floppy_directory[j].blocks[k] && edsk->floppy_directory[j].blocks[k]<180-edsk->bstart) {
 						if (edsk->floppy_block[edsk->floppy_directory[j].blocks[k]+edsk->bstart].isvalid) { // @@TODO secure this!!!
 							edsk->floppy_block[edsk->floppy_directory[j].blocks[k]+edsk->bstart].isallocated=1;
-					//printf("block #%02X used\n",edsk->floppy_directory[j].blocks[k]+edsk->bstart);
+			//		printf("block #%02X used\n",edsk->floppy_directory[j].blocks[k]+edsk->bstart);
 
 							memcpy(edsk->floppy_entries[i].data+nextoffset,edsk->floppy_block[edsk->floppy_directory[j].blocks[k]+edsk->bstart].data,remaining>1024?1024:remaining);
 							nextoffset+=1024;
@@ -15890,7 +15900,7 @@ void __edsk_check(struct s_assenv *ae, struct s_edsk_action *action) {
 
 	// check action
 	if (action->ioffset<0 || action->ioffset+action->isize>65536) {
-		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"EDSK WRITESECT error, invalid offset/size!\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"EDSK CHECK error, invalid offset/size!\n");
 		return;
 	}
 	offset=action->ioffset;
@@ -15913,7 +15923,7 @@ void __edsk_check(struct s_assenv *ae, struct s_edsk_action *action) {
 				for (j=0;j<edsk->track[i*edsk->sidenumber+side].sectornumber && size;j++) {
 					for (k=0;k<edsk->track[i*edsk->sidenumber+side].sector[j].length && size;k++) {
 						if (edsk->track[i*edsk->sidenumber+side].sector[j].data[k]!=ae->mem[zebank][offset]) {
-							MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"EDSK CHECK error track %d offset #%04X\n",i,offset);
+							MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"EDSK CHECK error track %d offset #%04X\n",i,k);
 							return;
 						}
 						offset++;
@@ -15927,7 +15937,7 @@ void __edsk_check(struct s_assenv *ae, struct s_edsk_action *action) {
 					if (edsk->track[i*edsk->sidenumber+side].sector[j].id==location[iloc].sectorID) {
 						for (k=0;k<edsk->track[i*edsk->sidenumber+side].sector[j].length && size;k++) {
 							if (edsk->track[i*edsk->sidenumber+side].sector[j].data[k]!=ae->mem[zebank][offset]) {
-								MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"EDSK CHECK error track %d sector #%02X offset #%04X\n",i,location[iloc].sectorID,offset);
+								MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"EDSK CHECK error track %d sector #%02X offset #%04X\n",i,location[iloc].sectorID,k);
 								return;
 							}
 							offset++;
@@ -30288,6 +30298,59 @@ printf("testing directive SUMMEM16 OK\n");
 	if (!ret) {} else {printf("Autotest %03d ERROR (formula func RND)\n",cpt);exit(-1);}
 	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
 printf("testing formula RND function OK\n");
+
+#define AUTOTEST_EDSK_OVERWRITE_FILE0 "EDSK create,'rasmoutput_test.dsk',DATA,OVERWRITE:bank:" \
+"org #100 : defb 'roudoudou' : save 'machin.bin',#100,$-#100,DSK,'rasmoutput_test.dsk' : " \
+"save '1:machin.bin',#100,$-#100,DSK,'rasmoutput_test.dsk'" 
+	memset(&param,0,sizeof(struct s_parameter));
+	//param.edskoverwrite=1; // else it wont work!
+	ret=RasmAssembleInfoParam(AUTOTEST_EDSK_OVERWRITE_FILE0,strlen(AUTOTEST_EDSK_OVERWRITE_FILE0),&opcode,&opcodelen,&debug,&param);
+	if (!ret) {} else {printf("Autotest %03d ERROR (testing EDSK create+multiple saves with different users)\n",cpt);
+		for (i=0;i<debug->nberror;i++) printf("%d -> %s\n",i,debug->error[i].msg);
+		exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing EDSK create+multiple saves with different users and same name\n");
+
+#define AUTOTEST_EDSK_OVERWRITE_FILE1 "contreMesure:"\
+"defb #00,#4d,#41,#43,#48,#49,#4e,#20,#20,#42,#49,#4e,#00,#00,#00,#02:"\
+"defb #02,#00,#00,#00,#00,#00,#00,#00,#00,#00,#00,#00,#00,#00,#00,#00:"\
+"defb #01,#4d,#41,#43,#48,#49,#4e,#20,#20,#42,#49,#4e,#00,#00,#00,#02:"\
+"defb #03,#00,#00,#00,#00,#00,#00,#00,#00,#00,#00,#00,#00,#00,#00,#00:"\
+"defb #e5,#e5,#e5,#e5,#e5,#e5,#e5,#e5,#e5,#e5,#e5,#e5,#e5,#e5,#e5,#e5:"\
+"lafin:"\
+"edsk check,'rasmoutput_test.dsk','0:#C1',lafin-contreMesure,contreMesure"
+	ret=RasmAssembleInfoParam(AUTOTEST_EDSK_OVERWRITE_FILE1,strlen(AUTOTEST_EDSK_OVERWRITE_FILE1),&opcode,&opcodelen,&debug,&param);
+	if (!ret && opcodelen==5*16) {} else {printf("Autotest %03d ERROR (testing EDSK multiple users+generated edsk)\n",cpt);
+		for (i=0;i<debug->nberror;i++) printf("%d -> %s\n",i,debug->error[i].msg);
+		exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing EDSK multiple users with same names on generated edsk\n");
+
+#define AUTOTEST_EDSK_OVERWRITE_FILE2 "defs 1024,#AA : save 'machin.bin',0,$,DSK,'rasmoutput_test.dsk' "
+	memset(&param,0,sizeof(struct s_parameter));
+	param.edskoverwrite=1; // else it wont work!
+	ret=RasmAssembleInfoParam(AUTOTEST_EDSK_OVERWRITE_FILE2,strlen(AUTOTEST_EDSK_OVERWRITE_FILE2),&opcode,&opcodelen,&debug,&param);
+	if (!ret) {} else {printf("Autotest %03d ERROR (testing EDSK overwrite file proper update with eo option)\n",cpt);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing EDSK overwrite file proper update with eo option\n");
+
+#define AUTOTEST_EDSK_OVERWRITE_FILE3 "contreMesure:"\
+"defb #00,#4d,#41,#43,#48,#49,#4e,#20,#20,#42,#49,#4e,#00,#00,#00,#09:"\
+"defb #02,#04,#00,#00,#00,#00,#00,#00,#00,#00,#00,#00,#00,#00,#00,#00:"\
+"defb #01,#4d,#41,#43,#48,#49,#4e,#20,#20,#42,#49,#4e,#00,#00,#00,#02:"\
+"defb #03,#00,#00,#00,#00,#00,#00,#00,#00,#00,#00,#00,#00,#00,#00,#00:"\
+"defb #e5,#e5,#e5,#e5,#e5,#e5,#e5,#e5,#e5,#e5,#e5,#e5,#e5,#e5,#e5,#e5:"\
+"lafin:"\
+"edsk check,'rasmoutput_test.dsk','0:#C1',lafin-contreMesure,contreMesure:"\
+"pleindeAA:defs 512,#AA:finAA:"\
+"edsk check,'rasmoutput_test.dsk','0:#C6',512,pleindeAA:"
+	ret=RasmAssembleInfoParam(AUTOTEST_EDSK_OVERWRITE_FILE3,strlen(AUTOTEST_EDSK_OVERWRITE_FILE3),&opcode,&opcodelen,&debug,&param);
+	if (!ret && opcodelen==5*16+512) {} else {printf("Autotest %03d ERROR (testing EDSK realloc block when overwriting)\n",cpt);
+		for (i=0;i<debug->nberror;i++) printf("%d -> %s\n",i,debug->error[i].msg);
+		exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing EDSK realloc blocks when overwriting + effective overwrite\n");
+
 
 #define AUTOTEST_EDSK_READFILE00 "EDSK create,'rasmoutput_test.dsk',DATA,OVERWRITE:bank" \
 ":defs 4096,#DD: defs 16384-4096,#EE: defs 24000,#FF:"\
