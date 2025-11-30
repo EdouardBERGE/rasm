@@ -30352,6 +30352,48 @@ printf("testing EDSK overwrite file proper update with eo option\n");
 printf("testing EDSK realloc blocks when overwriting + effective overwrite\n");
 
 
+#define AUTOTEST_EDSK_OVERWRITE_FILE4 "EDSK create,'rasmoutput_test.dsk',DATA,OVERWRITE:defs 16384,#BB:"\
+"save 'gros01.bin',0,16384,DSK,'rasmoutput_test.dsk':"\
+"save 'gros02.bin',0,16384,DSK,'rasmoutput_test.dsk':"\
+"save 'gros03.bin',0,16384,DSK,'rasmoutput_test.dsk':"\
+"save 'gros04.bin',0,16384,DSK,'rasmoutput_test.dsk':"\
+"save 'gros05.bin',0,16384,DSK,'rasmoutput_test.dsk':"\
+"save 'gros06.bin',0,16384,DSK,'rasmoutput_test.dsk':"\
+"save 'gros07.bin',0,16384,DSK,'rasmoutput_test.dsk':"\
+"save 'gros08.bin',0,16384,DSK,'rasmoutput_test.dsk':"\
+"save 'gros09.bin',0,16384,DSK,'rasmoutput_test.dsk':"\
+"save 'gros0a.bin',0,16384,DSK,'rasmoutput_test.dsk'"
+	ret=RasmAssembleInfoParam(AUTOTEST_EDSK_OVERWRITE_FILE4,strlen(AUTOTEST_EDSK_OVERWRITE_FILE4),&opcode,&opcodelen,&debug,&param);
+	if (!ret) {} else {printf("Autotest %03d ERROR (testing EDSK realloc block floppy is almost full 1/3)\n",cpt);
+		for (i=0;i<debug->nberror;i++) printf("%d -> %s\n",i,debug->error[i].msg);
+		exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing EDSK realloc blocks when floppy is almost full 1/3\n");
+
+
+#define AUTOTEST_EDSK_OVERWRITE_FILE5 "defs 16384,#CC:"\
+"save 'gros04.bin',0,16384,DSK,'rasmoutput_test.dsk':"
+	ret=RasmAssembleInfoParam(AUTOTEST_EDSK_OVERWRITE_FILE5,strlen(AUTOTEST_EDSK_OVERWRITE_FILE5),&opcode,&opcodelen,&debug,&param);
+	if (!ret) {} else {printf("Autotest %03d ERROR (testing EDSK realloc block floppy is almost full 2/3)\n",cpt);
+		for (i=0;i<debug->nberror;i++) printf("%d -> %s\n",i,debug->error[i].msg);
+		exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing EDSK realloc blocks when floppy is almost full 2/3\n");
+
+#define AUTOTEST_EDSK_OVERWRITE_FILE6 "defs 512,#CC:defs 512,#BB:"\
+"edsk check,'rasmoutput_test.dsk','11:#C9',512,0:"\
+"edsk check,'rasmoutput_test.dsk','11:#C5',512,512:"\
+"edsk check,'rasmoutput_test.dsk','5:#C8',512,512:"\
+"edsk check,'rasmoutput_test.dsk','0:#C8',512,512:"
+
+	ret=RasmAssembleInfoParam(AUTOTEST_EDSK_OVERWRITE_FILE6,strlen(AUTOTEST_EDSK_OVERWRITE_FILE6),&opcode,&opcodelen,&debug,&param);
+	if (!ret) {} else {printf("Autotest %03d ERROR (testing EDSK realloc block floppy is almost full 3/3)\n",cpt);
+		for (i=0;i<debug->nberror;i++) printf("%d -> %s\n",i,debug->error[i].msg);
+		exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing EDSK realloc blocks when floppy is almost full 3/3\n");
+
+
 #define AUTOTEST_EDSK_READFILE00 "EDSK create,'rasmoutput_test.dsk',DATA,OVERWRITE:bank" \
 ":defs 4096,#DD: defs 16384-4096,#EE: defs 24000,#FF:"\
 "save 'g4k.bin',0,4096,DSK,'rasmoutput_test.dsk': save 'g16k.bin',0,16384,DSK,'rasmoutput_test.dsk': save 'g36k.bin',0,1024*36,DSK,'rasmoutput_test.dsk' "
