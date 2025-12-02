@@ -14,6 +14,7 @@ struct z80 {
   void (*port_out)(z80*, uint8_t, uint8_t);
 
   unsigned long cyc; // cycle count (t-states)
+  unsigned long nop; // cycle count (t-states)
 
   uint16_t pc, sp, ix, iy; // special purpose registers
   uint16_t mem_ptr; // "wz" register
@@ -33,6 +34,10 @@ struct z80 {
 
   unsigned char userdata[65536];
   long nbinstructions;
+
+  int breakOnHalt;
+  int breakOnEI;
+  int breakSuccess;
 };
 
 void z80_init(z80* const z);
