@@ -40,6 +40,7 @@ struct z80 {
   int breakSuccess;
 };
 
+void z80_set_f(z80* const z, uint8_t val);
 void z80_init(z80* const z);
 void z80_step(z80* const z);
 void z80_debug_output(z80* const z);

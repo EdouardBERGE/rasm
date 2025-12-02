@@ -122,6 +122,16 @@ static inline uint8_t get_f(z80* const z) {
   return val;
 }
 
+void z80_set_f(z80* const z, uint8_t val) {
+  z->cf = (val >> 0) & 1;
+  z->nf = (val >> 1) & 1;
+  z->pf = (val >> 2) & 1;
+  z->xf = (val >> 3) & 1;
+  z->hf = (val >> 4) & 1;
+  z->yf = (val >> 5) & 1;
+  z->zf = (val >> 6) & 1;
+  z->sf = (val >> 7) & 1;
+}
 static inline void set_f(z80* const z, uint8_t val) {
   z->cf = (val >> 0) & 1;
   z->nf = (val >> 1) & 1;
