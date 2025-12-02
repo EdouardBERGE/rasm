@@ -244,10 +244,11 @@ void Usage(int errcode) {
 	printf("-maxnop <value>             RUN maximum duration in nops\n");
 	printf("-maxCycle <value>           RUN maximum duration in cycles\n");
 	printf("-maxRun <value>             RUN multiple times\n");
+	printf("-stopAddress <value>        RUN until reaching address\n");
+	printf("-eiStop                     RUN until EI\n");
 	printf("-haltStop                   RUN until HALT\n");
 	printf("-unknownStop                RUN until unknown instruction\n");
-	printf("-stopAddress <value>        RUN until reaching address\n");
-	printf("-debug                      RUN ultra verbose information (for debug purpose)\n");
+	printf("-debug                      ultra verbose information (for debug purpose)\n");
 	exit(errcode);
 }
 
@@ -342,6 +343,8 @@ int ParseOptions(char **argv,int argc, struct s_parameter *param)
 			param->ioCPC=1;
 		} else if (stricmp(argv[i],"-unknownStop")==0) {
 			param->unknownStop=1;
+		} else if (stricmp(argv[i],"-eiStop")==0) {
+			param->eiStop=1;
 		} else if (stricmp(argv[i],"-haltStop")==0) {
 			param->haltStop=1;
 		} else if (stricmp(argv[i],"-dirt")==0) {
