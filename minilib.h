@@ -917,6 +917,15 @@ int FileReadBinary(char *filename,char *data,int n)
 		FileClose(last_id);
 		return 0;
 	}
+#ifdef OS_WIN
+{int sr;
+sr=_setmode(_fileno(last_id), _O_BINARY );
+if (sr==-1) {
+logerr("FATAL: cannot set binary mode for reading");
+exit(ABORT_ERROR);
+}
+}
+#endif
 	
 	nn=fread(data,1,n,last_id);
 	//printf("%d bytes lus\n",nn);
