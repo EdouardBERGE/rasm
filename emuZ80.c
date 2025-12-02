@@ -46,6 +46,7 @@ struct s_parameter {
 	int ioCPC;       // 0:no(default) 1:try to mimic CPC
 	int haltStop;
 	int eiStop;
+	int unknownStop;
 	int debug;
 
 	int a,b,c,d,e,regF,h,l,xl,xh,yl,yh,af,bc,de,hl,ix,iy,afp,bcp,dep,hlp,ap,fp,bp,cp,dp,ep,hp,lp,sp;
@@ -89,6 +90,7 @@ int EmuZ80(struct s_parameter *param) {
 	z80 z;
 	if (param->haltStop) z.breakOnHalt=1;
 	if (param->eiStop) z.breakOnEI=1;
+	if (param->unknownStop) z.breakOnUnknownInstruction=1;
 	if (param->genINTdelay) INTcptMax=param->genINTdelay;
 	if (param->genVBLdelay) VBLcptMax=param->genVBLdelay;
 	fseek(param->f,0,SEEK_END);
@@ -243,6 +245,7 @@ void Usage(int errcode) {
 	printf("-maxCycle <value>           RUN maximum duration in cycles\n");
 	printf("-maxRun <value>             RUN multiple times\n");
 	printf("-haltStop                   RUN until HALT\n");
+	printf("-unknownStop                RUN until unknown instruction\n");
 	printf("-stopAddress <value>        RUN until reaching address\n");
 	printf("-debug                      RUN ultra verbose information (for debug purpose)\n");
 	exit(errcode);
@@ -337,6 +340,8 @@ int ParseOptions(char **argv,int argc, struct s_parameter *param)
 			param->addVec38=1;
 		} else if (stricmp(argv[i],"-IOCPC")==0) {
 			param->ioCPC=1;
+		} else if (stricmp(argv[i],"-unknownStop")==0) {
+			param->unknownStop=1;
 		} else if (stricmp(argv[i],"-haltStop")==0) {
 			param->haltStop=1;
 		} else if (stricmp(argv[i],"-dirt")==0) {

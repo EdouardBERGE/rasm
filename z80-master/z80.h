@@ -37,6 +37,7 @@ struct z80 {
 
   int breakOnHalt;
   int breakOnEI;
+  int breakOnUnknownInstruction;
   int breakSuccess;
 };
 
