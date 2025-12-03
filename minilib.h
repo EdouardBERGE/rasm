@@ -77,16 +77,16 @@
 static int _static_library_nbfile_opened=0;
 static int _static_library_nbfile_opened_max=0;
 
-void _internal_ObjectArrayAddDynamicValue(void **zearray, void *zeobject, int object_size,int curline, char *curfunc, char *cursource);
-void _internal_ObjectArrayAddDynamicValueConcat(void **zearray, int *nbfields, int *maxfields, void *zeobject, int object_size, int curline, char *curfunc, char *cursource);
-#define ObjectArrayAddDynamicValue(zearray,zeobject,objsize) _internal_ObjectArrayAddDynamicValue(zearray,zeobject,objsize,__LINE__,FUNC,__FILENAME__)
-#define ObjectArrayAddDynamicValueConcat(zearray,nbv,maxv,zeobject,objsize) _internal_ObjectArrayAddDynamicValueConcat(zearray,nbv,maxv,zeobject,objsize,__LINE__,FUNC,__FILENAME__)
-void _internal_IntArrayAddDynamicValueConcat(int **zearray, int *nbval, int *maxval, int zevalue, int curline, char *curfunc, char *cursource);
-#define IntArrayAddDynamicValueConcat(zearray,nbv,maxv,zevalue) _internal_IntArrayAddDynamicValueConcat(zearray,nbv,maxv,zevalue,__LINE__,FUNC,__FILENAME__)
-void _internal_FieldArrayAddDynamicValue(char ***zearray, char *zevalue, int curline, char *curfunc, char *cursource);
-#define FieldArrayAddDynamicValue(zearray,zevalue) _internal_FieldArrayAddDynamicValue(zearray,zevalue,__LINE__,FUNC,__FILENAME__)
-void _internal_FieldArrayAddDynamicValueConcat(char ***zearray, int *nbfields, int *maxfields, char *zevalue, int curline, char *curfunc, char *cursource);
-#define FieldArrayAddDynamicValueConcat(zearray,nb,maxf,zevalue) _internal_FieldArrayAddDynamicValueConcat(zearray,nb,maxf,zevalue,__LINE__,FUNC,__FILENAME__)
+void _internal_ObjectArrayAddDynamicValue(void **zearray, void *zeobject, int object_size);
+void _internal_ObjectArrayAddDynamicValueConcat(void **zearray, int *nbfields, int *maxfields, void *zeobject, int object_size);
+#define ObjectArrayAddDynamicValue(zearray,zeobject,objsize) _internal_ObjectArrayAddDynamicValue(zearray,zeobject,objsize)
+#define ObjectArrayAddDynamicValueConcat(zearray,nbv,maxv,zeobject,objsize) _internal_ObjectArrayAddDynamicValueConcat(zearray,nbv,maxv,zeobject,objsize)
+void _internal_IntArrayAddDynamicValueConcat(int **zearray, int *nbval, int *maxval, int zevalue);
+#define IntArrayAddDynamicValueConcat(zearray,nbv,maxv,zevalue) _internal_IntArrayAddDynamicValueConcat(zearray,nbv,maxv,zevalue)
+void _internal_FieldArrayAddDynamicValue(char ***zearray, char *zevalue);
+#define FieldArrayAddDynamicValue(zearray,zevalue) _internal_FieldArrayAddDynamicValue(zearray,zevalue)
+void _internal_FieldArrayAddDynamicValueConcat(char ***zearray, int *nbfields, int *maxfields, char *zevalue);
+#define FieldArrayAddDynamicValueConcat(zearray,nb,maxf,zevalue) _internal_FieldArrayAddDynamicValueConcat(zearray,nb,maxf,zevalue)
 
 
 long long FileGetSize(char *filename);
@@ -206,7 +206,7 @@ char *TxtStrDupLen(char *str, int *len)
 	return newstr;
 }
 
-void _internal_ObjectArrayAddDynamicValueConcat(void **zearray, int *nbfields, int *maxfields, void *zeobject, int object_size, int curline, char *curfunc, char *cursource)
+void _internal_ObjectArrayAddDynamicValueConcat(void **zearray, int *nbfields, int *maxfields, void *zeobject, int object_size)
 {
 	#undef FUNC
 	#define FUNC "ObjectArrayAddDynamicValueConcat"
@@ -243,7 +243,7 @@ void _internal_ObjectArrayAddDynamicValueConcat(void **zearray, int *nbfields, i
 	function reallocate memory to store the new string at
 	the end of the array.
 */
-void _internal_IntArrayAddDynamicValueConcat(int **zearray, int *nbval, int *maxval, int zevalue, int curline, char *curfunc, char *cursource)
+void _internal_IntArrayAddDynamicValueConcat(int **zearray, int *nbval, int *maxval, int zevalue) 
 {
 	#undef FUNC
 	#define FUNC "IntArrayAddDynamicValue"
@@ -321,7 +321,7 @@ char **TxtSplitWithChar(char *in_str, char split_char)
 	function reallocate memory to store the new string at
 	the end of the array.
 */
-void _internal_FieldArrayAddDynamicValue(char ***zearray, char *zevalue, int curline, char *curfunc, char *cursource)
+void _internal_FieldArrayAddDynamicValue(char ***zearray, char *zevalue)
 {
 	#undef FUNC
 	#define FUNC "FieldArrayAddDynamicValue"
@@ -332,7 +332,7 @@ void _internal_FieldArrayAddDynamicValue(char ***zearray, char *zevalue, int cur
 	(*zearray)[nbfield-2]=TxtStrDup(zevalue);
 	(*zearray)[nbfield-1]=NULL;
 }
-void _internal_FieldArrayAddDynamicValueConcat(char ***zearray, int *nbfields, int *maxfields, char *zevalue, int curline, char *curfunc, char *cursource)
+void _internal_FieldArrayAddDynamicValueConcat(char ***zearray, int *nbfields, int *maxfields, char *zevalue)
 {
 	#undef FUNC
 	#define FUNC "FieldArrayAddDynamicValueConcat"
@@ -340,7 +340,7 @@ void _internal_FieldArrayAddDynamicValueConcat(char ***zearray, int *nbfields, i
 	if ((*zearray)==NULL) {
 		*nbfields=1;
 		*maxfields=10;
-		(*zearray)=realloc(NULL,(*maxfields)*sizeof(char *));
+		(*zearray)=MemRealloc(NULL,(*maxfields)*sizeof(char *));
 	} else {
 		*nbfields=(*nbfields)+1;
 		if (*nbfields>=*maxfields) {
