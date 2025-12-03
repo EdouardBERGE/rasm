@@ -1,3 +1,4 @@
+#include<math.h>
 #include<stdlib.h>
 #include<stdio.h>
 #include<string.h>
@@ -25,9 +26,47 @@ return (int)c1 - (int)c2;
 }
 #endif
 
+void FieldArrayAddDynamicValueConcat(char ***zearray, int *nbfields, int *maxfields, char *zevalue)
+{
+        if ((*zearray)==NULL) {
+                *nbfields=1;
+                *maxfields=10;
+                (*zearray)=realloc(NULL,(*maxfields)*sizeof(char *));
+        } else {
+                *nbfields=(*nbfields)+1;
+                if (*nbfields>=*maxfields) {
+                        *maxfields=(*maxfields)*2;
+                        (*zearray)=realloc((*zearray),(*maxfields)*sizeof(char *));
+                }
+        }
+        /* using direct calls because it is more interresting to know which is the caller */
+        (*zearray)[(*nbfields)-1]=strdup(zevalue);
+        (*zearray)[(*nbfields)]=NULL;
+}
+char **TxtSplitWithChar(char *in_str, char split_char)
+{
+        char **tab=NULL;
+        char *match_str;
+        int redo=1;
+        int idx,idmax;
+
+        match_str=in_str;
+
+        while (redo && *in_str) {
+                while (*match_str && *match_str!=split_char) match_str++;
+                redo=*match_str;
+                *match_str=0;
+                FieldArrayAddDynamicValueConcat(&tab,&idx,&idmax,in_str);
+                in_str=++match_str;
+        }
+
+        return tab;
+}
+
 struct s_parameter {
 	FILE *f;
 	char *filename;
+	char *crible;
 
 	unsigned int fileOffset,fileLength; // if u dunna want to use all the file
 	unsigned int destOffset;
@@ -78,6 +117,80 @@ void cpc_wrapout(z80* const z, uint8_t port, uint8_t val) {
 	// pouet pouet
 }
 
+unsigned char crible[256];
+unsigned int ncrible;
+unsigned int icrible;
+unsigned int mcrible;
+int rcrible[32]={0};
+
+void initialize_crible(int maxrun) {
+	int i=0,j,k;
+	int vmax,imax,vmin,imin;
+
+	crible[i++]=0;
+	crible[i++]=255;
+	crible[i++]=127;
+	crible[i++]=1;
+	crible[i++]=2;
+	crible[i++]=3;
+	for (;i<256;i++) {
+		vmax=0;
+		for (j=0;j<256;j++) {
+			for (k=0;k<i;k++) {
+				if (crible[k]==j) break; // already assigned
+			}
+			if (k<i) continue; // skip
+					   //
+			// find minimum
+			vmin=256;
+			for (k=0;k<i;k++) {
+				if (abs(crible[k]-j)<vmin) {
+					vmin=abs(crible[k]-j);
+					imin=j;
+				}
+			}
+			// keep max :)
+			if (vmin>vmax) {
+				imax=imin;
+				vmax=vmin;
+			}
+		}
+		// value far away from previous values
+		crible[i]=imax;
+	}
+	// crible distribution ok
+	//for (i=0;i<256;i++) printf("#%02X ",crible[i]);
+	//printf("\n");
+
+	imax=2;
+	while (pow(mcrible,imax)<maxrun) imax++;
+	imax--;
+	if (imax<2) imax=2;
+	printf("crible will target %d different values per register (according to maxrun value)\n",imax);
+	ncrible=imax;
+	icrible=0;
+}
+
+unsigned char crible8() {
+	unsigned char ret;
+	unsigned int tcrible;
+
+	ret=crible[rcrible[icrible]];
+	rcrible[icrible]=(rcrible[icrible]+1)%mcrible;
+	tcrible=icrible;
+	while (!rcrible[tcrible]) {
+		tcrible++; // increment next register until not zero
+		rcrible[tcrible]=(rcrible[tcrible]+1)%mcrible;
+	}
+	icrible=(icrible+1)%mcrible; // next register for next call
+	
+	return ret;
+}
+
+unsigned short int crible16() {
+	return (crible8()<<8)|crible8();
+}
+
 int EmuZ80(struct s_parameter *param) {
 	unsigned int zesize;
 	unsigned int INTcpt=0,INTcptMax=64*52;
@@ -86,6 +199,8 @@ int EmuZ80(struct s_parameter *param) {
 	unsigned long long totalNop=0;
 	unsigned long long totalRun=0;
 	unsigned long minRun,maxRun;
+	char **myreg=NULL;
+	int ireg,maxreg=0;
 	int i;
 	z80 z;
 	if (param->haltStop) z.breakOnHalt=1;
@@ -109,6 +224,23 @@ int EmuZ80(struct s_parameter *param) {
 	if (zesize+param->destOffset>65536) {
 		fprintf(stderr,"ERROR : cannot insert %d bytes in memory at offset %d\n",zesize,param->destOffset);
 		exit(2);
+	}
+
+	if (param->crible) {
+		myreg=TxtSplitWithChar(param->crible,',');
+		for (maxreg=mcrible=0;myreg[maxreg];maxreg++,mcrible++) { // count registers
+			if (stricmp(myreg[ireg],"af")==0) mcrible++; else
+			if (stricmp(myreg[ireg],"bc")==0) mcrible++; else
+			if (stricmp(myreg[ireg],"de")==0) mcrible++; else
+			if (stricmp(myreg[ireg],"hl")==0) mcrible++; else
+			if (stricmp(myreg[ireg],"ix")==0) mcrible++; else
+			if (stricmp(myreg[ireg],"iy")==0) mcrible++; else
+			if (stricmp(myreg[ireg],"afp")==0) mcrible++; else
+			if (stricmp(myreg[ireg],"bcp")==0) mcrible++; else
+			if (stricmp(myreg[ireg],"dep")==0) mcrible++; else
+			if (stricmp(myreg[ireg],"hlp")==0) mcrible++;
+		}
+		initialize_crible(param->maxRun);
 	}
 
 	// reset emulator + memory preparation
@@ -170,6 +302,45 @@ int EmuZ80(struct s_parameter *param) {
 		if (param->dep!=-1) {z.d=param->dep>>8;z.e=param->dep&0xFF;}
 		if (param->hlp!=-1) {z.h=param->hlp>>8;z.l=param->hlp&0xFF;}
 
+		if (param->crible) {
+			for (ireg=0;myreg[ireg];ireg++) {
+				if (stricmp(myreg[ireg],"a")==0) z.a=crible8(); else
+				if (stricmp(myreg[ireg],"f")==0) z80_set_f(&z,crible8()); else
+				if (stricmp(myreg[ireg],"b")==0) z.b=crible8(); else
+				if (stricmp(myreg[ireg],"c")==0) z.c=crible8(); else
+				if (stricmp(myreg[ireg],"d")==0) z.d=crible8(); else
+				if (stricmp(myreg[ireg],"e")==0) z.e=crible8(); else
+				if (stricmp(myreg[ireg],"h")==0) z.h=crible8(); else
+				if (stricmp(myreg[ireg],"l")==0) z.l=crible8(); else
+				if (stricmp(myreg[ireg],"xh")==0) z.ix=(z.ix&0xFF)|(crible8()<<8); else
+				if (stricmp(myreg[ireg],"xl")==0) z.ix=(z.ix&0xFF00)|crible8(); else
+				if (stricmp(myreg[ireg],"yh")==0) z.iy=(z.iy&0xFF)|(crible8()<<8); else
+				if (stricmp(myreg[ireg],"yl")==0) z.iy=(z.iy&0xFF00)|crible8(); else
+				if (stricmp(myreg[ireg],"af")==0) {z.a=crible8();z80_set_f(&z,crible8());} else
+				if (stricmp(myreg[ireg],"bc")==0) {z.b=crible8();z.c=crible8();} else
+				if (stricmp(myreg[ireg],"de")==0) {z.d=crible8();z.e=crible8();} else
+				if (stricmp(myreg[ireg],"hl")==0) {z.h=crible8();z.l=crible8();} else
+				if (stricmp(myreg[ireg],"ix")==0) z.ix=crible16(); else
+				if (stricmp(myreg[ireg],"iy")==0) z.iy=crible16(); else
+				if (stricmp(myreg[ireg],"ap")==0) z.a_=crible8(); else
+				if (stricmp(myreg[ireg],"fp")==0) z.f_=crible8(); else
+				if (stricmp(myreg[ireg],"bp")==0) z.b_=crible8(); else
+				if (stricmp(myreg[ireg],"cp")==0) z.c_=crible8(); else
+				if (stricmp(myreg[ireg],"dp")==0) z.d_=crible8(); else
+				if (stricmp(myreg[ireg],"ep")==0) z.e_=crible8(); else
+				if (stricmp(myreg[ireg],"hp")==0) z.h_=crible8(); else
+				if (stricmp(myreg[ireg],"lp")==0) z.l_=crible8(); else
+				if (stricmp(myreg[ireg],"afp")==0) {z.a_=crible8();z.f_=crible8();} else
+				if (stricmp(myreg[ireg],"bcp")==0) {z.b_=crible8();z.c_=crible8();} else
+				if (stricmp(myreg[ireg],"dep")==0) {z.d_=crible8();z.e_=crible8();} else
+				if (stricmp(myreg[ireg],"hlp")==0) {z.h_=crible8();z.l_=crible8();} else
+				{
+					fprintf(stderr,"unknown register to crible [%s]\n",myreg[ireg]);
+					exit(2);
+				}
+			}
+		}
+
 		while (1) {
 		    if (param->debug) z80_debug_output(&z);
 		    z80_step(&z);
@@ -192,7 +363,7 @@ int EmuZ80(struct s_parameter *param) {
 		    }
 		}
 
-		if (!(i%1000)) printf("Executed in %ld nop(s) (cycles=%ld) MIPS=%.2lf cycleMIPS=%.2lf (@4MHz)\n",z.nop,z.cyc,(double)z.nbinstructions/(double)z.nop,(double)z.nbinstructions/(double)z.cyc*4.0);
+		if (!(i%(param->maxRun/10))) printf("Executed in %ld nop(s) (cycles=%ld) MIPS=%.2lf cycleMIPS=%.2lf (@4MHz)\n",z.nop,z.cyc,(double)z.nbinstructions/(double)z.nop,(double)z.nbinstructions/(double)z.cyc*4.0);
 
 		totalNop+=z.nop;
 		totalRun++;
@@ -238,6 +409,7 @@ void Usage(int errcode) {
 	printf("     reg may be : a,f,b,c,d,e,h,l,xl,xh,yl,yh\n");
 	printf("                  af,bc,de,hl,ix,iy\n");
 	printf("                  afp,bcp,dep,hlp,ap,fp,bp,cp,dp,ep,hp,lp\n");
+	printf("-crible <reg>,<reg>,...     crible registers in the list\n");
 	printf("-addVec38                   add EI:RET in #38\n");
 	printf("\n");
 	printf("run options :\n");
@@ -263,6 +435,15 @@ int ParseOptions(char **argv,int argc, struct s_parameter *param)
 	if (argv[0][0]=='-') {
 		if (stricmp(argv[i],"-h")==0) {
 			Usage(0);
+		} else if (stricmp(argv[i],"-crible")==0) {
+			if (i+1<argc) {
+				param->crible=argv[1];
+				printf("crible setting [%s]\n",param->crible);
+				i++;
+			} else {
+				fprintf(stderr,"ERROR : Missing argument for -crible option\nRun -h for help\n");
+				exit(1);
+			}
 		} else if (stricmp(argv[i],"-fileOffset")==0) {
 			if (i+1<argc) {
 				if (argv[1][0]=='0' && argv[1][1]=='x') param->fileOffset=strtol(argv[1],NULL,16); else
@@ -506,37 +687,11 @@ void GetParametersFromCommandLine(int argc, char **argv, struct s_parameter *par
 void main(int argc, char **argv) {
 	struct s_parameter param={0};
 	param.stopAddress=0x12345;
-	param.a=-1;
-	param.regF=-1;
-	param.b=-1;
-	param.c=-1;
-	param.d=-1;
-	param.e=-1;
-	param.h=-1;
-	param.l=-1;
-	param.xh=-1;
-	param.xl=-1;
-	param.yh=-1;
-	param.yl=-1;
-	param.sp=-1;
-	param.af=-1;
-	param.bc=-1;
-	param.de=-1;
-	param.hl=-1;
-	param.ix=-1;
-	param.iy=-1;
-	// EXX
-	param.ap=-1;
-	param.fp=-1;
-	param.bp=-1;
-	param.cp=-1;
-	param.dp=-1;
-	param.ep=-1;
-	param.hp=-1;
-	param.lp=-1;
-	param.afp=-1;
-	param.bcp=-1;
-	param.dep=-1;
+	param.a=-1; param.regF=-1; param.b=-1; param.c=-1; param.d=-1; param.e=-1;
+	param.h=-1; param.l=-1; param.xh=-1; param.xl=-1; param.yh=-1; param.yl=-1;
+	param.sp=-1; param.af=-1; param.bc=-1; param.de=-1; param.hl=-1; param.ix=-1;
+	param.iy=-1; param.ap=-1; param.fp=-1; param.bp=-1; param.cp=-1; param.dp=-1;
+	param.ep=-1; param.hp=-1; param.lp=-1; param.afp=-1; param.bcp=-1; param.dep=-1;
 	param.hlp=-1;
 
 	GetParametersFromCommandLine(argc,argv,&param);
