@@ -4,6 +4,10 @@
 #include<string.h>
 #include<ctype.h>
 #include "z80-master/z80.h"
+#ifdef OS_WIN
+#include<fcntl.h>
+#include<io.h>
+#endif
 
 #ifndef stricmp
 // Linus Torvald (c) 1991
@@ -201,10 +205,13 @@ int EmuZ80(struct s_parameter *param) {
 	unsigned long long totalRun=0;
 	unsigned long minRunC,maxRunC;
 	unsigned long minRun,maxRun;
+	int maxRunDisplay=0;
 	char **myreg=NULL;
 	int ireg,maxreg=0;
 	int i;
 	z80 z;
+
+	printf("Load [%s]\n",param->filename);
 	if (param->haltStop) z.breakOnHalt=1;
 	if (param->eiStop) z.breakOnEI=1;
 	if (param->unknownStop) z.breakOnUnknownInstruction=1;
@@ -231,20 +238,21 @@ int EmuZ80(struct s_parameter *param) {
 	if (param->crible) {
 		myreg=TxtSplitWithChar(param->crible,',');
 		for (maxreg=mcrible=0;myreg[maxreg];maxreg++,mcrible++) { // count registers
-			if (stricmp(myreg[ireg],"af")==0) mcrible++; else
-			if (stricmp(myreg[ireg],"bc")==0) mcrible++; else
-			if (stricmp(myreg[ireg],"de")==0) mcrible++; else
-			if (stricmp(myreg[ireg],"hl")==0) mcrible++; else
-			if (stricmp(myreg[ireg],"ix")==0) mcrible++; else
-			if (stricmp(myreg[ireg],"iy")==0) mcrible++; else
-			if (stricmp(myreg[ireg],"afp")==0) mcrible++; else
-			if (stricmp(myreg[ireg],"bcp")==0) mcrible++; else
-			if (stricmp(myreg[ireg],"dep")==0) mcrible++; else
-			if (stricmp(myreg[ireg],"hlp")==0) mcrible++;
+			if (stricmp(myreg[maxreg],"af")==0) mcrible++; else
+			if (stricmp(myreg[maxreg],"bc")==0) mcrible++; else
+			if (stricmp(myreg[maxreg],"de")==0) mcrible++; else
+			if (stricmp(myreg[maxreg],"hl")==0) mcrible++; else
+			if (stricmp(myreg[maxreg],"ix")==0) mcrible++; else
+			if (stricmp(myreg[maxreg],"iy")==0) mcrible++; else
+			if (stricmp(myreg[maxreg],"afp")==0) mcrible++; else
+			if (stricmp(myreg[maxreg],"bcp")==0) mcrible++; else
+			if (stricmp(myreg[maxreg],"dep")==0) mcrible++; else
+			if (stricmp(myreg[maxreg],"hlp")==0) mcrible++;
 		}
 		initialize_crible(param->maxRun);
 	}
 
+	printf("Configure Emulation\n");
 	// reset emulator + memory preparation
 	z80_init(&z);
 	if (param->ioCPC) {
@@ -265,6 +273,7 @@ int EmuZ80(struct s_parameter *param) {
 	// copy initial programm
 	memcpy(&z.userdata[0],memory+param->destOffset,zesize);
 
+	printf("Start Emulation\n");
 	if (!param->maxRun) param->maxRun=1; // execute at least once
 					     //
 	for (i=0;i<param->maxRun;i++) {
@@ -379,9 +388,8 @@ int EmuZ80(struct s_parameter *param) {
 		    }
 		}
 
-		if (!(i%(param->maxRun/10))) {
-			printf("Executed in %ld nop(s) (cycles=%ld) MIPS=%.2lf cycleMIPS=%.2lf (@4MHz)\n",z.nop,z.cyc,(double)z.nbinstructions/(double)z.nop,(double)z.nbinstructions/(double)z.cyc*4.0);
-		}
+		if (maxRunDisplay<10) printf("Executed in %ld nop(s) (cycles=%ld) MIPS=%.2lf cycleMIPS=%.2lf (@4MHz)\n",z.nop,z.cyc,(double)z.nbinstructions/(double)z.nop,(double)z.nbinstructions/(double)z.cyc*4.0);
+		maxRunDisplay++;
 
 		totalNop+=z.nop;
 		totalCyc+=z.cyc;
@@ -402,6 +410,7 @@ int EmuZ80(struct s_parameter *param) {
 		printf("Minimum RUN : %ld nops   %ld cycles\n",minRun,minRunC);
 		printf("Maximum RUN : %ld nops   %ld cycles\n",maxRun,maxRunC);
 	}
+	return 0;
 }
 
 void Usage(int errcode) {
@@ -576,7 +585,6 @@ int ParseOptions(char **argv,int argc, struct s_parameter *param)
 				fprintf(stderr,"ERROR : Missing argument for -pc option\nRun -h for help\n");
 				exit(1);
 			}
-	int a,b,c,d,e,regF,h,l,xl,xh,yl,yh,af,bc,de,hl,ix,iy,afp,bcp,dep,hlp,ap,fp,bp,cp,dp,ep,hp,lp;
 		} else if (stricmp(argv[i],"-a")==0) {
 			if (i+1<argc) { if (argv[1][0]=='0' && argv[1][1]=='x') param->a=strtol(argv[1],NULL,16); else param->a=atoi(argv[1]); i++; } else {
 			fprintf(stderr,"ERROR : Missing argument for -a option\nRun -h for help\n"); exit(1); }  
@@ -678,6 +686,15 @@ int ParseOptions(char **argv,int argc, struct s_parameter *param)
 		// open file
 		param->f=fopen(argv[0],"rb");
 		if (param->f) {
+#ifdef OS_WIN
+int sr;
+sr=_setmode(_fileno(param->f), _O_BINARY );
+if (sr==-1) {
+fprintf(stderr,"FATAL: cannot set binary mode for reading");
+exit(1);
+}
+#endif
+
 			param->filename=argv[0];
 			printf("opening [%s] as binary data\n",param->filename);
 		} else {
