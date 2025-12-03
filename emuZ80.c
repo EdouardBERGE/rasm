@@ -196,8 +196,10 @@ int EmuZ80(struct s_parameter *param) {
 	unsigned int INTcpt=0,INTcptMax=64*52;
 	unsigned int VBLcpt=0,VBLcptMax=64*312;
 
+	unsigned long long totalCyc=0;
 	unsigned long long totalNop=0;
 	unsigned long long totalRun=0;
+	unsigned long minRunC,maxRunC;
 	unsigned long minRun,maxRun;
 	char **myreg=NULL;
 	int ireg,maxreg=0;
@@ -268,6 +270,19 @@ int EmuZ80(struct s_parameter *param) {
 	for (i=0;i<param->maxRun;i++) {
 		z.pc=param->runAt;
 		z.breakSuccess=0;
+
+		// reset some CPU states
+		  z.iff_delay = 0;
+		  z.interrupt_mode = 0;
+		  z.iff1 = 0;
+		  z.iff2 = 0;
+		  z.halted = 0;
+		  z.int_pending = 0;
+		  z.nmi_pending = 0;
+		  z.int_data = 0;
+		// reset stats
+		z.nbinstructions=0;
+		z.nop=z.cyc=0;
 
 		if (param->a!=-1)    z.a=param->a;
 		if (param->regF!=-1) z80_set_f(&z,param->regF);
@@ -341,6 +356,7 @@ int EmuZ80(struct s_parameter *param) {
 			}
 		}
 
+		// RUN
 		while (1) {
 		    if (param->debug) z80_debug_output(&z);
 		    z80_step(&z);
@@ -363,20 +379,28 @@ int EmuZ80(struct s_parameter *param) {
 		    }
 		}
 
-		if (!(i%(param->maxRun/10))) printf("Executed in %ld nop(s) (cycles=%ld) MIPS=%.2lf cycleMIPS=%.2lf (@4MHz)\n",z.nop,z.cyc,(double)z.nbinstructions/(double)z.nop,(double)z.nbinstructions/(double)z.cyc*4.0);
+		if (!(i%(param->maxRun/10))) {
+			printf("Executed in %ld nop(s) (cycles=%ld) MIPS=%.2lf cycleMIPS=%.2lf (@4MHz)\n",z.nop,z.cyc,(double)z.nbinstructions/(double)z.nop,(double)z.nbinstructions/(double)z.cyc*4.0);
+		}
 
 		totalNop+=z.nop;
+		totalCyc+=z.cyc;
 		totalRun++;
-		if (!i) minRun=maxRun=z.nop; else {
+		if (!i) {
+			minRun=maxRun=z.nop;
+			minRunC=maxRunC=z.cyc;
+		} else {
 			if (minRun>z.nop) minRun=z.nop;
 			if (maxRun<z.nop) maxRun=z.nop;
+			if (minRunC>z.cyc) minRunC=z.cyc;
+			if (maxRunC<z.cyc) maxRunC=z.cyc;
 		}
 	}
 	if (totalRun>1) {
 		printf("Executed %lld times\n",totalRun);
-		printf("Average RUN : %lld\n",totalNop/totalRun);
-		printf("Minimum RUN : %ld\n",minRun);
-		printf("Maximum RUN : %ld\n",maxRun);
+		printf("Average RUN : %lld nops   %lld cycles\n",totalNop/totalRun, totalCyc/totalRun);
+		printf("Minimum RUN : %ld nops   %ld cycles\n",minRun,minRunC);
+		printf("Maximum RUN : %ld nops   %ld cycles\n",maxRun,maxRunC);
 	}
 }
 
