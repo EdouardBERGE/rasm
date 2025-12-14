@@ -16880,10 +16880,32 @@ void __BUILDZX(struct s_assenv *ae) {
 	}
 }
 void __BUILDCPR(struct s_assenv *ae) {
-	if (!ae->wl[ae->idx].t && ae->wl[ae->idx+1].t==1 && strcmp(ae->wl[ae->idx+1].w,"EXTENDED")==0) {
-		ae->extendedCPR=1;
-	} else if (!ae->wl[ae->idx].t) {
-		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"BUILDCPR unknown parameter\n");
+	while (!ae->wl[ae->idx].t) {
+		ae->idx++;
+		if (strcmp(ae->wl[ae->idx].w,"EXTENDED")==0) {
+			ae->extendedCPR=1;
+		} else if (StringIsQuote(ae->wl[ae->idx].w)) {
+			int validExt=0;
+			int idx;
+			ae->cartridge_name=ae->wl[ae->idx].w+1;
+			ae->cartridge_name[strlen(ae->cartridge_name)-1]=0;
+
+			if (strlen(ae->cartridge_name)>4) {
+				idx=strlen(ae->cartridge_name)-4;
+				if (ae->cartridge_name[idx]=='.' && (toupper(ae->cartridge_name[idx+1])=='C' || toupper(ae->cartridge_name[idx+1])=='X')
+						&& toupper(ae->cartridge_name[idx+2])=='P' && toupper(ae->cartridge_name[idx+3])=='R') {
+					validExt=1;
+				}
+			}
+			if (!validExt) {
+				if (!ae->nowarning) {
+					rasm_printf(ae,KWARNING"[%s:%d] Warning: cartridge filename does not end with .cpr or .xpr extension\n",GetCurrentFile(ae),ae->wl[ae->idx].l);
+					if (ae->erronwarn) MaxError(ae);
+				}
+			}
+		} else {
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"BUILDCPR unknown parameter, may be EXTENDED or 'filename'\n");
+		}
 	}
 	if (!ae->forcesnapshot && !ae->forcetape && !ae->forcezx && !ae->forceROM) {
 		ae->forcecpr=1;
@@ -32148,12 +32170,18 @@ int ParseOptions(char **argv,int argc, struct s_parameter *param)
 		switch(argv[i][1])
 		{
 			case 'I':
-				if (argv[i][2]) {
+				if (argv[i][2] || (i+1<argc)) {
 					char *curpath;
-					int l;
+					int l,boffset=2;
+
+					if (!argv[i][2]) {
+						boffset=0;
+						i++;
+					}
+
 					l=strlen(argv[i]);
-					curpath=MemMalloc(l); /* strlen(path)+2 */
-					strcpy(curpath,argv[i]+2);
+					curpath=MemMalloc(l+2);
+					strcpy(curpath,argv[i]+boffset);
 					
 #ifdef OS_WIN
 					if (argv[i][l-1]!='/' && argv[i][l-1]!='\\') strcat(curpath,"\\");
