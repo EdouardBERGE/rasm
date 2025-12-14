@@ -17244,7 +17244,6 @@ void __SNAPINIT(struct s_assenv *ae) {
 	MemFree(snapdata);
 }
 
-
 void __BUILDSNA(struct s_assenv *ae) {
 	while (!ae->wl[ae->idx].t) {
 		if (strcmp(ae->wl[ae->idx+1].w,"V2")==0) {
@@ -17253,6 +17252,25 @@ void __BUILDSNA(struct s_assenv *ae) {
 			ae->snacpr=1;
 		} else if (strcmp(ae->wl[ae->idx+1].w,"DSK")==0) {
 			ae->dsksnapshot=1;
+		} else if (StringIsQuote(ae->wl[ae->idx+1].w)) {
+			int validExt=0;
+			int idx;
+			ae->snapshot_name=ae->wl[ae->idx+1].w+1;
+			ae->snapshot_name[strlen(ae->snapshot_name)-1]=0;
+
+			if (strlen(ae->snapshot_name)>4) {
+				idx=strlen(ae->snapshot_name)-4;
+				if (ae->snapshot_name[idx]=='.' && toupper(ae->snapshot_name[idx+1])=='S'
+						&& toupper(ae->snapshot_name[idx+2])=='N' && toupper(ae->snapshot_name[idx+3])=='A') {
+					validExt=1;
+				}
+			}
+			if (!validExt) {
+				if (!ae->nowarning) {
+					rasm_printf(ae,KWARNING"[%s:%d] Warning: snapshot filename does not end with .sna extension\n",GetCurrentFile(ae),ae->wl[ae->idx].l);
+					if (ae->erronwarn) MaxError(ae);
+				}
+			}
 		} else {
 			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"BUILDSNA unrecognized option [%s]\n",ae->wl[ae->idx+1].w);
 		}
