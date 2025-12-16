@@ -39,7 +39,7 @@ struct s_parameter {
 	int xpr;
 	float rough;
 	int as80,dams,pasmo;
-	int v2,remu;
+	int v2,remu,export_rasmSymbolFile;
 	int warn_unused;
 	char *symbol_name;
 	char *binary_name;

@@ -1262,8 +1262,8 @@ struct s_assenv {
 	char *outputfilename;
 	int export_sym,export_local,export_multisym;
 	int export_var,export_equ;
-	int export_sna,export_snabrk,remu;
-	int export_brk,export_tape;
+	int export_sna,export_snabrk,remu,export_rasmSymbolFile;
+	int export_brk,export_tape,export_cprSymbol;
 	int autorise_export,local_export;
 	char *flexible_export;
 	char *breakpoint_name;
@@ -16882,7 +16882,9 @@ void __BUILDZX(struct s_assenv *ae) {
 void __BUILDCPR(struct s_assenv *ae) {
 	while (!ae->wl[ae->idx].t) {
 		ae->idx++;
-		if (strcmp(ae->wl[ae->idx].w,"EXTENDED")==0) {
+		if (strncmp(ae->wl[ae->idx].w,"SYMBOL",6)==0) {
+			ae->export_cprSymbol=1; // symbols for ACE inside cartridge
+		} else if (strcmp(ae->wl[ae->idx].w,"EXTENDED")==0) {
 			ae->extendedCPR=1;
 		} else if (StringIsQuote(ae->wl[ae->idx].w)) {
 			int validExt=0;
@@ -17285,7 +17287,27 @@ void __BUILDSNA(struct s_assenv *ae) {
 }
 void __BUILDTAPE(struct s_assenv *ae) {
 	if (!ae->wl[ae->idx].t) {
-		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"BUILDTAPE does not need a parameter\n");
+		ae->idx++;
+		if (ae->wl[ae->idx].t==1 && StringIsQuote(ae->wl[ae->idx].w)) {
+			int validExt=0;
+			int idx;
+			ae->tape_name=ae->wl[ae->idx].w+1;
+			ae->tape_name[strlen(ae->tape_name)-1]=0;
+			if (strlen(ae->tape_name)>4) {
+				idx=strlen(ae->tape_name)-4;
+				if (!_internal_strnicmp(&ae->tape_name[idx],".CDT",4) || !_internal_strnicmp(&ae->tape_name[idx],".TZX",4)) {
+					validExt=1;
+				}
+				if (!validExt) {
+					if (!ae->nowarning) {
+						rasm_printf(ae,KWARNING"[%s:%d] Warning: tape filename does not end with .cdt or .tzx extension\n",GetCurrentFile(ae),ae->wl[ae->idx].l);
+						if (ae->erronwarn) MaxError(ae);
+					}
+				}
+			}
+		} else {
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"BUILDTAPE optional parameter must be a string\n");
+		}
 	}
 	if (!ae->forcesnapshot && !ae->forcecpr && !ae->forcezx && !ae->forceROM) {
 		ae->forcetape=1;
@@ -17851,7 +17873,6 @@ void __ROMBANK(struct s_assenv *ae) {
 		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"ROMBANK can be used only with snapshot output\n");
 		return;
 	}
-	ae->remu=1; // force REMU output :)
 
 	// enforce correct memory usage
 	__internal_UpdateLZBlockIfAny(ae);
@@ -17923,7 +17944,6 @@ void __BANKSET(struct s_assenv *ae) {
 		ae->orgzone[ae->io-1].memend=ae->outputadr;
 	}
 	ae->bankmode=1;
-	ae->remu=1;
 	
 	if (ae->wl[ae->idx+1].t!=2) {
 		ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
@@ -23058,6 +23078,7 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 					ifast++;
 				} while (instruction[ifast].mnemo[0]==wordlist[ae->idx].w[0]);
 				if (executed) {
+					if (ae->stop) break; // only an instruction will stop assembling, not a macro, neither a label nor an expression
 					ae->idx++; 
 					continue;
 				}
@@ -23081,9 +23102,7 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 			ExpressionFastTranslate(ae,&wordlist[ae->idx].w,0);
 			ComputeExpression(ae,wordlist[ae->idx].w,ae->codeadr,0,0);
 		}
-
 		ae->idx++; 
-		if (ae->stop) break;
 	} else {
 		int nooutput,ipadding;
 		printf(KLWHITE"Bnk|Real|Logic  Bytecode  [Time] Assembly\n");
@@ -23987,7 +24006,7 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 					}
 				}
 				/* prepare REMU chunk to know the final size */
-				if (ae->remu) {
+				if (ae->export_cprSymbol) {
 					remu_output=_internal_export_REMU(ae,&remu_chunksize);
 				}
 				/* construction du CPR */
@@ -24125,7 +24144,7 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 					}
 					if (ae->snacpr) i=backi; // hack
 				}
-				if (ae->remu) {
+				if (ae->export_cprSymbol) {
 					FileWriteBinary(TMP_filename,(char*)remu_output,remu_chunksize+8); // 8 bytes for the chunk header
 					MemFree(remu_output);
 				}
@@ -25035,7 +25054,7 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 		  S Y M B O L   E X P O R T
 		*****************************
 		****************************/
-		if (ae->remu) {
+		if (ae->export_rasmSymbolFile) {
 #define MAKE_REMU_NAME if (ae->symbol_name) {sprintf(TMP_filename,"%s",ae->symbol_name);} else {sprintf(TMP_filename,"%s.rasm",ae->outputfilename);}
 			unsigned char *remu_output=NULL;
 			unsigned int chunksize;
@@ -25763,6 +25782,7 @@ printf("start prepro, alloc assenv\n");
 printf("paramz 1\n");
 #endif
 	if (param) {
+		ae->export_rasmSymbolFile=param->export_rasmSymbolFile;
 		ae->export_local=param->export_local;
 		ae->export_sym=param->export_sym;
 		ae->export_var=param->export_var;
@@ -29126,13 +29146,13 @@ struct s_autotest_keyword autotest_keyword[]={
 	{"assert filebyte('autotest_fast.raw',200)==200",0}, // check one byte
 	{"repeat 256,x : assert filebyte('autotest_fast.raw',x-1)==x-1 : rend ",0}, // check all bytes
 	{"repeat 256,x : assert filebyte('autotest_fast.raw',x-1)==x-1 : assert filebyte('autotest_fast2.raw',x-1)==x-1 : rend ",0}, // check all bytes on multiple files
+	{"grouik nop:stop:bite cinquante,douze,pourquoi pas",0},
 	/*
 	 *
 	 * will need to test resize + format then meta review test!
 	 *
 	 *
 	 *
-	{"",},
 	{"",},{"",},
 	{"",},{"",},{"",},
 	{"",},{"",},{"",},{"",},{"",},
@@ -32146,7 +32166,7 @@ int ParseOptions(char **argv,int argc, struct s_parameter *param)
 	} else if (strcmp(argv[i],"-cprquiet")==0) {
 		param->cprinfo=0;
 	} else if (strcmp(argv[i],"-rasm")==0) {
-		param->remu=1;
+		param->export_rasmSymbolFile=1;
 	} else if (strcmp(argv[i],"-ass")==0) {
 		param->as80=1;
 	} else if (strcmp(argv[i],"-amper")==0 || strcmp(argv[i],"--noampersand")==0) {
