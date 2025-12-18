@@ -1169,7 +1169,7 @@ struct s_assenv {
 	/* expressions */
 	struct s_expression *expression;
 	int ie,me;
-	int maxam,as80,dams,pasmo;  // compatibility flags
+	int maxam,as80,dams,pasmo,maxam_as80;  // compatibility flags
 	float rough;
 	struct s_compute_core_data *computectx,ctx1,ctx2;
 	char *fastVarBuffer;
@@ -3508,13 +3508,14 @@ int SearchMacro(struct s_assenv *ae, int crc, char *zemot)
 }
 
 
-void InsertAliasToTree(struct s_assenv *ae, struct s_alias *alias)
+int InsertAliasToTree(struct s_assenv *ae, struct s_alias *alias)
 {
 	#undef FUNC
 	#define FUNC "InsertAliasToTree"
 
 	struct s_crcalias_tree *curaliastree;
 	int radix,dek=16;
+	int i;
  
 	if ((curaliastree=ae->aliastree[(alias->crc>>16)&0xFFFF])==NULL) { //@@FAST
 		curaliastree=MemMalloc(sizeof(struct s_crcalias_tree));
@@ -3532,62 +3533,11 @@ void InsertAliasToTree(struct s_assenv *ae, struct s_alias *alias)
 			memset(curaliastree,0,sizeof(struct s_crcalias_tree));
 		}
 	}
+	for (i=0;i<curaliastree->nalias;i++) {
+		if (strcmp(curaliastree->alias[i].alias,alias->alias)==0) return 0;
+	}
 	ObjectArrayAddDynamicValueConcat((void**)&curaliastree->alias,&curaliastree->nalias,&curaliastree->malias,alias,sizeof(struct s_alias));
-}
-void CheckAndSortAliases(struct s_assenv *ae)
-{
-	#undef FUNC
-	#define FUNC "CheckAndSortAliases"
-
-	struct s_alias tmpalias;
-	int i,dw,dm=0,du,crc;
-	for (i=0;i<ae->ialias-1;i++) {
-		/* is there previous aliases in the new alias? */
-		if (strstr(ae->alias[ae->ialias-1].translation,ae->alias[i].alias)) {
-			/* there is a match, apply alias translation */
-			ExpressionFastTranslate(ae,&ae->alias[ae->ialias-1].translation,2);
-			/* need to compute again len */
-			ae->alias[ae->ialias-1].len=strlen(ae->alias[ae->ialias-1].translation);
-			break;
-		}
-	}
-	InsertAliasToTree(ae,&ae->alias[ae->ialias-1]);
-#if 0
-	/* cas particuliers pour insertion en début ou fin de liste */
-	if (ae->ialias-1) {
-		if (ae->alias[ae->ialias-1].crc>ae->alias[ae->ialias-2].crc) {
-			/* pas de tri il est déjà au bon endroit */
-		} else if (ae->alias[ae->ialias-1].crc<ae->alias[0].crc) {
-			/* insertion tout en bas de liste */
-			tmpalias=ae->alias[ae->ialias-1];
-			MemMove(&ae->alias[1],&ae->alias[0],sizeof(struct s_alias)*(ae->ialias-1));
-			ae->alias[0]=tmpalias;
-		} else {
-			/* on cherche ou inserer */
-			crc=ae->alias[ae->ialias-1].crc;
-			dw=0;
-			du=ae->ialias-1;
-			while (dw<=du) {
-				dm=(dw+du)/2;
-				if (ae->alias[dm].crc==crc) {
-					break;
-				} else if (ae->alias[dm].crc>crc) {
-					du=dm-1;
-				} else if (ae->alias[dm].crc<crc) {
-					dw=dm+1;
-				}
-			}
-			/* ajustement */
-			if (ae->alias[dm].crc<crc) dm++;
-			/* insertion */
-			tmpalias=ae->alias[ae->ialias-1];
-			MemMove(&ae->alias[dm+1],&ae->alias[dm],sizeof(struct s_alias)*(ae->ialias-1-dm));
-			ae->alias[dm]=tmpalias;
-		}
-	} else {
-		/* one alias need no sort */
-	}
-#endif
+	return 1;
 }
 void InsertDicoToTree(struct s_assenv *ae, struct s_expr_dico *dico)
 {
@@ -3930,6 +3880,7 @@ struct s_alias *SearchAlias(struct s_assenv *ae, int crc, char *zemot) {
 	}
 	return NULL;
 }
+
 struct s_expr_dico *SearchDico(struct s_assenv *ae, char *dico, int crc)
 {
 	#undef FUNC
@@ -3957,33 +3908,34 @@ struct s_expr_dico *SearchDico(struct s_assenv *ae, char *dico, int crc)
 
 	for (i=0;i<curdicotree->ndico;i++) {
 		if (strcmp(curdicotree->dico[i].name,dico)==0) {
-			//curdicotree->dico[i].used++;
-
-			if (curdicotree->dico[i].external) {
-				if (ae->external_mapping_size) {
-					/* outside crunched section of in intermediate section */
-					if (ae->lz<1 || ae->lzsection[ae->ilz-1].lzversion==0) {
-						// add mapping
-						struct s_external_mapping mapping;
-						int iex;
-						mapping.iorgzone=ae->io-1;
-						mapping.ptr=ae->outputadr;
-						mapping.size=ae->external_mapping_size;
-						for (iex=0;iex<ae->nexternal;iex++) {
-							if (ae->external[iex].crc==crc && strcmp(ae->external[iex].name,dico)==0) {
-	//printf("add mapping for [%s] ptr=%d size=%d\n",dico,mapping.ptr,mapping.size);
-								ObjectArrayAddDynamicValueConcat((void **)&ae->external[iex].mapping,&ae->external[iex].imapping,&ae->external[iex].mmapping,&mapping,sizeof(mapping));
-								break;
+#if 0
+			if (ae->buildobj) {
+				if (curdicotree->dico[i].external) {
+					if (ae->external_mapping_size) {
+						/* outside crunched section of in intermediate section */
+						if (ae->lz<1 || ae->lzsection[ae->ilz-1].lzversion==0) {
+							// add mapping
+							struct s_external_mapping mapping;
+							int iex;
+							mapping.iorgzone=ae->io-1;
+							mapping.ptr=ae->outputadr;
+							mapping.size=ae->external_mapping_size;
+							for (iex=0;iex<ae->nexternal;iex++) {
+								if (ae->external[iex].crc==crc && strcmp(ae->external[iex].name,dico)==0) {
+		//printf("add mapping for [%s] ptr=%d size=%d\n",dico,mapping.ptr,mapping.size);
+									ObjectArrayAddDynamicValueConcat((void **)&ae->external[iex].mapping,&ae->external[iex].imapping,&ae->external[iex].mmapping,&mapping,sizeof(mapping));
+									break;
+								}
 							}
+						} else {
+							MakeError(ae,ae->idx,GetCurrentFile(ae),GetExpLine(ae,0),"cannot use external variable [%s] inside a crunched section!\n",dico);
 						}
 					} else {
-						MakeError(ae,ae->idx,GetCurrentFile(ae),GetExpLine(ae,0),"cannot use external variable [%s] inside a crunched section!\n",dico);
+						MakeError(ae,ae->idx,GetCurrentFile(ae),GetExpLine(ae,0),"invalid usage of external variable [%s]\n",dico);
 					}
-				} else {
-					MakeError(ae,ae->idx,GetCurrentFile(ae),GetExpLine(ae,0),"invalid usage of external variable [%s]\n",dico);
 				}
 			}
-
+#endif
 			return &curdicotree->dico[i];
 		}
 	}
@@ -7343,7 +7295,7 @@ printf("final POP string=%X\n",ae->computectx->operatorstack[nboperatorstack+1].
 	/********************************************
 	        E X E C U T E        S T A C K
 	********************************************/
-	if (ae->maxam || ae->as80) {
+	if (ae->maxam_as80) {
 		int workinterval;
 		if (ae->as80) workinterval=0xFFFFFFFF; else workinterval=0xFFFF;
 		if (maccu<=nbcomputestack) {
@@ -8121,10 +8073,7 @@ printf("MakeAlias (2) EXPR=[%s EQU %s]\n",expr,ptr_exp2);
 			curalias.ptr=ae->codeadr;
 			curalias.lz=ae->ilz;
 
-			if (SearchAlias(ae,curalias.crc,curalias.alias)) {
-				MakeError(ae,ae->idx,GetCurrentFile(ae),GetExpLine(ae,0),"Duplicate alias [%s]\n",expr);
-				MemFree(curalias.alias);
-			} else if (SearchLabel(ae,curalias.alias,curalias.crc)) {
+			if (SearchLabel(ae,curalias.alias,curalias.crc)) {
 				MakeError(ae,ae->idx,GetCurrentFile(ae),GetExpLine(ae,0),"Alias cannot override existing label [%s]\n",expr);
 				MemFree(curalias.alias);
 			} else if (SearchDico(ae,curalias.alias,curalias.crc)) {
@@ -8144,8 +8093,22 @@ printf("%s\n",curalias.translation);
 				curalias.len=strlen(curalias.translation);
 				curalias.autorise_export=ae->autorise_export;
 				curalias.iw=ae->idx;
-				ObjectArrayAddDynamicValueConcat((void**)&ae->alias,&ae->ialias,&ae->malias,&curalias,sizeof(curalias));
-				CheckAndSortAliases(ae);
+				if (InsertAliasToTree(ae,&curalias)) {
+					ObjectArrayAddDynamicValueConcat((void**)&ae->alias,&ae->ialias,&ae->malias,&curalias,sizeof(curalias));
+					for (int i=0;i<ae->ialias-1;i++) {
+						/* is there previous aliases in the new alias? */
+						if (strstr(ae->alias[ae->ialias-1].translation,ae->alias[i].alias)) {
+							/* there is a match, apply alias translation */
+							ExpressionFastTranslate(ae,&ae->alias[ae->ialias-1].translation,2);
+							/* need to compute again len */
+							ae->alias[ae->ialias-1].len=strlen(ae->alias[ae->ialias-1].translation);
+							break;
+						}
+					}
+				} else {
+					MakeError(ae,ae->idx,GetCurrentFile(ae),GetExpLine(ae,0),"Duplicate alias [%s]\n",expr);
+					MemFree(curalias.alias);
+				}
 			}
 			*ptr_exp='~'; // on remet l'alias en place
 #if TRACE_COMPUTE_EXPRESSION
@@ -8867,6 +8830,138 @@ printf("exprout=[%s]\n",expr);
 }
 
 void _code_PushExpression(struct s_assenv *ae,int iw,enum e_expression zetype)
+{
+	#undef FUNC
+	#define FUNC "PushExpression_Code"
+	
+	struct s_expression curexp={0};
+	int startptr=0;
+	unsigned char bakXY=0;
+
+	curexp.iw=iw;
+	curexp.wptr=ae->outputadr;
+	curexp.zetype=zetype;
+	curexp.ibank=ae->activebank;
+	curexp.iorgzone=ae->io-1;
+	curexp.lz=ae->lz;
+	/* need the module to know where we are */
+	if (ae->module) curexp.module=TxtStrDup(ae->module); else curexp.module=NULL;
+	/* on traduit de suite les variables du dictionnaire pour les boucles et increments
+		SAUF si c'est une affectation 
+	*/
+	if (!ae->wl[iw].e) {
+		switch (zetype) {
+			case E_EXPRESSION_J16C:
+				/* check non register usage */
+				switch (GetCRC(ae->wl[iw].w)) {
+					case CRC_IX:
+					case CRC_IY:
+					case CRC_MIX:
+					case CRC_MIY:
+						MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"invalid register usage\n",ae->maxptr);
+					default:break;
+				}
+			case E_EXPRESSION_J8:
+			case E_EXPRESSION_V8:
+			case E_EXPRESSION_J16:
+			case E_EXPRESSION_V16:
+			case E_EXPRESSION_IM:startptr=-1;
+						break;
+			case E_EXPRESSION_IV8:
+			case E_EXPRESSION_IV81:
+					     // patch IX/IY because they dont exist anymore as constants
+					     bakXY=ae->wl[iw].w[2];
+					     ae->wl[iw].w[1]='%';
+					     ae->wl[iw].w[2]='0';
+			case E_EXPRESSION_IV16:startptr=-2;
+						break;
+			case E_EXPRESSION_3V8:startptr=-3;
+						break;
+			case E_EXPRESSION_RUN:
+			case E_EXPRESSION_ZXRUN:
+			case E_EXPRESSION_ZXSTACK:
+			case E_EXPRESSION_BRS:break;
+			default:break;
+		}
+		/* hack pourri pour gérer le $ */
+		ae->codeadr+=startptr;
+		/* ok mais les labels locaux des macros? */
+
+		if (ae->ir || ae->iw || ae->imacro) {
+			curexp.reference=TxtStrDup(ae->wl[iw].w);
+			ExpressionFastTranslate(ae,&curexp.reference,1);
+			// in a loop, we need to patch again in order to keep X/Y information
+			if (bakXY) {
+				ae->wl[iw].w[1]='I';
+				ae->wl[iw].w[2]=bakXY;
+			}
+		} else {
+			ExpressionFastTranslate(ae,&ae->wl[iw].w,1);
+		}
+		ae->codeadr-=startptr;
+	}
+	/* calcul adresse de reference et post-incrementation pour sauter les data */
+//printf("output=%X\n",ae->outputadr);
+	switch (zetype) {
+		case E_EXPRESSION_J8:curexp.ptr=ae->codeadr-1;ae->outputadr++;ae->codeadr++;break;
+		case E_EXPRESSION_0V8:curexp.ptr=ae->codeadr;ae->outputadr++;ae->codeadr++;break;
+		case E_EXPRESSION_V8:curexp.ptr=ae->codeadr-1;ae->outputadr++;ae->codeadr++;break;
+		case E_EXPRESSION_0V16:curexp.ptr=ae->codeadr;ae->outputadr+=2;ae->codeadr+=2;break;
+		case E_EXPRESSION_0V32:curexp.ptr=ae->codeadr;ae->outputadr+=4;ae->codeadr+=4;break;
+		case E_EXPRESSION_0VR:curexp.ptr=ae->codeadr;ae->outputadr+=5;ae->codeadr+=5;break;
+		case E_EXPRESSION_0VRMike:curexp.ptr=ae->codeadr;ae->outputadr+=5;ae->codeadr+=5;break;
+		case E_EXPRESSION_J16C:
+		case E_EXPRESSION_J16:
+		case E_EXPRESSION_V16:curexp.ptr=ae->codeadr-1;ae->outputadr+=2;ae->codeadr+=2;break;
+		case E_EXPRESSION_IV81:curexp.ptr=ae->codeadr-2;ae->outputadr++;ae->codeadr++;break;
+		case E_EXPRESSION_IV8:curexp.ptr=ae->codeadr-2;ae->outputadr++;ae->codeadr++;break;
+		case E_EXPRESSION_3V8:curexp.ptr=ae->codeadr-3;ae->outputadr++;ae->codeadr++;break;
+		case E_EXPRESSION_IV16:curexp.ptr=ae->codeadr-2;ae->outputadr+=2;ae->codeadr+=2;break;
+		case E_EXPRESSION_RST:curexp.ptr=ae->codeadr;ae->outputadr++;ae->codeadr++;break;
+		case E_EXPRESSION_RSTC:curexp.ptr=ae->codeadr;ae->outputadr++;ae->codeadr++;break;
+		case E_EXPRESSION_IM:curexp.ptr=ae->codeadr-1;ae->outputadr++;ae->codeadr++;break;
+		case E_EXPRESSION_RUN:break;
+		case E_EXPRESSION_ZXRUN:break;
+		case E_EXPRESSION_ZXSTACK:break;
+		case E_EXPRESSION_BRS:curexp.ptr=ae->codeadr;break; // minimum syndical
+		default:break;
+	}
+//printf("output=%X maxptr=%X\n",ae->outputadr,ae->maxptr);
+	if (ae->outputadr<=ae->maxptr) {  // = compare because done AFTER simili value assignment
+		ObjectArrayAddDynamicValueConcat((void **)&ae->expression,&ae->ie,&ae->me,&curexp,sizeof(curexp));
+	} else {
+		int requested_block;
+		int i,iscrunched;
+		iscrunched=0;
+		for (i=ae->ilz-1;i>=0;i--) {
+			if (ae->lzsection[i].ibank==ae->activebank) {
+				iscrunched=1;
+				break;
+			}
+		}
+		if (!iscrunched) {
+			/* to avoid double error message */
+			if (!ae->stop) MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"(PushExpr) output exceed limit %04X\n",ae->maxptr); else MaxError(ae);
+			ae->stop=1;
+			return;
+		} else {
+			// who cares!
+		}
+		if (ae->maxptr&0xFFFF) {
+			rasm_printf(ae,KWARNING"Warning: Specific limits are not applied when using crunched sections, cause memory blocks are moved unpredictably\n");
+			if (ae->erronwarn) MaxError(ae);
+		}
+#if TRACE_LZ
+printf("**output exceed limit** (PushExpr) extending memory space\n");
+#endif
+		requested_block=ae->outputadr>>16;
+		ae->mem[ae->activebank]=MemRealloc(ae->mem[ae->activebank],(requested_block+1)*65536);
+		ae->maxptr=(requested_block+1)*65536;
+		// eventually write expression ^_^
+		ObjectArrayAddDynamicValueConcat((void **)&ae->expression,&ae->ie,&ae->me,&curexp,sizeof(curexp));
+	}
+}
+void _codeobj_PushExpression(struct s_assenv *ae,int iw,enum e_expression zetype)
 {
 	#undef FUNC
 	#define FUNC "PushExpression_Code"
@@ -10206,12 +10301,12 @@ void PopAllExpression(struct s_assenv *ae, int crunched_zone)
 	printf("PopAllExpression crunched_zone=%d first=%d end=%d\n",crunched_zone,first,i);
 #endif
 }
-void InsertLabelToTree(struct s_assenv *ae, struct s_label *label)
+int InsertLabelToTree(struct s_assenv *ae, struct s_label *label)
 {
 	#undef FUNC
 	#define FUNC "InsertLabelToTree"
 	struct s_crclabel_tree *curlabeltree;
-	int radix;
+	int radix,i;
 
 	if ((curlabeltree=ae->labeltree[(label->crc>>16)&0xFFFF])==NULL) { //@@FAST
 		curlabeltree=MemMalloc(sizeof(struct s_crclabel_tree));
@@ -10234,7 +10329,14 @@ void InsertLabelToTree(struct s_assenv *ae, struct s_label *label)
 		curlabeltree=curlabeltree->radix[radix];
 		memset(curlabeltree,0,sizeof(struct s_crclabel_tree));
 	}
+	// check for duplicated entry
+	for (i=0;i<curlabeltree->nlabel;i++) {
+		if (strcmp(curlabeltree->label[i].name,label->name)==0) {
+			return 0;
+		}
+	}
 	ObjectArrayAddDynamicValueConcat((void**)&curlabeltree->label,&curlabeltree->nlabel,&curlabeltree->mlabel,&label[0],sizeof(struct s_label));
+	return 1;
 }
 
 /* use by structure mechanism and label import to add fake labels */
@@ -10242,32 +10344,31 @@ void PushLabelLight(struct s_assenv *ae, struct s_label *curlabel) {
 	#undef FUNC
 	#define FUNC "PushLabelLight"
 	
-	struct s_label *searched_label;
-	
 	/* PushLabel light */
-	if ((searched_label=SearchLabel(ae,curlabel->name,curlabel->crc))!=NULL) {
+	curlabel->backidx=ae->il;
+	curlabel->local_export=ae->local_export;
+	curlabel->autorise_export=ae->autorise_export&(!ae->getstruct); // do not export label in struct declaration!
+	curlabel->make_alias=ae->getstruct;
+	if (InsertLabelToTree(ae,curlabel)) {
+		ObjectArrayAddDynamicValueConcat((void **)&ae->label,&ae->il,&ae->ml,curlabel,sizeof(struct s_label));
+	} else {
+		struct s_label *searched_label;
+		searched_label=SearchLabel(ae,curlabel->name,curlabel->crc); // we know this will match because insert failed
 		MakeError(ae,ae->idx,GetCurrentFile(ae),GetExpLine(ae,0),"%s caused duplicate label [%s]\n",ae->idx?"Structure insertion":"Label import",curlabel->name);
 		MemFree(curlabel->name);
-	} else {
-		curlabel->backidx=ae->il;
-		curlabel->local_export=ae->local_export;
-		curlabel->autorise_export=ae->autorise_export&(!ae->getstruct); // do not export label in struct declaration!
-		curlabel->make_alias=ae->getstruct;
-		ObjectArrayAddDynamicValueConcat((void **)&ae->label,&ae->il,&ae->ml,curlabel,sizeof(struct s_label));
-		InsertLabelToTree(ae,curlabel);
-	}				
+	}
 }
 void PushLabel(struct s_assenv *ae)
 {
 	#undef FUNC
 	#define FUNC "PushLabel"
 	
-	struct s_label curlabel={0},*searched_label;
-	int i;
+	struct s_label curlabel={0};
 	/* label with counters */
 	char *varbuffer;
-	int tagcount=0;
+	int tagcount=0,tagmatch=0;
 	int touched;
+	int i;
 
 #if TRACE_LABEL
 	printf("check label [%s]\n",ae->wl[ae->idx].w);
@@ -10276,14 +10377,23 @@ void PushLabel(struct s_assenv *ae)
 	ae->deadend=0;
 
 	if (ae->AutomateValidLabelFirst[(int)ae->wl[ae->idx].w[0]&0xFF]) {
-		for (i=1;ae->wl[ae->idx].w[i];i++) {
-			if (ae->wl[ae->idx].w[i]=='{') tagcount++; else if (ae->wl[ae->idx].w[i]=='}') tagcount--;
-			if (!tagcount) {
-				if (!ae->AutomateValidLabel[(int)ae->wl[ae->idx].w[i]&0xFF]) {
-					MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Invalid char in label declaration (%c)\n",ae->wl[ae->idx].w[i]);
-					return;
-				}
+		i=1;
+		while (ae->wl[ae->idx].w[i]) {
+			// branch prediction optim
+			if (ae->wl[ae->idx].w[i]=='{') {
+				tagmatch=1;
+				tagcount++;
+				do {
+					i++;
+					if (ae->wl[ae->idx].w[i]=='}') tagcount--;
+				} while (tagcount && ae->wl[ae->idx].w[i]);
+				continue;
 			}
+			if (!ae->AutomateValidLabel[(int)ae->wl[ae->idx].w[i]&0xFF]) {
+				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Invalid char in label declaration (%c)\n",ae->wl[ae->idx].w[i]);
+				return;
+			}
+			i++;
 		}
 	} else {
 		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Invalid first char in label declaration (%c)\n",ae->wl[ae->idx].w[0]);
@@ -10323,11 +10433,13 @@ void PushLabel(struct s_assenv *ae)
 				return;
 			}			
 			break;
+#if 0
 		case 4:
 			if (strcmp(ae->wl[ae->idx].w,"VOID")==0) {
 				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Cannot use reserved word [%s] for label\n",ae->wl[ae->idx].w);
 				return;
 			}
+#endif
 		default:break;
 	}
 
@@ -10336,7 +10448,11 @@ void PushLabel(struct s_assenv *ae)
 
 	           -- varbuffer is always allocated --
 	*******************************************************/
-	varbuffer=TranslateTag(ae,TxtStrDup(ae->wl[ae->idx].w),&touched,1,E_TAGOPTION_NONE); // on se moque du touched ici => varbuffer toujours "new"
+	if (tagmatch) {
+		varbuffer=TranslateTag(ae,TxtStrDup(ae->wl[ae->idx].w),&touched,1,E_TAGOPTION_NONE); // on se moque du touched ici => varbuffer toujours "new"
+	} else {
+		varbuffer=TxtStrDup(ae->wl[ae->idx].w);
+	}
 #if TRACE_LABEL
 	printf("label after translation [%s]\n",varbuffer);
 #endif
@@ -10478,18 +10594,19 @@ printf("PUSH Orphan PROXIMITY label that cannot be exported [%s]->[%s]\n",ae->wl
 		curlabel.lz=ae->lz;
 	}
 
-	if ((searched_label=SearchLabel(ae,curlabel.name,curlabel.crc))!=NULL) {
+//printf("PushLabel(%s) name=%s crc=%X lz=%d\n",curlabel.name,curlabel.name?curlabel.name:"null",curlabel.crc,curlabel.lz);
+	curlabel.fileidx=ae->wl[ae->idx].ifile;
+	curlabel.fileline=ae->wl[ae->idx].l;
+	curlabel.local_export=ae->local_export;
+	curlabel.autorise_export=ae->autorise_export&(!ae->getstruct);
+	curlabel.backidx=ae->il;
+	if (InsertLabelToTree(ae,&curlabel)) {
+		ObjectArrayAddDynamicValueConcat((void **)&ae->label,&ae->il,&ae->ml,&curlabel,sizeof(curlabel));
+	} else {
+		struct s_label *searched_label;
+		searched_label=SearchLabel(ae,curlabel.name,curlabel.crc);
 		MakeError(ae,ae->idx,GetCurrentFile(ae),GetExpLine(ae,0),"Duplicate label [%s] - previously defined in [%s:%d]\n",curlabel.name,ae->filename[searched_label->fileidx],searched_label->fileline);
 		MemFree(curlabel.name);
-	} else {
-//printf("PushLabel(%s) name=%s crc=%X lz=%d\n",curlabel.name,curlabel.name?curlabel.name:"null",curlabel.crc,curlabel.lz);
-		curlabel.fileidx=ae->wl[ae->idx].ifile;
-		curlabel.fileline=ae->wl[ae->idx].l;
-		curlabel.local_export=ae->local_export;
-		curlabel.autorise_export=ae->autorise_export&(!ae->getstruct);
-		curlabel.backidx=ae->il;
-		ObjectArrayAddDynamicValueConcat((void **)&ae->label,&ae->il,&ae->ml,&curlabel,sizeof(curlabel));
-		InsertLabelToTree(ae,&curlabel);
 	}
 
 }
@@ -16715,6 +16832,10 @@ void __SYMBOL(struct s_assenv *ae) {
 void __EXTERNAL(struct s_assenv *ae) {
 	struct s_external zexternal={0};
 
+	if (!ae->buildobj) {
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Cannot declare EXTERNAL without using BUILDOBJ mode!\n");
+		return;
+	}
 	while (!ae->wl[ae->idx].t) {
 		ExpressionSetDicoVar(ae,ae->wl[ae->idx+1].w,0.0,1);
 		zexternal.name=TxtStrDup(ae->wl[ae->idx+1].w);
@@ -16728,6 +16849,11 @@ void __EXTERNAL(struct s_assenv *ae) {
 void __PROCEDURE(struct s_assenv *ae) {
 	char *dupname;
 	int cpt=1;
+
+	if (!ae->buildobj) {
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Cannot declare PROCEDURE without using BUILDOBJ mode!\n");
+		return;
+	}
 	while (!ae->wl[ae->idx].t) {
 		ae->idx++;
 		/* store procedure label */
@@ -16735,7 +16861,7 @@ void __PROCEDURE(struct s_assenv *ae) {
 		ObjectArrayAddDynamicValueConcat((void**)&ae->procedurename,&ae->nprocedurename,&ae->mprocedurename,&dupname,sizeof(char *));
 		/* push label as usual */
 		PushLabel(ae);
-		if (cpt>1) {
+		if (cpt==2) {
 			if (!ae->nowarning) {
 				rasm_printf(ae,KWARNING"[%s:%d] Warning: PROCEDURE directive is not supposed to declare more than one label\n",GetCurrentFile(ae),ae->wl[ae->idx].l);
 				if (ae->erronwarn) MaxError(ae);
@@ -16878,6 +17004,7 @@ void __BUILDOBJ(struct s_assenv *ae) {
 	} else {
 		// pure OBJ output
 	}
+	PushExpression=_codeobj_PushExpression;
 }
 void __BUILDZX(struct s_assenv *ae) {
 	if (!ae->wl[ae->idx].t) {
@@ -20460,7 +20587,7 @@ void __CODE(struct s_assenv *ae) {
 			ae->codeadr=ae->codeadrbackup;
 			ae->outputadr=ae->outputadrbackup;
 			___org_new(ae,0);
-			PushExpression=_code_PushExpression;
+			if (ae->buildobj) PushExpression=_codeobj_PushExpression; else PushExpression=_code_PushExpression;
 		} else {
 			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"unknown parameter for CODE directive\n");
 		}
@@ -20468,7 +20595,7 @@ void __CODE(struct s_assenv *ae) {
 	} else if (ae->wl[ae->idx].t==1) {
 		___org_close(ae);
 		___org_new(ae,0);
-		PushExpression=_code_PushExpression;
+		if (ae->buildobj) PushExpression=_codeobj_PushExpression; else PushExpression=_code_PushExpression;
 	} else {
 		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"CODE directive does not need parameter\n");
 	}
@@ -25848,6 +25975,7 @@ printf("paramz 1\n");
 		ae->module_separator[0]=param->module_separator;
 		ae->enforce_symbol_case=param->enforce_symbol_case;
 		if (param->rough) ae->maxam=0; else ae->maxam=1;
+		ae->maxam_as80=ae->maxam|ae->as80;
 		/* additional symbols */
 		for (i=0;i<param->nsymb;i++) {
 			char *sep;
@@ -26149,7 +26277,7 @@ printf("init 3\n");
 		}
 	}
 	qsort(math_keyword,nbinstruction,sizeof(struct s_math_keyword),cmpmathkeyword);
-	// init fastmatch table
+	// init fastmath table
 	for (i=0;i<256;i++) {
 		for (l=0;l<FUNCTION_MAXLENGTH;l++) {
 			ae->fastmath[i][l]=-1;
