@@ -1566,6 +1566,7 @@ struct s_math_keyword math_keyword[]={
 
 
 
+void (*PushExpression)(struct s_assenv *ae, int iw, enum e_expression zetype);
 
 /* struct declaration use special instructions for defines */
 int ICRC_DEFB,ICRC_DEFW,ICRC_DEFI,ICRC_DEFR,ICRC_DEFF,ICRC_DF,ICRC_DEFS,ICRC_DB,ICRC_DW,ICRC_DR,ICRC_DS;
@@ -8865,195 +8866,203 @@ printf("exprout=[%s]\n",expr);
 	}
 }
 
-void PushExpression(struct s_assenv *ae,int iw,enum e_expression zetype)
+void _code_PushExpression(struct s_assenv *ae,int iw,enum e_expression zetype)
 {
 	#undef FUNC
-	#define FUNC "PushExpression"
+	#define FUNC "PushExpression_Code"
 	
 	struct s_expression curexp={0};
 	int startptr=0;
 	unsigned char bakXY=0;
 
-	if (!ae->nocode) {
-		curexp.iw=iw;
-		curexp.wptr=ae->outputadr;
-		curexp.zetype=zetype;
-		curexp.ibank=ae->activebank;
-		curexp.iorgzone=ae->io-1;
-		curexp.lz=ae->lz;
-		/* need the module to know where we are */
-		if (ae->module) curexp.module=TxtStrDup(ae->module); else curexp.module=NULL;
-		/* on traduit de suite les variables du dictionnaire pour les boucles et increments
-			SAUF si c'est une affectation 
-		*/
-		if (!ae->wl[iw].e) {
-			switch (zetype) {
-				case E_EXPRESSION_J16C:
- 					/* check non register usage */
-					switch (GetCRC(ae->wl[iw].w)) {
-						case CRC_IX:
-						case CRC_IY:
-						case CRC_MIX:
-						case CRC_MIY:
-							MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"invalid register usage\n",ae->maxptr);
-						default:break;
-					}
-				case E_EXPRESSION_J8:
-				case E_EXPRESSION_V8:
-				case E_EXPRESSION_J16:
-				case E_EXPRESSION_V16:
-				case E_EXPRESSION_IM:startptr=-1;
-							break;
-				case E_EXPRESSION_IV8:
-				case E_EXPRESSION_IV81:
-						     // patch IX/IY because they dont exist anymore as constants
-						     bakXY=ae->wl[iw].w[2];
-						     ae->wl[iw].w[1]='%';
-						     ae->wl[iw].w[2]='0';
-				case E_EXPRESSION_IV16:startptr=-2;
-							break;
-				case E_EXPRESSION_3V8:startptr=-3;
-							break;
-				case E_EXPRESSION_RUN:
-				case E_EXPRESSION_ZXRUN:
-				case E_EXPRESSION_ZXSTACK:
-				case E_EXPRESSION_BRS:break;
-				default:break;
-			}
-			/* hack pourri pour gérer le $ */
-			ae->codeadr+=startptr;
-			/* ok mais les labels locaux des macros? */
-
-			/* if external declared then fill some informations */
-			if (ae->buildobj) {
-				switch (zetype) {
-					case E_EXPRESSION_0V8:
-					case E_EXPRESSION_V8:
-					case E_EXPRESSION_IV81:
-					case E_EXPRESSION_IV8:
-					case E_EXPRESSION_3V8:
-						ae->external_mapping_size=1;
-						break;
-					case E_EXPRESSION_J16C:
-					case E_EXPRESSION_J16:
-					case E_EXPRESSION_V16:
-					case E_EXPRESSION_0V16:
-					case E_EXPRESSION_IV16:
-						ae->external_mapping_size=2;
-						break;
-					case E_EXPRESSION_0V32:
-						ae->external_mapping_size=4;
-						break;
-					case E_EXPRESSION_0VR:
-					case E_EXPRESSION_0VRMike:
-						ae->external_mapping_size=5;
-						break;
-					default:
-						ae->external_mapping_size=0;
-						break;
-				}
-			}
-			if (ae->ir || ae->iw || ae->imacro) {
-				curexp.reference=TxtStrDup(ae->wl[iw].w);
-				ExpressionFastTranslate(ae,&curexp.reference,1);
-				if (bakXY) {
-					ae->wl[iw].w[1]='I';
-					ae->wl[iw].w[2]=bakXY;
-				}
-			} else {
-				ExpressionFastTranslate(ae,&ae->wl[iw].w,1);
-			}
-			ae->codeadr-=startptr;
-		}
-		/* calcul adresse de reference et post-incrementation pour sauter les data */
-//printf("output=%X\n",ae->outputadr);
+	curexp.iw=iw;
+	curexp.wptr=ae->outputadr;
+	curexp.zetype=zetype;
+	curexp.ibank=ae->activebank;
+	curexp.iorgzone=ae->io-1;
+	curexp.lz=ae->lz;
+	/* need the module to know where we are */
+	if (ae->module) curexp.module=TxtStrDup(ae->module); else curexp.module=NULL;
+	/* on traduit de suite les variables du dictionnaire pour les boucles et increments
+		SAUF si c'est une affectation 
+	*/
+	if (!ae->wl[iw].e) {
 		switch (zetype) {
-			case E_EXPRESSION_J8:curexp.ptr=ae->codeadr-1;ae->outputadr++;ae->codeadr++;break;
-			case E_EXPRESSION_0V8:curexp.ptr=ae->codeadr;ae->outputadr++;ae->codeadr++;break;
-			case E_EXPRESSION_V8:curexp.ptr=ae->codeadr-1;ae->outputadr++;ae->codeadr++;break;
-			case E_EXPRESSION_0V16:curexp.ptr=ae->codeadr;ae->outputadr+=2;ae->codeadr+=2;break;
-			case E_EXPRESSION_0V32:curexp.ptr=ae->codeadr;ae->outputadr+=4;ae->codeadr+=4;break;
-			case E_EXPRESSION_0VR:curexp.ptr=ae->codeadr;ae->outputadr+=5;ae->codeadr+=5;break;
-			case E_EXPRESSION_0VRMike:curexp.ptr=ae->codeadr;ae->outputadr+=5;ae->codeadr+=5;break;
 			case E_EXPRESSION_J16C:
+				/* check non register usage */
+				switch (GetCRC(ae->wl[iw].w)) {
+					case CRC_IX:
+					case CRC_IY:
+					case CRC_MIX:
+					case CRC_MIY:
+						MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"invalid register usage\n",ae->maxptr);
+					default:break;
+				}
+			case E_EXPRESSION_J8:
+			case E_EXPRESSION_V8:
 			case E_EXPRESSION_J16:
-			case E_EXPRESSION_V16:curexp.ptr=ae->codeadr-1;ae->outputadr+=2;ae->codeadr+=2;break;
-			case E_EXPRESSION_IV81:curexp.ptr=ae->codeadr-2;ae->outputadr++;ae->codeadr++;break;
-			case E_EXPRESSION_IV8:curexp.ptr=ae->codeadr-2;ae->outputadr++;ae->codeadr++;break;
-			case E_EXPRESSION_3V8:curexp.ptr=ae->codeadr-3;ae->outputadr++;ae->codeadr++;break;
-			case E_EXPRESSION_IV16:curexp.ptr=ae->codeadr-2;ae->outputadr+=2;ae->codeadr+=2;break;
-			case E_EXPRESSION_RST:curexp.ptr=ae->codeadr;ae->outputadr++;ae->codeadr++;break;
-			case E_EXPRESSION_RSTC:curexp.ptr=ae->codeadr;ae->outputadr++;ae->codeadr++;break;
-			case E_EXPRESSION_IM:curexp.ptr=ae->codeadr-1;ae->outputadr++;ae->codeadr++;break;
-			case E_EXPRESSION_RUN:break;
-			case E_EXPRESSION_ZXRUN:break;
-			case E_EXPRESSION_ZXSTACK:break;
-			case E_EXPRESSION_BRS:curexp.ptr=ae->codeadr;break; // minimum syndical
+			case E_EXPRESSION_V16:
+			case E_EXPRESSION_IM:startptr=-1;
+						break;
+			case E_EXPRESSION_IV8:
+			case E_EXPRESSION_IV81:
+					     // patch IX/IY because they dont exist anymore as constants
+					     bakXY=ae->wl[iw].w[2];
+					     ae->wl[iw].w[1]='%';
+					     ae->wl[iw].w[2]='0';
+			case E_EXPRESSION_IV16:startptr=-2;
+						break;
+			case E_EXPRESSION_3V8:startptr=-3;
+						break;
+			case E_EXPRESSION_RUN:
+			case E_EXPRESSION_ZXRUN:
+			case E_EXPRESSION_ZXSTACK:
+			case E_EXPRESSION_BRS:break;
 			default:break;
 		}
-//printf("output=%X maxptr=%X\n",ae->outputadr,ae->maxptr);
-		if (ae->outputadr<=ae->maxptr) {  // = compare because done AFTER simili value assignment
-			ObjectArrayAddDynamicValueConcat((void **)&ae->expression,&ae->ie,&ae->me,&curexp,sizeof(curexp));
-		} else {
-			int requested_block;
-			int i,iscrunched;
-			iscrunched=0;
-			for (i=ae->ilz-1;i>=0;i--) {
-				if (ae->lzsection[i].ibank==ae->activebank) {
-					iscrunched=1;
+		/* hack pourri pour gérer le $ */
+		ae->codeadr+=startptr;
+		/* ok mais les labels locaux des macros? */
+
+		/* if external declared then fill some informations */
+		if (ae->buildobj) {
+			switch (zetype) {
+				case E_EXPRESSION_0V8:
+				case E_EXPRESSION_V8:
+				case E_EXPRESSION_IV81:
+				case E_EXPRESSION_IV8:
+				case E_EXPRESSION_3V8:
+					ae->external_mapping_size=1;
 					break;
-				}
+				case E_EXPRESSION_J16C:
+				case E_EXPRESSION_J16:
+				case E_EXPRESSION_V16:
+				case E_EXPRESSION_0V16:
+				case E_EXPRESSION_IV16:
+					ae->external_mapping_size=2;
+					break;
+				case E_EXPRESSION_0V32:
+					ae->external_mapping_size=4;
+					break;
+				case E_EXPRESSION_0VR:
+				case E_EXPRESSION_0VRMike:
+					ae->external_mapping_size=5;
+					break;
+				default:
+					ae->external_mapping_size=0;
+					break;
 			}
-			if (!iscrunched) {
-				/* to avoid double error message */
-				if (!ae->stop) MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"(PushExpr) output exceed limit %04X\n",ae->maxptr); else MaxError(ae);
-				ae->stop=1;
-				return;
-			} else {
-				// who cares!
-			}
-			if (ae->maxptr&0xFFFF) {
-				rasm_printf(ae,KWARNING"Warning: Specific limits are not applied when using crunched sections, cause memory blocks are moved unpredictably\n");
-				if (ae->erronwarn) MaxError(ae);
-			}
-#if TRACE_LZ
-	printf("**output exceed limit** (PushExpr) extending memory space\n");
-#endif
-			requested_block=ae->outputadr>>16;
-			ae->mem[ae->activebank]=MemRealloc(ae->mem[ae->activebank],(requested_block+1)*65536);
-			ae->maxptr=(requested_block+1)*65536;
-			// eventually write expression ^_^
-			ObjectArrayAddDynamicValueConcat((void **)&ae->expression,&ae->ie,&ae->me,&curexp,sizeof(curexp));
 		}
-	} else {
-		switch (zetype) {
-			case E_EXPRESSION_J8:ae->outputadr++;ae->codeadr++;break;
-			case E_EXPRESSION_0V8:ae->outputadr++;ae->codeadr++;break;
-			case E_EXPRESSION_V8:ae->outputadr++;ae->codeadr++;break;
-			case E_EXPRESSION_0V16:ae->outputadr+=2;ae->codeadr+=2;break;
-			case E_EXPRESSION_0V32:ae->outputadr+=4;ae->codeadr+=4;break;
-			case E_EXPRESSION_0VR:ae->outputadr+=5;ae->codeadr+=5;break;
-			case E_EXPRESSION_0VRMike:ae->outputadr+=5;ae->codeadr+=5;break;
-			case E_EXPRESSION_J16C:
-			case E_EXPRESSION_J16:
-			case E_EXPRESSION_V16:ae->outputadr+=2;ae->codeadr+=2;break;
-			case E_EXPRESSION_IV81:ae->outputadr++;ae->codeadr++;break;
-			case E_EXPRESSION_IV8:ae->outputadr++;ae->codeadr++;break;
-			case E_EXPRESSION_3V8:ae->outputadr++;ae->codeadr++;break;
-			case E_EXPRESSION_IV16:ae->outputadr+=2;ae->codeadr+=2;break;
-			case E_EXPRESSION_RST:ae->outputadr++;ae->codeadr++;break;
-			case E_EXPRESSION_RSTC:ae->outputadr++;ae->codeadr++;break;
-			case E_EXPRESSION_IM:ae->outputadr++;ae->codeadr++;break;
-			case E_EXPRESSION_RUN:break;
-			case E_EXPRESSION_ZXRUN:break;
-			case E_EXPRESSION_ZXSTACK:break;
-			case E_EXPRESSION_BRS:break;
-		}
-		if (ae->outputadr<=ae->maxptr) { // = compare because done AFTER simili value assignment
+		if (ae->ir || ae->iw || ae->imacro) {
+			curexp.reference=TxtStrDup(ae->wl[iw].w);
+			ExpressionFastTranslate(ae,&curexp.reference,1);
+			// in a loop, we need to patch again in order to keep X/Y information
+			if (bakXY) {
+				ae->wl[iw].w[1]='I';
+				ae->wl[iw].w[2]=bakXY;
+			}
 		} else {
-			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"(PushExpr) NOCODE output exceed limit %04X\n",ae->maxptr);
-			FreeAssenv(ae);exit(3);
+			ExpressionFastTranslate(ae,&ae->wl[iw].w,1);
 		}
+		ae->codeadr-=startptr;
+	}
+	/* calcul adresse de reference et post-incrementation pour sauter les data */
+//printf("output=%X\n",ae->outputadr);
+	switch (zetype) {
+		case E_EXPRESSION_J8:curexp.ptr=ae->codeadr-1;ae->outputadr++;ae->codeadr++;break;
+		case E_EXPRESSION_0V8:curexp.ptr=ae->codeadr;ae->outputadr++;ae->codeadr++;break;
+		case E_EXPRESSION_V8:curexp.ptr=ae->codeadr-1;ae->outputadr++;ae->codeadr++;break;
+		case E_EXPRESSION_0V16:curexp.ptr=ae->codeadr;ae->outputadr+=2;ae->codeadr+=2;break;
+		case E_EXPRESSION_0V32:curexp.ptr=ae->codeadr;ae->outputadr+=4;ae->codeadr+=4;break;
+		case E_EXPRESSION_0VR:curexp.ptr=ae->codeadr;ae->outputadr+=5;ae->codeadr+=5;break;
+		case E_EXPRESSION_0VRMike:curexp.ptr=ae->codeadr;ae->outputadr+=5;ae->codeadr+=5;break;
+		case E_EXPRESSION_J16C:
+		case E_EXPRESSION_J16:
+		case E_EXPRESSION_V16:curexp.ptr=ae->codeadr-1;ae->outputadr+=2;ae->codeadr+=2;break;
+		case E_EXPRESSION_IV81:curexp.ptr=ae->codeadr-2;ae->outputadr++;ae->codeadr++;break;
+		case E_EXPRESSION_IV8:curexp.ptr=ae->codeadr-2;ae->outputadr++;ae->codeadr++;break;
+		case E_EXPRESSION_3V8:curexp.ptr=ae->codeadr-3;ae->outputadr++;ae->codeadr++;break;
+		case E_EXPRESSION_IV16:curexp.ptr=ae->codeadr-2;ae->outputadr+=2;ae->codeadr+=2;break;
+		case E_EXPRESSION_RST:curexp.ptr=ae->codeadr;ae->outputadr++;ae->codeadr++;break;
+		case E_EXPRESSION_RSTC:curexp.ptr=ae->codeadr;ae->outputadr++;ae->codeadr++;break;
+		case E_EXPRESSION_IM:curexp.ptr=ae->codeadr-1;ae->outputadr++;ae->codeadr++;break;
+		case E_EXPRESSION_RUN:break;
+		case E_EXPRESSION_ZXRUN:break;
+		case E_EXPRESSION_ZXSTACK:break;
+		case E_EXPRESSION_BRS:curexp.ptr=ae->codeadr;break; // minimum syndical
+		default:break;
+	}
+//printf("output=%X maxptr=%X\n",ae->outputadr,ae->maxptr);
+	if (ae->outputadr<=ae->maxptr) {  // = compare because done AFTER simili value assignment
+		ObjectArrayAddDynamicValueConcat((void **)&ae->expression,&ae->ie,&ae->me,&curexp,sizeof(curexp));
+	} else {
+		int requested_block;
+		int i,iscrunched;
+		iscrunched=0;
+		for (i=ae->ilz-1;i>=0;i--) {
+			if (ae->lzsection[i].ibank==ae->activebank) {
+				iscrunched=1;
+				break;
+			}
+		}
+		if (!iscrunched) {
+			/* to avoid double error message */
+			if (!ae->stop) MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"(PushExpr) output exceed limit %04X\n",ae->maxptr); else MaxError(ae);
+			ae->stop=1;
+			return;
+		} else {
+			// who cares!
+		}
+		if (ae->maxptr&0xFFFF) {
+			rasm_printf(ae,KWARNING"Warning: Specific limits are not applied when using crunched sections, cause memory blocks are moved unpredictably\n");
+			if (ae->erronwarn) MaxError(ae);
+		}
+#if TRACE_LZ
+printf("**output exceed limit** (PushExpr) extending memory space\n");
+#endif
+		requested_block=ae->outputadr>>16;
+		ae->mem[ae->activebank]=MemRealloc(ae->mem[ae->activebank],(requested_block+1)*65536);
+		ae->maxptr=(requested_block+1)*65536;
+		// eventually write expression ^_^
+		ObjectArrayAddDynamicValueConcat((void **)&ae->expression,&ae->ie,&ae->me,&curexp,sizeof(curexp));
+	}
+}
+void _nocode_PushExpression(struct s_assenv *ae,int iw,enum e_expression zetype)
+{
+	#undef FUNC
+	#define FUNC "PushExpression_NoCode"
+	
+	struct s_expression curexp={0};
+	int startptr=0;
+	unsigned char bakXY=0;
+
+	switch (zetype) {
+		case E_EXPRESSION_J8:ae->outputadr++;ae->codeadr++;break;
+		case E_EXPRESSION_0V8:ae->outputadr++;ae->codeadr++;break;
+		case E_EXPRESSION_V8:ae->outputadr++;ae->codeadr++;break;
+		case E_EXPRESSION_0V16:ae->outputadr+=2;ae->codeadr+=2;break;
+		case E_EXPRESSION_0V32:ae->outputadr+=4;ae->codeadr+=4;break;
+		case E_EXPRESSION_0VR:ae->outputadr+=5;ae->codeadr+=5;break;
+		case E_EXPRESSION_0VRMike:ae->outputadr+=5;ae->codeadr+=5;break;
+		case E_EXPRESSION_J16C:
+		case E_EXPRESSION_J16:
+		case E_EXPRESSION_V16:ae->outputadr+=2;ae->codeadr+=2;break;
+		case E_EXPRESSION_IV81:ae->outputadr++;ae->codeadr++;break;
+		case E_EXPRESSION_IV8:ae->outputadr++;ae->codeadr++;break;
+		case E_EXPRESSION_3V8:ae->outputadr++;ae->codeadr++;break;
+		case E_EXPRESSION_IV16:ae->outputadr+=2;ae->codeadr+=2;break;
+		case E_EXPRESSION_RST:ae->outputadr++;ae->codeadr++;break;
+		case E_EXPRESSION_RSTC:ae->outputadr++;ae->codeadr++;break;
+		case E_EXPRESSION_IM:ae->outputadr++;ae->codeadr++;break;
+		case E_EXPRESSION_RUN:break;
+		case E_EXPRESSION_ZXRUN:break;
+		case E_EXPRESSION_ZXSTACK:break;
+		case E_EXPRESSION_BRS:break;
+	}
+	if (ae->outputadr<=ae->maxptr) {  // = compare because done AFTER simili value assignment
+	} else {
+		if (!ae->stop) MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"(PushExpr) output exceed limit %04X\n",ae->maxptr); else MaxError(ae);
+		ae->stop=1;
 	}
 }
 
@@ -9978,7 +9987,7 @@ void PopAllExpression(struct s_assenv *ae, int crunched_zone)
 	static int lastlz=0;
 	double v;
 	long r;
-	int i,mapflag=0;
+	int i;
 	unsigned char *mem;
 	char *expr;
 	
@@ -10030,21 +10039,6 @@ void PopAllExpression(struct s_assenv *ae, int crunched_zone)
 #if TRACE_POPEXPR
 	printf("PopAll (%d) expr=[%s] ptr=%X outputadr=%X\n",crunched_zone,expr,ae->expression[i].ptr,ae->expression[i].wptr);
 #endif
-		if (ae->nexternal) {
-			int iex,jex;
-			mapflag=0;
-			for (iex=0;iex<ae->nexternal;iex++) {
-				for (jex=0;jex<ae->external[iex].imapping;jex++) {
-					if (ae->expression[i].wptr==ae->external[iex].mapping[jex].ptr) {
-#if TRACE_POPEXPR
-						printf("MAPPING [%s] adr=%d size=%d\n",ae->external[iex].name,ae->expression[i].wptr,ae->external[iex].mapping[jex].size);
-#endif
-						mapflag=1;
-						break;
-					}
-				}
-			}
-		}
 		v=ComputeExpressionCore(ae,expr,ae->expression[i].ptr,i);
 		r=(long)floor(v+ae->rough);
 #if TRACE_POPEXPR
@@ -10076,15 +10070,32 @@ void PopAllExpression(struct s_assenv *ae, int crunched_zone)
 				break;
 			case E_EXPRESSION_J16:
 			case E_EXPRESSION_J16C:
-				/* buildobj */
-				if (ae->buildobj && !mapflag) {
-					struct s_external_mapping mapping;
-					//printf("RELOCATION %04X\n",ae->expression[i].wptr);
-					mapping.iorgzone=ae->expression[i].ibank; // bank hack
-					mapping.ptr=ae->expression[i].wptr;
-					mapping.size=2;
-					mapping.value=r&0xFFFF;
-					ObjectArrayAddDynamicValueConcat((void**)&ae->mapping,&ae->imapping,&ae->mmapping,&mapping,sizeof(mapping));
+				if (ae->buildobj) {
+					int mapflag=0;
+					if (ae->nexternal) {
+						int iex,jex;
+						for (iex=0;iex<ae->nexternal;iex++) {
+							for (jex=0;jex<ae->external[iex].imapping;jex++) {
+								if (ae->expression[i].wptr==ae->external[iex].mapping[jex].ptr) {
+#if TRACE_POPEXPR
+									printf("MAPPING [%s] adr=%d size=%d\n",ae->external[iex].name,ae->expression[i].wptr,ae->external[iex].mapping[jex].size);
+#endif
+									mapflag=1;
+									break;
+								}
+							}
+						}
+					}
+					/* buildobj */
+					if (!mapflag) {
+						struct s_external_mapping mapping;
+						//printf("RELOCATION %04X\n",ae->expression[i].wptr);
+						mapping.iorgzone=ae->expression[i].ibank; // bank hack
+						mapping.ptr=ae->expression[i].wptr;
+						mapping.size=2;
+						mapping.value=r&0xFFFF;
+						ObjectArrayAddDynamicValueConcat((void**)&ae->mapping,&ae->imapping,&ae->mmapping,&mapping,sizeof(mapping));
+					}
 				}
 			case E_EXPRESSION_IV16:
 			case E_EXPRESSION_V16:
@@ -20433,6 +20444,7 @@ void __NOCODE(struct s_assenv *ae) {
 		ae->codeadrbackup=ae->codeadr;
 		ae->outputadrbackup=ae->outputadr;
 		___org_new(ae,1);
+		PushExpression=_nocode_PushExpression;
 	} else {
 		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"NOCODE directive does not need parameter\n");
 	}
@@ -20447,7 +20459,8 @@ void __CODE(struct s_assenv *ae) {
 			___org_close(ae);
 			ae->codeadr=ae->codeadrbackup;
 			ae->outputadr=ae->outputadrbackup;
-			___org_new(ae,1);
+			___org_new(ae,0);
+			PushExpression=_code_PushExpression;
 		} else {
 			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"unknown parameter for CODE directive\n");
 		}
@@ -20455,6 +20468,7 @@ void __CODE(struct s_assenv *ae) {
 	} else if (ae->wl[ae->idx].t==1) {
 		___org_close(ae);
 		___org_new(ae,0);
+		PushExpression=_code_PushExpression;
 	} else {
 		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"CODE directive does not need parameter\n");
 	}
@@ -26111,6 +26125,8 @@ printf("init 3\n");
 			exit(-666);
 		}
 	}
+	PushExpression=_code_PushExpression;
+
 	// sort them by length then alphabetical order
 	qsort(instruction,nbinstruction,sizeof(struct s_asm_keyword),cmpkeyword);
 	// init fastmatch table
@@ -27947,6 +27963,8 @@ int RasmAssembleInfoParam(const char *datain, int lenin, unsigned char **dataout
 
 #define AUTOTEST_CODESKIP "org #100: nop: old_dollar=$: nocode: defs 10: assert $==old_dollar+10: code: "\
 		"assert $==old_dollar+10: org #200: nop: old_dollar=$: nocode: defs 10: assert $==old_dollar+10: code skip: assert $==old_dollar"
+
+#define AUTOTEST_CODESKIP2 " nop: nocode: defs 10: code skip: nop "
 
 #define AUTOTEST_EMBEDDED_ERRORS "nop : rien : rien : rien : glop nop : glapi nop"
 
@@ -30265,6 +30283,11 @@ printf("testing var set inside an expression must trigger an error OK\n");
 	if (!ret) {} else {printf("Autotest %03d ERROR (code skip)\n",cpt);exit(-1);}
 	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
 printf("testing code skip OK\n");
+	
+	ret=RasmAssemble(AUTOTEST_CODESKIP2,strlen(AUTOTEST_CODESKIP2),&opcode,&opcodelen);
+	if (!ret && opcodelen==2) {} else {printf("Autotest %03d ERROR (code skip back)\n",cpt);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing code skip get back to proper code section OK\n");
 	
 	ret=RasmAssemble(AUTOTEST_FORMULA2,strlen(AUTOTEST_FORMULA2),&opcode,&opcodelen);
 	if (!ret) {} else {printf("Autotest %03d ERROR (formula case 2 function+multiple parenthesis)\n",cpt);exit(-1);}
