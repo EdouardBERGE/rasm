@@ -8092,8 +8092,9 @@ printf("%s\n",curalias.translation);
 				curalias.autorise_export=ae->autorise_export;
 				curalias.iw=ae->idx;
 				if (InsertAliasToTree(ae,&curalias)) {
+					int i;
 					ObjectArrayAddDynamicValueConcat((void**)&ae->alias,&ae->ialias,&ae->malias,&curalias,sizeof(curalias));
-					for (int i=0;i<ae->ialias-1;i++) {
+					for (i=0;i<ae->ialias-1;i++) {
 						/* is there previous aliases in the new alias? */
 						if (strstr(ae->alias[ae->ialias-1].translation,ae->alias[i].alias)) {
 							/* there is a match, apply alias translation */
