@@ -8107,6 +8107,7 @@ printf("%s\n",curalias.translation);
 					}
 				} else {
 					MakeError(ae,ae->idx,GetCurrentFile(ae),GetExpLine(ae,0),"Duplicate alias [%s]\n",expr);
+					MemFree(curalias.translation);
 					MemFree(curalias.alias);
 				}
 			}
@@ -8165,7 +8166,8 @@ printf("***********\n");
 								operatorassignment=ptr_exp[-1];ptr_exp[-1]=0;break;
 							default:operatorassignment=0;break;
 						}
-						
+					
+						// translate tags in variable name	
 						if (strchr(expr,'{')) {
 							dexpr=TranslateTag(ae,TxtStrDup(expr),&touched,0,E_TAGOPTION_NONE);
 						} else {
@@ -8173,10 +8175,7 @@ printf("***********\n");
 						}
 
 						crc=GetCRC(dexpr);
-						if (SearchAlias(ae,crc,dexpr)) {
-							MakeError(ae,ae->idx,GetCurrentFile(ae),GetExpLine(ae,0),"Variable cannot override existing alias [%s]\n",expr);
-							return 0;
-						}
+
 						curdic=SearchDico(ae,dexpr,crc);
 						if (curdic) {
 							switch (operatorassignment) {
@@ -8215,7 +8214,15 @@ printf("***********\n");
 								default: /* cannot do operator on non existing variable */
 									MakeError(ae,ae->idx,GetCurrentFile(ae),GetExpLine(ae,0),"Cannot do an operator assignment on non existing variable [%s]\n",expr);
 									return 0;
-								case 0: /* assign a new variable */
+								case 0: /* assign a new variable except if a label or alias already exists */
+									if (SearchAlias(ae,crc,dexpr)) {
+										MakeError(ae,ae->idx,GetCurrentFile(ae),GetExpLine(ae,0),"Variable cannot override existing alias [%s]\n",expr);
+										return 0;
+									}
+									if (SearchLabel(ae,dexpr,crc)) {
+										MakeError(ae,ae->idx,GetCurrentFile(ae),GetExpLine(ae,0),"Variable cannot override existing label [%s]\n",expr);
+										return 0;
+									}
 									ExpressionSetDicoVar(ae,dexpr,v,0);
 									break;
 							}
