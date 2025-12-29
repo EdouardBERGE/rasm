@@ -21236,6 +21236,7 @@ void __HEXBIN(struct s_assenv *ae) {
 	unsigned char *newdata=NULL;
 	int fileok=0,incwav=0;
 	int ifExists=0;
+	int skipHeader=0;
 	
 	if (!ae->wl[ae->idx].t) {
 		ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,1);
@@ -21265,6 +21266,12 @@ printf("Hexbin legacy datalen=%d\n",ae->hexbin[hbinidx].datalen);
 				if (strcmp("EXISTS",ae->wl[ae->idx+2].w)==0) {
 					ifExists=1;
 					offset=size=0; // full file
+					ae->idx++;
+				} else if (strcmp("SKIPHEADER",ae->wl[ae->idx+2].w)==0) {
+					size=0;
+					// detection AMSDOS header
+					offset=size=0;
+					skipHeader=1;
 					ae->idx++;
 				} else if (strcmp("REVERT",ae->wl[ae->idx+2].w)==0) {
 					/* revert data */
@@ -21459,6 +21466,24 @@ printf("Hexbin -> surprise! we found the file!\n");
 					return;
 				}
 				FileReadBinaryClose(newfilename);
+
+				if (skipHeader) {
+					if (curhexbin->rawlen>128) {
+						int checksum,i,headersize;
+						for (i=checksum=0;i<=66;i++) checksum+=curhexbin->data[i];
+						if (checksum && curhexbin->data[67]==(checksum&0xFF) && curhexbin->data[68]==(checksum>>8)) {
+							// extended checks
+							if (curhexbin->data[0]<16 && curhexbin->data[0x12]<=2 && curhexbin->data[0x18]==curhexbin->data[0x40] && curhexbin->data[0x19]==curhexbin->data[0x41]) {
+								headersize=curhexbin->data[0x18]+curhexbin->data[0x19]*256;
+                                                                if (headersize<=curhexbin->rawlen-128 && headersize>=(int)curhexbin->rawlen-128-512) {
+									// header seems ok :)
+									printf("AMSDOS header ok => offset forced to 128\n");
+									offset=128;
+								}
+							}
+						}
+					}
+				}
 				deload=1;
 			} else {
 				/* still not found */
@@ -29105,6 +29130,10 @@ struct s_autotest_keyword autotest_keyword[]={
 	{"repeat 256,x : assert filebyte('autotest_fast.raw',x-1)==x-1 : rend ",0}, // check all bytes
 	{"repeat 256,x : assert filebyte('autotest_fast.raw',x-1)==x-1 : assert filebyte('autotest_fast2.raw',x-1)==x-1 : rend ",0}, // check all bytes on multiple files
 	{"grouik nop:stop:bite cinquante,douze,pourquoi pas",0},
+	{"bank:repeat 256:defb rnd(255):rend:save 'rasmoutput.bin',0,256,AMSDOS",0},
+	{"bank : incbin 'rasmoutput.bin' : assert $==256+128:bank : incbin 'rasmoutput.bin',SKIPHEADER : assert $==256",0},
+	{"bank:repeat 256:defb rnd(255):rend:save 'rasmoutput.bin',0,256",0},
+	{"bank : incbin 'rasmoutput.bin' : assert $==256:bank : incbin 'rasmoutput.bin',SKIPHEADER : assert $==256",0}, // still same size without header
 	/*
 	 *
 	 * will need to test resize + format then meta review test!
