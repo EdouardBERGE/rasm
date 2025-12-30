@@ -9,6 +9,7 @@ CFLAGS_3RD = $(CFLAGS) -g -pthread -DNO_3RD_PARTIES
 SRC_APUDIR=./apultra-master/src
 SRC_LZSADIR=./lzsa-master/src
 SRC_SALVADOR=./salvador/src
+SRC_Z80_MASTER=./z80-master
 
 APU_FLAGS=-c -O3 -fomit-frame-pointer -I$(SRC_LZSADIR)/libdivsufsort/include -I$(SRC_APUDIR)
 
@@ -41,6 +42,8 @@ SALVADOR_OBJ =$(SRC_SALVADOR)/expand.o
 SALVADOR_OBJ+=$(SRC_SALVADOR)/matchfinder.o
 SALVADOR_OBJ+=$(SRC_SALVADOR)/shrink.o
 
+Z80_MASTER_OBJ = $(SRC_Z80_MASTER)/z80.o
+
 .PHONY: prod third debug clean
 
 default: prod
@@ -49,7 +52,7 @@ third:
 	$(CC) rasm.c $(CFLAGS_3RD)
 
 debug:
-	$(CC) z80-master/z80.c -O2 -c -o z80-master/z80.o
+	$(CC) z80-master/z80.c -O2 -c -o $(Z80_MASTER_OBJ)
 
 	$(CC) $(SRC_SALVADOR)/matchfinder.c $(SALVADOR_FLAGS) -o $(SRC_SALVADOR)/matchfinder.o
 	$(CC) $(SRC_SALVADOR)/expand.c      $(SALVADOR_FLAGS) -o $(SRC_SALVADOR)/expand.o
@@ -77,10 +80,10 @@ debug:
 	$(CC) $(SRC_LZSADIR)/shrink_inmem.c $(LZSA_FLAGS)      -o $(SRC_LZSADIR)/shrink_inmem.o
 	$(CC) $(SRC_LZSADIR)/stream.c $(LZSA_FLAGS)            -o $(SRC_LZSADIR)/stream.o
 
-	$(CC) rasm.c $(CFLAGS_DBG) $(APU_OBJ) $(LZSA_OBJ) $(SALVADOR_OBJ)  z80-master/z80.o
+	$(CC) rasm.c $(CFLAGS_DBG) $(APU_OBJ) $(LZSA_OBJ) $(SALVADOR_OBJ) $(Z80_MASTER_OBJ)
 
 prod:
-	$(CC) z80-master/z80.c -O2 -c -o z80-master/z80.o
+	$(CC) z80-master/z80.c -O2 -c -o $(Z80_MASTER_OBJ)
 
 	$(CC) $(SRC_SALVADOR)/matchfinder.c $(SALVADOR_FLAGS) -o $(SRC_SALVADOR)/matchfinder.o
 	$(CC) $(SRC_SALVADOR)/expand.c      $(SALVADOR_FLAGS) -o $(SRC_SALVADOR)/expand.o
@@ -108,18 +111,18 @@ prod:
 	$(CC) $(SRC_LZSADIR)/shrink_inmem.c $(LZSA_FLAGS)      -o $(SRC_LZSADIR)/shrink_inmem.o
 	$(CC) $(SRC_LZSADIR)/stream.c $(LZSA_FLAGS)            -o $(SRC_LZSADIR)/stream.o
 
-	$(CC) rasm.c $(CFLAGS_OPT) $(APU_OBJ) $(LZSA_OBJ) $(SALVADOR_OBJ)  z80-master/z80.o
+	$(CC) rasm.c $(CFLAGS_OPT) $(APU_OBJ) $(LZSA_OBJ) $(SALVADOR_OBJ) $(Z80_MASTER_OBJ)
 	strip $(EXEC)
 
 reloadd:
-	$(CC) rasm.c $(CFLAGS_DBG) $(APU_OBJ) $(LZSA_OBJ) $(SALVADOR_OBJ)  z80-master/z80.o
+	$(CC) rasm.c $(CFLAGS_DBG) $(APU_OBJ) $(LZSA_OBJ) $(SALVADOR_OBJ) $(Z80_MASTER_OBJ)
 
 reload:
-	$(CC) rasm.c $(CFLAGS_OPT) $(APU_OBJ) $(LZSA_OBJ) $(SALVADOR_OBJ) z80-master/z80.o
+	$(CC) rasm.c $(CFLAGS_OPT) $(APU_OBJ) $(LZSA_OBJ) $(SALVADOR_OBJ) $(Z80_MASTER_OBJ)
 	strip $(EXEC)
 
 release:
-	$(CC) z80-master/z80.c -O2 -c -o z80-master/z80.o
+	$(CC) z80-master/z80.c -O2 -c -o $(Z80_MASTER_OBJ)
 
 	$(CC) $(SRC_SALVADOR)/matchfinder.c $(SALVADOR_FLAGS) -o $(SRC_SALVADOR)/matchfinder.o
 	$(CC) $(SRC_SALVADOR)/expand.c      $(SALVADOR_FLAGS) -o $(SRC_SALVADOR)/expand.o
@@ -146,9 +149,9 @@ release:
 	$(CC) $(SRC_LZSADIR)/shrink_context.c $(LZSA_FLAGS)    -o $(SRC_LZSADIR)/shrink_context.o
 	$(CC) $(SRC_LZSADIR)/shrink_inmem.c $(LZSA_FLAGS)      -o $(SRC_LZSADIR)/shrink_inmem.o
 	$(CC) $(SRC_LZSADIR)/stream.c $(LZSA_FLAGS)            -o $(SRC_LZSADIR)/stream.o
-	$(CC) rasm.c $(CFLAGS_OPT) $(APU_OBJ) $(LZSA_OBJ) $(SALVADOR_OBJ) z80-master/z80.o
+	$(CC) rasm.c $(CFLAGS_OPT) $(APU_OBJ) $(LZSA_OBJ) $(SALVADOR_OBJ) $(Z80_MASTER_OBJ)
 	strip $(EXEC)
 
 clean:
-	rm -rf *.o
+	rm -f $(APU_OBJ) $(LZSA_OBJ) $(SALVADOR_OBJ) $(Z80_MASTER_OBJ)
 
