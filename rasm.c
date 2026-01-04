@@ -26639,7 +26639,7 @@ printf("quotes\n");
 								quote_type=0;
 								//MakeError(ae,0,ae->filename[listing[l].ifile],listing[l].iline,"Quote cannot be empty!\n");
 								if (!ae->nowarning) {
-									rasm_printf(ae,KWARNING"Warning - Quote is empty\n");
+									rasm_printf(ae,KWARNING"[%s:%d] Warning - Quote is empty\n",ae->filename[listing[l].ifile],listing[l].iline);
 									if (ae->erronwarn) MaxError(ae);
 								}
 							}
