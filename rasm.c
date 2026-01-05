@@ -16998,6 +16998,7 @@ void __CPRINIT(struct s_assenv *ae) {
 			return;
 		}
 		// initialise memory with cartridge data
+		if (!ae->mem[curbank]) ae->mem[curbank]=MemMalloc(65536);
 		for (i=0;i<cursize;i++) {
 			ae->mem[curbank][i]=cprdata[idx];
 			ae->mem[curbank][i+16384]=cprdata[idx];
@@ -17026,6 +17027,9 @@ void __SNAPINIT(struct s_assenv *ae) {
 		ae->forcesnapshot=1;
 		ae->remu=1;
 	}
+
+	// basic allocation
+	for (i=0;i<8;i++) if (!ae->mem[i]) ae->mem[i]=MemMalloc(65536);
 
 	if (!ae->wl[ae->idx].t) {
 		if (!StringIsQuote(ae->wl[ae->idx+1].w)) {
@@ -17157,28 +17161,34 @@ void __SNAPINIT(struct s_assenv *ae) {
 				break;
 			}
 
+			if (!ae->mem[slot*4]) ae->mem[slot*4]=MemMalloc(65536);
 			dataout=ae->mem[slot*4];
 
 			if (slot*4+4>ae->snapRAMsize) ae->snapRAMsize=slot*4+4;
 
-			while (idx<65536 && src<srcmax) {
-				if (snapdata[src]==0xE5) {
-					src++;
-					if (!snapdata[src]) {
-						dataout[idx++]=0xE5;
+			if (chunksize==65536) {
+				// not crunched!
+				while (idx<chunksize) dataout[idx++]=snapdata[src++];
+			} else {
+				while (idx<65536 && src<srcmax) {
+					if (snapdata[src]==0xE5) {
 						src++;
-					} else {
-						for (i=0;i<snapdata[src] && idx<65536;i++) {
-							dataout[idx++]=snapdata[src+1];
+						if (!snapdata[src]) {
+							dataout[idx++]=0xE5;
+							src++;
+						} else {
+							for (i=0;i<snapdata[src] && idx<65536;i++) {
+								dataout[idx++]=snapdata[src+1];
+							}
+							src+=2;
 						}
-						src+=2;
+					} else {
+						dataout[idx++]=snapdata[src++];
 					}
-				} else {
-					dataout[idx++]=snapdata[src++];
 				}
 			}
 			if (src!=srcmax) {
-				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"file [%s] invalid chunk in snapshot (overrun)\n",newfilename);
+				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"file [%s] invalid chunk in snapshot (src=%d srcmax=%d idx=%d)\n",newfilename,src,srcmax,idx);
 				break;
 			}
 		} else {
@@ -29134,6 +29144,14 @@ struct s_autotest_keyword autotest_keyword[]={
 	{"bank : incbin 'rasmoutput.bin' : assert $==256+128:bank : incbin 'rasmoutput.bin',SKIPHEADER : assert $==256",0},
 	{"bank:repeat 256:defb rnd(255):rend:save 'rasmoutput.bin',0,256",0},
 	{"bank : incbin 'rasmoutput.bin' : assert $==256:bank : incbin 'rasmoutput.bin',SKIPHEADER : assert $==256",0}, // still same size without header
+															//
+	{"buildsna 'snap64k.sna':bankset 0:repeat 65536,x : defb (45+X)&0xFF : rend",0},
+	{"buildsna 'snap128k.sna':bankset 0:repeat 65536,x : defb (45+X)&0xFF : rend:bankset 1:repeat 65536,x : defb (45+X)&0xFF : rend",0},
+	{"buildsna 'snap192k.sna':bankset 0:repeat 65536,x : defb (45+X)&0xFF : rend:bankset 1:repeat 65536,x : defb (45+X)&0xFF : rend:bankset 2:repeat 65536,x : defb (45+X)&0xFF : rend",0},
+	{"snapinit 'snap64k.sna' :bank 0:ld hl,454:bank 1:ld hl,454:bank 2:ld hl,454:bank 3:ld hl,454:bank 4:ld hl,454:bank 5:ld hl,454:bank 6:ld hl,454:bank 7:ld hl,454:bank 8:ld hl,454:bankset 4:ld hl,777",0},
+	{"snapinit 'snap128k.sna' :bank 0:ld hl,454:bank 1:ld hl,454:bank 2:ld hl,454:bank 3:ld hl,454:bank 4:ld hl,454:bank 5:ld hl,454:bank 6:ld hl,454:bank 7:ld hl,454:bank 8:ld hl,454:bankset 4:ld hl,777",0},
+	{"snapinit 'snap192k.sna' :bank 0:ld hl,454:bank 1:ld hl,454:bank 2:ld hl,454:bank 3:ld hl,454:bank 4:ld hl,454:bank 5:ld hl,454:bank 6:ld hl,454:bank 7:ld hl,454:bank 8:ld hl,454:bankset 4:ld hl,777",0},
+
 	/*
 	 *
 	 * will need to test resize + format then meta review test!
