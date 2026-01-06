@@ -23897,6 +23897,10 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 			if (ae->enforce_symbol_case) {
 				char *casefound;
 				int ilocal=0;
+				char splitlabel[256];
+				char casecharbackup;
+				int caseidx;
+				int istart,iend,ilen,isplit,icopy;
 
 				for (i=0;i<ae->il;i++) {
 					if (ae->label[i].autorise_export && !ae->label[i].make_alias) {
@@ -23906,10 +23910,6 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 							}
 						} else */
 						if (ae->export_local || !ae->label[i].local) {
-							char splitlabel[256];
-							char casecharbackup;
-							int caseidx;
-							int istart,iend,ilen,isplit,icopy;
 
 							ilen=strlen(ae->label[i].name);
 
@@ -23950,10 +23950,27 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 					}
 				}
 				// translate alias only if there are exported
-				if (ae->export_equ) {
+				if (ae->export_equ || ae->export_rasmSymbolFile) {
 					for (i=0;i<ae->ialias;i++) {
-						if ((casefound=_internal_stristr(ae->rawfile[ae->wl[ae->alias[i].iw].ifile],ae->rawlen[ae->wl[ae->alias[i].iw].ifile],ae->alias[i].alias))!=NULL) {
-							memcpy(ae->alias[i].alias,casefound,strlen(ae->alias[i].alias));
+						if (!strchr(ae->alias[i].alias,'.')) {
+							if ((casefound=_internal_stristr(ae->rawfile[ae->wl[ae->alias[i].iw].ifile],ae->rawlen[ae->wl[ae->alias[i].iw].ifile],ae->alias[i].alias))!=NULL) {
+								memcpy(ae->alias[i].alias,casefound,strlen(ae->alias[i].alias));
+							}
+						} else {
+							for (istart=0;ae->alias[i].alias[istart] && ae->alias[i].alias[istart]!='.';istart++); // find the dot
+							if (istart<254) {
+								ae->alias[i].alias[istart]=0;
+								casefound=_internal_stristr(ae->rawfile[ae->wl[ae->alias[i].iw].ifile],ae->rawlen[ae->wl[ae->alias[i].iw].ifile],ae->alias[i].alias);
+								if (casefound) {
+									memcpy(ae->alias[i].alias,casefound,istart);
+								}
+								ae->alias[i].alias[istart]='.';
+								casefound=_internal_stristr(ae->rawfile[ae->wl[ae->alias[i].iw].ifile],ae->rawlen[ae->wl[ae->alias[i].iw].ifile],ae->alias[i].alias+istart+1);
+								if (casefound) {
+									strcpy(ae->alias[i].alias+istart+1,casefound);
+								}
+							}
+
 						}
 					}
 				}
