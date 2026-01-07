@@ -3017,7 +3017,8 @@ void FreeAssenv(struct s_assenv *ae)
 	}
 	/*** end debug ***/
 
-	if (ae->enforce_symbol_case) {
+	if (ae->enforce_symbol_case && !ae->flux) {
+		// no source copy in flux mode
 		for (i=0;i<ae->ifile;i++) {
 			if (ae->rawlen[i]) MemFree(ae->rawfile[i]);
 		}
@@ -17098,9 +17099,9 @@ void __SNAPINIT(struct s_assenv *ae) {
 		default:
 		case 0:
 			if (snapdata[16]<3) {
-				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"file [%s] empty snapshot v2\n",newfilename);
-				snapsize=0;
+				rasm_printf(ae,KWARNING"[%s:%d] snapshot v2 [%s] without 64K/128K legacy\n",GetCurrentFile(ae),ae->wl[ae->idx].l,newfilename);
 			}
+			snapsize=0;
 			break;
 		case 64:
 			if (snapsize>=size+0x100) {
@@ -21220,10 +21221,10 @@ void __HEXBIN(struct s_assenv *ae) {
 	#undef FUNC
 	#define FUNC "__HEXBIN"
 
-	int hbinidx,overwritecheck=1,crc;
+	int hbinidx=-1,overwritecheck=1,crc;
 	struct s_expr_dico *rvar;
 	unsigned int idx;
-	int size=0,offset=0;
+	int size=0,offset=0,hasSize=0,hasOffset=0,hasExtendedOffset=0;
 	float amplification=1.0;
 	int deload=0;
 	int vtiles=0,remap=0,revert=0;
@@ -21233,12 +21234,19 @@ void __HEXBIN(struct s_assenv *ae) {
 	int fileok=0,incwav=0;
 	int ifExists=0;
 	int skipHeader=0;
+	int maxOpt;
+#if TRACE_HEXBIN
+printf("Hexbin ae->idx=%d\n",ae->idx);
+#endif
 	
 	if (!ae->wl[ae->idx].t) {
+#if TRACE_HEXBIN
+printf("Hexbin get IDX\n");
+#endif
 		ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,1);
 		hbinidx=RoundComputeExpressionCore(ae,ae->wl[ae->idx+1].w,ae->codeadr,0);
-		if (hbinidx>=ae->ih) {
-			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"internal error with binary file import (index out of bounds)\n");
+		if (hbinidx>=ae->ih || hbinidx<0) {
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"internal error with binary file import (index out of bounds), please report\n");
 			return;
 		}
 #if TRACE_HEXBIN
@@ -21246,168 +21254,136 @@ printf("Hexbin idx=[%s] filename=[%s]\n",ae->wl[ae->idx+1].w,ae->hexbin[hbinidx]
 #endif
 		
 		if (!ae->wl[ae->idx+1].t) {
-			if (strcmp("DSK",ae->wl[ae->idx+2].w)==0) {
-				/* import binary from DSK */
-			} else if (strchr("SD",ae->wl[ae->idx+2].w[0]) && ae->wl[ae->idx+2].w[1]=='M' && strchr("P24A",ae->wl[ae->idx+2].w[2]) && !ae->wl[ae->idx+2].w[3]) {
+
+			if (strchr("SD",ae->wl[ae->idx+2].w[0]) && ae->wl[ae->idx+2].w[1]=='M' && strchr("P24A",ae->wl[ae->idx+2].w[2]) && !ae->wl[ae->idx+2].w[3]) {
 				/* SMP,SM2,SM4,DMA */
 #if TRACE_HEXBIN
 printf("Hexbin for WAV-> %s (no operation until delayed load)\n",ae->wl[ae->idx+2].w);
 #endif
 				incwav=1;
 			} else {
-				/* legacy binary file */
+				/*******************************************************************************************************
+				 * legacy binary file
+				 ******************************************************************************************************/
 #if TRACE_HEXBIN
 printf("Hexbin legacy datalen=%d\n",ae->hexbin[hbinidx].datalen);
 #endif
-				if (strcmp("EXISTS",ae->wl[ae->idx+2].w)==0) {
-					ifExists=1;
-					offset=size=0; // full file
+				ae->idx++; // file index
+				do {
 					ae->idx++;
-				} else if (strcmp("SKIPHEADER",ae->wl[ae->idx+2].w)==0) {
-					size=0;
-					// detection AMSDOS header
-					offset=size=0;
-					skipHeader=1;
-					ae->idx++;
-				} else if (strcmp("REVERT",ae->wl[ae->idx+2].w)==0) {
-					/* revert data */
-					if (!ae->wl[ae->idx+2].t) {
-						MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"INCBIN REVERT does not need extra parameters\n");
-					}
 #if TRACE_HEXBIN
-printf(" -> REVERT loading\n");
+printf("Hexbin check wl[%d]=[%s]\n",ae->idx,ae->wl[ae->idx].w);
 #endif
-					revert=1;
-					offset=size=0; // full file
-					ae->idx++;
-
-				} else if (strcmp("REMAP",ae->wl[ae->idx+2].w)==0) {
-					/* reorder tiles data */
-					if (!ae->wl[ae->idx+2].t) {
-						ExpressionFastTranslate(ae,&ae->wl[ae->idx+3].w,1);
-						remap=RoundComputeExpressionCore(ae,ae->wl[ae->idx+3].w,ae->codeadr,0);
-					} else {
-						MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"INCBIN REMAP need a number of columns for reordering\n");
-					}
-#if TRACE_HEXBIN
-printf(" -> REMAP loading\n");
-#endif
-					offset=size=0; // full file
-					ae->idx+=2;
-
-				} else if (strcmp("GTILES",ae->wl[ae->idx+2].w)==0) {
-					/*** entrelace les tiles, besoin de hauteur et largeur de la tile ***/
-					if (!ae->wl[ae->idx+2].t) {
-						ExpressionFastTranslate(ae,&ae->wl[ae->idx+3].w,1);
-						tilex=RoundComputeExpressionCore(ae,ae->wl[ae->idx+3].w,ae->codeadr,0);
-						gtiles=1;
-					} else {
-						MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"usage is INCBIN'file',GTILES,width\n");
-						tilex=0;
-					}
-#if TRACE_HEXBIN
-printf(" -> GTILES loading\n");
-#endif
-					offset=size=0; // full file
-					ae->idx+=2;
-				} else if (strcmp("ITILES",ae->wl[ae->idx+2].w)==0) {
-					/*** entrelace les tiles, besoin de hauteur et largeur de la tile ***/
-					if (!ae->wl[ae->idx+2].t) {
-						ExpressionFastTranslate(ae,&ae->wl[ae->idx+3].w,1);
-						tilex=RoundComputeExpressionCore(ae,ae->wl[ae->idx+3].w,ae->codeadr,0);
-						itiles=1;
-					} else {
-						MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"usage is INCBIN'file',ITILES,width\n");
-						tilex=0;
-					}
-#if TRACE_HEXBIN
-printf(" -> ITILES loading\n");
-#endif
-					offset=size=0; // full file
-					ae->idx+=2;
-				} else if (strcmp("VTILES",ae->wl[ae->idx+2].w)==0) {
-					/* import and reorder tiles */
-					if (!ae->wl[ae->idx+2].t) {
-						ExpressionFastTranslate(ae,&ae->wl[ae->idx+3].w,1);
-						vtiles=RoundComputeExpressionCore(ae,ae->wl[ae->idx+3].w,ae->codeadr,0);
-					} else {
-						MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"INCBIN VTILES need a number of lines for reordering\n");
-					}
-#if TRACE_HEXBIN
-printf(" -> VTILES loading\n");
-#endif
-					offset=size=0; // full file
-					ae->idx+=2;
-				} else {
-					char *expwrk;
-					
-					expwrk=TxtStrDup(ae->wl[ae->idx+2].w);
-					ExpressionFastTranslate(ae,&expwrk,1);
-					offset=RoundComputeExpressionCore(ae,expwrk,ae->codeadr,0);
-					MemFree(expwrk);
-#if TRACE_HEXBIN
-	printf("offset=%d\n",offset);
-#endif
-					if (!ae->wl[ae->idx+2].t) {
-						if (ae->wl[ae->idx+3].w[0]) {
-							expwrk=TxtStrDup(ae->wl[ae->idx+3].w);
-							ExpressionFastTranslate(ae,&expwrk,1);
-							size=RoundComputeExpressionCore(ae,expwrk,ae->codeadr,0);
-							MemFree(expwrk);
+					if (strcmp("EXISTS",ae->wl[ae->idx].w)==0) {
+						ifExists=1;
+					} else if (strcmp("SKIPHEADER",ae->wl[ae->idx].w)==0) {
+						// detection AMSDOS header
+						skipHeader=1;
+					} else if (strcmp("REVERT",ae->wl[ae->idx].w)==0) {
+						// revert data
+						revert=1;
+					} else if (strcmp("REMAP",ae->wl[ae->idx].w)==0) {
+						/* reorder tiles data */
+						if (!ae->wl[ae->idx+1].t) {
+							ae->idx++;
+							ExpressionFastTranslate(ae,&ae->wl[ae->idx].w,1);
+							remap=RoundComputeExpressionCore(ae,ae->wl[ae->idx].w,ae->codeadr,0);
 						} else {
-							size=0;
+							MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"INCBIN REMAP need a number of columns for reordering\n");
 						}
-#if TRACE_HEXBIN
-	printf("size=%d\n",size);
-#endif
-						if (size<-65535 || size>65536) {
-							MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"INCBIN invalid size\n");
-						}
-						if (!ae->wl[ae->idx+3].t) {
-							if (ae->wl[ae->idx+4].w[0]) {
-								expwrk=TxtStrDup(ae->wl[ae->idx+4].w);
-								ExpressionFastTranslate(ae,&expwrk,1);
-								offset+=65536*RoundComputeExpressionCore(ae,expwrk,ae->codeadr,0);
-								MemFree(expwrk);
-							}
-							if (!ae->wl[ae->idx+4].t) {
-								if (strcmp(ae->wl[ae->idx+5].w,"OFF")==0) {
-									overwritecheck=0;
-								} else if (strcmp(ae->wl[ae->idx+5].w,"ON")==0) {
-									overwritecheck=1;
-#if TRACE_HEXBIN
-	printf("mode OVERWRITE\n");
-#endif
-								} else if (ae->wl[ae->idx+5].w[0]) {
-									MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"INCBIN invalid overwrite value. Must be 'OFF' or 'ON'\n");
-								}
-								if (!ae->wl[ae->idx+5].t) {
-									/* copy raw len to a (new) variable */
-									crc=GetCRC(ae->wl[ae->idx+6].w);
-									if ((rvar=SearchDico(ae,ae->wl[ae->idx+6].w,crc))!=NULL) {
-										rvar->v=ae->hexbin[hbinidx].rawlen;
-										rvar->used=1;
-									} else {
-										/* mais ne peut être un label ou un alias */
-										ExpressionSetDicoVar(ae,ae->wl[ae->idx+6].w,ae->hexbin[hbinidx].rawlen,0);
-									}
-									ae->idx+=6;
-								} else {
-									ae->idx+=5;
-								}
-							} else {
-								ae->idx+=4;
-							}
+					} else if (strcmp("GTILES",ae->wl[ae->idx].w)==0) {
+						/*** entrelace les tiles, besoin de hauteur et largeur de la tile ***/
+						if (!ae->wl[ae->idx].t) {
+							ae->idx++;
+							ExpressionFastTranslate(ae,&ae->wl[ae->idx].w,1);
+							tilex=RoundComputeExpressionCore(ae,ae->wl[ae->idx].w,ae->codeadr,0);
+							gtiles=1;
 						} else {
-							ae->idx+=3;
+							MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"usage is INCBIN'file',GTILES,width\n");
+							tilex=0;
 						}
+					} else if (strcmp("ITILES",ae->wl[ae->idx].w)==0) {
+						/*** entrelace les tiles, besoin de hauteur et largeur de la tile ***/
+						if (!ae->wl[ae->idx].t) {
+							ae->idx++;
+							ExpressionFastTranslate(ae,&ae->wl[ae->idx].w,1);
+							tilex=RoundComputeExpressionCore(ae,ae->wl[ae->idx].w,ae->codeadr,0);
+							itiles=1;
+						} else {
+							MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"usage is INCBIN'file',ITILES,width\n");
+							tilex=0;
+						}
+					} else if (strcmp("VTILES",ae->wl[ae->idx].w)==0) {
+						/* import and reorder tiles */
+						if (!ae->wl[ae->idx].t) {
+							ae->idx++;
+							ExpressionFastTranslate(ae,&ae->wl[ae->idx].w,1);
+							vtiles=RoundComputeExpressionCore(ae,ae->wl[ae->idx].w,ae->codeadr,0);
+						} else {
+							MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"INCBIN VTILES need a number of lines for reordering\n");
+						}
+					} else if (strcmp(ae->wl[ae->idx].w,"OFF")==0) {
+						overwritecheck=0;
+					} else if (strcmp(ae->wl[ae->idx].w,"ON")==0) {
+						overwritecheck=1;
 					} else {
-						ae->idx+=2;
+						char *expwrk;
+						int iValue;
+						// no keyword detected, guess what it is...
+						if (StringIsQuote(ae->wl[ae->idx].w)) {
+							MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"INCBIN has unexpected string parameter [%s]\n",ae->wl[ae->idx].w);
+							return;
+						}
+						expwrk=TxtStrDup(ae->wl[ae->idx].w);
+						ExpressionFastTranslate(ae,&expwrk,1);
+						iValue=RoundComputeExpressionCore(ae,expwrk,ae->codeadr,0);
+						MemFree(expwrk);
+
+						if (!hasOffset) {
+							offset=iValue;
+							hasOffset=1;
+						} else if (!hasSize) {
+							size=iValue;
+							hasSize=1;
+						} else if (!hasExtendedOffset) {
+							offset+=65536*iValue;
+							hasExtendedOffset=1;
+						} else {
+							MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"INCBIN has unexpected integer parameter [%s]\n",ae->wl[ae->idx].w);
+							return;
+						}
+
 					}
+				} while (!ae->wl[ae->idx].t);
+
+				if (size>65536) {
+					MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"INCBIN invalid size, must be lower than 65536\n");
 				}
+
+	#if 0
+
+		// now there is filesize it's useless (and still undocumented so...)
+
+		/* copy raw len to a (new) variable */
+		crc=GetCRC(ae->wl[ae->idx+6].w);
+		if ((rvar=SearchDico(ae,ae->wl[ae->idx+6].w,crc))!=NULL) {
+			rvar->v=ae->hexbin[hbinidx].rawlen;
+			rvar->used=1;
+		} else {
+			/* mais ne peut être un label ou un alias */
+			ExpressionSetDicoVar(ae,ae->wl[ae->idx+6].w,ae->hexbin[hbinidx].rawlen,0);
+		}
+	#endif
 			}
 		} else {
 			ae->idx++;
+		}
+
+		// on peut cumuler avec skipHeader + revert + overwrite
+		maxOpt=0; if (itiles) maxOpt++; if (gtiles) maxOpt++; if (vtiles) maxOpt++; if (remap) maxOpt++;
+		if (maxOpt>1) {
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"INCBIN options ITLES, GTILES, VTILES and REMAP are mutually exclusives\n");
+			return;
 		}
 
 		curhexbin=&ae->hexbin[hbinidx];
@@ -21473,8 +21449,14 @@ printf("Hexbin -> surprise! we found the file!\n");
 								headersize=curhexbin->data[0x18]+curhexbin->data[0x19]*256;
                                                                 if (headersize<=curhexbin->rawlen-128 && headersize>=(int)curhexbin->rawlen-128-512) {
 									// header seems ok :)
-									printf("AMSDOS header ok => offset forced to 128\n");
-									offset=128;
+									if (offset>=0) {
+										offset+=128;
+									} else {
+										if (!ae->nowarning) {
+											rasm_printf(ae,KWARNING"[%s:%d] Warning: SKIPHEADER is useless with negative offset\n",GetCurrentFile(ae),ae->wl[ae->idx].l);
+											if (ae->erronwarn) MaxError(ae);
+										}
+									}
 								}
 							}
 						}
@@ -21490,7 +21472,7 @@ printf("Hexbin -> surprise! we found the file!\n");
 				return;
 			}
 			MemFree(newfilename);
-		} 
+		}
 
 		if (incwav) {
 			/* SMP,SM2,SM4,DMA */
@@ -21571,300 +21553,311 @@ printf("Hexbin -> %s\n",ae->wl[ae->idx+2].w);
 			ae->idx+=2;
 			return;
 		}
-		
+	
+
+		/***************************************************************************************************************
+		 ***************************************************************************************************************
+		               L E G A C Y      I N C B I N
+		***************************************************************************************************************
+		***************************************************************************************************************/
+
 		if (ae->hexbin[hbinidx].datalen>0) {
-			if (hbinidx<ae->ih && hbinidx>=0) {
-				/* pre-parametres OK (longueur+IDX struct) */
-				if (size<0) {
+			/* OUTPUT DATA */
+			unsigned char *outputdata;
+			int outputidx=0;
+
+			/* pre-parametres OK (longueur+IDX struct) */
+			if (size<0) {
 #if TRACE_HEXBIN
 printf("taille négative %d -> conversion en %d\n",size,ae->hexbin[hbinidx].datalen+size);
 #endif
-					size=ae->hexbin[hbinidx].datalen+size;
-					if (size<1) {
-						MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"INCBIN negative size is greater or equal to filesize\n");
-					}
+				size=ae->hexbin[hbinidx].datalen+size;
+				if (size<1) {
+					MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"INCBIN negative size is greater or equal to filesize\n");
 				}
-				/* negative offset conversion */
-				if (offset<0) {
+			}
+			/* negative offset conversion */
+			if (offset<0) {
 #if TRACE_HEXBIN
 printf("offset négatif %d -> conversion en %d\n",offset,ae->hexbin[hbinidx].datalen+offset);
 #endif
-					offset=ae->hexbin[hbinidx].datalen+offset;
-				}
-				if (!size) {
-					if (!offset) {
-						size=ae->hexbin[hbinidx].datalen;
-					} else {
-						size=ae->hexbin[hbinidx].datalen-offset;
-					}
+				offset=ae->hexbin[hbinidx].datalen+offset;
+			}
+			if (!size) {
+				size=ae->hexbin[hbinidx].datalen-offset;
 #if TRACE_HEXBIN
 printf("taille nulle et offset=%d -> conversion en %d\n",offset,size);
 #endif
-				}
-				if (size>ae->hexbin[hbinidx].datalen) {
-					rasm_printf(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"INCBIN size is greater than filesize\n");
-				} else {
-					if (size+offset>ae->hexbin[hbinidx].datalen) {
-						MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"INCBIN size+offset is greater than filesize\n");
-					} else {
-						/* OUTPUT DATA */
-						unsigned char *outputdata;
-						int outputidx=0;
-						outputdata=MemMalloc(ae->hexbin[hbinidx].datalen);
+			}
+			if (size>ae->hexbin[hbinidx].datalen) {
+				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"INCBIN size is greater than filesize\n");
+				return;
+			}
+			if (size+offset>ae->hexbin[hbinidx].datalen) {
+				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"INCBIN size+offset is greater than filesize\n");
+				return;
+			}
+			outputdata=MemMalloc(ae->hexbin[hbinidx].datalen);
 #if TRACE_HEXBIN
 printf("output fictif pour réorganiser les données\n");
 #endif
 
-						if (revert) {
-							int p;
-							p=size-1;
-							while (p>=0) {
-								outputdata[outputidx++]=ae->hexbin[hbinidx].data[p--];
-							}
-						} else if (itiles || gtiles) {
-							/* tiles data reordering */
-							int tx,it;
+			if (revert) {
+#if TRACE_HEXBIN
+printf("revert DATA on selected  area\n");
+#endif
+				zx0_reverse(ae->hexbin[hbinidx].data+offset,ae->hexbin[hbinidx].data+offset+size-1);
+			}
+			if (itiles || gtiles) {
+				/* tiles data reordering */
+				int tx,it;
+				if (tilex<=0 || tilex>256) {
+					MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"INCBIN ITILES/GTILES need a tile value in the range [1-256]\n");
+				} else if (size % (tilex*8)) {
+					MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"INCBIN ITILES/GTILES cannot reorder tiles %d bytewidth with file of size %d\n",tilex,size);
+				} else {
+					if (itiles) {
+						/* zigzag with regular gray coding */
+						it=0;
+						while (it<size) {
+							for (tx=0;tx<tilex;tx++)    outputdata[outputidx++]=ae->hexbin[hbinidx].data[it+tx+0*tilex+offset];
+							for (tx=tilex-1;tx>=0;tx--) outputdata[outputidx++]=ae->hexbin[hbinidx].data[it+tx+1*tilex+offset];
+							for (tx=0;tx<tilex;tx++)    outputdata[outputidx++]=ae->hexbin[hbinidx].data[it+tx+3*tilex+offset];
+							for (tx=tilex-1;tx>=0;tx--) outputdata[outputidx++]=ae->hexbin[hbinidx].data[it+tx+2*tilex+offset];
+							for (tx=0;tx<tilex;tx++)    outputdata[outputidx++]=ae->hexbin[hbinidx].data[it+tx+6*tilex+offset];
+							for (tx=tilex-1;tx>=0;tx--) outputdata[outputidx++]=ae->hexbin[hbinidx].data[it+tx+7*tilex+offset];
+							for (tx=0;tx<tilex;tx++)    outputdata[outputidx++]=ae->hexbin[hbinidx].data[it+tx+5*tilex+offset];
+							for (tx=tilex-1;tx>=0;tx--) outputdata[outputidx++]=ae->hexbin[hbinidx].data[it+tx+4*tilex+offset];
+							it+=tilex*8;
+						}
+					} else {
+						/* only reorder lines with regular gray coding */
+						it=0;
+						while (it<size) {
+							for (tx=0;tx<tilex;tx++)    outputdata[outputidx++]=ae->hexbin[hbinidx].data[it+tx+0*tilex+offset];
+							for (tx=0;tx<tilex;tx++)    outputdata[outputidx++]=ae->hexbin[hbinidx].data[it+tx+1*tilex+offset];
+							for (tx=0;tx<tilex;tx++)    outputdata[outputidx++]=ae->hexbin[hbinidx].data[it+tx+3*tilex+offset];
+							for (tx=0;tx<tilex;tx++)    outputdata[outputidx++]=ae->hexbin[hbinidx].data[it+tx+2*tilex+offset];
+							for (tx=0;tx<tilex;tx++)    outputdata[outputidx++]=ae->hexbin[hbinidx].data[it+tx+6*tilex+offset];
+							for (tx=0;tx<tilex;tx++)    outputdata[outputidx++]=ae->hexbin[hbinidx].data[it+tx+7*tilex+offset];
+							for (tx=0;tx<tilex;tx++)    outputdata[outputidx++]=ae->hexbin[hbinidx].data[it+tx+5*tilex+offset];
+							for (tx=0;tx<tilex;tx++)    outputdata[outputidx++]=ae->hexbin[hbinidx].data[it+tx+4*tilex+offset];
+							it+=tilex*8;
+						}
+					}
+				}
+			} else if (remap) {
+				/* tiles data reordering */
+				int tx,it,width;
 
-							if (size % (tilex*8)) {
-								MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"INCBIN ITILES/GTILES cannot reorder tiles %d bytewidth with file of size %d\n",tilex,size);
-							} else {
-								if (itiles) {
-									/* zigzag with regular gray coding */
-									it=0;
-									while (it<size) {
-										for (tx=0;tx<tilex;tx++)    outputdata[outputidx++]=ae->hexbin[hbinidx].data[it+tx+0*tilex];
-										for (tx=tilex-1;tx>=0;tx--) outputdata[outputidx++]=ae->hexbin[hbinidx].data[it+tx+1*tilex];
-										for (tx=0;tx<tilex;tx++)    outputdata[outputidx++]=ae->hexbin[hbinidx].data[it+tx+3*tilex];
-										for (tx=tilex-1;tx>=0;tx--) outputdata[outputidx++]=ae->hexbin[hbinidx].data[it+tx+2*tilex];
-										for (tx=0;tx<tilex;tx++)    outputdata[outputidx++]=ae->hexbin[hbinidx].data[it+tx+6*tilex];
-										for (tx=tilex-1;tx>=0;tx--) outputdata[outputidx++]=ae->hexbin[hbinidx].data[it+tx+7*tilex];
-										for (tx=0;tx<tilex;tx++)    outputdata[outputidx++]=ae->hexbin[hbinidx].data[it+tx+5*tilex];
-										for (tx=tilex-1;tx>=0;tx--) outputdata[outputidx++]=ae->hexbin[hbinidx].data[it+tx+4*tilex];
-										it+=tilex*8;
-									}
-								} else {
-									/* only reorder lines with regular gray coding */
-									it=0;
-									while (it<size) {
-										for (tx=0;tx<tilex;tx++)    outputdata[outputidx++]=ae->hexbin[hbinidx].data[it+tx+0*tilex];
-										for (tx=0;tx<tilex;tx++)    outputdata[outputidx++]=ae->hexbin[hbinidx].data[it+tx+1*tilex];
-										for (tx=0;tx<tilex;tx++)    outputdata[outputidx++]=ae->hexbin[hbinidx].data[it+tx+3*tilex];
-										for (tx=0;tx<tilex;tx++)    outputdata[outputidx++]=ae->hexbin[hbinidx].data[it+tx+2*tilex];
-										for (tx=0;tx<tilex;tx++)    outputdata[outputidx++]=ae->hexbin[hbinidx].data[it+tx+6*tilex];
-										for (tx=0;tx<tilex;tx++)    outputdata[outputidx++]=ae->hexbin[hbinidx].data[it+tx+7*tilex];
-										for (tx=0;tx<tilex;tx++)    outputdata[outputidx++]=ae->hexbin[hbinidx].data[it+tx+5*tilex];
-										for (tx=0;tx<tilex;tx++)    outputdata[outputidx++]=ae->hexbin[hbinidx].data[it+tx+4*tilex];
-										it+=tilex*8;
-									}
-								}
-							}
-						} else if (remap) {
-							/* tiles data reordering */
-							int tx,it,width;
+				if (remap<=0 || remap>256) {
+					MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"INCBIN REMAP need a remap value in the range [1-256]\n");
+					return;
+				}
+				width=size/remap;
 
-							width=size/remap;
+				if ((size % remap) || (remap*width>size)) {
+					MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"INCBIN REMAP cannot reorder %d columns%s with file of size %d\n",remap,remap>1?"s":"",size);
+				} else {
+					for (it=0;it<remap;it++) {
+						for (tx=0;tx<width;tx++) {
+							outputdata[outputidx++]=ae->hexbin[hbinidx].data[it+tx*remap+offset];
+						}
+					}
+				}
+				
+			} else if (vtiles) {
+				/* tiles map reordering */
+				int width,tilex,tiley;
 
-							if ((size % remap) || (remap*width>size)) {
-								MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"INCBIN REMAP cannot reorder %d columns%s with file of size %d\n",remap,remap>1?"s":"",size);
-							} else {
-								for (it=0;it<remap;it++) {
-									for (tx=0;tx<width;tx++) {
-										outputdata[outputidx++]=ae->hexbin[hbinidx].data[it+tx*remap];
-									}
-								}
-							}
-							
-						} else if (vtiles) {
-							/* tiles map reordering */
-							int width,tilex,tiley;
+				if (vtiles<=0 || vtiles>256) {
+					MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"INCBIN VTILES need a value in the range [1-256]\n");
+					return;
+				}
+				width=size/vtiles;
 
-							width=size/vtiles;
-
-							if ((size % vtiles) || (vtiles*width>size)) {
-								MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"INCBIN VTILES cannot reorder %d line%s with file of size %d\n",vtiles,vtiles>1?"s":"",size);
-							} else {
+				if ((size % vtiles) || (vtiles*width>size)) {
+					MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"INCBIN VTILES cannot reorder %d line%s with file of size %d\n",vtiles,vtiles>1?"s":"",size);
+				} else {
 #if TRACE_HEXBIN
 printf("Hexbin -> re-tiling MAP! width=%d\n",width);
 #endif
-								for (idx=tilex=tiley=0;idx<size;idx++) {
-									outputdata[outputidx++]=ae->hexbin[hbinidx].data[tilex+tiley*width];
-									tiley++;
-									if (tiley>=vtiles) {
-										tiley=0;
-										tilex++;
-									}
-								}
-							}
-						} else {
+					for (idx=tilex=tiley=0;idx<size;idx++) {
+						outputdata[outputidx++]=ae->hexbin[hbinidx].data[tilex+tiley*width+offset];
+						tiley++;
+						if (tiley>=vtiles) {
+							tiley=0;
+							tilex++;
+						}
+					}
+				}
+			} else {
 #if TRACE_HEXBIN
 printf("Hexbin -> Legacy output from %d to %d\n",offset,size+offset);
 if (curhexbin->crunch) printf("CRUNCHED! (%d)\n",curhexbin->crunch);
 #endif
-							/* only from offset to size+offset */
-							for (idx=offset;idx<size+offset;idx++) {
-								outputdata[outputidx++]=ae->hexbin[hbinidx].data[idx];
-							}
-
-							switch (curhexbin->crunch) {
-								#ifndef NO_3RD_PARTIES
-								case 4:
-									newdata=LZ4_crunch(outputdata,outputidx,&outputidx);
-									MemFree(outputdata);
-									outputdata=newdata;
-									#if TRACE_PREPRO
-									rasm_printf(ae,KVERBOSE"crunched with LZ4 into %d byte(s)\n",outputidx);
-									#endif
-									break;
+				/* only from offset to size+offset */
+				for (idx=offset;idx<size+offset;idx++) {
+					outputdata[outputidx++]=ae->hexbin[hbinidx].data[idx];
+				}
+			}
+	
+			// any kind of preprocessing may be crunched!	
+			switch (curhexbin->crunch) {
+				#ifndef NO_3RD_PARTIES
+				case 4:
+					newdata=LZ4_crunch(outputdata,outputidx,&outputidx);
+					MemFree(outputdata);
+					outputdata=newdata;
+					#if TRACE_PREPRO
+					rasm_printf(ae,KVERBOSE"crunched with LZ4 into %d byte(s)\n",outputidx);
+					#endif
+					break;
 #ifndef NOAPULTRA
-								case 70:
-									{
-									unsigned char *input_data;
+				case 70:
+					{
+					unsigned char *input_data;
 
-									if (!ae->nowarning)
-									if (!ae->nocrunchwarning && outputidx>=20000) rasm_printf(ae,KWARNING"ZX0 is crunching %.1fkb this may take a while, be patient...\n",outputidx/1024.0);
-									input_data=MemMalloc(outputidx); memcpy(input_data,outputdata,outputidx); // copy buffer to input
-									outputdata=MemRealloc(outputdata,salvador_get_max_compressed_size(outputidx)); // enlarge output buffer
-									memset(outputdata,0,salvador_get_max_compressed_size(outputidx)); // then raz !
-									outputidx=salvador_compress(input_data,outputdata,outputidx,salvador_get_max_compressed_size(outputidx),1,32640,0,NULL,NULL);
-									MemFree(input_data);
-									#if TRACE_PREPRO
-									rasm_printf(ae,KVERBOSE"crunched with ZX0 into %d byte(s)\n",outputidx);
-									#endif
-									}
-									break;
-								case 71:
-									{
-									unsigned char *input_data;
-
-									if (!ae->nowarning)
-									if (!ae->nocrunchwarning && outputidx>=20000) rasm_printf(ae,KWARNING"ZX0 is crunching %.1fkb this may take a while, be patient...\n",outputidx/1024.0);
-									input_data=MemMalloc(outputidx);
-									memcpy(input_data,outputdata,outputidx);
-									memset(outputdata,0,outputidx);
-									zx0_reverse(input_data,input_data+outputidx-1);
-									outputidx=salvador_compress(input_data,outputdata,outputidx,outputidx,1+2 /* FLG_IS_BACKWARD */ ,32640,0,NULL,NULL);
-									zx0_reverse(outputdata,outputdata+outputidx-1);
-									MemFree(input_data);
-									#if TRACE_PREPRO
-									rasm_printf(ae,KVERBOSE"crunched with ZX0 backward into %d byte(s)\n",outputidx);
-									#endif
-									}
-									break;
-#endif // NOAPULTRA
-								case 7:
-									{
-									int slzlen;
-									newdata=ZX7_compress(zx7_optimize(outputdata, outputidx), outputdata, outputidx, &slzlen);
-									outputidx=slzlen;
-									MemFree(outputdata);
-									outputdata=newdata;
-									#if TRACE_PREPRO
-									rasm_printf(ae,KVERBOSE"crunched with ZX7 into %d byte(s)\n",outputidx);
-									#endif
-									}
-									break;
-								case 8:
-									if (!ae->nowarning)
-									if (!ae->nocrunchwarning && outputidx>=512) rasm_printf(ae,KWARNING"Exomizer is crunching %.1fkb this may take a while, be patient...\n",outputidx/1024.0);
-									newdata=Exomizer_crunch(outputdata,outputidx,&outputidx);
-									MemFree(outputdata);
-									outputdata=newdata;
-									#if TRACE_PREPRO
-									rasm_printf(ae,KVERBOSE"crunched with Exomizer into %d byte(s)\n",outputidx);
-									#endif
-									break;
-#ifndef NOAPULTRA
-								case 17:
-									if (!ae->nowarning)
-									if (!ae->nocrunchwarning && outputidx>=1024) rasm_printf(ae,KWARNING"AP-Ultra is crunching %.1fkb this may take a while, be patient...\n",outputidx/1024.0);
-									{
-									int nnewlen;
-									APULTRA_crunch(outputdata,outputidx,&newdata,&nnewlen);
-									outputidx=nnewlen;
-									}
-									MemFree(outputdata);
-									outputdata=newdata;
-									#if TRACE_PREPRO
-									rasm_printf(ae,KVERBOSE"crunched with AP-Ultra into %d byte(s)\n",outputidx);
-									#endif
-									break;
-								case 18:
-									if (!ae->nowarning)
-									if (!ae->nocrunchwarning && outputidx>=16384 && curhexbin->version==2) rasm_printf(ae,KWARNING"LZSA2 is crunching %.1fkb this may take a while, be patient...\n",outputidx/1024.0);
-									{
-									int nnewlen;
-									LZSA_crunch(outputdata,outputidx,&newdata,&nnewlen,curhexbin->version,curhexbin->minmatch);
-									if (nnewlen==0) {
-										if (outputidx>65536)
-										MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"LZSA cannot crunch more than 64K in RAW MODE\n");
-										else
-										MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"LZSA cannot crunch this and i dont know why!\n");
-									}
-									outputidx=nnewlen;
-									}
-									MemFree(outputdata);
-									outputdata=newdata;
-									#if TRACE_PREPRO
-									rasm_printf(ae,KVERBOSE"crunched with LZSA%d into %d byte(s)\n",curhexbin->version,outputidx);
-									#endif
-									break;
-								#endif
-#endif
-								case 48:
-									newdata=LZ48_crunch(outputdata,outputidx,&outputidx);
-									MemFree(outputdata);
-									outputdata=newdata;
-									#if TRACE_PREPRO
-									rasm_printf(ae,KVERBOSE"crunched with LZ48 into %d byte(s)\n",outputidx);
-									#endif
-									break;
-								case 49:
-									newdata=LZ49_crunch(outputdata,outputidx,&outputidx);
-									MemFree(outputdata);
-									outputdata=newdata;
-									#if TRACE_PREPRO
-									rasm_printf(ae,KVERBOSE"crunched with LZ49 into %d byte(s)\n",outputidx);
-									#endif
-									break;
-								default:break;
-							}
-
-
-							if (!overwritecheck) {
-								rasm_printf(ae,KWARNING"INCBIN without overwrite check still not working...\n");
-								if (ae->erronwarn) MaxError(ae);
-							}
-						}
-
-						if (overwritecheck) {
-							for (idx=0;idx<outputidx;idx++) {
-								___output(ae,outputdata[idx]);
-							}
-						} else {
-							___org_close(ae);
-							___org_new(ae,0);
-							/* hack to disable overwrite check */
-							for (idx=0;idx<outputidx;idx++) {
-								___output(ae,outputdata[idx]);
-							}
-							ae->orgzone[ae->io-1].nocode=2;
-							___org_close(ae);
-							___org_new(ae,0);
-						}
-
-						MemFree(outputdata);
+					if (!ae->nowarning)
+					if (!ae->nocrunchwarning && outputidx>=20000) rasm_printf(ae,KWARNING"ZX0 is crunching %.1fkb this may take a while, be patient...\n",outputidx/1024.0);
+					input_data=MemMalloc(outputidx); memcpy(input_data,outputdata,outputidx); // copy buffer to input
+					outputdata=MemRealloc(outputdata,salvador_get_max_compressed_size(outputidx)); // enlarge output buffer
+					memset(outputdata,0,salvador_get_max_compressed_size(outputidx)); // then raz !
+					outputidx=salvador_compress(input_data,outputdata,outputidx,salvador_get_max_compressed_size(outputidx),1,32640,0,NULL,NULL);
+					MemFree(input_data);
+					#if TRACE_PREPRO
+					rasm_printf(ae,KVERBOSE"crunched with ZX0 into %d byte(s)\n",outputidx);
+					#endif
 					}
+					break;
+				case 71:
+					{
+					unsigned char *input_data;
+
+					if (!ae->nowarning)
+					if (!ae->nocrunchwarning && outputidx>=20000) rasm_printf(ae,KWARNING"ZX0 is crunching %.1fkb this may take a while, be patient...\n",outputidx/1024.0);
+					input_data=MemMalloc(outputidx);
+					memcpy(input_data,outputdata,outputidx);
+					memset(outputdata,0,outputidx);
+					zx0_reverse(input_data,input_data+outputidx-1);
+					outputidx=salvador_compress(input_data,outputdata,outputidx,outputidx,1+2 /* FLG_IS_BACKWARD */ ,32640,0,NULL,NULL);
+					zx0_reverse(outputdata,outputdata+outputidx-1);
+					MemFree(input_data);
+					#if TRACE_PREPRO
+					rasm_printf(ae,KVERBOSE"crunched with ZX0 backward into %d byte(s)\n",outputidx);
+					#endif
+					}
+					break;
+#endif // NOAPULTRA
+				case 7:
+					{
+					int slzlen;
+					newdata=ZX7_compress(zx7_optimize(outputdata, outputidx), outputdata, outputidx, &slzlen);
+					outputidx=slzlen;
+					MemFree(outputdata);
+					outputdata=newdata;
+					#if TRACE_PREPRO
+					rasm_printf(ae,KVERBOSE"crunched with ZX7 into %d byte(s)\n",outputidx);
+					#endif
+					}
+					break;
+				case 8:
+					if (!ae->nowarning)
+					if (!ae->nocrunchwarning && outputidx>=512) rasm_printf(ae,KWARNING"Exomizer is crunching %.1fkb this may take a while, be patient...\n",outputidx/1024.0);
+					newdata=Exomizer_crunch(outputdata,outputidx,&outputidx);
+					MemFree(outputdata);
+					outputdata=newdata;
+					#if TRACE_PREPRO
+					rasm_printf(ae,KVERBOSE"crunched with Exomizer into %d byte(s)\n",outputidx);
+					#endif
+					break;
+#ifndef NOAPULTRA
+				case 17:
+					if (!ae->nowarning)
+					if (!ae->nocrunchwarning && outputidx>=1024) rasm_printf(ae,KWARNING"AP-Ultra is crunching %.1fkb this may take a while, be patient...\n",outputidx/1024.0);
+					{
+					int nnewlen;
+					APULTRA_crunch(outputdata,outputidx,&newdata,&nnewlen);
+					outputidx=nnewlen;
+					}
+					MemFree(outputdata);
+					outputdata=newdata;
+					#if TRACE_PREPRO
+					rasm_printf(ae,KVERBOSE"crunched with AP-Ultra into %d byte(s)\n",outputidx);
+					#endif
+					break;
+				case 18:
+					if (!ae->nowarning)
+					if (!ae->nocrunchwarning && outputidx>=16384 && curhexbin->version==2) rasm_printf(ae,KWARNING"LZSA2 is crunching %.1fkb this may take a while, be patient...\n",outputidx/1024.0);
+					{
+					int nnewlen;
+					LZSA_crunch(outputdata,outputidx,&newdata,&nnewlen,curhexbin->version,curhexbin->minmatch);
+					if (nnewlen==0) {
+						if (outputidx>65536)
+						MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"LZSA cannot crunch more than 64K in RAW MODE\n");
+						else
+						MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"LZSA cannot crunch this and i dont know why!\n");
+					}
+					outputidx=nnewlen;
+					}
+					MemFree(outputdata);
+					outputdata=newdata;
+					#if TRACE_PREPRO
+					rasm_printf(ae,KVERBOSE"crunched with LZSA%d into %d byte(s)\n",curhexbin->version,outputidx);
+					#endif
+					break;
+				#endif
+#endif
+				case 48:
+					newdata=LZ48_crunch(outputdata,outputidx,&outputidx);
+					MemFree(outputdata);
+					outputdata=newdata;
+					#if TRACE_PREPRO
+					rasm_printf(ae,KVERBOSE"crunched with LZ48 into %d byte(s)\n",outputidx);
+					#endif
+					break;
+				case 49:
+					newdata=LZ49_crunch(outputdata,outputidx,&outputidx);
+					MemFree(outputdata);
+					outputdata=newdata;
+					#if TRACE_PREPRO
+					rasm_printf(ae,KVERBOSE"crunched with LZ49 into %d byte(s)\n",outputidx);
+					#endif
+					break;
+				default:break;
+			}
+
+			if (overwritecheck) {
+				for (idx=0;idx<outputidx;idx++) {
+					___output(ae,outputdata[idx]);
 				}
 			} else {
-				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"INTERNAL - HEXBIN refer to unknown structure\n");
-				FreeAssenv(ae);
-				exit(2);
+				___org_close(ae);
+				___org_new(ae,0);
+				/* hack to disable overwrite check */
+				for (idx=0;idx<outputidx;idx++) {
+					___output(ae,outputdata[idx]);
+				}
+				ae->orgzone[ae->io-1].nocode=2;
+				___org_close(ae);
+				___org_new(ae,0);
+			}
+
+			MemFree(outputdata);
+		} else {
+			// empty file
+			if (size) {
+				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"INCBIN cannot read %d byte%s as the file is empty\n",size,size>1?"s":"");
+			} else {
+				if (!ae->nowarning) {
+					rasm_printf(ae,KWARNING"[%s:%d] Warning: INCBIN of an empty file\n",GetCurrentFile(ae),ae->wl[ae->idx].l);
+					if (ae->erronwarn) MaxError(ae);
+				}
 			}
 		}
 	} else {
-		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"INTERNAL - HEXBIN need one HEX parameter\n");
-		FreeAssenv(ae);
-		exit(2);
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"INTERNAL - HEXBIN need one HEX parameter and is a RESERVED keyword\n");
+		return;
 	}
 	
 	/* generated names must be reloaded! */
@@ -22446,7 +22439,7 @@ unsigned char * _internal_export_REMU(struct s_assenv *ae, unsigned int *rchksiz
 	int ilocal=0,i,m;
 	unsigned int chunksize;
 	int localcpt=0;
-
+printf("remu output start\n");
 	remu_output=MemMalloc(ae->ibreakpoint*64+ae->il*256+ae->ialias*256+16+ae->icomz*256);
 	strcpy(remu_output,"REMU    ");
 
@@ -22557,7 +22550,9 @@ unsigned char * _internal_export_REMU(struct s_assenv *ae, unsigned int *rchksiz
 		memset(shortlabel,0,sizeof(shortlabel));
 		strncpy(shortlabel,ae->alias[i].alias,sizeof(shortlabel)-1);
 		strcat(remu_output,shortlabel);
+printf("alias [%s]\n",ae->alias[i].translation);
 		tmpptr=RoundComputeExpression(ae,ae->alias[i].translation,0,0,0);
+printf(" => [%d]\n",tmpptr);
 		if (ae->alias[i].fromstruct) {
 			sprintf(zedigit," %d idx;",tmpptr);
 		} else {
@@ -22565,6 +22560,7 @@ unsigned char * _internal_export_REMU(struct s_assenv *ae, unsigned int *rchksiz
 		}
 		strcat(remu_output,zedigit);
 	}
+printf("break export\n");
 	for (i=0;i<ae->iacebrk;i++) {
 		unsigned int v;
 		strcat(remu_output,"acebreak ");
@@ -22596,6 +22592,7 @@ unsigned char * _internal_export_REMU(struct s_assenv *ae, unsigned int *rchksiz
 	//FileWriteBinary(TMP_filename,(char*)remu_output,chunksize+8); // 8 bytes for the chunk header
 	//MemFree(remu_output);
 	*rchksize=chunksize;
+printf("remu output ok\n");
 	return remu_output;
 }
 
@@ -23880,7 +23877,8 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 			/****************************
 			    case export hack
 			****************************/
-			if (ae->enforce_symbol_case) {
+			if (ae->enforce_symbol_case && !ae->flux) {
+				// cannot export case with flux
 				char *casefound;
 				int ilocal=0;
 				char splitlabel[256];
@@ -23953,10 +23951,9 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 								ae->alias[i].alias[istart]='.';
 								casefound=_internal_stristr(ae->rawfile[ae->wl[ae->alias[i].iw].ifile],ae->rawlen[ae->wl[ae->alias[i].iw].ifile],ae->alias[i].alias+istart+1);
 								if (casefound) {
-									strcpy(ae->alias[i].alias+istart+1,casefound);
+									memcpy(ae->alias[i].alias+istart+1,casefound,strlen(ae->alias[i].alias+istart+1));
 								}
 							}
-
 						}
 					}
 				}
@@ -25843,6 +25840,9 @@ printf("paramz 1\n");
 		ae->mpath=param->mpath;
 		/* old inline params */
 		ae->dependencies=param->dependencies;
+	} else {
+		// default!
+		ae->snapshot.version=3;
 	}
 #if TRACE_PREPRO
 printf("init 0 amper=%d\n",ae->noampersand);
@@ -29154,6 +29154,37 @@ struct s_autotest_keyword autotest_keyword[]={
 	{"snapinit 'snap64k.sna' :bank 0:ld hl,454:bank 1:ld hl,454:bank 2:ld hl,454:bank 3:ld hl,454:bank 4:ld hl,454:bank 5:ld hl,454:bank 6:ld hl,454:bank 7:ld hl,454:bank 8:ld hl,454:bankset 4:ld hl,777",0},
 	{"snapinit 'snap128k.sna' :bank 0:ld hl,454:bank 1:ld hl,454:bank 2:ld hl,454:bank 3:ld hl,454:bank 4:ld hl,454:bank 5:ld hl,454:bank 6:ld hl,454:bank 7:ld hl,454:bank 8:ld hl,454:bankset 4:ld hl,777",0},
 	{"snapinit 'snap192k.sna' :bank 0:ld hl,454:bank 1:ld hl,454:bank 2:ld hl,454:bank 3:ld hl,454:bank 4:ld hl,454:bank 5:ld hl,454:bank 6:ld hl,454:bank 7:ld hl,454:bank 8:ld hl,454:bankset 4:ld hl,777",0},
+	// simple tests about options for INCBIN (do not test data, only a matter of size and header skip)
+	{"repeat 256,x,0: defb x: rend: save 'rasmoutput_increment.bin',0,#100: save 'rasmoutput_increment_amsdos.bin',0,#100,AMSDOS",0},
+	{"bank : incbin 'rasmoutput_increment.bin' : assert $==256",0},
+	{"bank : incbin 'rasmoutput_increment.bin',SKIPHEADER : assert $==256",0},
+	{"bank : incbin 'rasmoutput_increment_amsdos.bin' : assert $==384",0},
+	{"bank : incbin 'rasmoutput_increment_amsdos.bin',SKIPHEADER : assert $==256",0},
+	{"bank : incbin 'rasmoutput_increment.bin',10 : assert $==246",0},
+	{"bank : incbin 'rasmoutput_increment.bin',10,SKIPHEADER : assert $==246",0},
+	{"bank : incbin 'rasmoutput_increment.bin',SKIPHEADER,10 : assert $==246",0},
+	{"bank : incbin 'rasmoutput_increment_amsdos.bin',10 : assert $==374",0},
+	{"bank : incbin 'rasmoutput_increment_amsdos.bin',SKIPHEADER,10 : assert $==246",0},
+	{"bank : incbin 'rasmoutput_increment_amsdos.bin',10,SKIPHEADER : assert $==246",0},
+	{"bank : incbin 'rasmoutput_increment.bin',10,80 : assert $==80",0},
+	{"bank : incbin 'rasmoutput_increment.bin',10,SKIPHEADER,80 : assert $==80",0},
+	{"bank : incbin 'rasmoutput_increment.bin',SKIPHEADER,10,80 : assert $==80",0},
+	{"bank : incbin 'rasmoutput_increment_amsdos.bin',10,80 : assert $==80",0},
+	{"bank : incbin 'rasmoutput_increment_amsdos.bin',SKIPHEADER,10,80 : assert $==80",0},
+	{"bank : incbin 'rasmoutput_increment_amsdos.bin',10,SKIPHEADER,80 : assert $==80",0},
+	{"bank : incbin 'rasmoutput_increment_amsdos.bin',SKIPHEADER,10,80 : assert $==80",0},
+	{"bank : incbin 'rasmoutput_increment_amsdos.bin',10,80,OFF : assert $==80 : org 0 : defs 80",0},
+	{"bank : incbin 'rasmoutput_increment_amsdos.bin',SKIPHEADER,10,80,OFF : assert $==80 : org 0 : defs 80",0},
+	{"bank : incbin 'rasmoutput_increment_amsdos.bin',10,SKIPHEADER,80,OFF : assert $==80 : org 0 : defs 80",0},
+	{"bank : incbin 'rasmoutput_increment_amsdos.bin',SKIPHEADER,10,80,OFF : assert $==80 : org 0 : defs 80",0},
+	{"bank : incbin 'rasmoutput_increment_amsdos.bin',10,OFF,80 : assert $==80 : org 0 : defs 80",0},
+	{"bank : incbin 'rasmoutput_increment_amsdos.bin',SKIPHEADER,10,OFF,80 : assert $==80 : org 0 : defs 80",0},
+	{"bank : incbin 'rasmoutput_increment_amsdos.bin',OFF,10,SKIPHEADER,80 : assert $==80 : org 0 : defs 80",0},
+	{"bank : incbin 'rasmoutput_increment_amsdos.bin',OFF,OFF,SKIPHEADER,OFF,10,OFF,OFF,OFF,80,OFF : assert $==80 : org 0 : defs 80",0},
+	{"bank : incbin 'rasmoutput_increment_amsdos.bin',REVERT,10,OFF,80 : assert $==80 : org 0 : defs 80",0},
+	{"bank : incbin 'rasmoutput_increment_amsdos.bin',SKIPHEADER,REVERT,10,OFF,80 : assert $==80 : org 0 : defs 80",0},
+	{"bank : incbin 'rasmoutput_increment_amsdos.bin',OFF,10,REVERT,SKIPHEADER,80 : assert $==80 : org 0 : defs 80",0},
+	{"bank : incbin 'rasmoutput_increment_amsdos.bin',OFF,REVERT,OFF,SKIPHEADER,OFF,10,OFF,OFF,OFF,80,OFF : assert $==80 : org 0 : defs 80",0};
 
 	/*
 	 *
@@ -30138,6 +30169,18 @@ printf("testing UTF8 remapping inside structure declaration\n");
 	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
 	RasmFreeInfoStruct(debug);
 printf("testing UTF8 remapping inside inline structure with param overload\n");
+
+
+#define AUTOTEST_CASEALIAS "grouik\n.machin equ $+3\nld hl,#1234\n"
+	memset(&param,0,sizeof(struct s_parameter));
+	param.freequote=1;
+	param.enforce_symbol_case=1;
+	param.extended_error=1;
+	ret=RasmAssembleInfoParam(AUTOTEST_CASEALIAS,strlen(AUTOTEST_CASEALIAS),&opcode,&opcodelen,&debug,&param);
+	if (!ret) {} else {printf("Autotest %03d ERROR (testing alias case reconstruction + memory leak)\n",cpt);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+	RasmFreeInfoStruct(debug);
+printf("testing alias case reconstruction + memory leak regression\n");
 
 	memset(&param,0,sizeof(struct s_parameter));
 	param.erronwarn=1;
@@ -31575,6 +31618,11 @@ printf("testing simple extended CPR behaviour OK\n");
 
 #ifndef OS_WIN
 	// remove workfiles
+	FileRemoveIfExists("snap64k.sna");
+	FileRemoveIfExists("snap128k.sna");
+	FileRemoveIfExists("snap192k.sna");
+	FileRemoveIfExists("rasmoutput_increment_amsdos.bin");
+	FileRemoveIfExists("rasmoutput_increment.bin");
 	FileRemoveIfExists("autotest_fast.raw");
 	FileRemoveIfExists("autotest_fast2.raw");
 	FileRemoveIfExists("autotest_include.raw");
