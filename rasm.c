@@ -1280,6 +1280,7 @@ struct s_assenv {
 	int iacebrk,macebrk;
 	int *winapeBRK;
 	int winapeBRKidx,winapeBRKmax;
+	int autotest;
 	/* HFE */
 	struct s_hfe_action *hfe_action;
 	int nbhfeaction,maxhfeaction;
@@ -12976,173 +12977,156 @@ void _SRL(struct s_assenv *ae) {
 
 void _BIT(struct s_assenv *ae) {
 	int o;
-	/* on check qu'il y a deux ou trois parametres 
-	ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
-	o=RoundComputeExpressionCore(ae,ae->wl[ae->idx+1].w,ae->codeadr,0);*/
-
-	o=0;
-	if (o<0 || o>7) {
-		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is BIT <value from 0 to 7>,... (%d)\n",o);
-	} else {
-		o=0x40+o*8;
-		if (ae->wl[ae->idx+1].t==0 && ae->wl[ae->idx+2].t==1) {
-			switch (GetCRC(ae->wl[ae->idx+2].w)) {
-				case CRC_B:___output(ae,0xCB);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x0+o);ae->nop+=2;ae->tick+=8;break;
-				case CRC_C:___output(ae,0xCB);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x1+o);ae->nop+=2;ae->tick+=8;break;
-				case CRC_D:___output(ae,0xCB);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x2+o);ae->nop+=2;ae->tick+=8;break;
-				case CRC_E:___output(ae,0xCB);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x3+o);ae->nop+=2;ae->tick+=8;break;
-				case CRC_H:___output(ae,0xCB);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x4+o);ae->nop+=2;ae->tick+=8;break;
-				case CRC_L:___output(ae,0xCB);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x5+o);ae->nop+=2;ae->tick+=8;break;
-				case CRC_MHL:___output(ae,0xCB);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x6+o);ae->nop+=3;ae->tick+=12;break;
-				case CRC_A:___output(ae,0xCB);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x7+o);ae->nop+=2;ae->tick+=8;break;
-				default:
-					if (strncmp(ae->wl[ae->idx+2].w,"(IX",3)==0 && (ae->wl[ae->idx+2].w[3]=='+' || ae->wl[ae->idx+2].w[3]=='-'  || ae->wl[ae->idx+2].w[3]==')')) {
-						___output(ae,0xDD);___output(ae,0xCB);
-						PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);
-						PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x6+o);
-						ae->nop+=6;ae->tick+=20;
-					} else if (strncmp(ae->wl[ae->idx+2].w,"(IY",3)==0 && (ae->wl[ae->idx+2].w[3]=='+' || ae->wl[ae->idx+2].w[3]=='-'  || ae->wl[ae->idx+2].w[3]==')')) {
-						___output(ae,0xFD);___output(ae,0xCB);
-						PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);
-						PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x6+o);
-						ae->nop+=6;ae->tick+=20;
-					} else {
-						MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is BIT n,reg8/(HL)/(IX+n)/(IY+n)\n");
-					}
-			}
-			ae->idx+=2;
-		} else if (!ae->wl[ae->idx+1].t && !ae->wl[ae->idx+2].t && ae->wl[ae->idx+3].t==1) {
-			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"there is no syntax BIT (IX+n),reg8\n");
-			ae->idx+=3;
-		} else {
-			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is BIT n,reg8/(HL)/(IX+n)[,reg8]/(IY+n)\n");
+	o=0x40;
+	if (ae->wl[ae->idx+1].t==0 && ae->wl[ae->idx+2].t==1) {
+		switch (GetCRC(ae->wl[ae->idx+2].w)) {
+			case CRC_B:___output(ae,0xCB);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x0+o);ae->nop+=2;ae->tick+=8;break;
+			case CRC_C:___output(ae,0xCB);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x1+o);ae->nop+=2;ae->tick+=8;break;
+			case CRC_D:___output(ae,0xCB);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x2+o);ae->nop+=2;ae->tick+=8;break;
+			case CRC_E:___output(ae,0xCB);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x3+o);ae->nop+=2;ae->tick+=8;break;
+			case CRC_H:___output(ae,0xCB);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x4+o);ae->nop+=2;ae->tick+=8;break;
+			case CRC_L:___output(ae,0xCB);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x5+o);ae->nop+=2;ae->tick+=8;break;
+			case CRC_MHL:___output(ae,0xCB);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x6+o);ae->nop+=3;ae->tick+=12;break;
+			case CRC_A:___output(ae,0xCB);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x7+o);ae->nop+=2;ae->tick+=8;break;
+			default:
+				if (strncmp(ae->wl[ae->idx+2].w,"(IX",3)==0 && (ae->wl[ae->idx+2].w[3]=='+' || ae->wl[ae->idx+2].w[3]=='-'  || ae->wl[ae->idx+2].w[3]==')')) {
+					___output(ae,0xDD);___output(ae,0xCB);
+					PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);
+					PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x6+o);
+					ae->nop+=6;ae->tick+=20;
+				} else if (strncmp(ae->wl[ae->idx+2].w,"(IY",3)==0 && (ae->wl[ae->idx+2].w[3]=='+' || ae->wl[ae->idx+2].w[3]=='-'  || ae->wl[ae->idx+2].w[3]==')')) {
+					___output(ae,0xFD);___output(ae,0xCB);
+					PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);
+					PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x6+o);
+					ae->nop+=6;ae->tick+=20;
+				} else {
+					MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is BIT n,reg8/(HL)/(IX+n)/(IY+n)\n");
+				}
 		}
+		ae->idx+=2;
+	} else if (!ae->wl[ae->idx+1].t && !ae->wl[ae->idx+2].t && ae->wl[ae->idx+3].t==1) {
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"there is no syntax BIT n,(IX+n),reg8\n");
+		ae->idx+=3;
+	} else {
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is BIT n,reg8/(HL)/(IX+n)[,reg8]/(IY+n)\n");
 	}
 }
 
 void _RES(struct s_assenv *ae) {
 	int o;
-	/* on check qu'il y a deux ou trois parametres 
-	ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
-	o=RoundComputeExpressionCore(ae,ae->wl[ae->idx+1].w,ae->codeadr,0); */
-	o=0;
-	if (o<0 || o>7) {
-		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is RES <value from 0 to 7>,... (%d)\n",o);
-	} else {
-		o=0x80+o*8;
-		if (ae->wl[ae->idx+1].t==0 && ae->wl[ae->idx+2].t==1) {
-			switch (GetCRC(ae->wl[ae->idx+2].w)) {
-				case CRC_B:___output(ae,0xCB);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x0+o);ae->nop+=2;ae->tick+=8;break;
-				case CRC_C:___output(ae,0xCB);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x1+o);ae->nop+=2;ae->tick+=8;break;
-				case CRC_D:___output(ae,0xCB);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x2+o);ae->nop+=2;ae->tick+=8;break;
-				case CRC_E:___output(ae,0xCB);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x3+o);ae->nop+=2;ae->tick+=8;break;
-				case CRC_H:___output(ae,0xCB);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x4+o);ae->nop+=2;ae->tick+=8;break;
-				case CRC_L:___output(ae,0xCB);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x5+o);ae->nop+=2;ae->tick+=8;break;
-				case CRC_MHL:___output(ae,0xCB);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x6+o);ae->nop+=4;ae->tick+=15;break;
-				case CRC_A:___output(ae,0xCB);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x7+o);ae->nop+=2;ae->tick+=8;break;
-				default:
-					if (strncmp(ae->wl[ae->idx+2].w,"(IX",3)==0 && (ae->wl[ae->idx+2].w[3]=='+' || ae->wl[ae->idx+2].w[3]=='-'  || ae->wl[ae->idx+2].w[3]==')')) {
-						___output(ae,0xDD);___output(ae,0xCB);
-						PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);
-						PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x6+o);
-						ae->nop+=7;ae->tick+=23;
-					} else if (strncmp(ae->wl[ae->idx+2].w,"(IY",3)==0 && (ae->wl[ae->idx+2].w[3]=='+' || ae->wl[ae->idx+2].w[3]=='-'  || ae->wl[ae->idx+2].w[3]==')')) {
-						___output(ae,0xFD);___output(ae,0xCB);
-						PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);
-						PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x6+o);
-						ae->nop+=7;ae->tick+=23;
-					} else {
-						MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is RES n,reg8/(HL)/(IX+n)/(IY+n)\n");
-					}
-			}
-			ae->idx+=2;
-		} else if (!ae->wl[ae->idx+1].t && !ae->wl[ae->idx+2].t && ae->wl[ae->idx+3].t==1) {
-			if (strncmp(ae->wl[ae->idx+2].w,"(IX",3)==0 && (ae->wl[ae->idx+2].w[3]=='+' || ae->wl[ae->idx+2].w[3]=='-'  || ae->wl[ae->idx+2].w[3]==')')) {
-				___output(ae,0xDD);
-			} else if (strncmp(ae->wl[ae->idx+2].w,"(IY",3)==0 && (ae->wl[ae->idx+2].w[3]=='+' || ae->wl[ae->idx+2].w[3]=='-'  || ae->wl[ae->idx+2].w[3]==')')) {
-				___output(ae,0xFD);
-			} else {
-				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is RES n,(IX+n),reg8\n");
-			}
-			___output(ae,0xCB);
-			switch (GetCRC(ae->wl[ae->idx+3].w)) {
-				case CRC_B:PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x0+o);ae->nop+=7;ae->tick+=23;break;
-				case CRC_C:PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x1+o);ae->nop+=7;ae->tick+=23;break;
-				case CRC_D:PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x2+o);ae->nop+=7;ae->tick+=23;break;
-				case CRC_E:PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x3+o);ae->nop+=7;ae->tick+=23;break;
-				case CRC_H:PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x4+o);ae->nop+=7;ae->tick+=23;break;
-				case CRC_L:PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x5+o);ae->nop+=7;ae->tick+=23;break;
-				case CRC_A:PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x7+o);ae->nop+=7;ae->tick+=23;break;
-				default:			
-					MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is RES n,(IX+n),reg8\n");
-			}
-			ae->idx+=3;
-		} else {
-			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is RES n,reg8/(HL)/(IX+n)[,reg8]/(IY+n)[,reg8]\n");
+	o=0x80;
+	if (ae->wl[ae->idx+1].t==0 && ae->wl[ae->idx+2].t==1) {
+		switch (GetCRC(ae->wl[ae->idx+2].w)) {
+			case CRC_B:___output(ae,0xCB);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x0+o);ae->nop+=2;ae->tick+=8;break;
+			case CRC_C:___output(ae,0xCB);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x1+o);ae->nop+=2;ae->tick+=8;break;
+			case CRC_D:___output(ae,0xCB);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x2+o);ae->nop+=2;ae->tick+=8;break;
+			case CRC_E:___output(ae,0xCB);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x3+o);ae->nop+=2;ae->tick+=8;break;
+			case CRC_H:___output(ae,0xCB);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x4+o);ae->nop+=2;ae->tick+=8;break;
+			case CRC_L:___output(ae,0xCB);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x5+o);ae->nop+=2;ae->tick+=8;break;
+			case CRC_MHL:___output(ae,0xCB);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x6+o);ae->nop+=4;ae->tick+=15;break;
+			case CRC_A:___output(ae,0xCB);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x7+o);ae->nop+=2;ae->tick+=8;break;
+			default:
+				if (strncmp(ae->wl[ae->idx+2].w,"(IX",3)==0 && (ae->wl[ae->idx+2].w[3]=='+' || ae->wl[ae->idx+2].w[3]=='-'  || ae->wl[ae->idx+2].w[3]==')')) {
+					___output(ae,0xDD);___output(ae,0xCB);
+					PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);
+					PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x6+o);
+					ae->nop+=7;ae->tick+=23;
+				} else if (strncmp(ae->wl[ae->idx+2].w,"(IY",3)==0 && (ae->wl[ae->idx+2].w[3]=='+' || ae->wl[ae->idx+2].w[3]=='-'  || ae->wl[ae->idx+2].w[3]==')')) {
+					___output(ae,0xFD);___output(ae,0xCB);
+					PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);
+					PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x6+o);
+					ae->nop+=7;ae->tick+=23;
+				} else {
+					MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is RES n,reg8/(HL)/(IX+n)/(IY+n)\n");
+					ae->idx+=2;
+					return;
+				}
 		}
+		ae->idx+=2;
+	} else if (!ae->wl[ae->idx+1].t && !ae->wl[ae->idx+2].t && ae->wl[ae->idx+3].t==1) {
+		if (strncmp(ae->wl[ae->idx+2].w,"(IX",3)==0 && (ae->wl[ae->idx+2].w[3]=='+' || ae->wl[ae->idx+2].w[3]=='-'  || ae->wl[ae->idx+2].w[3]==')')) {
+			___output(ae,0xDD);
+		} else if (strncmp(ae->wl[ae->idx+2].w,"(IY",3)==0 && (ae->wl[ae->idx+2].w[3]=='+' || ae->wl[ae->idx+2].w[3]=='-'  || ae->wl[ae->idx+2].w[3]==')')) {
+			___output(ae,0xFD);
+		} else {
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is RES n,(IX+n),reg8\n");
+			ae->idx+=3;
+			return;
+		}
+		___output(ae,0xCB);
+		switch (GetCRC(ae->wl[ae->idx+3].w)) {
+			case CRC_B:PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x0+o);ae->nop+=7;ae->tick+=23;break;
+			case CRC_C:PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x1+o);ae->nop+=7;ae->tick+=23;break;
+			case CRC_D:PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x2+o);ae->nop+=7;ae->tick+=23;break;
+			case CRC_E:PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x3+o);ae->nop+=7;ae->tick+=23;break;
+			case CRC_H:PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x4+o);ae->nop+=7;ae->tick+=23;break;
+			case CRC_L:PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x5+o);ae->nop+=7;ae->tick+=23;break;
+			case CRC_A:PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x7+o);ae->nop+=7;ae->tick+=23;break;
+			default:			
+				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is RES n,(IX+n),reg8\n");
+		}
+		ae->idx+=3;
+	} else {
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is RES n,reg8/(HL)/(IX+n)[,reg8]/(IY+n)[,reg8]\n");
 	}
 }
 
 void _SET(struct s_assenv *ae) {
 	int o;
-	/* on check qu'il y a deux ou trois parametres 
-	ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
-	o=RoundComputeExpressionCore(ae,ae->wl[ae->idx+1].w,ae->codeadr,0); */
-	o=0;
-	if (o<0 || o>7) {
-		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is SET <value from 0 to 7>,... (%d)\n",o);
-	} else {
-		o=0xC0+o*8;
-		if (ae->wl[ae->idx+1].t==0 && ae->wl[ae->idx+2].t==1) {
-			switch (GetCRC(ae->wl[ae->idx+2].w)) {
-				case CRC_B:___output(ae,0xCB);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x0+o);ae->nop+=2;ae->tick+=8;break;
-				case CRC_C:___output(ae,0xCB);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x1+o);ae->nop+=2;ae->tick+=8;break;
-				case CRC_D:___output(ae,0xCB);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x2+o);ae->nop+=2;ae->tick+=8;break;
-				case CRC_E:___output(ae,0xCB);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x3+o);ae->nop+=2;ae->tick+=8;break;
-				case CRC_H:___output(ae,0xCB);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x4+o);ae->nop+=2;ae->tick+=8;break;
-				case CRC_L:___output(ae,0xCB);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x5+o);ae->nop+=2;ae->tick+=8;break;
-				case CRC_MHL:___output(ae,0xCB);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x6+o);ae->nop+=4;ae->tick+=15;break;
-				case CRC_A:___output(ae,0xCB);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x7+o);ae->nop+=2;ae->tick+=8;break;
-				default:
-					if (strncmp(ae->wl[ae->idx+2].w,"(IX",3)==0 && (ae->wl[ae->idx+2].w[3]=='+' || ae->wl[ae->idx+2].w[3]=='-'  || ae->wl[ae->idx+2].w[3]==')')) {
-						___output(ae,0xDD);___output(ae,0xCB);
-						PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);
-						PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x6+o);
-						ae->nop+=7;ae->tick+=23;
-					} else if (strncmp(ae->wl[ae->idx+2].w,"(IY",3)==0 && (ae->wl[ae->idx+2].w[3]=='+' || ae->wl[ae->idx+2].w[3]=='-'  || ae->wl[ae->idx+2].w[3]==')')) {
-						___output(ae,0xFD);___output(ae,0xCB);
-						PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);
-						PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x6+o);
-						ae->nop+=7;ae->tick+=23;
-					} else {
-						MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is SET n,reg8/(HL)/(IX+n)/(IY+n)\n");
-					}
-			}
-			ae->idx+=2;
-		} else if (!ae->wl[ae->idx+1].t && !ae->wl[ae->idx+2].t && ae->wl[ae->idx+3].t==1) {
-			if (strncmp(ae->wl[ae->idx+2].w,"(IX",3)==0 && (ae->wl[ae->idx+2].w[3]=='+' || ae->wl[ae->idx+2].w[3]=='-'  || ae->wl[ae->idx+2].w[3]==')')) {
-				___output(ae,0xDD);
-			} else if (strncmp(ae->wl[ae->idx+2].w,"(IY",3)==0 && (ae->wl[ae->idx+2].w[3]=='+' || ae->wl[ae->idx+2].w[3]=='-'  || ae->wl[ae->idx+2].w[3]==')')) {
-				___output(ae,0xFD);
-			} else {
-				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is SET n,(IX+n),reg8\n");
-			}
-			___output(ae,0xCB);
-			switch (GetCRC(ae->wl[ae->idx+3].w)) {
-				case CRC_B:PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x0+o);ae->nop+=7;ae->tick+=23;break;
-				case CRC_C:PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x1+o);ae->nop+=7;ae->tick+=23;break;
-				case CRC_D:PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x2+o);ae->nop+=7;ae->tick+=23;break;
-				case CRC_E:PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x3+o);ae->nop+=7;ae->tick+=23;break;
-				case CRC_H:PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x4+o);ae->nop+=7;ae->tick+=23;break;
-				case CRC_L:PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x5+o);ae->nop+=7;ae->tick+=23;break;
-				case CRC_A:PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x7+o);ae->nop+=7;ae->tick+=23;break;
-				default:			
-					MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is SET n,(IX+n),reg8\n");
-			}
-			ae->idx+=3;
-		} else {
-			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is SET n,reg8/(HL)/(IX+n)[,reg8]/(IY+n)[,reg8]\n");
+	o=0xC0;
+	if (ae->wl[ae->idx+1].t==0 && ae->wl[ae->idx+2].t==1) {
+		switch (GetCRC(ae->wl[ae->idx+2].w)) {
+			case CRC_B:___output(ae,0xCB);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x0+o);ae->nop+=2;ae->tick+=8;break;
+			case CRC_C:___output(ae,0xCB);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x1+o);ae->nop+=2;ae->tick+=8;break;
+			case CRC_D:___output(ae,0xCB);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x2+o);ae->nop+=2;ae->tick+=8;break;
+			case CRC_E:___output(ae,0xCB);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x3+o);ae->nop+=2;ae->tick+=8;break;
+			case CRC_H:___output(ae,0xCB);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x4+o);ae->nop+=2;ae->tick+=8;break;
+			case CRC_L:___output(ae,0xCB);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x5+o);ae->nop+=2;ae->tick+=8;break;
+			case CRC_MHL:___output(ae,0xCB);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x6+o);ae->nop+=4;ae->tick+=15;break;
+			case CRC_A:___output(ae,0xCB);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x7+o);ae->nop+=2;ae->tick+=8;break;
+			default:
+				if (strncmp(ae->wl[ae->idx+2].w,"(IX",3)==0 && (ae->wl[ae->idx+2].w[3]=='+' || ae->wl[ae->idx+2].w[3]=='-'  || ae->wl[ae->idx+2].w[3]==')')) {
+					___output(ae,0xDD);___output(ae,0xCB);
+					PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);
+					PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x6+o);
+					ae->nop+=7;ae->tick+=23;
+				} else if (strncmp(ae->wl[ae->idx+2].w,"(IY",3)==0 && (ae->wl[ae->idx+2].w[3]=='+' || ae->wl[ae->idx+2].w[3]=='-'  || ae->wl[ae->idx+2].w[3]==')')) {
+					___output(ae,0xFD);___output(ae,0xCB);
+					PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);
+					PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x6+o);
+					ae->nop+=7;ae->tick+=23;
+				} else {
+					MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is SET n,reg8/(HL)/(IX+n)/(IY+n)\n");
+					ae->idx+=2;
+					return;
+				}
 		}
+		ae->idx+=2;
+	} else if (!ae->wl[ae->idx+1].t && !ae->wl[ae->idx+2].t && ae->wl[ae->idx+3].t==1) {
+		if (strncmp(ae->wl[ae->idx+2].w,"(IX",3)==0 && (ae->wl[ae->idx+2].w[3]=='+' || ae->wl[ae->idx+2].w[3]=='-'  || ae->wl[ae->idx+2].w[3]==')')) {
+			___output(ae,0xDD);
+		} else if (strncmp(ae->wl[ae->idx+2].w,"(IY",3)==0 && (ae->wl[ae->idx+2].w[3]=='+' || ae->wl[ae->idx+2].w[3]=='-'  || ae->wl[ae->idx+2].w[3]==')')) {
+			___output(ae,0xFD);
+		} else {
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is SET n,(IX+n),reg8\n");
+			ae->idx+=3;
+			return;
+		}
+		___output(ae,0xCB);
+		switch (GetCRC(ae->wl[ae->idx+3].w)) {
+			case CRC_B:PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x0+o);ae->nop+=7;ae->tick+=23;break;
+			case CRC_C:PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x1+o);ae->nop+=7;ae->tick+=23;break;
+			case CRC_D:PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x2+o);ae->nop+=7;ae->tick+=23;break;
+			case CRC_E:PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x3+o);ae->nop+=7;ae->tick+=23;break;
+			case CRC_H:PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x4+o);ae->nop+=7;ae->tick+=23;break;
+			case CRC_L:PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x5+o);ae->nop+=7;ae->tick+=23;break;
+			case CRC_A:PushExpression(ae,ae->idx+2,E_EXPRESSION_IV8);PushExpression(ae,ae->idx+1,E_EXPRESSION_BRS);___output(ae,0x7+o);ae->nop+=7;ae->tick+=23;break;
+			default:			
+				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is SET n,(IX+n),reg8\n");
+		}
+		ae->idx+=3;
+	} else {
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is SET n,reg8/(HL)/(IX+n)[,reg8]/(IY+n)[,reg8]\n");
 	}
 }
 
@@ -17211,6 +17195,8 @@ void __BUILDSNA(struct s_assenv *ae) {
 	while (!ae->wl[ae->idx].t) {
 		if (strcmp(ae->wl[ae->idx+1].w,"V2")==0) {
 			ae->snapshot.version=2;
+		} else if (strcmp(ae->wl[ae->idx+1].w,"AUTOTEST")==0) {
+			ae->autotest=1;
 		} else if (strcmp(ae->wl[ae->idx+1].w,"CPR")==0) {
 			ae->snacpr=1;
 		} else if (strcmp(ae->wl[ae->idx+1].w,"DSK")==0) {
@@ -24273,7 +24259,7 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 					int bankset;
 					int noflood=0;
 
-					if (!ae->flux) {
+					if (!ae->flux || ae->autotest) {
 						if (ae->snapshot.version==2 && ae->snapshot.CPCType>2) {
 							if (!ae->nowarning) {
 								rasm_printf(ae,KWARNING"[%s:%d] Warning: V2 snapshot cannot select a Plus model (forced to 6128)\n",GetCurrentFile(ae),ae->wl[ae->idx].l);
@@ -24322,7 +24308,7 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 						rasm_printf(ae,KIO"Write snapshot v%d file %s\n",ae->snapshot.version,TMP_filename);
 						
 						/* header */
-						if (!ae->flux) FileWriteBinary(TMP_filename,(char *)&ae->snapshot,0x100);
+						if (!ae->flux || ae->autotest) FileWriteBinary(TMP_filename,(char *)&ae->snapshot,0x100);
 						/* write all memory crunched */
 						for (i=0;i<=maxrom;i+=4) {
 							bankset=i>>2;
@@ -24350,7 +24336,7 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 										rasm_printf(ae,KERROR"\nRAMBANK is too big!!! (%d byte%s too large)\n"KVERBOSE,endoffset-offset-16384,endoffset-offset-16384>1?"s":"");
 										rasm_printf(ae,KERROR"lowest  ORG [%s:%d] at #%04X\n"KVERBOSE,ae->filename[ae->orgzone[idstart].ifile],ae->orgzone[idstart].iline,offset);
 										rasm_printf(ae,KERROR"highest ORG [%s:%d] ends at #%04X\n"KVERBOSE,ae->filename[ae->orgzone[idend].ifile],ae->orgzone[idend].iline,endoffset);
-										if (!ae->flux) {
+										if (!ae->flux || ae->autotest) {
 											FileWriteBinaryClose(TMP_filename);
 											FileRemoveIfExists(TMP_filename);
 											FreeAssenv(ae);
@@ -24382,7 +24368,7 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 											rasm_printf(ae,KERROR"\nRAM block is too big!!! (%d byte%s too large)\n"KVERBOSE,endoffset-offset-16384,endoffset-offset-16384>1?"s":"");
 											rasm_printf(ae,KERROR"lowest  ORG [%s:%d] at #%04X\n"KVERBOSE,ae->filename[ae->orgzone[idstart].ifile],ae->orgzone[idstart].iline,offset);
 											rasm_printf(ae,KERROR"highest ORG [%s:%d] ends at #%04X\n"KVERBOSE,ae->filename[ae->orgzone[idend].ifile],ae->orgzone[idend].iline,endoffset);
-											if (!ae->flux) {
+											if (!ae->flux || ae->autotest) {
 												FileWriteBinaryClose(TMP_filename);
 												FileRemoveIfExists(TMP_filename);
 												FreeAssenv(ae);
@@ -24403,7 +24389,7 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 							
 							if (ae->snapshot.version==2) {
 								/* snapshot v2 */
-								if (!ae->flux) FileWriteBinary(TMP_filename,(char*)&packed,65536);
+								if (!ae->flux || ae->autotest) FileWriteBinary(TMP_filename,(char*)&packed,65536);
 								if (bankset) {
 									/* v2 snapshot is 128K maximum */
 									maxrom=7;
@@ -24422,7 +24408,7 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 									MakeError(ae,0,"(core)",0,"internal error during snapshot write, please report (%d)\n",bankset);
 								}
 								
-								if (!ae->flux) {
+								if (!ae->flux || ae->autotest) {
 									FileWriteBinary(TMP_filename,ChunkName,4);
 									FileWriteBinary(TMP_filename,(char*)&ChunkSize,4);
 									if (rlebank!=NULL) {
@@ -24461,7 +24447,7 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 									rasm_printf(ae,KERROR"\nROMBANK %d is too big!!! (%d byte%s too large)\n"KVERBOSE,i,endoffset-offset-16384,endoffset-offset-16384>1?"s":"");
 									rasm_printf(ae,KERROR"lowest  ORG [%s:%d] at #%04X\n"KVERBOSE,ae->filename[ae->orgzone[idstart].ifile],ae->orgzone[idstart].iline,offset);
 									rasm_printf(ae,KERROR"highest ORG [%s:%d] ends at #%04X\n"KVERBOSE,ae->filename[ae->orgzone[idend].ifile],ae->orgzone[idend].iline,endoffset);
-									if (!ae->flux) {
+									if (!ae->flux || ae->autotest) {
 										FileWriteBinaryClose(TMP_filename);
 										FileRemoveIfExists(TMP_filename);
 										FreeAssenv(ae);
@@ -24500,7 +24486,7 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 						/**************************************************************
 								snapshot additional chunks in v3+ only
 						**************************************************************/
-						if (!ae->flux && ae->snapshot.version>=3) {
+						if ((!ae->flux || ae->autotest) && ae->snapshot.version>=3) {
 							/* export breakpoint */
 							struct s_breakpoint breakpoint={0};
 							/* add labels and local labels to breakpoint pool (if any) */
@@ -24661,7 +24647,7 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 							}
 						}
 
-						if (!ae->flux) FileWriteBinaryClose(TMP_filename);
+						if (!ae->flux || ae->autotest) FileWriteBinaryClose(TMP_filename);
 						maxrom=(maxrom>>2)*4+4;
 						rasm_printf(ae,KAYGREEN"Total %d bank%s (%dK)\n",maxrom,maxrom>1?"s":"",(maxrom)*16);
 					}
@@ -29162,9 +29148,9 @@ struct s_autotest_keyword autotest_keyword[]={
 	{"bank:repeat 256:defb rnd(255):rend:save 'rasmoutput.bin',0,256",0},
 	{"bank : incbin 'rasmoutput.bin' : assert $==256:bank : incbin 'rasmoutput.bin',SKIPHEADER : assert $==256",0}, // still same size without header
 															//
-	{"buildsna 'snap64k.sna':bankset 0:repeat 65536,x : defb (45+X)&0xFF : rend",0},
-	{"buildsna 'snap128k.sna':bankset 0:repeat 65536,x : defb (45+X)&0xFF : rend:bankset 1:repeat 65536,x : defb (45+X)&0xFF : rend",0},
-	{"buildsna 'snap192k.sna':bankset 0:repeat 65536,x : defb (45+X)&0xFF : rend:bankset 1:repeat 65536,x : defb (45+X)&0xFF : rend:bankset 2:repeat 65536,x : defb (45+X)&0xFF : rend",0},
+	{"buildsna AUTOTEST,'snap64k.sna':bankset 0:repeat 65536,x : defb (45+X)&0xFF : rend",0},
+	{"buildsna AUTOTEST,'snap128k.sna':bankset 0:repeat 65536,x : defb (45+X)&0xFF : rend:bankset 1:repeat 65536,x : defb (45+X)&0xFF : rend",0},
+	{"buildsna AUTOTEST,'snap192k.sna':bankset 0:repeat 65536,x : defb (45+X)&0xFF : rend:bankset 1:repeat 65536,x : defb (45+X)&0xFF : rend:bankset 2:repeat 65536,x : defb (45+X)&0xFF : rend",0},
 	{"snapinit 'snap64k.sna' :bank 0:ld hl,454:bank 1:ld hl,454:bank 2:ld hl,454:bank 3:ld hl,454:bank 4:ld hl,454:bank 5:ld hl,454:bank 6:ld hl,454:bank 7:ld hl,454:bank 8:ld hl,454:bankset 4:ld hl,777",0},
 	{"snapinit 'snap128k.sna' :bank 0:ld hl,454:bank 1:ld hl,454:bank 2:ld hl,454:bank 3:ld hl,454:bank 4:ld hl,454:bank 5:ld hl,454:bank 6:ld hl,454:bank 7:ld hl,454:bank 8:ld hl,454:bankset 4:ld hl,777",0},
 	{"snapinit 'snap192k.sna' :bank 0:ld hl,454:bank 1:ld hl,454:bank 2:ld hl,454:bank 3:ld hl,454:bank 4:ld hl,454:bank 5:ld hl,454:bank 6:ld hl,454:bank 7:ld hl,454:bank 8:ld hl,454:bankset 4:ld hl,777",0},
@@ -29261,8 +29247,6 @@ void RasmAutotest(void)
 		}
 		cpt++;
 printf("testing rasm source integrity : activebank and maxptr update OK\n");
-
-
 	} else {
 		printf("rasm.c not found, skipping integrity tests\n");
 	}
@@ -29283,13 +29267,14 @@ printf("testing rasm source integrity : activebank and maxptr update OK\n");
 	memset(ABuf,0,ASize);
 	printf("testing StateMachineResizeBuffer OK\n");
 
-
+#ifndef OS_WIN
 	/* unit testing */
 	opcode=MemMalloc(64);
 	FileRemoveIfExists("rasmoutput_CRLF.raw");
 	if (FileWriteBinary("rasmoutput_CRLF.raw",(char *)crlfbug,32)!=32) {printf("Autotest %03d ERROR (Binary write must return outputed byte number)\n",cpt);exit(-1);} else cpt++;
 	printf("testing pure binary write OK\n");
 	FileWriteBinaryClose("rasmoutput_CRLF.raw");
+	printf("testing pure binary closing OK\n");
 	if (FileGetSize("rasmoutput_CRLF.raw")!=32) {printf("Autotest %03d ERROR (Binary write must not change 0x0D or 0x0A output)\n",cpt);exit(-1);} else cpt++;
 	printf("testing pure binary write + GetSize OK\n");
 	if (!FileExists("rasmoutput_CRLF.raw")) {printf("Autotest %03d ERROR (fileExists KO)\n",cpt);exit(-1);} else cpt++;
@@ -29300,7 +29285,7 @@ printf("testing rasm source integrity : activebank and maxptr update OK\n");
 	if (FileExists("rasmoutput_CRLF.raw")) {printf("Autotest %03d ERROR (cannot remove file or fileExists KO)\n",cpt);exit(-1);} else cpt++;
 	printf("testing file remove OK\n");
 	MemFree(opcode);opcode=NULL;
-
+#endif
 	if (!StringIsMem("(45+3*12+tartampion)")) {printf("Autotest %03d ERROR (StringIsMem KO)\n",cpt);exit(-1);} else cpt++; 
 	if (StringIsMem("(45+3*12+tartampion)*2")) {printf("Autotest %03d ERROR (StringIsMem KO)\n",cpt);exit(-1);} else cpt++; 
 	if (StringIsMem("2*(45+3*12+tartampion)")) {printf("Autotest %03d ERROR (StringIsMem KO)\n",cpt);exit(-1);} else cpt++; 
@@ -29322,6 +29307,7 @@ printf("testing rasm source integrity : activebank and maxptr update OK\n");
 	printf("testing StringIsQuote (8 tests) OK\n");
 
 	
+#ifndef OS_WIN
 	/* Autotest preprocessing */
 	FileRemoveIfExists("rasmTesting01.asm");
 	FileWriteBinary("rasmTesting01.asm",(char *)include01,strlen(include01));
@@ -29332,6 +29318,7 @@ printf("testing rasm source integrity : activebank and maxptr update OK\n");
 	if (!ret && opcodelen==7 && opcode[5]==5) {} else {printf("Autotest %03d ERROR (include text files) ret=%d\n",cpt,ret);exit(-1);}
 	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
 printf("testing preprocessor text file inclusion OK\n");
+#endif
 
 	ret=RasmAssemble(AUTOTEST_VIRGULE,strlen(AUTOTEST_VIRGULE),&opcode,&opcodelen);
 	if (ret) {} else {printf("Autotest %03d ERROR (double comma must trigger an error) ret=%d\n",cpt,ret);exit(-1);}
@@ -29539,6 +29526,7 @@ printf("testing %d various opcode tests OK\n",i);
 
 	idx=0;
 	while (autotest_keyword[idx].keywordtest) {
+		//if (idx>350 && idx<400) printf("%s\n",autotest_keyword[idx].keywordtest);
 		ret=RasmAssemble(autotest_keyword[idx].keywordtest,strlen(autotest_keyword[idx].keywordtest),&opcode,&opcodelen);
 		if (!ret && !autotest_keyword[idx].result) {
 		} else if (ret && autotest_keyword[idx].result) {
@@ -31585,7 +31573,7 @@ printf("testing EXO (Z80 simulation with exo_docent) OK\n");cpt++;
 	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
 printf("testing simple extended CPR behaviour OK\n");
 
-
+#ifndef OS_WIN
 	// remove workfiles
 	FileRemoveIfExists("autotest_fast.raw");
 	FileRemoveIfExists("autotest_fast2.raw");
@@ -31598,6 +31586,7 @@ printf("testing simple extended CPR behaviour OK\n");
 
 	// each compilation function is counting
 	ret=RasmAssemble(NULL,0,&opcode,&opcodelen)+RasmAssembleInfo(NULL,0,&opcode,&opcodelen,&debug)+RasmAssembleInfoParam(NULL,0,&opcode,&opcodelen,&debug,&param);
+#endif
 
 	if (sko) {
 		printf("ERROR => various opcode tests did not pass! (check backlog)\n");
