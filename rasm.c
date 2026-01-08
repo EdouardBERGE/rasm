@@ -21284,10 +21284,14 @@ printf("Hexbin check wl[%d]=[%s]\n",ae->idx,ae->wl[ae->idx].w);
 						revert=1;
 					} else if (strcmp("REMAP",ae->wl[ae->idx].w)==0) {
 						/* reorder tiles data */
-						if (!ae->wl[ae->idx+1].t) {
+						if (!ae->wl[ae->idx].t) {
 							ae->idx++;
 							ExpressionFastTranslate(ae,&ae->wl[ae->idx].w,1);
 							remap=RoundComputeExpressionCore(ae,ae->wl[ae->idx].w,ae->codeadr,0);
+							if (remap<1) {
+								MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"INCBIN REMAP need a proper number of columns (>1)\n");
+								return;
+							}
 						} else {
 							MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"INCBIN REMAP need a number of columns for reordering\n");
 						}
@@ -21648,19 +21652,19 @@ printf("revert DATA on selected  area\n");
 				}
 			} else if (remap) {
 				/* tiles data reordering */
-				int tx,it,width;
+				int tx,it,height;
 
-				if (remap<=0 || remap>256) {
-					MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"INCBIN REMAP need a remap value in the range [1-256]\n");
+				if (remap<=0 || remap>32768) {
+					MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"INCBIN REMAP need a remap (column number) value in the range [1-32768]\n");
 					return;
 				}
-				width=size/remap;
+				height=size/remap;
 
-				if ((size % remap) || (remap*width>size)) {
+				if (!height || (size % remap) || (remap*height>size)) {
 					MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"INCBIN REMAP cannot reorder %d columns%s with file of size %d\n",remap,remap>1?"s":"",size);
 				} else {
 					for (it=0;it<remap;it++) {
-						for (tx=0;tx<width;tx++) {
+						for (tx=0;tx<height;tx++) {
 							outputdata[outputidx++]=ae->hexbin[hbinidx].data[it+tx*remap+offset];
 						}
 					}
@@ -21670,13 +21674,13 @@ printf("revert DATA on selected  area\n");
 				/* tiles map reordering */
 				int width,tilex,tiley;
 
-				if (vtiles<=0 || vtiles>256) {
-					MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"INCBIN VTILES need a value in the range [1-256]\n");
+				if (vtiles<=0 || vtiles>32768) {
+					MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"INCBIN VTILES need a value in the range [1-32768]\n");
 					return;
 				}
 				width=size/vtiles;
 
-				if ((size % vtiles) || (vtiles*width>size)) {
+				if (!width || (size % vtiles) || (vtiles*width>size)) {
 					MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"INCBIN VTILES cannot reorder %d line%s with file of size %d\n",vtiles,vtiles>1?"s":"",size);
 				} else {
 #if TRACE_HEXBIN
@@ -27951,6 +27955,18 @@ int RasmAssembleInfoParam(const char *datain, int lenin, unsigned char **dataout
 			"genreg {channel},{psg}:channel=channel+1:wend:assert LABEL5==#0202:assert LABEL6==#0204:assert LABEL7==#0300:"\
 			"assert LABEL8==#0302:nop"
 
+#define AUTOTEST_TILES_IMPORT " incbin 'rasmoutput_increment_amsdos.bin',128+10,32,GTILES,4: incbin 'rasmoutput_increment_amsdos.bin'"\
+	",SKIPHEADER,10,32,GTILES,4: incbin 'rasmoutput_increment.bin',SKIPHEADER,10,32,GTILES,4:"\
+	"incbin 'rasmoutput_increment_amsdos.bin',128+10,32,ITILES,4: incbin 'rasmoutput_increment_amsdos.bin',SKIPHEADER,10,32,ITILES,4: incbin 'rasmoutput_increment.bin',SKIPHEADER,10,32,ITILES,4:"\
+	"incbin 'rasmoutput_increment_amsdos.bin',128+10,32,VTILES,4: incbin 'rasmoutput_increment_amsdos.bin',SKIPHEADER,10,32,VTILES,4: incbin 'rasmoutput_increment.bin',SKIPHEADER,10,32,VTILES,4:"\
+	"incbin 'rasmoutput_increment_amsdos.bin',128+10,32,REMAP,4: incbin 'rasmoutput_increment_amsdos.bin',SKIPHEADER,10,32,REMAP,4: incbin 'rasmoutput_increment.bin',SKIPHEADER,10,32,REMAP,4:"\
+	"repeat 3: x=10: defb x,x+1,x+2,x+3: defb x+1*4,x+1*4+1,x+1*4+2,x+1*4+3: defb x+3*4,x+3*4+1,x+3*4+2,x+3*4+3: defb x+2*4,x+2*4+1,x+2*4+2,x+2*4+3:"\
+	"defb x+6*4,x+6*4+1,x+6*4+2,x+6*4+3: defb x+7*4,x+7*4+1,x+7*4+2,x+7*4+3: defb x+5*4,x+5*4+1,x+5*4+2,x+5*4+3: defb x+4*4,x+4*4+1,x+4*4+2,x+4*4+3:"\
+	"rend: repeat 3: x=10: defb x,x+1,x+2,x+3: defb x+1*4+3,x+1*4+2,x+1*4+1,x+1*4+0: defb x+3*4,x+3*4+1,x+3*4+2,x+3*4+3:"\
+	"defb x+2*4+3,x+2*4+2,x+2*4+1,x+2*4+0: defb x+6*4,x+6*4+1,x+6*4+2,x+6*4+3: defb x+7*4+3,x+7*4+2,x+7*4+1,x+7*4+0: defb x+5*4,x+5*4+1,x+5*4+2,x+5*4+3:"\
+	"defb x+4*4+3,x+4*4+2,x+4*4+1,x+4*4+0: rend: repeat 3: x=10: repeat 8,vx,0: repeat 4,vt,0: defb x+vt*8+vx: rend:"\
+	"rend: rend: repeat 3: x=10: repeat 4,cl,0: repeat 8,ch,0: defb x+ch*4+cl: rend: rend: rend"
+
 #define AUTOTEST_PLUSCOLOR " myval=0x123 : assert getr(myval)==2 : assert getb(myval)==3 : assert getg(myval)==1 : assert getv(myval)==1" \
 			" : assert setr(2)+setv(1)+setb(3)==0x123 : assert setv(-2)==setv(0) && setb(220)==setb(15) : nop "
 
@@ -29184,7 +29200,7 @@ struct s_autotest_keyword autotest_keyword[]={
 	{"bank : incbin 'rasmoutput_increment_amsdos.bin',REVERT,10,OFF,80 : assert $==80 : org 0 : defs 80",0},
 	{"bank : incbin 'rasmoutput_increment_amsdos.bin',SKIPHEADER,REVERT,10,OFF,80 : assert $==80 : org 0 : defs 80",0},
 	{"bank : incbin 'rasmoutput_increment_amsdos.bin',OFF,10,REVERT,SKIPHEADER,80 : assert $==80 : org 0 : defs 80",0},
-	{"bank : incbin 'rasmoutput_increment_amsdos.bin',OFF,REVERT,OFF,SKIPHEADER,OFF,10,OFF,OFF,OFF,80,OFF : assert $==80 : org 0 : defs 80",0};
+	{"bank : incbin 'rasmoutput_increment_amsdos.bin',OFF,REVERT,OFF,SKIPHEADER,OFF,10,OFF,OFF,OFF,80,OFF : assert $==80 : org 0 : defs 80",0},
 
 	/*
 	 *
@@ -30258,6 +30274,11 @@ printf("testing invalid offset (too low) for SAVE OK\n");
 	if (ret) {} else {printf("Autotest %03d ERROR (invalid offset for SAVE)\n",cpt);exit(-1);}
 	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
 printf("testing invalid offset (too high) for SAVE OK\n");
+
+	ret=RasmAssemble(AUTOTEST_TILES_IMPORT,strlen(AUTOTEST_TILES_IMPORT),&opcode,&opcodelen);
+	if (!ret && !(opcodelen&1) && opcodelen>256 && memcmp(opcode,opcode+(opcodelen>>1),opcodelen>>1)==0) {} else {printf("Autotest %03d ERROR (tile import modes)\n",cpt);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing INCBIN tiles import modes OK\n");
 
 	ret=RasmAssemble(AUTOTEST_INHIBITION2,strlen(AUTOTEST_INHIBITION2),&opcode,&opcodelen);
 	if (!ret) {} else {printf("Autotest %03d ERROR (if switch inhibition)\n",cpt);exit(-1);}
