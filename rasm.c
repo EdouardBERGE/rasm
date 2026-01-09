@@ -27978,6 +27978,19 @@ int RasmAssembleInfoParam(const char *datain, int lenin, unsigned char **dataout
 	"defb x+4*4+3,x+4*4+2,x+4*4+1,x+4*4+0: rend: repeat 3: x=10: repeat 8,vx,0: repeat 4,vt,0: defb x+vt*8+vx: rend:"\
 	"rend: rend: repeat 3: x=10: repeat 4,cl,0: repeat 8,ch,0: defb x+ch*4+cl: rend: rend: rend"
 
+#define AUTOTEST_TILES_REVERT " incbin 'rasmoutput_increment_amsdos.bin',128+10,32,GTILES,4,REVERT: incbin 'rasmoutput_increment_amsdos.bin',SKIPHEADER,10,32,GTILES,4,REVERT:"\
+	"incbin 'rasmoutput_increment.bin',SKIPHEADER,10,32,GTILES,4,REVERT: incbin 'rasmoutput_increment_amsdos.bin',128+10,32,ITILES,4,REVERT:"\
+	"incbin 'rasmoutput_increment_amsdos.bin',SKIPHEADER,10,32,ITILES,4,REVERT: incbin 'rasmoutput_increment.bin',SKIPHEADER,10,32,ITILES,4,REVERT:"\
+	"incbin 'rasmoutput_increment_amsdos.bin',128+10,32,VTILES,4,REVERT: incbin 'rasmoutput_increment_amsdos.bin',SKIPHEADER,10,32,VTILES,4,REVERT:"\
+	"incbin 'rasmoutput_increment.bin',SKIPHEADER,10,32,VTILES,4,REVERT: incbin 'rasmoutput_increment_amsdos.bin',128+10,32,REMAP,4,REVERT:"\
+	"incbin 'rasmoutput_increment_amsdos.bin',SKIPHEADER,10,32,REMAP,4,REVERT: incbin 'rasmoutput_increment.bin',SKIPHEADER,10,32,REMAP,4,REVERT:"\
+	"repeat 3: x=10+32-1: defb x,x-1,x-2,x-3: defb x-1*4,x-1*4-1,x-1*4-2,x-1*4-3: defb x-3*4,x-3*4-1,x-3*4-2,x-3*4-3: defb x-2*4,x-2*4-1,x-2*4-2,x-2*4-3:"\
+	"defb x-6*4,x-6*4-1,x-6*4-2,x-6*4-3: defb x-7*4,x-7*4-1,x-7*4-2,x-7*4-3: defb x-5*4,x-5*4-1,x-5*4-2,x-5*4-3: defb x-4*4,x-4*4-1,x-4*4-2,x-4*4-3: rend:"\
+	"repeat 3: x=10+32-1: defb x,x-1,x-2,x-3: defb x-1*4-3,x-1*4-2,x-1*4-1,x-1*4-0: defb x-3*4,x-3*4-1,x-3*4-2,x-3*4-3: defb x-2*4-3,x-2*4-2,x-2*4-1,x-2*4-0:"\
+	"defb x-6*4,x-6*4-1,x-6*4-2,x-6*4-3: defb x-7*4-3,x-7*4-2,x-7*4-1,x-7*4-0: defb x-5*4,x-5*4-1,x-5*4-2,x-5*4-3: defb x-4*4-3,x-4*4-2,x-4*4-1,x-4*4-0: rend:"\
+	"repeat 3 : incbin 'rasmoutput_decrement.bin',VTILES,4 : rend: repeat 3 : incbin 'rasmoutput_decrement.bin',REMAP,4 : rend"
+
+
 #define AUTOTEST_PLUSCOLOR " myval=0x123 : assert getr(myval)==2 : assert getb(myval)==3 : assert getg(myval)==1 : assert getv(myval)==1" \
 			" : assert setr(2)+setv(1)+setb(3)==0x123 : assert setv(-2)==setv(0) && setb(220)==setb(15) : nop "
 
@@ -29183,6 +29196,7 @@ struct s_autotest_keyword autotest_keyword[]={
 	{"snapinit 'snap192k.sna' :bank 0:ld hl,454:bank 1:ld hl,454:bank 2:ld hl,454:bank 3:ld hl,454:bank 4:ld hl,454:bank 5:ld hl,454:bank 6:ld hl,454:bank 7:ld hl,454:bank 8:ld hl,454:bankset 4:ld hl,777",0},
 	// simple tests about options for INCBIN (do not test data, only a matter of size and header skip)
 	{"repeat 256,x,0: defb x: rend: save 'rasmoutput_increment.bin',0,#100: save 'rasmoutput_increment_amsdos.bin',0,#100,AMSDOS",0},
+	{"str=41:repeat 32:defb str:str-=1:rend:save 'rasmoutput_decrement.bin',0,32",0},
 	{"bank : incbin 'rasmoutput_increment.bin' : assert $==256",0},
 	{"bank : incbin 'rasmoutput_increment.bin',SKIPHEADER : assert $==256",0},
 	{"bank : incbin 'rasmoutput_increment_amsdos.bin' : assert $==384",0},
@@ -30290,6 +30304,11 @@ printf("testing invalid offset (too high) for SAVE OK\n");
 	if (!ret && !(opcodelen&1) && opcodelen>256 && memcmp(opcode,opcode+(opcodelen>>1),opcodelen>>1)==0) {} else {printf("Autotest %03d ERROR (tile import modes)\n",cpt);exit(-1);}
 	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
 printf("testing INCBIN tiles import modes OK\n");
+
+	ret=RasmAssemble(AUTOTEST_TILES_REVERT,strlen(AUTOTEST_TILES_REVERT),&opcode,&opcodelen);
+	if (!ret && !(opcodelen&1) && opcodelen>256 && memcmp(opcode,opcode+(opcodelen>>1),opcodelen>>1)==0) {} else {printf("Autotest %03d ERROR (tile import revert modes)\n",cpt);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing INCBIN tiles import modes in revert OK\n");
 
 	ret=RasmAssemble(AUTOTEST_INHIBITION2,strlen(AUTOTEST_INHIBITION2),&opcode,&opcodelen);
 	if (!ret) {} else {printf("Autotest %03d ERROR (if switch inhibition)\n",cpt);exit(-1);}
@@ -31655,6 +31674,7 @@ printf("testing simple extended CPR behaviour OK\n");
 	FileRemoveIfExists("snap192k.sna");
 	FileRemoveIfExists("rasmoutput_increment_amsdos.bin");
 	FileRemoveIfExists("rasmoutput_increment.bin");
+	FileRemoveIfExists("rasmoutput_decrement.bin");
 	FileRemoveIfExists("autotest_fast.raw");
 	FileRemoveIfExists("autotest_fast2.raw");
 	FileRemoveIfExists("autotest_include.raw");
