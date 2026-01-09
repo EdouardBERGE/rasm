@@ -138,6 +138,23 @@ do {
 } while (--len);
 return (int)c1 - (int)c2;
 }
+int _internal_stricmp(const char *s1, const char *s2) {
+/* Yes, Virginia, it had better be unsigned */
+unsigned char c1, c2;
+while (1) {
+    c1 = *s1++;
+    c2 = *s2++;
+    if (!c1 || !c2)
+        break;
+    if (c1 == c2)
+        continue;
+    c1 = tolower(c1);
+    c2 = tolower(c2);
+    if (c1 != c2)
+        break;
+}
+return (int)c1 - (int)c2;
+}
 
 /*
 ** Call syntax:  char *stristr(char *String, char *Pattern)
