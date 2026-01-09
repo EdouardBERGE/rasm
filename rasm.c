@@ -22443,7 +22443,6 @@ unsigned char * _internal_export_REMU(struct s_assenv *ae, unsigned int *rchksiz
 	int ilocal=0,i,m;
 	unsigned int chunksize;
 	int localcpt=0;
-printf("remu output start\n");
 	remu_output=MemMalloc(ae->ibreakpoint*64+ae->il*256+ae->ialias*256+16+ae->icomz*256);
 	strcpy(remu_output,"REMU    ");
 
@@ -22554,9 +22553,7 @@ printf("remu output start\n");
 		memset(shortlabel,0,sizeof(shortlabel));
 		strncpy(shortlabel,ae->alias[i].alias,sizeof(shortlabel)-1);
 		strcat(remu_output,shortlabel);
-printf("alias [%s]\n",ae->alias[i].translation);
 		tmpptr=RoundComputeExpression(ae,ae->alias[i].translation,0,0,0);
-printf(" => [%d]\n",tmpptr);
 		if (ae->alias[i].fromstruct) {
 			sprintf(zedigit," %d idx;",tmpptr);
 		} else {
@@ -22564,7 +22561,6 @@ printf(" => [%d]\n",tmpptr);
 		}
 		strcat(remu_output,zedigit);
 	}
-printf("break export\n");
 	for (i=0;i<ae->iacebrk;i++) {
 		unsigned int v;
 		strcat(remu_output,"acebreak ");
@@ -22596,7 +22592,6 @@ printf("break export\n");
 	//FileWriteBinary(TMP_filename,(char*)remu_output,chunksize+8); // 8 bytes for the chunk header
 	//MemFree(remu_output);
 	*rchksize=chunksize;
-printf("remu output ok\n");
 	return remu_output;
 }
 
@@ -23939,24 +23934,40 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 				}
 				// translate alias only if there are exported
 				if (ae->export_equ || ae->export_rasmSymbolFile) {
+					char *dotSeparator;
+					char *lastLabel=NULL;
 					for (i=0;i<ae->ialias;i++) {
-						if (!strchr(ae->alias[i].alias,'.')) {
+						// @@TODO refaire la recherche via des morceaux de texte seulement pour les noms générés
+						if ((dotSeparator=strchr(ae->alias[i].alias,'.'))==NULL) {
 							if ((casefound=_internal_stristr(ae->rawfile[ae->wl[ae->alias[i].iw].ifile],ae->rawlen[ae->wl[ae->alias[i].iw].ifile],ae->alias[i].alias))!=NULL) {
 								memcpy(ae->alias[i].alias,casefound,strlen(ae->alias[i].alias));
 							}
 						} else {
-							for (istart=0;ae->alias[i].alias[istart] && ae->alias[i].alias[istart]!='.';istart++); // find the dot
-							if (istart<254) {
-								ae->alias[i].alias[istart]=0;
+							*dotSeparator=0;
+
+							if (lastLabel && _internal_strnicmp(lastLabel,ae->alias[i].alias,dotSeparator-ae->alias[i].alias)==0) {
+								casefound=lastLabel;
+							} else {
+								lastLabel=NULL;
 								casefound=_internal_stristr(ae->rawfile[ae->wl[ae->alias[i].iw].ifile],ae->rawlen[ae->wl[ae->alias[i].iw].ifile],ae->alias[i].alias);
-								if (casefound) {
-									memcpy(ae->alias[i].alias,casefound,istart);
+								// rewind sources if label is not found
+								if (!casefound) {
+									int iFile;
+									iFile=ae->wl[ae->alias[i].iw].ifile-1;
+									while (iFile>=0) {
+										casefound=_internal_stristr(ae->rawfile[iFile],ae->rawlen[iFile],ae->alias[i].alias);
+										if (casefound) break; else iFile--;
+									}
+									if (casefound) lastLabel=casefound;
 								}
-								ae->alias[i].alias[istart]='.';
-								casefound=_internal_stristr(ae->rawfile[ae->wl[ae->alias[i].iw].ifile],ae->rawlen[ae->wl[ae->alias[i].iw].ifile],ae->alias[i].alias+istart+1);
-								if (casefound) {
-									memcpy(ae->alias[i].alias+istart+1,casefound,strlen(ae->alias[i].alias+istart+1));
-								}
+							}
+							if (casefound) {
+								memcpy(ae->alias[i].alias,casefound,dotSeparator-ae->alias[i].alias);
+							}
+							*dotSeparator='.';
+							casefound=_internal_stristr(ae->rawfile[ae->wl[ae->alias[i].iw].ifile],ae->rawlen[ae->wl[ae->alias[i].iw].ifile],dotSeparator+1);
+							if (casefound) {
+								memcpy(dotSeparator+1,casefound,strlen(dotSeparator+1));
 							}
 						}
 					}
