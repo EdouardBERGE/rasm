@@ -65,6 +65,8 @@ The project was born a few years ago (2017) because i needed a really fast assem
 
 ## Links
 
+You can play with RASM live on https://cpc-playground.iiivan.org/
+
 BTW there is many other assemblers you could try:
 
 - ORGAMS http://orgams.wikidot.com/ (definitely the best native Z80 assembler on any machine)
