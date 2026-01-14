@@ -1111,8 +1111,8 @@ struct s_assenv {
 	/* current memory */
 	int maxptr;
 	/* CPR memory */
-	int iwnamebank[BANK_MAX_NUMBER];
-	int iwnameromsna[256]; // ROM with snapshots
+	char *iwnamebank[BANK_MAX_NUMBER];
+	char *iwnameromsna[256]; // ROM with snapshots
 	unsigned char **mem;
 	int nbbank,maxbank;
 	int *memsize;
@@ -3024,6 +3024,12 @@ void FreeAssenv(struct s_assenv *ae)
 		}
 	}
 
+	for (i=0;i<BANK_MAX_NUMBER;i++) {
+		if (ae->iwnamebank[i]) free(ae->iwnamebank[i]);
+	}
+	for (i=0;i<256;i++) {
+		if (ae->iwnameromsna[i]) free(ae->iwnameromsna[i]);
+	}
 	for (i=0;i<ae->nbbank;i++) {
 		if (ae->mem[i]) MemFree(ae->mem[i]);
 	}
@@ -17985,7 +17991,11 @@ void __NameROM(struct s_assenv *ae) {
 			if (ibank<0 || ibank>256) {
 				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"NAMEROM selection must be from 0 to 255 (or use LOWER for lower ROM)\n");
 			} else {
-				ae->iwnameromsna[ibank]=ae->idx+2;
+				int touched,lm;
+				for (lm=touched=0;ae->wl[ae->idx+2].w[lm];lm++) {
+					if (ae->wl[ae->idx+2].w[lm]=='{') touched++; else if (ae->wl[ae->idx+2].w[lm]=='}') touched--; else if (touched) ae->wl[ae->idx+2].w[lm]=toupper(ae->wl[ae->idx+2].w[lm]);
+				}
+				ae->iwnameromsna[ibank]=TranslateTag(ae,TxtStrDup(ae->wl[ae->idx+2].w),&touched,1,E_TAGOPTION_NONE);
 			}
 		}
 		ae->idx+=2;
@@ -18004,7 +18014,11 @@ void __NameROM(struct s_assenv *ae) {
 			if (sl==257) {
 				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"NAMEROM cannot be used in that memory space\n");
 			} else {
-				ae->iwnameromsna[ibank]=ae->idx+1;
+				int touched,lm;
+				for (lm=touched=0;ae->wl[ae->idx+1].w[lm];lm++) {
+					if (ae->wl[ae->idx+1].w[lm]=='{') touched++; else if (ae->wl[ae->idx+1].w[lm]=='}') touched--; else if (touched) ae->wl[ae->idx+1].w[lm]=toupper(ae->wl[ae->idx+1].w[lm]);
+				}
+				ae->iwnameromsna[ibank]=TranslateTag(ae,TxtStrDup(ae->wl[ae->idx+1].w),&touched,1,E_TAGOPTION_NONE);
 			}
 		}
 	} else {
@@ -18024,7 +18038,11 @@ void __NameBANK(struct s_assenv *ae) {
 			if (ibank<0 || ibank>=BANK_MAX_NUMBER) {
 				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"NAMEBANK selection must be from 0 to %d\n",BANK_MAX_NUMBER);
 			} else {
-				ae->iwnamebank[ibank]=ae->idx+2;
+				int touched,lm;
+				for (lm=touched=0;ae->wl[ae->idx+2].w[lm];lm++) {
+					if (ae->wl[ae->idx+2].w[lm]=='{') touched++; else if (ae->wl[ae->idx+2].w[lm]=='}') touched--; else if (touched) ae->wl[ae->idx+2].w[lm]=toupper(ae->wl[ae->idx+2].w[lm]);
+				}
+				ae->iwnamebank[ibank]=TranslateTag(ae,TxtStrDup(ae->wl[ae->idx+2].w),&touched,1,E_TAGOPTION_NONE);
 			}
 		}
 		ae->idx+=2;
@@ -18036,7 +18054,11 @@ void __NameBANK(struct s_assenv *ae) {
 			if (ibank<0 || ibank>=BANK_MAX_NUMBER) {
 				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"NAMEBANK cannot be used in that memory space\n");
 			} else {
-				ae->iwnamebank[ibank]=ae->idx+1;
+				int touched,lm;
+				for (lm=touched=0;ae->wl[ae->idx+1].w[lm];lm++) {
+					if (ae->wl[ae->idx+1].w[lm]=='{') touched++; else if (ae->wl[ae->idx+1].w[lm]=='}') touched--; else if (touched) ae->wl[ae->idx+1].w[lm]=toupper(ae->wl[ae->idx+1].w[lm]);
+				}
+				ae->iwnamebank[ibank]=TranslateTag(ae,TxtStrDup(ae->wl[ae->idx+1].w),&touched,1,E_TAGOPTION_NONE);
 			}
 		}
 	} else {
@@ -23884,10 +23906,10 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 
 				for (i=0;i<=maxrom && i<BANK_MAX_NUMBER;i++) {
 					int lm;
-					if (ae->iwnamebank[i]>0) {
-						lm=strlen(ae->wl[ae->iwnamebank[i]].w)-2;
+					if (ae->iwnamebank[i]) {
+						lm=strlen(ae->iwnamebank[i])-2;
 						if (lm) {
-							snprintf(cprinfo_line,sizeof(cprinfo_line),"%d: %-*.*s\n",i,lm,lm,ae->wl[ae->iwnamebank[i]].w+1);
+							snprintf(cprinfo_line,sizeof(cprinfo_line),"%d: %-*.*s\n",i,lm,lm,ae->iwnamebank[i]+1);
 							FileWriteLine(cprinfo_filename,cprinfo_line);
 						}
 					} else {
@@ -24099,9 +24121,9 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 					if (ae->snacpr && !i) endoffset=offset=0; // hack
 					if (endoffset>offset) {
 						int lm=0;
-						if (ae->iwnamebank[i]>0) {
-							if (!ae->snacpr) lm=strlen(ae->wl[ae->iwnamebank[i]].w)-2; else {
-								if (i) lm=strlen(ae->wl[ae->iwnameromsna[i]].w)-2; else lm=0; // cannot have a ROM physically in 0 with snapshots
+						if (ae->iwnamebank[i]) {
+							if (!ae->snacpr) lm=strlen(ae->iwnamebank[i])-2; else {
+								if (i) lm=strlen(ae->iwnameromsna[i])-2; else lm=0; // cannot have a ROM physically in 0 with snapshots
 							}
 						}
 						if (ae->cprinfo) rasm_printf(ae,KVERBOSE"WriteCPR bank %2d of %5d byte%s start at #%04X",ae->snacpr?backi:i,endoffset-offset,endoffset-offset>1?"s":" ",offset);
@@ -24116,7 +24138,7 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 						}
 						if (ae->cprinfo) {
 							if (lm) {
-								rasm_printf(ae," (%-*.*s)\n",lm,lm,ae->wl[ae->iwnamebank[i]].w+1);
+								rasm_printf(ae," (%-*.*s)\n",lm,lm,ae->iwnamebank[i]+1);
 							} else {
 								rasm_printf(ae,"\n");
 							}
@@ -24353,7 +24375,7 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 								memcpy(packed,ae->mem[i],65536);
 								if (i<4 || i+4>maxrom) {
 									if (ae->cprinfo) rasm_printf(ae,KVERBOSE"WriteSNA RAM %2d,%d,%d,%d packed",i,i+1,i+2,i+3);
-									if (ae->cprinfo) if (ae->iwnamebank[i]) rasm_printf(ae," (%s)",ae->wl[ae->iwnamebank[i]].w);
+									if (ae->cprinfo) if (ae->iwnamebank[i]) rasm_printf(ae," (%s)",ae->iwnamebank[i]);
 									if (ae->cprinfo) rasm_printf(ae,"\n");
 								} else if (!noflood) {rasm_printf(ae,KVERBOSE"[...]\n");noflood=1;}
 							} else {
@@ -24393,12 +24415,12 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 									
 									if (endoffset>offset) {
 										int lm=0;
-										if (ae->iwnamebank[i]>0) {
-											lm=strlen(ae->wl[ae->iwnamebank[i]].w)-2;
+										if (ae->iwnamebank[i]) {
+											lm=strlen(ae->iwnamebank[i])-2;
 										}
 										if (i<4 || i+4>maxrom) {
 											if (ae->cprinfo) rasm_printf(ae,KVERBOSE"WriteSNA RAM %2d of %5d byte%s start at #%04X",i+k,endoffset-offset,endoffset-offset>1?"s":" ",offset);
-											if (ae->cprinfo) if (ae->iwnamebank[i]) rasm_printf(ae," (%s)",ae->wl[ae->iwnamebank[i]].w);
+											if (ae->cprinfo) if (ae->iwnamebank[i]) rasm_printf(ae," (%s)",ae->iwnamebank[i]);
 											if (ae->cprinfo) rasm_printf(ae,"\n");
 										} else if (!noflood) {rasm_printf(ae,KVERBOSE"[...]\n");noflood=1;}
 										if (endoffset-offset>16384) {
@@ -24413,7 +24435,7 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 											} // @@TODO aussi
 										}
 										if (lm) {
-											if (i<4 || i+4>maxrom) rasm_printf(ae,KVERBOSE" (%-*.*s)\n",lm,lm,ae->wl[ae->iwnamebank[i+k]].w+1);
+											if (i<4 || i+4>maxrom) rasm_printf(ae,KVERBOSE" (%-*.*s)\n",lm,lm,ae->iwnamebank[i+k]+1);
 										} else {
 											if (i<4 || i+4>maxrom) rasm_printf(ae,"\n");
 										}
@@ -24498,7 +24520,7 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 									if (ae->cprinfo) {
 									if (i<256) rasm_printf(ae,KVERBOSE"WriteSNA ROM %3d of %5d byte%s start at #%04X",i,endoffset-offset,endoffset-offset>1?"s":" ",offset);
 									      else rasm_printf(ae,KVERBOSE"WriteSNA LOWER   of %5d byte%s start at #%04X",endoffset-offset,endoffset-offset>1?"s":" ",offset);
-									if (ae->iwnameromsna[i]) rasm_printf(ae," (%s)",ae->wl[ae->iwnameromsna[i]].w);
+									if (ae->iwnameromsna[i]) rasm_printf(ae," (%s)",ae->iwnameromsna[i]);
 									rasm_printf(ae,"\n");
 									}
 								} else if (!noflood) {rasm_printf(ae,KVERBOSE"[...]\n");noflood=1;}
