@@ -4694,7 +4694,12 @@ int __GETNOP(struct s_assenv *ae,char *oplist, int didx)
 					/* split args */
 					listarg=TxtSplitWithChar(zearg,',');
 					crc1=GetCRC(listarg[0]);
-					crc2=GetCRC(listarg[1]);
+					if (listarg[1]) {
+						crc2=GetCRC(listarg[1]);
+					} else {
+						MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"missing LD argument for GETNOP, see documentation\n");
+						break;
+					}
 
 					switch (crc1) {
 						case CRC_I:
@@ -5122,7 +5127,12 @@ int __GETTICK(struct s_assenv *ae,char *oplist, int didx)
 					/* split args */
 					listarg=TxtSplitWithChar(zearg,',');
 					crc1=GetCRC(listarg[0]);
-					crc2=GetCRC(listarg[1]);
+					if (listarg[1]) {
+						crc2=GetCRC(listarg[1]);
+					} else {
+						MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"missing LD argument for GETTICK, see documentation\n");
+						break;
+					}
 
 					switch (crc1) {
 						case CRC_I:
@@ -21227,7 +21237,7 @@ void __HEXBIN(struct s_assenv *ae) {
 	int size=0,offset=0,hasSize=0,hasOffset=0,hasExtendedOffset=0;
 	float amplification=1.0;
 	int deload=0;
-	int vtiles=0,remap=0,revert=0;
+	int vtiles=0,remap=0,revert=0,repack=0;
 	int itiles=0,tilex=0,gtiles=0;
 	struct s_hexbin *curhexbin;
 	unsigned char *newdata=NULL;
@@ -21282,6 +21292,9 @@ printf("Hexbin check wl[%d]=[%s]\n",ae->idx,ae->wl[ae->idx].w);
 					} else if (strcmp("REVERT",ae->wl[ae->idx].w)==0) {
 						// revert data
 						revert=1;
+					} else if (strcmp("REPACK",ae->wl[ae->idx].w)==0) {
+						// repack data (for hardware sprites)
+						repack=1;
 					} else if (strcmp("REMAP",ae->wl[ae->idx].w)==0) {
 						/* reorder tiles data */
 						if (!ae->wl[ae->idx].t) {
@@ -21384,9 +21397,9 @@ printf("Hexbin check wl[%d]=[%s]\n",ae->idx,ae->wl[ae->idx].w);
 		}
 
 		// on peut cumuler avec skipHeader + revert + overwrite
-		maxOpt=0; if (itiles) maxOpt++; if (gtiles) maxOpt++; if (vtiles) maxOpt++; if (remap) maxOpt++;
+		maxOpt=0; if (itiles) maxOpt++; if (gtiles) maxOpt++; if (vtiles) maxOpt++; if (remap) maxOpt++; if (repack) maxOpt++;
 		if (maxOpt>1) {
-			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"INCBIN options ITLES, GTILES, VTILES and REMAP are mutually exclusives\n");
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"INCBIN options ITLES, GTILES, VTILES, REPACK and REMAP are mutually exclusives\n");
 			return;
 		}
 
@@ -21649,6 +21662,18 @@ printf("revert DATA on selected  area\n");
 							it+=tilex*8;
 						}
 					}
+				}
+			} else if (repack) {
+				int tx;
+
+				if (size&1) {
+					if (!ae->nowarning) {
+						rasm_printf(ae,KWARNING"INCBIN REPACK is using an odd length\n");
+						if (ae->erronwarn) MaxError(ae);
+					}
+				}
+				for (tx=0;tx<size;tx+=2) {
+					outputdata[outputidx++]=ae->hexbin[hbinidx].data[tx]|(ae->hexbin[hbinidx].data[tx]<<4);
 				}
 			} else if (remap) {
 				/* tiles data reordering */
@@ -29226,7 +29251,7 @@ struct s_autotest_keyword autotest_keyword[]={
 	{"bank : incbin 'rasmoutput_increment_amsdos.bin',SKIPHEADER,REVERT,10,OFF,80 : assert $==80 : org 0 : defs 80",0},
 	{"bank : incbin 'rasmoutput_increment_amsdos.bin',OFF,10,REVERT,SKIPHEADER,80 : assert $==80 : org 0 : defs 80",0},
 	{"bank : incbin 'rasmoutput_increment_amsdos.bin',OFF,REVERT,OFF,SKIPHEADER,OFF,10,OFF,OFF,OFF,80,OFF : assert $==80 : org 0 : defs 80",0},
-
+	{"ld hl,getnop('ld hl,:nop')",1}, // must not segfault and lead to an error
 	/*
 	 *
 	 * will need to test resize + format then meta review test!
