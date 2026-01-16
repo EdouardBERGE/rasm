@@ -77,21 +77,21 @@
 static int _static_library_nbfile_opened=0;
 static int _static_library_nbfile_opened_max=0;
 
-void _internal_ObjectArrayAddDynamicValue(void **zearray, void *zeobject, int object_size);
-void _internal_ObjectArrayAddDynamicValueConcat(void **zearray, int *nbfields, int *maxfields, void *zeobject, int object_size);
+void _internal_ObjectArrayAddDynamicValue(void **zearray, const void *zeobject, const int object_size);
+void _internal_ObjectArrayAddDynamicValueConcat(void **zearray, int *nbfields, int *maxfields, const void *zeobject, const int object_size);
 #define ObjectArrayAddDynamicValue(zearray,zeobject,objsize) _internal_ObjectArrayAddDynamicValue(zearray,zeobject,objsize)
 #define ObjectArrayAddDynamicValueConcat(zearray,nbv,maxv,zeobject,objsize) _internal_ObjectArrayAddDynamicValueConcat(zearray,nbv,maxv,zeobject,objsize)
-void _internal_IntArrayAddDynamicValueConcat(int **zearray, int *nbval, int *maxval, int zevalue);
+void _internal_IntArrayAddDynamicValueConcat(int **zearray, int *nbval, int *maxval, const int zevalue);
 #define IntArrayAddDynamicValueConcat(zearray,nbv,maxv,zevalue) _internal_IntArrayAddDynamicValueConcat(zearray,nbv,maxv,zevalue)
-void _internal_FieldArrayAddDynamicValue(char ***zearray, char *zevalue);
+void _internal_FieldArrayAddDynamicValue(char ***zearray, const char *zevalue);
 #define FieldArrayAddDynamicValue(zearray,zevalue) _internal_FieldArrayAddDynamicValue(zearray,zevalue)
-void _internal_FieldArrayAddDynamicValueConcat(char ***zearray, int *nbfields, int *maxfields, char *zevalue);
+void _internal_FieldArrayAddDynamicValueConcat(char ***zearray, int *nbfields, int *maxfields, const char *zevalue);
 #define FieldArrayAddDynamicValueConcat(zearray,nb,maxf,zevalue) _internal_FieldArrayAddDynamicValueConcat(zearray,nb,maxf,zevalue)
 
 
-long long FileGetSize(char *filename);
+long long FileGetSize(const char *filename);
 
-int MinMaxInt(int zeval, int zemin, int zemax)
+int MinMaxInt(const int zeval, const int zemin, const int zemax)
 {
         #undef FUNC
         #define FUNC "MinMaxInt"
@@ -105,7 +105,7 @@ int MinMaxInt(int zeval, int zemin, int zemax)
 #if defined(__WATCOMC__) || defined(__BORLANDC__)
 size_t strnlen (s, maxlen)
      register const char *s;
-     size_t maxlen;
+     const size_t maxlen;
 {
   register const char *e;
   size_t n;
@@ -211,7 +211,7 @@ char *_internal_stristr(const char *ZeString, const unsigned int ZeLen, const ch
 	return NULL;
 }
 
-char *TxtStrDupLen(char *str, int *len)
+char *TxtStrDupLen(const char *str, int *len)
 {
 	#undef FUNC
 	#define FUNC "TxtStrDupLen"
@@ -223,7 +223,7 @@ char *TxtStrDupLen(char *str, int *len)
 	return newstr;
 }
 
-void _internal_ObjectArrayAddDynamicValueConcat(void **zearray, int *nbfields, int *maxfields, void *zeobject, int object_size)
+void _internal_ObjectArrayAddDynamicValueConcat(void **zearray, int *nbfields, int *maxfields, const void *zeobject, const int object_size)
 {
 	#undef FUNC
 	#define FUNC "ObjectArrayAddDynamicValueConcat"
@@ -260,7 +260,7 @@ void _internal_ObjectArrayAddDynamicValueConcat(void **zearray, int *nbfields, i
 	function reallocate memory to store the new string at
 	the end of the array.
 */
-void _internal_IntArrayAddDynamicValueConcat(int **zearray, int *nbval, int *maxval, int zevalue) 
+void _internal_IntArrayAddDynamicValueConcat(int **zearray, int *nbval, int *maxval, const int zevalue) 
 {
 	#undef FUNC
 	#define FUNC "IntArrayAddDynamicValue"
@@ -284,7 +284,7 @@ void _internal_IntArrayAddDynamicValueConcat(int **zearray, int *nbval, int *max
 	
 	count array elements
 */
-int CSVGetFieldArrayNumber(char **myfield)
+int CSVGetFieldArrayNumber(const char **myfield)
 {
 	#undef FUNC
 	#define FUNC "CSVGetFieldArrayNumber"
@@ -304,7 +304,7 @@ int CSVGetFieldArrayNumber(char **myfield)
  *
  *      split the parameter string into an array of strings
  */
-char **TxtSplitWithChar(char *in_str, char split_char)
+char **TxtSplitWithChar(char *in_str, const char split_char)
 {
         #undef FUNC
         #define FUNC "TxtSplitWithChar"
@@ -338,18 +338,18 @@ char **TxtSplitWithChar(char *in_str, char split_char)
 	function reallocate memory to store the new string at
 	the end of the array.
 */
-void _internal_FieldArrayAddDynamicValue(char ***zearray, char *zevalue)
+void _internal_FieldArrayAddDynamicValue(char ***zearray, const char *zevalue)
 {
 	#undef FUNC
 	#define FUNC "FieldArrayAddDynamicValue"
 	int nbfield;
-	if ((*zearray)==NULL) nbfield=2; else nbfield=CSVGetFieldArrayNumber((*zearray))+2;
+	if ((*zearray)==NULL) nbfield=2; else nbfield=CSVGetFieldArrayNumber((const char **)(*zearray))+2;
 	/* using direct calls because it is more interresting to know which is the caller */
 	(*zearray)=realloc((*zearray),nbfield*sizeof(char *));
 	(*zearray)[nbfield-2]=TxtStrDup(zevalue);
 	(*zearray)[nbfield-1]=NULL;
 }
-void _internal_FieldArrayAddDynamicValueConcat(char ***zearray, int *nbfields, int *maxfields, char *zevalue)
+void _internal_FieldArrayAddDynamicValueConcat(char ***zearray, int *nbfields, int *maxfields, const char *zevalue)
 {
 	#undef FUNC
 	#define FUNC "FieldArrayAddDynamicValueConcat"
@@ -436,7 +436,7 @@ static struct s_fileid *fileidROOT=NULL;
 	output: file structure
 		NULL if not found
 */
-struct s_fileid *FileGetStructFromName(char *filename)
+struct s_fileid *FileGetStructFromName(const char *filename)
 {
 	#undef FUNC
 	#define FUNC "FileGetStructFromName"
@@ -484,7 +484,7 @@ struct s_fileid *FileGetStructFromName(char *filename)
 	check if the file is already open
 	check for conflicts	
 */
-FILE *FileOpen(char *filename, char *opening_type)
+FILE *FileOpen(const char *filename, const char *opening_type)
 {
 	#undef FUNC
 	#define FUNC "FileOpen"
@@ -579,9 +579,9 @@ FILE *FileOpen(char *filename, char *opening_type)
 	return curfile->file_id;
 }
 
-struct s_fileid *FileGetStructFromID(FILE *file_id);
+struct s_fileid *FileGetStructFromID(const FILE *file_id);
 
-void FileSeekBinary(char *filename,int pos, int st)
+void FileSeekBinary(const char *filename,const int pos, const int st)
 {
 	#undef FUNC
 	#define FUNC "FileSeekBinary"
@@ -609,7 +609,7 @@ void FileSeekBinary(char *filename,int pos, int st)
 	
 	retrieve the file structure from the tree, with his ID
 */
-struct s_fileid *FileGetStructFromID(FILE *file_id)
+struct s_fileid *FileGetStructFromID(const FILE *file_id)
 {
 	#undef FUNC
 	#define FUNC "FileGetStructFromID"
@@ -648,7 +648,7 @@ struct s_fileid *FileGetStructFromID(FILE *file_id)
 	check for closing return code
 	free the memory file structure
 */
-void FileClose(FILE *file_id)
+void FileClose(const FILE *file_id)
 {
 	#undef FUNC
 	#define FUNC "FileClose"
@@ -688,7 +688,7 @@ void FileClose(FILE *file_id)
 	
 	add n to counter when reading or writing in a file
 */
-void FileAddCPT(FILE *file_id, int n)
+void FileAddCPT(const FILE *file_id, const int n)
 {
 	#undef FUNC
 	#define FUNC "FileAddCPT"
@@ -705,7 +705,7 @@ void FileAddCPT(FILE *file_id, int n)
 	Get file counter information
 	input: file_id
 */
-int FileGetCPT(FILE *file_id)
+int FileGetCPT(const FILE *file_id)
 {
 	#undef FUNC
 	#define FUNC "FileGetCPT"
@@ -720,7 +720,7 @@ int FileGetCPT(FILE *file_id)
 	Get file counter information
 	input: filename
 */
-int FileGetCPTFromName(char *filename)
+int FileGetCPTFromName(const char *filename)
 {
 	#undef FUNC
 	#define FUNC "FileGetCPTFromName"
@@ -766,7 +766,7 @@ RAW_READING,
 CLOSE_READING
 };
 
-char *_internal_fgetsmulti(char *filename, int read_mode)
+char *_internal_fgetsmulti(const char *filename, const int read_mode)
 {
 	#undef FUNC
 	#define FUNC "_internal_fgetsmulti"
@@ -802,7 +802,7 @@ char *_internal_fgetsmulti(char *filename, int read_mode)
 	}
 }
 
-char **_internal_fgetsmultilines(char *filename, int read_mode)
+char **_internal_fgetsmultilines(const char *filename, const int read_mode)
 {
 	#undef FUNC
 	#define FUNC "_internal_fgetsmultilines"
@@ -849,7 +849,7 @@ char **_internal_fgetsmultilines(char *filename, int read_mode)
 #define FileReadClose(filename) _internal_fgetsmulti(filename,CLOSE_READING)
 #define FileReadLine(filename) _internal_fgetsmulti(filename,RAW_READING)
 
-long FileReadPos(char *filename)
+long FileReadPos(const char *filename)
 {
 	#undef FUNC
 	#define FUNC "FileReadPos"
@@ -876,7 +876,7 @@ long FileReadPos(char *filename)
 	or the system will warn you
 */
 
-void FileWriteLine(char *filename, char *buffer)
+void FileWriteLine(const char *filename, const char *buffer)
 {
 	#undef FUNC
 	#define FUNC "FileWriteLine"
@@ -896,7 +896,7 @@ void FileWriteLine(char *filename, char *buffer)
 		FileClose(last_id);
 	}
 }
-void FileWriteLines(char *filename, char **buffer)
+void FileWriteLines(const char *filename, const char **buffer)
 {
 	#undef FUNC
 	#define FUNC "FileWriteLines"
@@ -920,7 +920,7 @@ void FileWriteLines(char *filename, char **buffer)
 	
 	as other File functions, you can use it with many files simultaneously
 */
-int FileReadBinary(char *filename,char *data,int n)
+int FileReadBinary(const char *filename,char *data,const int n)
 {
 	#undef FUNC
 	#define FUNC "FileReadBinary"
@@ -979,7 +979,7 @@ exit(ABORT_ERROR);
 	FileTruncate function
 	set file to zero size then leave	
 */
-int FileTruncate(char *filename)
+int FileTruncate(const char *filename)
 {
 #undef FUNC
 #define FUNC "FileTruncate"
@@ -1008,7 +1008,7 @@ return 0;
 	
 	as other File functions, you can use it with many files simultaneously
 */
-int FileWriteBinary(char *filename,char *data,int n)
+int FileWriteBinary(const char *filename,const char *data, const int n)
 {
 	#undef FUNC
 	#define FUNC "FileWriteBinary"
@@ -1073,7 +1073,7 @@ int FileWriteBinary(char *filename,char *data,int n)
 	input: filename
 	return the stat structure of a given file
 */
-struct stat *FileGetStat(char *filename)
+struct stat *FileGetStat(const char *filename)
 {
 	#undef FUNC
 	#define FUNC "FileGetStat"
@@ -1133,7 +1133,7 @@ struct stat *FileGetStat(char *filename)
 	input: filename
 	output: the size in bytes of the file
 */
-long long FileGetSize(char *filename)
+long long FileGetSize(const char *filename)
 {
 	#undef FUNC
 	#define FUNC "FileGetSize"
@@ -1151,7 +1151,7 @@ long long FileGetSize(char *filename)
  *	append a string
  *	return the number of char appened
  */
-int strappend(char *Adst, char *Asrc)
+int strappend(char *Adst, const char *Asrc)
 {
 	int Lcpt=0;
 
@@ -1199,7 +1199,7 @@ char * TxtTrimEnd(char *in_str)
 	return in_str;
 }
 
-int LookForFile(char *filename, char *dirname)
+int LookForFile(const char *filename, const char *dirname)
 {
 	#undef FUNC
 	#define FUNC "LookForFile"
@@ -1245,7 +1245,7 @@ int LookForFile(char *filename, char *dirname)
 
 #define FileExists(zefile) LookForFile(zefile,NULL)
 
-int _internal_do_remove(char *zename, char *zetype)
+int _internal_do_remove(const char *zename, const char *zetype)
 {
 	#undef FUNC
 	#define FUNC "_do_remove"
@@ -1281,7 +1281,7 @@ int _internal_do_remove(char *zename, char *zetype)
 
 #define FileRemove(filename) _internal_do_remove(filename,"file")
 
-void FileRemoveIfExists(char *filename)
+void FileRemoveIfExists(const char *filename)
 {
 	#undef FUNC
 	#define FUNC "FileRemoveIfExists"

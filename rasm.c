@@ -1764,7 +1764,7 @@ char **_internal_readtextfile(struct s_assenv *ae,char *filename, char replacech
 	note: in_str MUST BE previously mallocated if out_substr is bigger than in_substr
 */
 #ifndef RDD
-char *TxtReplace(char *in_str, char *in_substr, char *out_substr, int recurse)
+char *TxtReplace(char *in_str, const char *in_substr, const char *out_substr, const int recurse)
 {
 	#undef FUNC
 	#define FUNC "TxtReplace"
@@ -1880,7 +1880,7 @@ char *TxtReplace(char *in_str, char *in_substr, char *out_substr, int recurse)
 #endif
 
 /* Levenshtein implementation by TheRayTracer https://gist.github.com/TheRayTracer/2644387 */
-int _internal_LevenshteinDistance(char *s,  char *t)
+int _internal_LevenshteinDistance(const char *s,  const char *t)
 {
 	int i,j,n,m,*d;
 	int im,jn;
@@ -2233,7 +2233,7 @@ void InitAutomate(char *autotab, const unsigned char *def)
 	}
 }
 // supposed to be used
-void StateMachineResizeBuffer(char **ABuf, int idx, int *ASize) {
+void StateMachineResizeBuffer(char **ABuf, const int idx, int *ASize) {
 	#undef FUNC
 	#define FUNC "StateMachineResizeBuffer"
 
@@ -2256,7 +2256,7 @@ static inline int GetCRC(char *label) {
 #endif
 #endif
 
-int _oldGetCRC(char *label) {
+int _oldGetCRC(const char *label) {
 	#undef FUNC
 	#define FUNC "GetCRC"
 	int crc=0x12345678;
@@ -2268,7 +2268,7 @@ int _oldGetCRC(char *label) {
 	return crc;
 }
 
-int GetCRC(char *label) {
+int GetCRC(const char *label) {
         #undef FUNC
         #define FUNC "GetCRC"
         int crc;
@@ -2313,7 +2313,7 @@ int GetCRC(char *label) {
         return crc;
 }
 
-int GetCRCandLength(char *label, int *ilength) {
+int GetCRCandLength(const char *label, int *ilength) {
 	#undef FUNC
 	#define FUNC "GetCRC"
 
@@ -2321,9 +2321,9 @@ int GetCRCandLength(char *label, int *ilength) {
 	return GetCRC(label);
 }
 
-int IsDirective(char *expr);
+int IsDirective(const char *expr);
 
-int IsRegister(char *zeexpression)
+int IsRegister(const char *zeexpression)
 {
 	#undef FUNC
 	#define FUNC "IsRegister"
@@ -2363,7 +2363,7 @@ int IsRegister(char *zeexpression)
 	return 0;
 }
 
-int StringIsMem(char *w)
+int StringIsMem(const char *w)
 {
 	#undef FUNC
 	#define FUNC "StringIsMem"
@@ -2431,7 +2431,7 @@ char *StringRemoveQuotes(struct s_assenv *ae,const char *w) {
 	}
 	return newstr;
 }
-char *StringLooksLikeDicoRecurse(struct s_crcdico_tree *lt, int *score, char *str)
+char *StringLooksLikeDicoRecurse(struct s_crcdico_tree *lt, int *score, const char *str)
 {
 	#undef FUNC
 	#define FUNC "StringLooksLikeDicoRecurse"
@@ -2458,7 +2458,7 @@ char *StringLooksLikeDicoRecurse(struct s_crcdico_tree *lt, int *score, char *st
 	}
 	return retstr;
 }
-char *StringLooksLikeDico(struct s_assenv *ae, int *score, char *str)
+char *StringLooksLikeDico(struct s_assenv *ae, int *score, const char *str)
 {
 	#undef FUNC
 	#define FUNC "StringLooksLikeDico"
@@ -2474,7 +2474,7 @@ char *StringLooksLikeDico(struct s_assenv *ae, int *score, char *str)
 	}
 	return retstr;
 }
-char *StringLooksLikeMacro(struct s_assenv *ae, char *str, int *retscore)
+char *StringLooksLikeMacro(struct s_assenv *ae, const char *str, int *retscore)
 {
 	#undef FUNC
 	#define FUNC "StringLooksLikeMacro"
@@ -2493,7 +2493,7 @@ char *StringLooksLikeMacro(struct s_assenv *ae, char *str, int *retscore)
 	return ret;
 }	
 
-char *StringLooksLike(struct s_assenv *ae, char *str)
+char *StringLooksLike(struct s_assenv *ae, const char *str)
 {
 	#undef FUNC
 	#define FUNC "StringLooksLike"
@@ -2534,10 +2534,10 @@ char *StringLooksLike(struct s_assenv *ae, char *str)
 	return ret;
 }
 
-int RoundComputeExpression(struct s_assenv *ae,char *expr, int ptr, int didx, int expression_expected);
-int RoundComputeExpressionCore(struct s_assenv *ae,char *zeexpression,int ptr,int didx);
-double ComputeExpressionCore(struct s_assenv *ae,char *original_zeexpression,int ptr, int didx);
-char *GetExpFile(struct s_assenv *ae,int didx);
+int RoundComputeExpression(struct s_assenv *ae,char *expr, const int ptr, const int didx, const int expression_expected);
+int RoundComputeExpressionCore(struct s_assenv *ae,char *zeexpression, const int ptr,const int didx);
+double ComputeExpressionCore(struct s_assenv *ae,char *original_zeexpression,const int ptr, const int didx);
+char *GetExpFile(struct s_assenv *ae,const int didx);
 void __STOP(struct s_assenv *ae);
 
 /****************************************************************************************
@@ -2562,7 +2562,7 @@ void __STOP(struct s_assenv *ae);
  *       this will need some rewrite for harmonisation in the future...
  *
 ****************************************************************************************/
-void MakeError(struct s_assenv *ae, int idx, char *filename, int line, char *format, ...)
+void MakeError(struct s_assenv *ae, const int idx, const char *filename, const int line, const char *format, ...)
 {
 	#undef FUNC
 	#define FUNC "MakeError"
@@ -2886,7 +2886,7 @@ printf("\n%d bits used for mantissa\n",ibit);
 
 
 
-struct s_label *SearchLabel(struct s_assenv *ae, char *label, int crc);
+struct s_label *SearchLabel(struct s_assenv *ae, const char *label, const int crc);
 char *GetExpFile(struct s_assenv *ae,int didx){
 	#undef FUNC
 	#define FUNC "GetExpFile"
@@ -2946,7 +2946,7 @@ void FreeDicoTree(struct s_assenv *ae);
 void FreeAliasTree(struct s_assenv *ae);
 void FreeUsedTree(struct s_assenv *ae);
 void ExpressionFastTranslate(struct s_assenv *ae, char **ptr_expr, int fullreplace);
-char *TradExpression(char *zexp);
+char *TradExpression(const char *zexp);
 
 
 void _internal_RasmFreeInfoStruct(struct s_rasm_info *debug)
@@ -3233,15 +3233,15 @@ void MaxError(struct s_assenv *ae)
 	}
 }
 
-void (*___output)(struct s_assenv *ae, unsigned char v);
+void (*___output)(struct s_assenv *ae, const unsigned char v);
 
-void ___internal_output_disabled(struct s_assenv *ae,unsigned char v)
+void ___internal_output_disabled(struct s_assenv *ae,const unsigned char v)
 {
 	#undef FUNC
 	#define FUNC "fake ___output"
 }
 
-void ___internal_output_extend(struct s_assenv *ae,unsigned char v)
+void ___internal_output_extend(struct s_assenv *ae,const unsigned char v)
 {
 	/* limit exceededn, second chance if crunched section */
 	int requested_block;
@@ -3279,7 +3279,7 @@ void ___internal_output_extend(struct s_assenv *ae,unsigned char v)
 	ae->codeadr++;
 
 }
-void ___internal_output(struct s_assenv *ae,unsigned char v)
+void ___internal_output(struct s_assenv *ae,const unsigned char v)
 {
 	#undef FUNC
 	#define FUNC "___output"
@@ -3291,7 +3291,7 @@ void ___internal_output(struct s_assenv *ae,unsigned char v)
 		___internal_output_extend(ae,v);
 	}
 }
-void ___internal_output_nocode(struct s_assenv *ae,unsigned char v)
+void ___internal_output_nocode(struct s_assenv *ae,const unsigned char v)
 {
 	#undef FUNC
 	#define FUNC "___output (nocode)"
@@ -3327,7 +3327,7 @@ void ___internal_output_nocode(struct s_assenv *ae,unsigned char v)
 }
 
 
-void ___output_set_limit(struct s_assenv *ae,int zelimit)
+void ___output_set_limit(struct s_assenv *ae,const int zelimit)
 {
 	#undef FUNC
 	#define FUNC "___output_set_limit"
@@ -3490,7 +3490,7 @@ int _deprecated_SearchAlias(struct s_assenv *ae, int crc, char *zemot)
 //printf("not found\n");
 	return -1;
 }
-int SearchMacro(struct s_assenv *ae, int crc, char *zemot)
+int SearchMacro(struct s_assenv *ae, const int crc, const char *zemot)
 {
 	int dw,dm,du,i;
 
@@ -3514,7 +3514,7 @@ int SearchMacro(struct s_assenv *ae, int crc, char *zemot)
 }
 
 
-int InsertAliasToTree(struct s_assenv *ae, struct s_alias *alias)
+int InsertAliasToTree(struct s_assenv *ae, const struct s_alias *alias)
 {
 	#undef FUNC
 	#define FUNC "InsertAliasToTree"
@@ -3545,7 +3545,7 @@ int InsertAliasToTree(struct s_assenv *ae, struct s_alias *alias)
 	ObjectArrayAddDynamicValueConcat((void**)&curaliastree->alias,&curaliastree->nalias,&curaliastree->malias,alias,sizeof(struct s_alias));
 	return 1;
 }
-void InsertDicoToTree(struct s_assenv *ae, struct s_expr_dico *dico)
+void InsertDicoToTree(struct s_assenv *ae, const struct s_expr_dico *dico)
 {
 	#undef FUNC
 	#define FUNC "InsertDicoToTree"
@@ -3572,7 +3572,7 @@ void InsertDicoToTree(struct s_assenv *ae, struct s_expr_dico *dico)
 	ObjectArrayAddDynamicValueConcat((void**)&curdicotree->dico,&curdicotree->ndico,&curdicotree->mdico,dico,sizeof(struct s_expr_dico));
 }
 
-unsigned char *SnapshotDicoInsert(char *symbol_name, int ptr, int *retidx)
+unsigned char *SnapshotDicoInsert(char *symbol_name, const int ptr, int *retidx)
 {
 	static unsigned char *subchunk=NULL;
 	static int subchunksize=0;
@@ -3855,7 +3855,7 @@ void FreeDicoTree(struct s_assenv *ae)
 		}
 	}
 }
-struct s_alias *SearchAlias(struct s_assenv *ae, int crc, char *zemot) {
+struct s_alias *SearchAlias(struct s_assenv *ae, const int crc, const char *zemot) {
 	#undef FUNC
 	#define FUNC "SearchAlias"
 	struct s_crcalias_tree *curaliastree;
@@ -3887,7 +3887,7 @@ struct s_alias *SearchAlias(struct s_assenv *ae, int crc, char *zemot) {
 	return NULL;
 }
 
-struct s_expr_dico *SearchDico(struct s_assenv *ae, char *dico, int crc)
+struct s_expr_dico *SearchDico(struct s_assenv *ae, const char *dico, const int crc)
 {
 	#undef FUNC
 	#define FUNC "SearchDico"
@@ -3947,7 +3947,7 @@ struct s_expr_dico *SearchDico(struct s_assenv *ae, char *dico, int crc)
 	}
 	return NULL;
 }
-int DelDico(struct s_assenv *ae, char *dico, int crc)
+int DelDico(struct s_assenv *ae, const char *dico, const int crc)
 {
 	#undef FUNC
 	#define FUNC "DelDico"
@@ -3986,7 +3986,7 @@ int DelDico(struct s_assenv *ae, char *dico, int crc)
 }
 
 
-void InsertUsedToTree(struct s_assenv *ae, char *used, int crc)
+void InsertUsedToTree(struct s_assenv *ae, const char *used, const int crc)
 {
 	#undef FUNC
 	#define FUNC "InsertUsedToTree"
@@ -4054,7 +4054,7 @@ void FreeUsedTree(struct s_assenv *ae)
 		}
 	}
 }
-int SearchUsed(struct s_assenv *ae, char *used, int crc)
+int SearchUsed(struct s_assenv *ae, const char *used, const int crc)
 {
 	#undef FUNC
 	#define FUNC "SearchUsed"
@@ -4081,98 +4081,6 @@ int SearchUsed(struct s_assenv *ae, char *used, int crc)
 	}
 	return 0;
 }
-
-
-
-void InsertTextToTree(struct s_assenv *ae, char *text, char *replace, int crc)
-{
-	#undef FUNC
-	#define FUNC "InsertTextToTree"
-
-	struct s_crcstring_tree *curstringtree;
-	int radix,dek=32,i;
-	
-	curstringtree=&ae->stringtree;
-	while (dek) {
-		dek=dek-8;
-		radix=(crc>>dek)&0xFF;
-		if (curstringtree->radix[radix]) {
-			curstringtree=curstringtree->radix[radix];
-		} else {
-			curstringtree->radix[radix]=MemMalloc(sizeof(struct s_crcused_tree));
-			curstringtree=curstringtree->radix[radix];
-			memset(curstringtree,0,sizeof(struct s_crcused_tree));
-		}
-	}
-	for (i=0;i<curstringtree->ntext;i++) if (strcmp(text,curstringtree->text[i])==0) break;
-	/* no double */
-	if (i==curstringtree->ntext) {
-		text=TxtStrDup(text);
-		replace=TxtStrDup(replace);
-		FieldArrayAddDynamicValueConcat(&curstringtree->text,&curstringtree->ntext,&curstringtree->mtext,text);
-		FieldArrayAddDynamicValueConcat(&curstringtree->replace,&curstringtree->nreplace,&curstringtree->mreplace,replace);
-	}
-}
-
-void FreeTextTreeRecurse(struct s_crcstring_tree *lt)
-{
-	#undef FUNC
-	#define FUNC "FreeTextTreeRecurse"
-
-	int i;
-
-	for (i=0;i<256;i++) {
-		if (lt->radix[i]) {
-			FreeTextTreeRecurse(lt->radix[i]);
-		}
-	}
-	if (lt->mtext) {
-		for (i=0;i<lt->ntext;i++) MemFree(lt->text[i]);
-		MemFree(lt->text);
-	}
-	MemFree(lt);
-}
-void FreeTextTree(struct s_assenv *ae)
-{
-	#undef FUNC
-	#define FUNC "FreeTextTree"
-
-	int i;
-
-	for (i=0;i<256;i++) {
-		if (ae->stringtree.radix[i]) {
-			FreeTextTreeRecurse(ae->stringtree.radix[i]);
-		}
-	}
-	if (ae->stringtree.mtext) MemFree(ae->stringtree.text);
-}
-int SearchText(struct s_assenv *ae, char *text, int crc)
-{
-	#undef FUNC
-	#define FUNC "SearchText"
-
-	struct s_crcstring_tree *curstringtree;
-	int i,radix,dek=32;
-
-	curstringtree=&ae->stringtree;
-	while (dek) {
-		dek=dek-8;
-		radix=(crc>>dek)&0xFF;
-		if (curstringtree->radix[radix]) {
-			curstringtree=curstringtree->radix[radix];
-		} else {
-			/* radix not found, used is not in index */
-			return 0;
-		}
-	}
-	for (i=0;i<curstringtree->ntext;i++) {
-		if (strcmp(curstringtree->text[i],text)==0) {
-			return 1;
-		}
-	}
-	return 0;
-}
-
 
 
 void FreeLabelTreeRecurse(struct s_crclabel_tree *lt)
@@ -4206,7 +4114,7 @@ void FreeLabelTree(struct s_assenv *ae)
 	//if (ae->labeltree.mlabel) MemFree(ae->labeltree.label);
 }
 
-struct s_label *SearchLabel(struct s_assenv *ae, char *label, int crc)
+struct s_label *SearchLabel(struct s_assenv *ae, const char *label, const int crc)
 {
 	#undef FUNC
 	#define FUNC "SearchLabel"
@@ -4249,7 +4157,7 @@ struct s_label *SearchLabel(struct s_assenv *ae, char *label, int crc)
 	return NULL;
 }
 
-char *MakeLocalLabel(struct s_assenv *ae,char *varbuffer, int *retdek)
+char *MakeLocalLabel(struct s_assenv *ae,const char *varbuffer, int *retdek)
 {
 	#undef FUNC
 	#define FUNC "MakeLocalLabel"
@@ -4335,7 +4243,7 @@ char *MakeLocalLabel(struct s_assenv *ae,char *varbuffer, int *retdek)
 	return locallabel;
 }
 
-char *TradExpression(char *zexp)
+char *TradExpression(const char *zexp)
 {
 	#undef FUNC
 	#define FUNC "TradExpression"
@@ -4383,7 +4291,7 @@ int TrimFloatingPointString(char *fps) {
 	used in label declaration
 	used in print directive
 */
-char *TranslateTag(struct s_assenv *ae, char *varbuffer, int *touched, int enablefast, int tagoption) {
+char *TranslateTag(struct s_assenv *ae, char *varbuffer, int *touched, const int enablefast, const int tagoption) {
 	/*******************************************************
 	       v a r i a b l e s     i n    s t r i n g s
 	*******************************************************/
@@ -4459,7 +4367,7 @@ char *TranslateTag(struct s_assenv *ae, char *varbuffer, int *touched, int enabl
 }
 
 
-int __GETNOP(struct s_assenv *ae,char *oplist, int didx)
+int __GETNOP(struct s_assenv *ae,char *oplist, const int didx)
 {
 	#undef FUNC
 	#define FUNC "__GETNOP"
@@ -4880,7 +4788,7 @@ int __GETNOP(struct s_assenv *ae,char *oplist, int didx)
 	if (opcode) MemFree(opcode);
 	return tick;
 }
-int __GETTICK(struct s_assenv *ae,char *oplist, int didx)
+int __GETTICK(struct s_assenv *ae, char *oplist, const int didx)
 {
 	#undef FUNC
 	#define FUNC "__GETTICK"
@@ -5390,7 +5298,7 @@ int __IS_REGISTER(struct s_assenv *ae,char *argstr)
 
 	return IsRegister(argstr);
 }
-int __GETSIZE(struct s_assenv *ae,char *oplist, int didx)
+int __GETSIZE(struct s_assenv *ae, char *oplist, const int didx)
 {
 	#undef FUNC
 	#define FUNC "__GETSIZE"
@@ -5787,7 +5695,7 @@ int __GETSIZE(struct s_assenv *ae,char *oplist, int didx)
 	default returned value of Duration is NOP
 	but BUILDZX usage change this to ticks!
 */
-int __DURATION(struct s_assenv *ae,char *opcode, int didx)
+int __DURATION(struct s_assenv *ae, char *opcode, const int didx)
 {
 	#undef FUNC
 	#define FUNC "__DURATION"
@@ -5814,7 +5722,7 @@ int __FILESIZE(struct s_assenv *ae,char *zefile, int didx)
 	return zesize;
 }
 
-int __Soft2HardInk(struct s_assenv *ae,int soft, int didx) {
+int __Soft2HardInk(struct s_assenv *ae,const int soft, const int didx) {
 	switch (soft) {
 		case 0:return 64+20;break;
 		case 1:return 64+4 ;break;
@@ -5848,8 +5756,7 @@ int __Soft2HardInk(struct s_assenv *ae,int soft, int didx) {
 	}
 	return 0;
 }
-int __Hard2SoftInk(struct s_assenv *ae,int hard, int didx) {
-	hard&=31;
+int __Hard2SoftInk(struct s_assenv *ae,const int hard, const int didx) {
 	switch (hard) {
 		case 0:return 13;break;
 		case 1:return 13;break;
@@ -5889,7 +5796,7 @@ int __Hard2SoftInk(struct s_assenv *ae,int hard, int didx) {
 	return 0;
 }
 
-char *getOperatorStr(int operator) {
+char *getOperatorStr(const int operator) {
 	static char opStr[128];
 	switch (operator) {
 		case E_COMPUTE_OPERATION_PUSH_DATASTC:strcpy(opStr,"*not an operator (data)*");break;
@@ -5968,7 +5875,7 @@ char *getOperatorStr(int operator) {
 	return opStr;
 }
 
-double ComputeExpressionCore(struct s_assenv *ae,char *original_zeexpression,int ptr, int didx)
+double ComputeExpressionCore(struct s_assenv *ae,char *original_zeexpression,const int ptr, const int didx)
 {
 	#undef FUNC
 	#define FUNC "ComputeExpressionCore"
@@ -8000,11 +7907,11 @@ printf("final POP string=%X\n",ae->computectx->operatorstack[nboperatorstack+1].
 		return 0;
 	}
 }
-int RoundComputeExpressionCore(struct s_assenv *ae,char *zeexpression,int ptr,int didx) {
+int RoundComputeExpressionCore(struct s_assenv *ae,char *zeexpression,const int ptr,const int didx) {
 	return floor(ComputeExpressionCore(ae,zeexpression,ptr,didx)+ae->rough);
 }
 
-void ExpressionSetDicoVar(struct s_assenv *ae,char *name, double v, int var_external)
+void ExpressionSetDicoVar(struct s_assenv *ae,const char *name, const double v, const int var_external)
 {
 	#undef FUNC
 	#define FUNC "ExpressionSetDicoVar"
@@ -8026,7 +7933,7 @@ void ExpressionSetDicoVar(struct s_assenv *ae,char *name, double v, int var_exte
 	InsertDicoToTree(ae,&curdic);
 }
 
-double ComputeExpression(struct s_assenv *ae,char *expr, int ptr, int didx, int expected_eval)
+double ComputeExpression(struct s_assenv *ae,char *expr, const int ptr, const int didx, const int expected_eval)
 {
 	#undef FUNC
 	#define FUNC "ComputeExpression"
@@ -8258,7 +8165,7 @@ printf("***********\n");
 	}
 	return ComputeExpressionCore(ae,expr,ptr,didx);
 }
-int RoundComputeExpression(struct s_assenv *ae,char *expr, int ptr, int didx, int expression_expected) {
+int RoundComputeExpression(struct s_assenv *ae,char *expr, const int ptr, const int didx, const int expression_expected) {
 	return floor(ComputeExpression(ae,expr,ptr,didx,expression_expected)+ae->rough);
 }
 
@@ -8271,7 +8178,7 @@ int RoundComputeExpression(struct s_assenv *ae,char *expr, int ptr, int didx, in
 1:
 2: (equ declaration)
 */
-void ExpressionFastTranslate(struct s_assenv *ae, char **ptr_expr, int fullreplace)
+void ExpressionFastTranslate(struct s_assenv *ae, char **ptr_expr, const int fullreplace)
 {
 	#undef FUNC
 	#define FUNC "ExpressionFastTranslate"
@@ -8853,7 +8760,7 @@ printf("exprout=[%s]\n",expr);
 	}
 }
 
-void PushExpression(struct s_assenv *ae,int iw,enum e_expression zetype)
+void PushExpression(struct s_assenv *ae,const int iw,const enum e_expression zetype)
 {
 	#undef FUNC
 	#define FUNC "PushExpression"
@@ -9034,7 +8941,7 @@ AL - Allocation. Each AL is the number of a block on the disc. If an AL
      AL numbers can either be 8-bit (if there are fewer than 256 blocks on the
     disc) or 16-bit (stored low byte first). 
 */
-int EDSK_getblockid(int *fb) {
+int EDSK_getblockid(const int *fb) {
 	#undef FUNC
 	#define FUNC "EDSK_getblockid"
 	
@@ -9046,7 +8953,7 @@ int EDSK_getblockid(int *fb) {
 	}
 	return -1;
 }
-int EDSK_getdirid(struct s_edsk_wrapper *curwrap) {
+int EDSK_getdirid(const struct s_edsk_wrapper *curwrap) {
 	#undef FUNC
 	#define FUNC "EDSK_getdirid"
 	
@@ -9905,7 +9812,7 @@ void PopAllSave(struct s_assenv *ae)
 	if (ae->maxedskwrapper) MemFree(ae->edsk_wrapper);
 }
 
-void PopAllExpression(struct s_assenv *ae, int crunched_zone)
+void PopAllExpression(struct s_assenv *ae, const int crunched_zone)
 {
 	#undef FUNC
 	#define FUNC "PopAllExpression"
@@ -10133,7 +10040,7 @@ void PopAllExpression(struct s_assenv *ae, int crunched_zone)
 	printf("PopAllExpression crunched_zone=%d first=%d end=%d\n",crunched_zone,first,i);
 #endif
 }
-int InsertLabelToTree(struct s_assenv *ae, struct s_label *label)
+int InsertLabelToTree(struct s_assenv *ae, const struct s_label *label)
 {
 	#undef FUNC
 	#define FUNC "InsertLabelToTree"
@@ -10444,7 +10351,7 @@ printf("PUSH Orphan PROXIMITY label that cannot be exported [%s]->[%s]\n",ae->wl
 }
 
 
-unsigned char *EncodeSnapshotRLE(unsigned char *memin, int *lenout, int sizetoencode) {
+unsigned char *EncodeSnapshotRLE(unsigned char *memin, int *lenout, const int sizetoencode) {
 	#undef FUNC
 	#define FUNC "EncodeSnapshotRLE"
 	
@@ -18370,7 +18277,7 @@ void __MACRO(struct s_assenv *ae) {
 	}
 }
 
-struct s_wordlist *__MACRO_EXECUTE(struct s_assenv *ae, int imacro) {
+struct s_wordlist *__MACRO_EXECUTE(struct s_assenv *ae, const int imacro) {
 	struct s_wordlist *cpybackup;
 	int nbparam=0,idx,i,j,k,idad;
 	int ifile,iline,iu,lenparam;
@@ -19460,7 +19367,7 @@ void __ALIGN(struct s_assenv *ae) {
 	}
 }
 
-void ___internal_skip_loop_block(struct s_assenv *ae, int eloopstyle) {
+void ___internal_skip_loop_block(struct s_assenv *ae, const int eloopstyle) {
 	int *loopstyle=NULL;
 	int iloop=0,mloop=0;
 	int cidx;
@@ -20870,34 +20777,34 @@ void __MEMSPACE(struct s_assenv *ae) {
 	}
 }
 
-int (*_internal_getsample)(unsigned char *data, int *idx);
+int (*_internal_getsample)(const unsigned char *data, int *idx);
 #undef FUNC
 #define FUNC "_internal_AudioGetSampleValue"
 
-int __internal_getsample8(unsigned char *data, int *idx) {
+int __internal_getsample8(const unsigned char *data, int *idx) {
 	int v;
 	v=data[*idx]-128;*idx=*idx+1;return v;
 }
-int __internal_getsample16little(unsigned char *data, int *idx) {
+int __internal_getsample16little(const unsigned char *data, int *idx) {
 	int cursample;
 	char *sdata=(char *)data;
 	cursample=sdata[*idx+1];*idx=*idx+2;
 	return cursample;
 }
-int __internal_getsample24little(unsigned char *data, int *idx) {
+int __internal_getsample24little(const unsigned char *data, int *idx) {
 	int cursample;
 	char *sdata=(char *)data;
 	cursample=sdata[*idx+2];*idx=*idx+3;
 	return cursample;
 }
 /* big-endian */
-int __internal_getsample16big(unsigned char *data, int *idx) {
+int __internal_getsample16big(const unsigned char *data, int *idx) {
 	int cursample;
 	char *sdata=(char *)data;
 	cursample=sdata[*idx];*idx=*idx+2;
 	return cursample;
 }
-int __internal_getsample24big(unsigned char *data, int *idx) {
+int __internal_getsample24big(const unsigned char *data, int *idx) {
 	int cursample;
 	char *sdata=(char *)data;
 	cursample=sdata[*idx];*idx=*idx+3;
@@ -20917,7 +20824,7 @@ int _isLittleEndian() /* from lz4.h */
     return one.c[0];
 }
 
-unsigned char * __internal_floatinversion(unsigned char *data) {
+unsigned char * __internal_floatinversion(const unsigned char *data) {
 	static unsigned char bswap[4];
 	bswap[0]=data[3];
 	bswap[1]=data[2];
@@ -20926,7 +20833,7 @@ unsigned char * __internal_floatinversion(unsigned char *data) {
 	return bswap;
 }
 
-float __internal_audio_filter(float e) {
+float __internal_audio_filter(const float e) {
         static float old_old_s=0.0,old_s=0.0,s=0.0;
         static float old_old_e=0.0,old_e=0.0;
 
@@ -20939,7 +20846,7 @@ float __internal_audio_filter(float e) {
         return s;
 }
 
-int __internal_getsample32bigbig(unsigned char *data, int *idx) {
+int __internal_getsample32bigbig(const unsigned char *data, int *idx) {
 	float fsample;
 	int cursample;
 	fsample=*((float*)(data+*idx));
@@ -20947,7 +20854,7 @@ int __internal_getsample32bigbig(unsigned char *data, int *idx) {
 	cursample=(floor)((fsample+1.0)*127.5+0.5);
 	return cursample;
 }
-int __internal_getsample32biglittle(unsigned char *data, int *idx) {
+int __internal_getsample32biglittle(const unsigned char *data, int *idx) {
 	float fsample;
 	int cursample;
 	fsample=*((float*)(__internal_floatinversion(data+*idx)));
@@ -22466,7 +22373,7 @@ struct s_asm_keyword instruction[]={
 {"",0,0,NULL}
 };
 
-int IsDirective(char *zeexpression)
+int IsDirective(const char *zeexpression)
 {
 	int i,crc;
 
@@ -22476,7 +22383,7 @@ int IsDirective(char *zeexpression)
 
 	return 0;
 }
-char *WhichColor(char *content) {
+char *WhichColor(const char *content) {
 	if (!strcmp(content,"(C)") || !strcmp(content,"(HL)") || !strcmp(content,"(DE)") || !strcmp(content,"(BC)") || !strcmp(content,"(SP)")) return KLYELLOW;
 	if (!strncmp(content,"(IX",3) || !strncmp(content,"(IY",3)) return KLYELLOW;
 	if (IsRegister(content)) return KLYELLOW;
@@ -25474,7 +25381,7 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
  - convert shifts << & >> to a single bracket
  - convert code to upper chars (but not in quotes)
 ***********************************************************************/
-int EarlyPrepSrc(struct s_assenv *ae, char **listing, char *filename) {
+int EarlyPrepSrc(struct s_assenv *ae, char **listing, const char *filename) {
 	int l,idx,c,qopen=0;
 	int mlc_start,mlc_idx;
 	int midx=0,nextidx,previdx,superFusion;
@@ -25701,7 +25608,7 @@ int EarlyPrepSrc(struct s_assenv *ae, char **listing, char *filename) {
 	return midx;
 }
 
-void PreProcessingSplitListing(struct s_listing **listing, int *il, int *ml, int idx, int end, int start)
+void PreProcessingSplitListing(struct s_listing **listing, int *il, int *ml, const int idx, const int end, const int start)
 {
 	#undef FUNC
 	#define FUNC "PreProcessingSplitListing"
@@ -25721,7 +25628,7 @@ void PreProcessingSplitListing(struct s_listing **listing, int *il, int *ml, int
 	strcpy((*listing)[idx].listing+end,":");
 }
 
-void PreProcessingInsertListing(struct s_listing **reflisting, int *il, int *ml, int idx, char **zelines, int ifile)
+void PreProcessingInsertListing(struct s_listing **reflisting, int *il, int *ml, const int idx, char **zelines, const int ifile)
 {
 	#undef FUNC
 	#define FUNC "PreProcessingSplitListing"
