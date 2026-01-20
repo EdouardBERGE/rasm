@@ -16929,7 +16929,7 @@ void __SNAPINIT(struct s_assenv *ae) {
 	// integration
 	char *newfilename=NULL;
 	int fileok=0;
-
+	
 	if (!ae->forcecpr && !ae->forcetape && !ae->forceROM) {
 		// automatic BUILDSNA
 		ae->forcesnapshot=1;
@@ -17023,8 +17023,8 @@ void __SNAPINIT(struct s_assenv *ae) {
 		case 0:
 			if (snapdata[16]<3) {
 				rasm_printf(ae,KWARNING"[%s:%d] snapshot v2 [%s] without 64K/128K legacy\n",GetCurrentFile(ae),ae->wl[ae->idx].l,newfilename);
+				snapsize=0;
 			}
-			snapsize=0;
 			break;
 		case 64:
 			if (snapsize>=size+0x100) {
