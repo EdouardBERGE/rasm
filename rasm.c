@@ -5757,7 +5757,7 @@ int __Soft2HardInk(struct s_assenv *ae,const int soft, const int didx) {
 	return 0;
 }
 int __Hard2SoftInk(struct s_assenv *ae,const int hard, const int didx) {
-	switch (hard) {
+	switch (hard&31) {
 		case 0:return 13;break;
 		case 1:return 13;break;
 		case 2:return 19;break;
