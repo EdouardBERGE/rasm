@@ -29295,6 +29295,7 @@ struct s_autotest_keyword autotest_keyword[]={
 	{"bank : incbin 'rasmoutput_increment_amsdos.bin',OFF,10,REVERT,SKIPHEADER,80 : assert $==80 : org 0 : defs 80",0},
 	{"bank : incbin 'rasmoutput_increment_amsdos.bin',OFF,REVERT,OFF,SKIPHEADER,OFF,10,OFF,OFF,OFF,80,OFF : assert $==80 : org 0 : defs 80",0},
 	{"ld hl,getnop('ld hl,:nop')",1}, // must not segfault and lead to an error
+	{"ld ix,555: mabite nop 10: moncouteau xor a: assert countnops('mabite','moncouteau')==10: assert countnops('mabite','$')==11",0}, // countnops
 	/*
 	 *
 	 * will need to test resize + format then meta review test!
