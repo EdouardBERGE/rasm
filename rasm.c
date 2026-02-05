@@ -298,7 +298,8 @@ E_COMPUTE_OPERATION_FILESIZE=67,
 E_COMPUTE_OPERATION_GETSIZE=68,
 E_COMPUTE_OPERATION_IS_REGISTER=69,
 E_COMPUTE_OPERATION_FILEBYTE=70,
-E_COMPUTE_OPERATION_END=71
+E_COMPUTE_OPERATION_COUNTNOPS=71,
+E_COMPUTE_OPERATION_END=72
 };
 
 struct s_compute_element {
@@ -429,6 +430,7 @@ struct s_label {
 	int iorgzone; /* org of label */
 	int ibank;    /* current CPR bank / always zero in classic mode */
 	int local;
+	unsigned int nop;
 	/* errmsg */
 	int fileidx;
 	int fileline;
@@ -1214,7 +1216,7 @@ struct s_assenv {
 	/* ticker */
 	struct s_ticker *ticker;
 	int iticker,mticker;
-	long tick,nop;
+	unsigned int tick,nop;
 	/* crunch section flag */
 	struct s_lz_section *lzsection;
 	int ilz,mlz;
@@ -1396,6 +1398,7 @@ struct s_math_keyword math_keyword[]={
 {"GETSIZE",0,0,E_COMPUTE_OPERATION_GETSIZE},
 {"IS_REGISTER",0,0,E_COMPUTE_OPERATION_IS_REGISTER},
 {"FILEBYTE",0,0,E_COMPUTE_OPERATION_FILEBYTE},
+{"COUNTNOPS",0,0,E_COMPUTE_OPERATION_COUNTNOPS},
 {"",0,0,-1}
 };
 
@@ -5283,6 +5286,29 @@ exit(ABORT_ERROR);
 		return 0;
 	}
 }
+int __COUNTNOPS(struct s_assenv *ae,char *label1, char *label2, int didx)
+{
+	int duree;
+	struct s_label *firstlabel,*secondlabel;
+
+	firstlabel=SearchLabel(ae,label1,GetCRC(label1));
+	if (!firstlabel) {
+		MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"COUNTNOPS need a known label [%s]\n",label1);
+		return 0;
+	}
+	if (!strcmp(label2,"$")) {
+		duree=ae->nop-firstlabel->nop;
+	} else {
+		secondlabel=SearchLabel(ae,label2,GetCRC(label2));
+		if (!secondlabel) {
+			MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"COUNTNOPS second label not known [%s]\n",label2);
+			return 0;
+		}
+		duree=(int)secondlabel->nop-firstlabel->nop;
+	}
+
+	return duree;
+}
 int __IS_REGISTER(struct s_assenv *ae,char *argstr)
 {
 	#undef FUNC
@@ -5870,6 +5896,7 @@ char *getOperatorStr(const int operator) {
 		case E_COMPUTE_OPERATION_GETSIZE:strcpy(opStr,"getsize");break;
 		case E_COMPUTE_OPERATION_IS_REGISTER:strcpy(opStr,"is_register");break;
 		case E_COMPUTE_OPERATION_FILEBYTE:strcpy(opStr,"filebyte");break;
+		case E_COMPUTE_OPERATION_COUNTNOPS:strcpy(opStr,"countnops");break;
 		default:strcpy(opStr,"*internal error* ");break;
 	}
 	return opStr;
@@ -7053,6 +7080,7 @@ printf("DUMP des labels\n");
 			case E_COMPUTE_OPERATION_GETSIZE:printf("getsize ");break;
 			case E_COMPUTE_OPERATION_IS_REGISTER:printf("is_register ");break;
 			case E_COMPUTE_OPERATION_FILEBYTE:printf("filebyte ");break;
+			case E_COMPUTE_OPERATION_COUNTNOPS:strcpy(opStr,"countnops");break;
 			default:printf("bug\n");break;
 		}
 		
@@ -7199,6 +7227,7 @@ printf("operator string=%X\n",ae->computectx->operatorstack[o2].string);
 			case E_COMPUTE_OPERATION_GETSIZE:
 			case E_COMPUTE_OPERATION_IS_REGISTER:
 			case E_COMPUTE_OPERATION_FILEBYTE:
+			case E_COMPUTE_OPERATION_COUNTNOPS:
 #if DEBUG_STACK
 printf("ajout de la fonction\n");
 #endif
@@ -7527,6 +7556,48 @@ printf("final POP string=%X\n",ae->computectx->operatorstack[nboperatorstack+1].
 									MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"FILEBYTE need 2 parameters, '<filename>' and offset\n");
 								}
 							       break;
+				case E_COMPUTE_OPERATION_COUNTNOPS:if (paccu>1) {
+									      int integeridx;
+									      int integeridx2;
+									      int wsup,isDollar=0;
+									      integeridx=floor(accu[paccu-2]);
+									      integeridx2=floor(accu[paccu-1]);
+
+									      if (integeridx2>=0 && integeridx2<nbcomputestack && computestack[integeridx2].string) {
+									      } else {
+										if (((int)(accu[paccu-1]+0.5))=='$') isDollar=1; else {
+											MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"COUNTNOPS needs 2 strings parameters, 'label' and ( 'label' or '$' )\n");
+											isDollar=-1;
+										}
+									      }
+
+								      		if (integeridx>=0 && integeridx<nbcomputestack && isDollar>=0) {
+										       if (computestack[integeridx].string) {
+										          for (wsup=0;computestack[integeridx].string[wsup];wsup++) computestack[integeridx].string[wsup]=toupper(computestack[integeridx].string[wsup]);
+											  if (computestack[integeridx2].string) for (wsup=0;computestack[integeridx2].string[wsup];wsup++) computestack[integeridx2].string[wsup]=toupper(computestack[integeridx2].string[wsup]);
+
+											  if (isDollar)
+												accu[paccu-2]=__COUNTNOPS(ae,computestack[integeridx].string,"$",didx);
+											  else
+												accu[paccu-2]=__COUNTNOPS(ae,computestack[integeridx].string,computestack[integeridx2].string,didx);
+											      // cleanup stack
+											      MemFree(computestack[integeridx].string);
+											      if (computestack[integeridx2].string) MemFree(computestack[integeridx2].string);
+											      computestack[integeridx].string=NULL;
+											      computestack[integeridx2].string=NULL;
+											      paccu--;
+										       } else {
+											  if (computestack[integeridx].string) {MemFree(computestack[integeridx].string);computestack[integeridx].string=NULL;}
+											  if (computestack[integeridx2].string) {MemFree(computestack[integeridx2].string);computestack[integeridx2].string=NULL;}
+											  MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"COUNTNOPS needs strings parameters, '<label>' and ( 'label' or '$' )\n");
+										       }
+										} else {
+											MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"COUNTNOPS needs 2 strings parameters, 'label' and ( 'label' or '$' )\n");
+										}
+								} else {
+									MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"COUNTNOPS needs 2 strings parameters, 'label' and ( 'label' or '$' )\n");
+								  }
+								  break;
 				default:MakeError(ae,GetExpIdx(ae,didx),GetCurrentFile(ae),GetExpLine(ae,didx),"invalid computing state! (%d)\n",computestack[i].operator);paccu=0;
 			}
 			if (!paccu) {
@@ -7870,9 +7941,51 @@ printf("final POP string=%X\n",ae->computectx->operatorstack[nboperatorstack+1].
 										}
 									}
 								} else {
-									MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"FILEBYTE need 2 parameters, '<filename>' and offset\n");
+									MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"FILEBYTE needs 2 parameters, '<filename>' and offset\n");
 								}
 							       break;
+				case E_COMPUTE_OPERATION_COUNTNOPS:if (paccu>1) {
+									      int integeridx;
+									      int integeridx2;
+									      int wsup,isDollar=0;
+									      integeridx=floor(accu[paccu-2]);
+									      integeridx2=floor(accu[paccu-1]);
+
+									      if (integeridx2>=0 && integeridx2<nbcomputestack && computestack[integeridx2].string) {
+									      } else {
+										if (((int)(accu[paccu-1]+0.5))=='$') isDollar=1; else {
+											MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"COUNTNOPS needs 2 strings parameters, 'label' and ( 'label' or '$' )\n");
+											isDollar=-1;
+										}
+									      }
+
+								      		if (integeridx>=0 && integeridx<nbcomputestack && isDollar>=0) {
+										       if (computestack[integeridx].string) {
+										          for (wsup=0;computestack[integeridx].string[wsup];wsup++) computestack[integeridx].string[wsup]=toupper(computestack[integeridx].string[wsup]);
+											  if (computestack[integeridx2].string) for (wsup=0;computestack[integeridx2].string[wsup];wsup++) computestack[integeridx2].string[wsup]=toupper(computestack[integeridx2].string[wsup]);
+
+											  if (isDollar)
+												accu[paccu-2]=__COUNTNOPS(ae,computestack[integeridx].string,"$",didx);
+											  else
+												accu[paccu-2]=__COUNTNOPS(ae,computestack[integeridx].string,computestack[integeridx2].string,didx);
+											      // cleanup stack
+											      MemFree(computestack[integeridx].string);
+											      if (computestack[integeridx2].string) MemFree(computestack[integeridx2].string);
+											      computestack[integeridx].string=NULL;
+											      computestack[integeridx2].string=NULL;
+											      paccu--;
+										       } else {
+											  if (computestack[integeridx].string) {MemFree(computestack[integeridx].string);computestack[integeridx].string=NULL;}
+											  if (computestack[integeridx2].string) {MemFree(computestack[integeridx2].string);computestack[integeridx2].string=NULL;}
+											  MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"COUNTNOPS needs strings parameters, '<label>' and ( 'label' or '$' )\n");
+										       }
+										} else {
+											MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"COUNTNOPS needs 2 strings parameters, 'label' and ( 'label' or '$' )\n");
+										}
+								} else {
+									MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"COUNTNOPS needs 2 strings parameters, 'label' and ( 'label' or '$' )\n");
+								  }
+								  break;
 				default:MakeError(ae,GetExpIdx(ae,didx),GetCurrentFile(ae),GetExpLine(ae,didx),"invalid computing state! (%d)\n",computestack[i].operator);paccu=0;
 			}
 			if (!paccu) {
@@ -10339,6 +10452,7 @@ printf("PUSH Orphan PROXIMITY label that cannot be exported [%s]->[%s]\n",ae->wl
 	curlabel.local_export=ae->local_export;
 	curlabel.autorise_export=ae->autorise_export&(!ae->getstruct);
 	curlabel.backidx=ae->il;
+	curlabel.nop=ae->nop;
 	if (InsertLabelToTree(ae,&curlabel)) {
 		ObjectArrayAddDynamicValueConcat((void **)&ae->label,&ae->il,&ae->ml,&curlabel,sizeof(curlabel));
 	} else {
@@ -22580,8 +22694,8 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 	int backaddr;
 	int backbank;
 	int backcode;
-	int backnop,backtick;
 	int idstart,idend;
+	unsigned int backnop,backtick;
 
 	for (i=0;i<256;i++) {
 		if (i==0 || (i>='a' && i<='z') || (i>='A' && i<='Z')) AutomateCharStop[i]=1; else AutomateCharStop[i]=0;
