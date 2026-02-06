@@ -7573,18 +7573,22 @@ printf("final POP string=%X\n",ae->computectx->operatorstack[nboperatorstack+1].
 
 								      		if (integeridx>=0 && integeridx<nbcomputestack && isDollar>=0) {
 										       if (computestack[integeridx].string) {
+											       // toupper first arg
 										          for (wsup=0;computestack[integeridx].string[wsup];wsup++) computestack[integeridx].string[wsup]=toupper(computestack[integeridx].string[wsup]);
-											  if (computestack[integeridx2].string) for (wsup=0;computestack[integeridx2].string[wsup];wsup++) computestack[integeridx2].string[wsup]=toupper(computestack[integeridx2].string[wsup]);
-
-											  if (isDollar)
-												accu[paccu-2]=__COUNTNOPS(ae,computestack[integeridx].string,"$",didx);
-											  else
-												accu[paccu-2]=__COUNTNOPS(ae,computestack[integeridx].string,computestack[integeridx2].string,didx);
+												if (isDollar) {
+													// no second arg
+													accu[paccu-2]=__COUNTNOPS(ae,computestack[integeridx].string,"$",didx);
+												} else {
+													// toupper second arg
+											  		for (wsup=0;computestack[integeridx2].string[wsup];wsup++) computestack[integeridx2].string[wsup]=toupper(computestack[integeridx2].string[wsup]);
+													accu[paccu-2]=__COUNTNOPS(ae,computestack[integeridx].string,computestack[integeridx2].string,didx);
+													// cleanup second stack arg
+												      MemFree(computestack[integeridx2].string);
+												      computestack[integeridx2].string=NULL;
+												}
 											      // cleanup stack
 											      MemFree(computestack[integeridx].string);
-											      if (computestack[integeridx2].string) MemFree(computestack[integeridx2].string);
 											      computestack[integeridx].string=NULL;
-											      computestack[integeridx2].string=NULL;
 											      paccu--;
 										       } else {
 											  if (computestack[integeridx].string) {MemFree(computestack[integeridx].string);computestack[integeridx].string=NULL;}
@@ -7961,18 +7965,22 @@ printf("final POP string=%X\n",ae->computectx->operatorstack[nboperatorstack+1].
 
 								      		if (integeridx>=0 && integeridx<nbcomputestack && isDollar>=0) {
 										       if (computestack[integeridx].string) {
+											       // toupper first arg
 										          for (wsup=0;computestack[integeridx].string[wsup];wsup++) computestack[integeridx].string[wsup]=toupper(computestack[integeridx].string[wsup]);
-											  if (computestack[integeridx2].string) for (wsup=0;computestack[integeridx2].string[wsup];wsup++) computestack[integeridx2].string[wsup]=toupper(computestack[integeridx2].string[wsup]);
-
-											  if (isDollar)
-												accu[paccu-2]=__COUNTNOPS(ae,computestack[integeridx].string,"$",didx);
-											  else
-												accu[paccu-2]=__COUNTNOPS(ae,computestack[integeridx].string,computestack[integeridx2].string,didx);
+												if (isDollar) {
+													// no second arg
+													accu[paccu-2]=__COUNTNOPS(ae,computestack[integeridx].string,"$",didx);
+												} else {
+													// toupper second arg
+											  		for (wsup=0;computestack[integeridx2].string[wsup];wsup++) computestack[integeridx2].string[wsup]=toupper(computestack[integeridx2].string[wsup]);
+													accu[paccu-2]=__COUNTNOPS(ae,computestack[integeridx].string,computestack[integeridx2].string,didx);
+													// cleanup second stack arg
+												      MemFree(computestack[integeridx2].string);
+												      computestack[integeridx2].string=NULL;
+												}
 											      // cleanup stack
 											      MemFree(computestack[integeridx].string);
-											      if (computestack[integeridx2].string) MemFree(computestack[integeridx2].string);
 											      computestack[integeridx].string=NULL;
-											      computestack[integeridx2].string=NULL;
 											      paccu--;
 										       } else {
 											  if (computestack[integeridx].string) {MemFree(computestack[integeridx].string);computestack[integeridx].string=NULL;}
