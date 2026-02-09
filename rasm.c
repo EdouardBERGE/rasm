@@ -5288,24 +5288,86 @@ exit(ABORT_ERROR);
 }
 int __COUNTNOPS(struct s_assenv *ae,char *label1, char *label2, int didx)
 {
+	struct s_label *firstlabel=NULL,*secondlabel=NULL;
+	char *newLabel1=NULL,*newLabel2=NULL;
+	int alloc1=0,alloc2=0;
 	int duree;
-	struct s_label *firstlabel,*secondlabel;
 
-	firstlabel=SearchLabel(ae,label1,GetCRC(label1));
+	// is there proximity label?
+	if (label1[0]=='.') {
+		if (ae->dams) {
+			newLabel1=label1+1; // skip dot in DAMS mode
+		} else {
+			if (ae->lastgloballabel) {
+				newLabel1=MemMalloc(strlen(label1)+1+ae->lastgloballabellen);
+				sprintf(newLabel1,"%s%s",ae->lastgloballabel,label1);
+				alloc1=1;
+			}
+		}
+	} else {
+		newLabel1=label1;
+	}
+	if (label2[0]=='.') {
+		if (ae->dams) {
+			newLabel2=label2+1; // skip dot in DAMS mode
+		} else {
+			if (ae->lastgloballabel) {
+				newLabel2=MemMalloc(strlen(label2)+1+ae->lastgloballabellen);
+				sprintf(newLabel2,"%s%s",ae->lastgloballabel,label2);
+				alloc2=1;
+			}
+		}
+	} else {
+		newLabel2=label2;
+	}
+
+	// first look for module label!                                        
+	if (ae->module) {
+		char *labelmodule1,*labelmodule2;
+
+		labelmodule1=MemMalloc(ae->modulen+2+strlen(newLabel1));
+		strcpy(labelmodule1,ae->module);
+		strcat(labelmodule1,ae->module_separator);
+		strcat(labelmodule1,newLabel1);
+		if (strcmp(label2,"$")) {
+			labelmodule2=MemMalloc(ae->modulen+2+strlen(newLabel2));
+			strcpy(labelmodule2,ae->module);
+			strcat(labelmodule2,ae->module_separator);
+			strcat(labelmodule2,newLabel2);
+			secondlabel=SearchLabel(ae,labelmodule2,GetCRC(labelmodule2));
+		}
+
+		firstlabel=SearchLabel(ae,labelmodule1,GetCRC(labelmodule1));
+		MemFree(labelmodule1);
+		MemFree(labelmodule2);
+	}
+	if (!firstlabel) {
+		// seconde chance au tirage (typical case is label with module specified)
+		firstlabel=SearchLabel(ae,newLabel1,GetCRC(newLabel1));
+	}
+	if (strcmp(label2,"$") && !secondlabel) {
+			secondlabel=SearchLabel(ae,newLabel2,GetCRC(newLabel2));
+	}
+
 	if (!firstlabel) {
 		MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"COUNTNOPS need a known label [%s]\n",label1);
+		if (alloc1) MemFree(newLabel1);
+		if (alloc2) MemFree(newLabel2);
 		return 0;
 	}
 	if (!strcmp(label2,"$")) {
 		duree=ae->nop-firstlabel->nop;
 	} else {
-		secondlabel=SearchLabel(ae,label2,GetCRC(label2));
 		if (!secondlabel) {
 			MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"COUNTNOPS second label not known [%s]\n",label2);
+			if (alloc1) MemFree(newLabel1);
+			if (alloc2) MemFree(newLabel2);
 			return 0;
 		}
 		duree=(int)secondlabel->nop-firstlabel->nop;
 	}
+	if (alloc1) MemFree(newLabel1);
+	if (alloc2) MemFree(newLabel2);
 
 	return duree;
 }
@@ -29304,6 +29366,11 @@ struct s_autotest_keyword autotest_keyword[]={
 	{"bank : incbin 'rasmoutput_increment_amsdos.bin',OFF,REVERT,OFF,SKIPHEADER,OFF,10,OFF,OFF,OFF,80,OFF : assert $==80 : org 0 : defs 80",0},
 	{"ld hl,getnop('ld hl,:nop')",1}, // must not segfault and lead to an error
 	{"ld ix,555: mabite nop 10: moncouteau xor a: assert countnops('mabite','moncouteau')==10: assert countnops('mabite','$')==11",0}, // countnops
+	{" coucou: .un: .deux: nop 16: assert countnops('.un','.deux')==0: proximity: .un nop: .deux: assert countnops('.un','.deux')==1: assert countnops('coucou.un','coucou.deux')==0",0}, // countnops+proximity
+	{" john: .bon nop 3: .jovi: assert countnops('.bon','.jovi')==3: module youpi1: john: .bon nop: .jovi: "\
+	"assert countnops('.bon','.jovi')==1: doe: assert countnops('john','doe')==1: module youpi2: john: .bon nop : nop: .jovi:"\
+	"assert countnops('.bon','.jovi')==2: assert countnops('youpi1_john.bon','youpi1_john.jovi')==1: doe: assert countnops('john','doe')==2: module:"\
+	"assert countnops('john.bon','john.jovi')==3: ",0}, // countnops+proximity+module
 	/*
 	 *
 	 * will need to test resize + format then meta review test!
