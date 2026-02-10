@@ -6430,7 +6430,7 @@ double ComputeExpressionCore(struct s_assenv *ae,char *original_zeexpression,con
 					for (icheck=minusptr;ae->computectx->varbuffer[icheck];icheck++) {
 						if (ae->AutomateDigit[(int)ae->computectx->varbuffer[icheck]&0xFF]) continue;
 						/* Intel hexa & binary style */
-						switch (ae->computectx->varbuffer[strlen(ae->computectx->varbuffer)-1]) {
+						switch (ae->computectx->varbuffer[ivar-1]) {
 							case 'H':
 								for (icheck=minusptr;ae->computectx->varbuffer[icheck+1];icheck++) {
 									if (ae->AutomateHexa[(int)ae->computectx->varbuffer[icheck]&0xFF]) continue;
@@ -6447,6 +6447,7 @@ double ComputeExpressionCore(struct s_assenv *ae,char *original_zeexpression,con
 								break;
 							default:
 								MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"expression [%s] - %s is not a valid number\n",TradExpression(zeexpression),ae->computectx->varbuffer);
+								curval=0;
 						}
 						icheck=0;
 						break;
@@ -6478,7 +6479,7 @@ double ComputeExpressionCore(struct s_assenv *ae,char *original_zeexpression,con
 					curval=strtol(ae->computectx->varbuffer+minusptr+1,NULL,16);
 					break;
 				default:
-					if (1 || !curlyflag) {
+					if (!curlyflag) {
 						/* $ hex value hack */
 						if (ae->computectx->varbuffer[minusptr+0]=='$' && ae->AutomateHexa[(int)ae->computectx->varbuffer[minusptr+1]&0xFF]) {
 							for (icheck=minusptr+2;ae->computectx->varbuffer[icheck];icheck++) {
@@ -6501,7 +6502,7 @@ double ComputeExpressionCore(struct s_assenv *ae,char *original_zeexpression,con
 						}
 						/* Intel hexa value hack */
 						if (ae->AutomateHexa[(int)ae->computectx->varbuffer[minusptr+0]&0xFF]) {
-							if (ae->computectx->varbuffer[strlen(ae->computectx->varbuffer)-1]=='H') {
+							if (ae->computectx->varbuffer[ivar-1]=='H') {
 								for (icheck=minusptr;ae->computectx->varbuffer[icheck+1];icheck++) {
 									if (!ae->AutomateHexa[(int)ae->computectx->varbuffer[icheck]&0xFF]) break;
 								}
@@ -6511,10 +6512,7 @@ double ComputeExpressionCore(struct s_assenv *ae,char *original_zeexpression,con
 								}
 							}
 						}
-					}
-					
-					
-					if (curlyflag) {
+					} else { // curlyflag
 						char *minivarbuffer;
 						int touched;
 
