@@ -24639,7 +24639,10 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 							struct s_breakpoint breakpoint={0};
 							/* add labels and local labels to breakpoint pool (if any) */
 							for (i=0;i<ae->il;i++) {
-								if (_internal_strnicmp(ae->label[i].name,"BRK",3)==0 || _internal_strnicmp(ae->label[i].name,"@BRK",4)==0 || _internal_stristr(ae->label[i].name,strlen(ae->label[i].name),".BRK")) {
+								if ((_internal_strnicmp(ae->label[i].name,"BRK",3)==0 && !strchr(ae->label[i].name+3,'.'))
+									|| _internal_strnicmp(ae->label[i].name,"@BRK",4)==0
+									|| _internal_stristr(ae->label[i].name,strlen(ae->label[i].name),".BRK")) {
+printf("lab[%s]\n",ae->label[i].name);
 									breakpoint.address=ae->label[i].ptr;
 									breakpoint.bank=ae->label[i].ibank;
 									ObjectArrayAddDynamicValueConcat((void **)&ae->breakpoint,&ae->ibreakpoint,&ae->maxbreakpoint,&breakpoint,sizeof(struct s_breakpoint));	
@@ -25404,7 +25407,9 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 
 			/* add labels and local labels to breakpoint pool (if any) */
 			for (i=0;i<ae->il;i++) {
-				if (strncmp(ae->label[i].name,"BRK",3)==0 || strncmp(ae->label[i].name,"@BRK",4)==0 || strstr(ae->label[i].name,".BRK")) {
+				if ((_internal_strnicmp(ae->label[i].name,"BRK",3)==0 && !strchr(ae->label[i].name+3,'.'))
+						|| _internal_strnicmp(ae->label[i].name,"@BRK",4)==0
+						|| _internal_stristr(ae->label[i].name,strlen(ae->label[i].name),".BRK")) {
 					breakpoint.address=ae->label[i].ptr;
 					if (ae->label[i].ibank>3) breakpoint.bank=1; else breakpoint.bank=0;
 					ObjectArrayAddDynamicValueConcat((void **)&ae->breakpoint,&ae->ibreakpoint,&ae->maxbreakpoint,&breakpoint,sizeof(struct s_breakpoint));
