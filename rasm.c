@@ -6,6 +6,7 @@
 #define TRACE_HEXBIN 0
 #define TRACE_MAKEAMSDOSREAL 0
 #define TRACE_STRUCT 0
+#define DEBUG_ENUM 0
 #define TRACE_EDSK 0
 #define TRACE_HFE 0
 #define TRACE_LABEL 0
@@ -1402,6 +1403,7 @@ struct s_math_keyword math_keyword[]={
 {"",0,0,-1}
 };
 
+#define CRC_ENUM 0x4D554E45
 #define CRC_SWITCH 0x5449141B
 #define CRC_CASE 0x45534143
 #define CRC_DEFAULT 0x41130910
@@ -18354,8 +18356,9 @@ printf("<== PopGlobal on Stack [%s] igs=%d\n",ae->globalstack[ae->igs],ae->igs+1
 void __MACRO(struct s_assenv *ae) {
 	struct s_macro curmacro={0};
 	char *referentfilename,*zeparam;
-	int refidx,idx,getparam=1,i;
+	int refidx,idx,getparam=1,i,redo=1;
 	struct s_wordlist curwl;
+	int enumCount=0;
 
 	if (ae->getstruct==1) {
 		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Please, why define a MACRO inside a structure declaration?\n");
@@ -18392,7 +18395,14 @@ void __MACRO(struct s_assenv *ae) {
 		}
 
 		idx=ae->idx+2;
-		while (ae->wl[idx].t!=2 && (GetCRC(ae->wl[idx].w)!=CRC_MEND || strcmp(ae->wl[idx].w,"MEND")!=0) && (GetCRC(ae->wl[idx].w)!=CRC_ENDM || strcmp(ae->wl[idx].w,"ENDM")!=0)) {
+		while (redo) {
+			if (ae->wl[idx].t==2) {
+				redo=0;
+				break;
+			}
+			if ((GetCRC(ae->wl[idx].w)==CRC_MEND && strcmp(ae->wl[idx].w,"MEND")==0) || (GetCRC(ae->wl[idx].w)==CRC_ENDM && strcmp(ae->wl[idx].w,"ENDM")==0)) {
+				if (enumCount) enumCount--; else {redo=0;break;}
+			}
 			if (GetCRC(ae->wl[idx].w)==CRC_MACRO || strcmp(ae->wl[idx].w,"MACRO")==0) {
 				/* inception interdite */
 				referentfilename=GetCurrentFile(ae);
@@ -18417,6 +18427,9 @@ void __MACRO(struct s_assenv *ae) {
 					getparam=0;
 				}
 			} else {
+				if (GetCRC(ae->wl[idx].w)==CRC_ENUM && strcmp(ae->wl[idx].w,"ENUM")==0) {
+					enumCount++;
+				}
 				/* copie la liste de mots */	
 				curwl=ae->wl[idx];
 				ObjectArrayAddDynamicValueConcat((void **)&curmacro.wc,&curmacro.nbword,&curmacro.maxword,&curwl,sizeof(struct s_wordlist));
@@ -19377,7 +19390,6 @@ void __PRINT(struct s_assenv *ae) {
 			} else {
 				string2print=TxtStrDup(ae->wl[ae->idx+1].w);
 			}
-
 			ExpressionFastTranslate(ae,&string2print,1);
 			if (hex) {
 				int zv;
@@ -20527,6 +20539,187 @@ void __CODE(struct s_assenv *ae) {
 	} else {
 		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"CODE directive does not need parameter\n");
 	}
+}
+
+
+void __ENUM(struct s_assenv *ae) {
+	#undef FUNC
+	#define FUNC "__ENUM"
+	struct s_alias curalias;
+	int start=0,increment=1,i;
+	char *prefix,*ptr_exp,*expwrk;
+	int redo=1,lngprefix,touched=0;
+	int firstIDX=ae->idx;
+
+	// ENUM name,value,increment
+	if (!ae->wl[ae->idx].t) {
+		ae->idx++;
+#if DEBUG_ENUM
+	printf("ENUM has a name\n");
+	printf("ENUM prefix [%s]\n",ae->wl[ae->idx].w);
+#endif
+		// there is a name, duplicate and translateTag!
+		prefix=TranslateTag(ae,TxtStrDup(ae->wl[ae->idx].w),&touched,1,E_TAGOPTION_REMOVESPACE);
+
+#if DEBUG_ENUM
+	printf("ENUM prefix [%s]\n",prefix);
+#endif
+		// name validation
+		if ((prefix[0]<'A' || prefix[0]>'Z') && prefix[0]!='_') {
+			MakeError(ae,ae->idx,GetCurrentFile(ae),GetExpLine(ae,0),"ENUM name must begin by a letter or '_' [%s]\n",prefix);
+			strcpy(prefix,"_");
+		} else {
+			for (i=1;prefix[i];i++) {
+				if ((prefix[i]>='A' && prefix[i]<='Z') || prefix[i]=='_' || (prefix[i]>='0' && prefix[i]<='9')) {
+					// is ok
+				} else {
+					MakeError(ae,ae->idx,GetCurrentFile(ae),GetExpLine(ae,0),"ENUM name must contains letters, digits or '_' [%s]\n",prefix);
+					strcpy(prefix,"_");
+					break;
+				}
+			}
+		}
+#if DEBUG_ENUM
+	printf("ENUM prefix checked\n");
+#endif
+		prefix=MemRealloc(prefix,strlen(prefix)+4);
+		strcat(prefix,"_");
+		lngprefix=strlen(prefix);
+
+#if DEBUG_ENUM
+	printf("ENUM final prefix [%s] is OK lng=%d\n",prefix,lngprefix);
+#endif
+		// name validation
+
+		if (!ae->wl[ae->idx].t) {
+			// there is a start value
+#if DEBUG_ENUM
+	printf("there is a start value\n");
+#endif
+			ae->idx++;
+			expwrk=TxtStrDup(ae->wl[ae->idx].w);
+			ExpressionFastTranslate(ae,&expwrk,0);
+			start=RoundComputeExpression(ae,expwrk,ae->outputadr,0,0);
+			MemFree(expwrk);
+			if (!ae->wl[ae->idx].t) {
+				// there is also an increment
+#if DEBUG_ENUM
+	printf("there is an increment\n");
+#endif
+				ae->idx++;
+				expwrk=TxtStrDup(ae->wl[ae->idx].w);
+				ExpressionFastTranslate(ae,&expwrk,0);
+				increment=RoundComputeExpression(ae,expwrk,ae->outputadr,0,0);
+				MemFree(expwrk);
+				if (!ae->wl[ae->idx].t) {
+					MakeError(ae,ae->idx,GetCurrentFile(ae),GetExpLine(ae,0),"ENUM declaration has too much parameters\n");
+				}
+			}
+		}
+	} else {
+#if DEBUG_ENUM
+	printf("ENUM has no param\n");
+#endif
+		// no name, default start, default increment
+		prefix=strdup("");
+		lngprefix=0;
+	}
+#if DEBUG_ENUM
+printf("prefix=[%s] lngprefix=%d start=%d increment=%d\n",prefix,lngprefix,start,increment);
+#endif
+
+	// skip declaration
+	while (!ae->wl[ae->idx].t) ae->idx++;
+	ae->idx++;
+
+#if DEBUG_ENUM
+	printf("ENUM first element is [%s]\n",ae->wl[ae->idx].w);
+#endif
+	while (redo) {
+		// enumerate until ENDM end marker
+		if (ae->wl[ae->idx].t==2) {
+			int enumLine,lastIdx;
+			char *enumFile;
+			ae->idx--;
+			lastIdx=ae->idx;
+			enumLine=GetExpLine(ae,0);
+			enumFile=GetCurrentFile(ae);
+			ae->idx=lastIdx;
+			MakeError(ae,ae->idx,GetCurrentFile(ae),GetExpLine(ae,0),"End of file reached before the end of ENUM [%s:%d]\n",enumFile,enumLine);
+			break;
+		}
+		if ((GetCRC(ae->wl[ae->idx].w)==CRC_MEND && strcmp(ae->wl[ae->idx].w,"MEND")==0) || (GetCRC(ae->wl[ae->idx].w)==CRC_ENDM && strcmp(ae->wl[ae->idx].w,"ENDM")==0)) {
+			redo=0;
+			break;
+		}
+
+		if (ae->wl[ae->idx].t==0) {
+			MakeError(ae,ae->idx,GetCurrentFile(ae),GetExpLine(ae,0),"ENUM elements must not have parameter(s)\n");
+			while (!ae->wl[ae->idx].t) ae->idx++; // skip params then next element
+		} else {
+			expwrk=ae->wl[ae->idx].w;
+			// is there an evaluation?
+			if ((ptr_exp=strchr(expwrk,'='))) {
+				char *dblexp;
+				dblexp=TxtStrDup(ptr_exp+1);
+				// assign need to fasttranslate proximity labels
+				start=ComputeExpressionCore(ae,dblexp,ae->codeadr,0);
+				MemFree(dblexp);
+				*ptr_exp=0;
+			}
+			// control word => no tag translation, pointless
+			for (i=1;expwrk[i];i++) {
+				if ((expwrk[i]>='A' && expwrk[i]<='Z') || expwrk[i]=='_' || (expwrk[i]>='0' && expwrk[i]<='9')) {
+					// is ok
+				} else {
+					MakeError(ae,ae->idx,GetCurrentFile(ae),GetExpLine(ae,0),"ENUM name must contains letters, digits or '_' [%s]\n",expwrk);
+					strcpy(expwrk,"_");
+					break;
+				}
+			}
+
+
+			curalias.alias=MemMalloc(lngprefix+1+ae->wl[ae->idx].len);
+			strcpy(curalias.alias,prefix);
+			strcat(curalias.alias,ae->wl[ae->idx].w);
+			curalias.crc=GetCRC(curalias.alias);
+#if DEBUG_ENUM
+	printf("ENUM new alias [%s]\n",curalias.alias);
+#endif
+
+			if (SearchLabel(ae,curalias.alias,curalias.crc)) {
+				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"ENUM cannot create alias because there is already a label with this name [%s]\n",curalias.alias);
+				MemFree(curalias.alias);
+			} else {
+				if (SearchDico(ae,curalias.alias,curalias.crc)) {
+					MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"ENUM cannot create alias because there is already a variable with this name [%s]\n",curalias.alias);
+					MemFree(curalias.alias);
+				} else {
+					curalias.ptr=ae->codeadr;
+					curalias.iw=ae->idx;
+					curalias.lz=ae->ilz;
+					curalias.translation=MemMalloc(32);
+					snprintf(curalias.translation,31,"(%d)",start);
+					curalias.len=strlen(curalias.translation);
+					curalias.autorise_export=ae->autorise_export;
+
+#if DEBUG_ENUM
+	printf("ENUM new alias translation [%s]\n",curalias.translation);
+#endif
+					if (InsertAliasToTree(ae,&curalias)) {
+						ObjectArrayAddDynamicValueConcat((void**)&ae->alias,&ae->ialias,&ae->malias,&curalias,sizeof(curalias));
+					} else {
+						MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"ENUM cannot create alias because there is already an alias with this name [%s]\n",curalias.alias);
+						MemFree(curalias.translation);
+						MemFree(curalias.alias);
+					}
+				}
+			}
+		}
+		start+=increment;
+		ae->idx++;
+	}
+
 }
 void __STRUCT(struct s_assenv *ae) {
 	#undef FUNC
@@ -22480,6 +22673,7 @@ struct s_asm_keyword instruction[]={
 {"NOCODE",0,0,__NOCODE},
 {"MEMSPACE",0,0,__MEMSPACE},
 {"MACRO",0,0,__MACRO},
+{"ENUM",0,0,__ENUM},
 {"TICKER",0,0,__TICKER},
 {"LET",0,0,__LET},
 {"ASSERT",0,0,__ASSERT},
@@ -29374,6 +29568,14 @@ struct s_autotest_keyword autotest_keyword[]={
 	"assert countnops('.bon','.jovi')==1: doe: assert countnops('john','doe')==1: module youpi2: john: .bon nop : nop: .jovi:"\
 	"assert countnops('.bon','.jovi')==2: assert countnops('youpi1_john.bon','youpi1_john.jovi')==1: doe: assert countnops('john','doe')==2: module:"\
 	"assert countnops('john.bon','john.jovi')==3: ",0}, // countnops+proximity+module
+	{"nop:enum:un:deux:mend",0}, // enum simple test
+	{"nop:enum:un:deux:endm",0},
+	{"zob_control equ 55: cpt=0: nop: enum zob{cpt}: preums: deuze: troize = 20: quatre: mend: nop: assert zob0_preums==0: assert zob0_deuze==1: assert zob0_troize==20: assert zob0_quatre==21: assert zob_control==55 ",0},
+	{"nop:enum zib,10,10: dizaine: vingtaine: endm: assert zib_dizaine==10: assert zib_vingtaine==20 ",0},
+	{"nop: enum: lezero: leun: mend: assert lezero==0: assert leun==1 ",0},
+	{"nop:enum grouik:xor a:machin=5:mend",1},
+	{"nop:enum grouik,6,7,8:un:deux:mend",1},
+	{" macro mymacro,param1: nop: enum grouik{{param1}}: un: deux: mend: mend: mymacro 1: mymacro 2: assert grouik1_un==grouik2_un: assert grouik1_deux==grouik2_deux ",0}, // enum+macro mix
 	/*
 	 *
 	 * will need to test resize + format then meta review test!
