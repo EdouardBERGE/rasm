@@ -29673,14 +29673,15 @@ struct s_autotest_keyword autotest_keyword[]={
 	{"nop:enum grouik:xor a:machin=5:mend",1},
 	{"nop:enum grouik,6,7,8:un:deux:mend",1},
 	{" macro mymacro,param1: nop: enum grouik{{param1}}: un: deux: mend: mend: mymacro 1: mymacro 2: assert grouik1_un==grouik2_un: assert grouik1_deux==grouik2_deux ",0}, // enum+macro mix
+	{"x=5:assert clamp((cos(x*360/256)*2+2.5),0,3)==clamp((cos(x*360/256)*2+2.5),0,3):nop",0},  // comma handling with multi param functions!
+	{"assert clamp(4,2+7,1+9)==clamp(4,(2+7),(1+9)):nop ",0},
+	{"assert clamp(14*3,3*(2+7),3*(1+9)+2)==clamp(14*3,3*(2+7),(3*(1+9)+2)):nop ",0},
 	/*
 	 *
 	 * will need to test resize + format then meta review test!
 	 *
 	 *
 	 *
-	{"x=5:assert clamp((cos(x*360/256)*2+2.5),0,3)==clamp((cos(x*360/256)*2+2.5),0,3):nop",0},  // comma handling with multi param functions!
-	{"",},
 	{"",},{"",},{"",},
 	{"",},{"",},{"",},{"",},{"",},
 	{"",},{"",},{"",},{"",},{"",},{"",},
