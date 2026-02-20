@@ -219,63 +219,64 @@ enum e_compute_operation_type {
 E_COMPUTE_OPERATION_PUSH_DATASTC=0,
 E_COMPUTE_OPERATION_OPEN=1,
 E_COMPUTE_OPERATION_CLOSE=2,
-E_COMPUTE_OPERATION_ADD=3,
-E_COMPUTE_OPERATION_SUB=4,
-E_COMPUTE_OPERATION_DIV=5,
-E_COMPUTE_OPERATION_MUL=6,
-E_COMPUTE_OPERATION_AND=7,
-E_COMPUTE_OPERATION_OR=8,
-E_COMPUTE_OPERATION_MOD=9,
-E_COMPUTE_OPERATION_XOR=10,
-E_COMPUTE_OPERATION_NOT=11,
-E_COMPUTE_OPERATION_SHL=12,
-E_COMPUTE_OPERATION_SHR=13,
-E_COMPUTE_OPERATION_BAND=14,
-E_COMPUTE_OPERATION_BOR=15,
-E_COMPUTE_OPERATION_LOWER=16,
-E_COMPUTE_OPERATION_GREATER=17,
-E_COMPUTE_OPERATION_EQUAL=18,
-E_COMPUTE_OPERATION_NOTEQUAL=19,
-E_COMPUTE_OPERATION_LOWEREQ=20,
-E_COMPUTE_OPERATION_GREATEREQ=21, // this one MUST be the last before math function!
+E_COMPUTE_OPERATION_COMMA=3,
+E_COMPUTE_OPERATION_ADD=4,
+E_COMPUTE_OPERATION_SUB=5,
+E_COMPUTE_OPERATION_DIV=6,
+E_COMPUTE_OPERATION_MUL=7,
+E_COMPUTE_OPERATION_AND=8,
+E_COMPUTE_OPERATION_OR=9,
+E_COMPUTE_OPERATION_MOD=10,
+E_COMPUTE_OPERATION_XOR=11,
+E_COMPUTE_OPERATION_NOT=12,
+E_COMPUTE_OPERATION_SHL=13,
+E_COMPUTE_OPERATION_SHR=14,
+E_COMPUTE_OPERATION_BAND=15,
+E_COMPUTE_OPERATION_BOR=16,
+E_COMPUTE_OPERATION_LOWER=17,
+E_COMPUTE_OPERATION_GREATER=18,
+E_COMPUTE_OPERATION_EQUAL=19,
+E_COMPUTE_OPERATION_NOTEQUAL=20,
+E_COMPUTE_OPERATION_LOWEREQ=21,
+E_COMPUTE_OPERATION_GREATEREQ=22, // this one MUST be the last before math function!
 /* math functions */
-E_COMPUTE_OPERATION_SIN=22,
-E_COMPUTE_OPERATION_COS=23,
-E_COMPUTE_OPERATION_INT=24,
-E_COMPUTE_OPERATION_FLOOR=25,
-E_COMPUTE_OPERATION_ABS=26,
-E_COMPUTE_OPERATION_LN=27,
-E_COMPUTE_OPERATION_LOG10=28,
-E_COMPUTE_OPERATION_SQRT=29,
-E_COMPUTE_OPERATION_ASIN=30,
-E_COMPUTE_OPERATION_ACOS=31,
-E_COMPUTE_OPERATION_ATAN=32,
-E_COMPUTE_OPERATION_EXP=33,
-E_COMPUTE_OPERATION_LOW=34,
-E_COMPUTE_OPERATION_HIGH=35,
-E_COMPUTE_OPERATION_PSG=36,
-E_COMPUTE_OPERATION_RND=37,
-E_COMPUTE_OPERATION_FRAC=38,
-E_COMPUTE_OPERATION_CEIL=39,
-E_COMPUTE_OPERATION_GET_R=40,
-E_COMPUTE_OPERATION_GET_V=41,
-E_COMPUTE_OPERATION_GET_B=42,
-E_COMPUTE_OPERATION_SET_R=43,
-E_COMPUTE_OPERATION_SET_V=44,
-E_COMPUTE_OPERATION_SET_B=45,
-E_COMPUTE_OPERATION_SOFT2HARD=46,
-E_COMPUTE_OPERATION_HARD2SOFT=47,
-E_COMPUTE_OPERATION_PEEK=48,
-E_COMPUTE_OPERATION_POW2=49,
-E_COMPUTE_OPERATION_POW=50,
-E_COMPUTE_OPERATION_FMOD=51,
-E_COMPUTE_OPERATION_ATAN2=52,
-E_COMPUTE_OPERATION_HYPOT=53,
-E_COMPUTE_OPERATION_LDEXP=54,
-E_COMPUTE_OPERATION_FDIM=55,  // différence positive
-E_COMPUTE_OPERATION_FSTEP=56, // seuil, valeur dessous 0, dessus 1
-E_COMPUTE_OPERATION_FMAX=57,
-E_COMPUTE_OPERATION_FMIN=58,
+E_COMPUTE_OPERATION_SIN=23,
+E_COMPUTE_OPERATION_COS=24,
+E_COMPUTE_OPERATION_INT=25,
+E_COMPUTE_OPERATION_FLOOR=26,
+E_COMPUTE_OPERATION_ABS=27,
+E_COMPUTE_OPERATION_LN=28,
+E_COMPUTE_OPERATION_LOG10=29,
+E_COMPUTE_OPERATION_SQRT=30,
+E_COMPUTE_OPERATION_ASIN=31,
+E_COMPUTE_OPERATION_ACOS=32,
+E_COMPUTE_OPERATION_ATAN=33,
+E_COMPUTE_OPERATION_EXP=34,
+E_COMPUTE_OPERATION_LOW=35,
+E_COMPUTE_OPERATION_HIGH=36,
+E_COMPUTE_OPERATION_PSG=37,
+E_COMPUTE_OPERATION_RND=38,
+E_COMPUTE_OPERATION_FRAC=39,
+E_COMPUTE_OPERATION_CEIL=40,
+E_COMPUTE_OPERATION_GET_R=41,
+E_COMPUTE_OPERATION_GET_V=42,
+E_COMPUTE_OPERATION_GET_B=43,
+E_COMPUTE_OPERATION_SET_R=44,
+E_COMPUTE_OPERATION_SET_V=45,
+E_COMPUTE_OPERATION_SET_B=46,
+E_COMPUTE_OPERATION_SOFT2HARD=47,
+E_COMPUTE_OPERATION_HARD2SOFT=48,
+E_COMPUTE_OPERATION_PEEK=49,
+E_COMPUTE_OPERATION_POW2=50,
+E_COMPUTE_OPERATION_POW=51,
+E_COMPUTE_OPERATION_FMOD=52,
+E_COMPUTE_OPERATION_ATAN2=53,
+E_COMPUTE_OPERATION_HYPOT=54,
+E_COMPUTE_OPERATION_LDEXP=55,
+E_COMPUTE_OPERATION_FDIM=56,  // différence positive
+E_COMPUTE_OPERATION_FSTEP=57, // seuil, valeur dessous 0, dessus 1
+E_COMPUTE_OPERATION_FMAX=58,
+E_COMPUTE_OPERATION_FMIN=59,
 E_COMPUTE_OPERATION_CLAMP=60, // x min,max contraindre dans l'intervale
 E_COMPUTE_OPERATION_LERP=61, // a,b,x interpolation linéaire  a+x*(b-a)
 E_COMPUTE_OPERATION_ISGREATER=62,
@@ -6118,14 +6119,16 @@ double ComputeExpressionCore(struct s_assenv *ae,char *original_zeexpression,con
 				parenth--;
 				break;
 			case '(':
+#if TRACE_COMPUTE_EXPRESSION
+	if (c=='(') printf("parenth++\n");
+#endif
 				parenth++;
 			/* comma */
 			case ',':
 #if TRACE_COMPUTE_EXPRESSION
-	if (c=='(') printf("parenth++\n");
 	if (c==',') printf("comma\n");
 #endif
-				if (!parenth) printf(" invalid comma in expression, must only be used for multiple param functions...\n");
+				if (!parenth) MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx)," invalid comma in expression, must only be used for multiple param functions...\n");
 			/* operator detection */
 			case '*':
 			case '/':
@@ -6348,7 +6351,7 @@ double ComputeExpressionCore(struct s_assenv *ae,char *original_zeexpression,con
 		}
 		if (c && !ivar) idx++;
 #if TRACE_COMPUTE_EXPRESSION
-	printf("c=%c ivar=%d\n",c>31?c:'.',ivar);
+	printf("c=%c ivar=%d\n",c>31?c:'.',ivar); // too verbose with stack...
 #endif
 	
 		/************************************
@@ -6361,17 +6364,16 @@ double ComputeExpressionCore(struct s_assenv *ae,char *original_zeexpression,con
 			************************************/
 			stackelement=ae->AutomateElement[c];
 			if (stackelement.operator>E_COMPUTE_OPERATION_GREATEREQ) {
-				if (c==',') continue; // this is a comma, nothing to see here, please disperse to a new value :)
 				MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"expression [%s] has unknown operator %c (%d)\n",TradExpression(zeexpression),c>31?c:'.',c);
 			}
 			/* stackelement.value isn't used */
 			stackelement.string=NULL;
 #if TRACE_COMPUTE_EXPRESSION
-	printf("pushoperator [%c]\n",c);
+	printf("=> pushoperator [%c]\n",c);
 #endif
 		} else if (is_string) {
 #if TRACE_COMPUTE_EXPRESSION
-	printf("pushstring [%s]\n",ae->computectx->varbuffer);
+	printf("=> pushstring [%s]\n",ae->computectx->varbuffer);
 #endif
 			stackelement.operator=E_COMPUTE_OPERATION_PUSH_DATASTC;
 			/* priority & value isn't used */
@@ -6383,7 +6385,7 @@ double ComputeExpressionCore(struct s_assenv *ae,char *original_zeexpression,con
 			              V A L U E
 			************************************/
 #if TRACE_COMPUTE_EXPRESSION
-	printf("pushvalue [%s]\n",ae->computectx->varbuffer);
+	printf("=> pushvalue [%s]\n",ae->computectx->varbuffer);
 #endif
 			if (ae->computectx->varbuffer[0]=='-') minusptr=1; else minusptr=0;
 			/* constantes ou variables/labels */
@@ -7069,12 +7071,14 @@ printf("DUMP des labels\n");
 	      C R E A T E    E X E C U T I O N    S T A C K
 	*******************************************************/
 #if DEBUG_STACK
+printf("====== STACK ==\n");
 	for (itoken=0;itoken<nbtokenstack;itoken++) {
 		if (itoken) printf(" | ");
 		switch (ae->computectx->tokenstack[itoken].operator) {
 			case E_COMPUTE_OPERATION_PUSH_DATASTC:printf("%lf %s",ae->computectx->tokenstack[itoken].value,ae->computectx->tokenstack[itoken].string?ae->computectx->tokenstack[itoken].string:"(null)");break;
 			case E_COMPUTE_OPERATION_OPEN:printf("(");break;
 			case E_COMPUTE_OPERATION_CLOSE:printf(")");break;
+			case E_COMPUTE_OPERATION_COMMA:printf(",");break;
 			case E_COMPUTE_OPERATION_ADD:printf("+ ");break;
 			case E_COMPUTE_OPERATION_SUB:printf("- ");break;
 			case E_COMPUTE_OPERATION_DIV:printf("/ ");break;
@@ -7142,31 +7146,31 @@ printf("DUMP des labels\n");
 			case E_COMPUTE_OPERATION_GETSIZE:printf("getsize ");break;
 			case E_COMPUTE_OPERATION_IS_REGISTER:printf("is_register ");break;
 			case E_COMPUTE_OPERATION_FILEBYTE:printf("filebyte ");break;
-			case E_COMPUTE_OPERATION_COUNTNOPS:strcpy(opStr,"countnops");break;
+			case E_COMPUTE_OPERATION_COUNTNOPS:printf("countnops");break;
 			default:printf("bug\n");break;
 		}
 		
 	}
-	printf("\n");
+	printf("\n==== REORGANISE STACK ===\n");
 #endif
 
 	for (itoken=0;itoken<nbtokenstack;itoken++) {
 		switch (ae->computectx->tokenstack[itoken].operator) {
 			case E_COMPUTE_OPERATION_PUSH_DATASTC:
 #if DEBUG_STACK
-printf("data string=%X\n",ae->computectx->tokenstack[itoken].string);
+printf("PUSH DATA data (%.2lf) string=%p\n",ae->computectx->tokenstack[itoken].value,ae->computectx->tokenstack[itoken].string);
 #endif
 				ObjectArrayAddDynamicValueConcat((void **)&computestack,&nbcomputestack,&maxcomputestack,&ae->computectx->tokenstack[itoken],sizeof(stackelement));
 				break;
 			case E_COMPUTE_OPERATION_OPEN:
 				ObjectArrayAddDynamicValueConcat((void **)&ae->computectx->operatorstack,&nboperatorstack,&ae->computectx->maxoperatorstack,&ae->computectx->tokenstack[itoken],sizeof(stackelement));
 #if DEBUG_STACK
-printf("ajout ( string=%X\n",ae->computectx->tokenstack[itoken].string);
+printf("ADD OPERATOR ajout ( string=%p\n",ae->computectx->tokenstack[itoken].string);
 #endif
 				break;
 			case E_COMPUTE_OPERATION_CLOSE:
 #if DEBUG_STACK
-printf("close\n");
+printf("== close processing\n");
 #endif
 				/* pop out token until the opened parenthesis is reached */
 				o2=nboperatorstack-1;
@@ -7176,13 +7180,13 @@ printf("close\n");
 						ObjectArrayAddDynamicValueConcat((void **)&computestack,&nbcomputestack,&maxcomputestack,&ae->computectx->operatorstack[o2],sizeof(stackelement));
 						nboperatorstack--;
 #if DEBUG_STACK
-printf("op-- string=%X\n",ae->computectx->operatorstack[o2].string);
+printf("op-- string=%p\n",ae->computectx->operatorstack[o2].string);
 #endif
 						o2--;
 					} else {
 						/* discard opening parenthesis as operator */
 #if DEBUG_STACK
-printf("discard )\n");
+printf("discard opening (\n");
 #endif
 						nboperatorstack--;
 						okclose=1;
@@ -7202,8 +7206,38 @@ printf("discard )\n");
 					ObjectArrayAddDynamicValueConcat((void **)&computestack,&nbcomputestack,&maxcomputestack,&ae->computectx->operatorstack[o2],sizeof(stackelement));
 					nboperatorstack--;
 #if DEBUG_STACK
-printf("pop function string=%X\n",ae->computectx->operatorstack[o2].string);
+printf("upper token is a function, so pop function string=%p\n",ae->computectx->operatorstack[o2].string);
 #endif
+				}
+				break;
+			case E_COMPUTE_OPERATION_COMMA:
+#if DEBUG_STACK
+	printf("== comma is kindah like a close but do not stack out OPEN\n");
+#endif
+				/* pop out token until the opened parenthesis is reached */
+				o2=nboperatorstack-1;
+				okclose=0;
+				while (o2>=0) {
+					if (ae->computectx->operatorstack[o2].operator!=E_COMPUTE_OPERATION_OPEN) {
+						ObjectArrayAddDynamicValueConcat((void **)&computestack,&nbcomputestack,&maxcomputestack,&ae->computectx->operatorstack[o2],sizeof(stackelement));
+						nboperatorstack--;
+#if DEBUG_STACK
+printf("op-- string=%p\n",ae->computectx->operatorstack[o2].string);
+#endif
+						o2--;
+					} else {
+						/* DO NOT discard opening parenthesis as operator */
+						okclose=1;
+						// keep the open bracket :)
+						break;
+					}
+				}
+				if (!okclose) {
+					MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"missing parenthesis [%s]\n",TradExpression(zeexpression));
+					if (!original) {
+						MemFree(zeexpression);
+					}
+					return 0;
 				}
 				break;
 			case E_COMPUTE_OPERATION_ADD:
@@ -7230,7 +7264,7 @@ printf("pop function string=%X\n",ae->computectx->operatorstack[o2].string);
 					if (ae->computectx->tokenstack[itoken].priority>=ae->computectx->operatorstack[o2].priority || ae->computectx->operatorstack[o2].operator>=E_COMPUTE_OPERATION_SIN) {
 						ObjectArrayAddDynamicValueConcat((void **)&computestack,&nbcomputestack,&maxcomputestack,&ae->computectx->operatorstack[o2],sizeof(stackelement));
 #if DEBUG_STACK
-printf("operator string=%X\n",ae->computectx->operatorstack[o2].string);
+printf("ADD OPERATOR %s string=%p\n",getOperatorStr(ae->computectx->tokenstack[itoken].operator),ae->computectx->operatorstack[o2].string);
 #endif
 						nboperatorstack--;
 						o2--;
@@ -7291,7 +7325,7 @@ printf("operator string=%X\n",ae->computectx->operatorstack[o2].string);
 			case E_COMPUTE_OPERATION_FILEBYTE:
 			case E_COMPUTE_OPERATION_COUNTNOPS:
 #if DEBUG_STACK
-printf("ajout de la fonction\n");
+printf("ADD OPERATOR (function)\n");
 #endif
 				ObjectArrayAddDynamicValueConcat((void **)&ae->computectx->operatorstack,&nboperatorstack,&ae->computectx->maxoperatorstack,&ae->computectx->tokenstack[itoken],sizeof(stackelement));
 				break;
@@ -7302,10 +7336,13 @@ printf("ajout de la fonction\n");
 	while (nboperatorstack>0) {
 		ObjectArrayAddDynamicValueConcat((void **)&computestack,&nbcomputestack,&maxcomputestack,&ae->computectx->operatorstack[--nboperatorstack],sizeof(stackelement));
 #if DEBUG_STACK
-printf("final POP string=%X\n",ae->computectx->operatorstack[nboperatorstack+1].string);
+printf("final POP string=%p\n",ae->computectx->operatorstack[nboperatorstack+1].string);
 #endif
 	}
 	
+#if DEBUG_STACK
+printf("=== STACK EXECUTION ===\n");
+#endif
 	/********************************************
 	        E X E C U T E        S T A C K
 	********************************************/
@@ -7685,32 +7722,85 @@ printf("final POP string=%X\n",ae->computectx->operatorstack[nboperatorstack+1].
 			accu=MemRealloc(accu,sizeof(double)*maccu);
 		}
 		for (i=0;i<nbcomputestack;i++) {
-#if 0
-			int kk;
-			for (kk=0;kk<paccu;kk++) printf("stack[%d]=%lf\n",kk,accu[kk]);
-			if (computestack[i].operator==E_COMPUTE_OPERATION_PUSH_DATASTC) {
-				printf("pacc=%d push %.1lf or %s\n",paccu,computestack[i].value,computestack[i].string?computestack[i].string:"null");
-			} else {
-				printf("pacc=%d operation %s p=%d\n",paccu,computestack[i].operator==E_COMPUTE_OPERATION_MUL?"*":
-								computestack[i].operator==E_COMPUTE_OPERATION_ADD?"+":
-								computestack[i].operator==E_COMPUTE_OPERATION_DIV?"/":
-								computestack[i].operator==E_COMPUTE_OPERATION_SUB?"-":
-								computestack[i].operator==E_COMPUTE_OPERATION_BAND?"&&":
-								computestack[i].operator==E_COMPUTE_OPERATION_BOR?"||":
-								computestack[i].operator==E_COMPUTE_OPERATION_SHL?"<<":
-								computestack[i].operator==E_COMPUTE_OPERATION_SHR?">>":
-								computestack[i].operator==E_COMPUTE_OPERATION_LOWER?"<":
-								computestack[i].operator==E_COMPUTE_OPERATION_GREATER?">":
-								computestack[i].operator==E_COMPUTE_OPERATION_EQUAL?"==":
-								computestack[i].operator==E_COMPUTE_OPERATION_INT?"INT":
-								computestack[i].operator==E_COMPUTE_OPERATION_LOWEREQ?"<=":
-								computestack[i].operator==E_COMPUTE_OPERATION_GREATEREQ?">=":
-								computestack[i].operator==E_COMPUTE_OPERATION_OPEN?"(":
-								computestack[i].operator==E_COMPUTE_OPERATION_CLOSE?")":
-								computestack[i].operator==E_COMPUTE_OPERATION_GETNOP?"getnpo":
-								"<autre>",computestack[i].priority);
-			}
-#endif
+#if DEBUG_STACK
+		switch (computestack[i].operator) {
+			case E_COMPUTE_OPERATION_PUSH_DATASTC:
+				printf("pacc=%d push %.1lf or %s",paccu,computestack[i].value,computestack[i].string?computestack[i].string:"null");
+				break;
+			case E_COMPUTE_OPERATION_OPEN:printf("(");break;
+			case E_COMPUTE_OPERATION_CLOSE:printf(")");break;
+			case E_COMPUTE_OPERATION_ADD:printf("+ ");break;
+			case E_COMPUTE_OPERATION_SUB:printf("- ");break;
+			case E_COMPUTE_OPERATION_DIV:printf("/ ");break;
+			case E_COMPUTE_OPERATION_MUL:printf("* ");break;
+			case E_COMPUTE_OPERATION_AND:printf("and ");break;
+			case E_COMPUTE_OPERATION_OR:printf("or ");break;
+			case E_COMPUTE_OPERATION_MOD:printf("mod ");break;
+			case E_COMPUTE_OPERATION_XOR:printf("xor ");break;
+			case E_COMPUTE_OPERATION_NOT:printf("! ");break;
+			case E_COMPUTE_OPERATION_SHL:printf("<< ");break;
+			case E_COMPUTE_OPERATION_SHR:printf(">> ");break;
+			case E_COMPUTE_OPERATION_BAND:printf("&& ");break;
+			case E_COMPUTE_OPERATION_BOR:printf("|| ");break;
+			case E_COMPUTE_OPERATION_LOWER:printf("< ");break;
+			case E_COMPUTE_OPERATION_GREATER:printf("> ");break;
+			case E_COMPUTE_OPERATION_EQUAL:printf("== ");break;
+			case E_COMPUTE_OPERATION_NOTEQUAL:printf("!= ");break;
+			case E_COMPUTE_OPERATION_LOWEREQ:printf("<= ");break;
+			case E_COMPUTE_OPERATION_GREATEREQ:printf(">= ");break;
+			case E_COMPUTE_OPERATION_SIN:printf("sin ");break;
+			case E_COMPUTE_OPERATION_COS:printf("cos ");break;
+			case E_COMPUTE_OPERATION_INT:printf("int ");break;
+			case E_COMPUTE_OPERATION_FLOOR:printf("floor ");break;
+			case E_COMPUTE_OPERATION_ABS:printf("abs ");break;
+			case E_COMPUTE_OPERATION_LN:printf("ln ");break;
+			case E_COMPUTE_OPERATION_LOG10:printf("log10 ");break;
+			case E_COMPUTE_OPERATION_SQRT:printf("sqrt ");break;
+			case E_COMPUTE_OPERATION_ASIN:printf("asin ");break;
+			case E_COMPUTE_OPERATION_ACOS:printf("acos ");break;
+			case E_COMPUTE_OPERATION_ATAN:printf("atan ");break;
+			case E_COMPUTE_OPERATION_EXP:printf("exp ");break;
+			case E_COMPUTE_OPERATION_LOW:printf("low ");break;
+			case E_COMPUTE_OPERATION_HIGH:printf("high ");break;
+			case E_COMPUTE_OPERATION_PSG:printf("psg ");break;
+			case E_COMPUTE_OPERATION_RND:printf("rnd ");break;
+			case E_COMPUTE_OPERATION_FRAC:printf("frac ");break;
+			case E_COMPUTE_OPERATION_CEIL:printf("ceil ");break;
+			case E_COMPUTE_OPERATION_GET_R:printf("get_r ");break;
+			case E_COMPUTE_OPERATION_GET_V:printf("get_v ");break;
+			case E_COMPUTE_OPERATION_GET_B:printf("get_b ");break;
+			case E_COMPUTE_OPERATION_SET_R:printf("set_r ");break;
+			case E_COMPUTE_OPERATION_SET_V:printf("set_v ");break;
+			case E_COMPUTE_OPERATION_SET_B:printf("set_b ");break;
+			case E_COMPUTE_OPERATION_SOFT2HARD:printf("soft2hard ");break;
+			case E_COMPUTE_OPERATION_HARD2SOFT:printf("hard2soft ");break;
+			case E_COMPUTE_OPERATION_PEEK:printf("peek ");break;
+			case E_COMPUTE_OPERATION_POW2:printf("pow2 ");break;
+			case E_COMPUTE_OPERATION_POW:printf("pow ");break;
+			case E_COMPUTE_OPERATION_FMOD:printf("fmod ");break;
+			case E_COMPUTE_OPERATION_ATAN2:printf("atan2 ");break;
+			case E_COMPUTE_OPERATION_HYPOT:printf("hypot ");break;
+			case E_COMPUTE_OPERATION_LDEXP:printf("ldexp ");break;
+			case E_COMPUTE_OPERATION_FDIM:printf("fdim ");break;
+			case E_COMPUTE_OPERATION_FSTEP:printf("fstep ");break;
+			case E_COMPUTE_OPERATION_FMAX:printf("fmax ");break;
+			case E_COMPUTE_OPERATION_FMIN:printf("fmin ");break;
+			case E_COMPUTE_OPERATION_CLAMP:printf("clamp ");break;
+			case E_COMPUTE_OPERATION_LERP:printf("lerp ");break;
+			case E_COMPUTE_OPERATION_ISGREATER:printf("isgreater ");break;
+			case E_COMPUTE_OPERATION_ISLESS:printf("isless ");break;
+			case E_COMPUTE_OPERATION_GETNOP:printf("getnop ");break;
+			case E_COMPUTE_OPERATION_GETTICK:printf("gettick ");break;
+			case E_COMPUTE_OPERATION_DURATION:printf("duration ");break;
+			case E_COMPUTE_OPERATION_FILESIZE:printf("filesize ");break;
+			case E_COMPUTE_OPERATION_GETSIZE:printf("getsize ");break;
+			case E_COMPUTE_OPERATION_IS_REGISTER:printf("is_register ");break;
+			case E_COMPUTE_OPERATION_FILEBYTE:printf("filebyte ");break;
+			case E_COMPUTE_OPERATION_COUNTNOPS:printf("countnops");break;
+			default:printf("should not be anything here...");
+		}
+		printf("\n");
+	#endif
 			switch (computestack[i].operator) {
 				case E_COMPUTE_OPERATION_PUSH_DATASTC:
 					if (computestack[i].string) {
@@ -7847,8 +7937,10 @@ printf("final POP string=%X\n",ae->computectx->operatorstack[nboperatorstack+1].
 							       }
 							       break;
 				case E_COMPUTE_OPERATION_CLAMP:if (paccu>2) {
+								       //printf("clamp %.2f %.2f %.2f ",accu[paccu-3],accu[paccu-2],accu[paccu-1]);
 								       if (accu[paccu-3]<accu[paccu-2]) accu[paccu-3]=accu[paccu-2]; else
 								       if (accu[paccu-3]>accu[paccu-1]) accu[paccu-3]=accu[paccu-1];
+								       //printf("clamp result = %.2f\n",accu[paccu-3]);
 								       paccu-=2;
 							       } else {
 									MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"CLAMP requires 3 parameters (val,min,max)\n");
@@ -8071,6 +8163,9 @@ printf("final POP string=%X\n",ae->computectx->operatorstack[nboperatorstack+1].
 			}
 		}
 	}
+#if DEBUG_STACK
+printf("================================\n");
+#endif
 	if (!original) {
 		MemFree(zeexpression);
 	}
@@ -23004,6 +23099,7 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 				/* priority 0 */
 				case '(':ae->AutomateElement[i].operator=E_COMPUTE_OPERATION_OPEN;ae->AutomateElement[i].priority=0;break;
 				case ')':ae->AutomateElement[i].operator=E_COMPUTE_OPERATION_CLOSE;ae->AutomateElement[i].priority=0;break;
+				case ',':ae->AutomateElement[i].operator=E_COMPUTE_OPERATION_COMMA;ae->AutomateElement[i].priority=0;break;
 				/* priority 1 */
 				case 'b':ae->AutomateElement[i].operator=E_COMPUTE_OPERATION_NOT;ae->AutomateElement[i].priority=1;break;
 				/* priority 2 */
@@ -23043,6 +23139,7 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 				/* priority 0 */
 				case '(':ae->AutomateElement[i].operator=E_COMPUTE_OPERATION_OPEN;ae->AutomateElement[i].priority=0;break;
 				case ')':ae->AutomateElement[i].operator=E_COMPUTE_OPERATION_CLOSE;ae->AutomateElement[i].priority=0;break;
+				case ',':ae->AutomateElement[i].operator=E_COMPUTE_OPERATION_COMMA;ae->AutomateElement[i].priority=0;break;
 				/* priority 0.5 */
 				case 'b':ae->AutomateElement[i].operator=E_COMPUTE_OPERATION_NOT;ae->AutomateElement[i].priority=128;break;
 				/* priority 1 */
@@ -29582,7 +29679,8 @@ struct s_autotest_keyword autotest_keyword[]={
 	 *
 	 *
 	 *
-	{"",},{"",},
+	{"x=5:assert clamp((cos(x*360/256)*2+2.5),0,3)==clamp((cos(x*360/256)*2+2.5),0,3):nop",0},  // comma handling with multi param functions!
+	{"",},
 	{"",},{"",},{"",},
 	{"",},{"",},{"",},{"",},{"",},
 	{"",},{"",},{"",},{"",},{"",},{"",},
