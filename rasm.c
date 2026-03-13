@@ -1746,7 +1746,7 @@ char **_internal_readtextfile(struct s_assenv *ae,char *filename, char replacech
         }
 
 	if (ae && ae->enforce_symbol_case && replacechar==':') {
-		ae->source_bigbuffer=bigbuffer;
+		ae->source_bigbuffer=(char *)bigbuffer;
 		ae->source_bigbuffer_len=file_size;
 	}
         //MemFree(bigbuffer);
@@ -2974,7 +2974,7 @@ void _internal_RasmFreeInfoStruct(struct s_rasm_info *debug)
 		}
 		MemFree(debug->symbol);
 	}
-	memset(debug,0,sizeof(debug));
+	memset(debug,0,sizeof(struct s_rasm_info));
 }
 
 void RasmFreeInfoStruct(struct s_rasm_info *debug)
@@ -9598,13 +9598,13 @@ int EDSK_addfile(struct s_assenv *ae,char *edskfilename,int facenumber, char *fi
 	memcpy(data,MakeAMSDOSHeader(run,offset,offset+insize,amsdos_name,amsdos_user),128);
 	memcpy(data+128,indata,insize);
 	/* overwrite check */
-	if (amsdos_entry_exists(edsk,facenumber,amsdos_name,amsdos_user)) {
+	if (amsdos_entry_exists(edsk,facenumber,(unsigned char *)amsdos_name,amsdos_user)) {
 		if (!ae->edskoverwrite) {
 			MakeError(ae,0,NULL,0,"Error - Cannot save [%s] in edsk [%s] with overwrite disabled as the file already exists (use -eo command line option)\n",amsdos_name,edskfilename);
 			MemFree(data);
 			return 0;
 		} else {
-			amsdos_remove_entry(edsk,facenumber,amsdos_name,amsdos_user);
+			amsdos_remove_entry(edsk,facenumber,(unsigned char *)amsdos_name,amsdos_user);
 		}
 	}
 
@@ -9689,8 +9689,8 @@ void EDSK_write_file(struct s_assenv *ae,struct s_edsk_wrapper *faceA,struct s_e
 	EDSK_build_amsdos_directory(faceB);
 	/* écriture header */
 	strcpy((char *)header,"EXTENDED CPC DSK File\r\nDisk-Info\r\n");
-	sprintf(headertag,"%-9.9s",RASM_SNAP_VERSION);
-	strcpy((char *)header+0x22,headertag);
+	sprintf((char *)headertag,"%-9.9s",RASM_SNAP_VERSION);
+	strcpy((char *)header+0x22,(char *)headertag);
 	header[0x30]=40;
 	if (!faceA) {
 		faceA=&emptyface;
@@ -9936,7 +9936,7 @@ void __output_CDT(struct s_assenv *ae, char *tapefilename,char *filename,char *m
 	wrksize=size;
 
 	memset(head,0,16);
-	strcpy(head,MakeAMSDOS_name(ae,filename,&dummy_user));
+	strcpy((char *)head,MakeAMSDOS_name(ae,filename,&dummy_user));
 	head[0x12]=body[0x12];
 	head[0x18]=body[0x40];
 	head[0x19]=body[0x41];
@@ -13923,7 +13923,7 @@ unsigned char *__internal_make_HFE_header(int ntrack,int nside) {
 
 	for (i=0;i<0x200;i++) hfe[i]=0xFF;
 
-	strcpy(hfe,"HXCPICFE");
+	strcpy((char *)hfe,"HXCPICFE");
 
 	hfe[8]=0;  // revision
 	hfe[9]=ntrack;
@@ -14054,8 +14054,8 @@ void __hfe_close(struct s_assenv *ae, struct s_hfe_action *hfe_action) {
 	int i,j,k,l,blocktrack,tracklen;
 	int first=0;
 
-	oname=ae->hfedisk[ae->nbhfedisk-1].filename;
-	FileRemoveIfExists(oname);
+	oname=(unsigned char *)ae->hfedisk[ae->nbhfedisk-1].filename;
+	FileRemoveIfExists((char *)oname);
 
 	// we assume the longest track is the reference for all tracks
 	for (i=tracklen=0;i<ae->hfedisk[ae->nbhfedisk-1].itrack;i++) {
@@ -14101,13 +14101,13 @@ void __hfe_close(struct s_assenv *ae, struct s_hfe_action *hfe_action) {
 	}
 
 	hfe_header=__internal_make_HFE_header(ae->hfedisk[ae->nbhfedisk-1].itrack>>1,2); // HFE side isn't used by emulators
-	FileWriteBinary(oname,(char*)hfe_header,0x200);
+	FileWriteBinary((char *)oname,(char*)hfe_header,0x200);
 
 #if TRACE_HFE
 	printf("HFE blocks per track=%d   ",blocktrack);
 #endif
 
-	FileWriteBinary(oname,(char*)tracklist,0x200);
+	FileWriteBinary((char *)oname,(char*)tracklist,0x200);
 
 #if TRACE_HFE
 	printf("nbtrack=%d\n",ae->hfedisk[ae->nbhfedisk-1].itrack>>1);
@@ -14128,20 +14128,20 @@ void __hfe_close(struct s_assenv *ae, struct s_hfe_action *hfe_action) {
 		lng=tracklen*2;
 		i=0;
 		while (lng>=256) {
-			FileWriteBinary(oname,(char*)data0+i,256);
-			FileWriteBinary(oname,(char*)data1+i,256); i+=256;
+			FileWriteBinary((char *)oname,(char*)data0+i,256);
+			FileWriteBinary((char *)oname,(char*)data1+i,256); i+=256;
 			lng-=256;
 		}
 		if (lng) {
-			FileWriteBinary(oname,(char*)data0+i,lng);
-			FileWriteBinary(oname,(char*)filler,256-lng);
-			FileWriteBinary(oname,(char*)data1+i,lng);
-			FileWriteBinary(oname,(char*)filler,256-lng);
+			FileWriteBinary((char *)oname,(char*)data0+i,lng);
+			FileWriteBinary((char *)oname,(char*)filler,256-lng);
+			FileWriteBinary((char *)oname,(char*)data1+i,lng);
+			FileWriteBinary((char *)oname,(char*)filler,256-lng);
 		}
 		MemFree(data0);
 		MemFree(data1);
 	}
-	FileWriteBinaryClose(oname);
+	FileWriteBinaryClose((char *)oname);
 	rasm_printf(ae,KIO"Write floppy image file %s\n"KNORMAL,oname);
 }
 void __hfe_output_crc(struct s_assenv *ae, struct s_hfe_action *hfe_action) {
@@ -14724,7 +14724,7 @@ void amsdos_remove_entry(struct s_edsk_global_struct *edsk, int side, unsigned c
 	int i;
 
 	entry[0]=amsdos_user;
-	strcpy(entry+1,entryName);
+	strcpy((char *)entry+1,(char *)entryName);
 
 	for (i=0;i<32;i++) {
 		if (!memcmp(&edsk->floppy_block[edsk->bstart].data[i*32],entry,9)) { // user+filename without extension
@@ -14749,7 +14749,7 @@ int amsdos_entry_exists(struct s_edsk_global_struct *edsk, int side, unsigned ch
 	int i,j;
 
 	entry[0]=amsdos_user;
-	strcpy(entry+1,entryName);
+	strcpy((char*)entry+1,(char*)entryName);
 	//printf("#%02X ",amsdos_user); for (j=1;j<12;j++) printf("%c",entry[j]); printf("\n");
 
 	for (i=0;i<32;i++) {
@@ -14790,7 +14790,7 @@ void amsdos_build_entries(struct s_edsk_global_struct *edsk) {
 
 		amsdos_init_entries(edsk);
 
-		strcpy(fullname,"");
+		strcpy((char *)fullname,"");
 		curuser=-1;
 		for (i=0;i<64;i++) {
 			if (edsk->floppy_directory[i].user<16) { // valid user
@@ -14799,7 +14799,7 @@ void amsdos_build_entries(struct s_edsk_global_struct *edsk) {
 				memcpy(curfullname+9,edsk->floppy_directory[i].filename+8,3);
 				curfullname[12]=0;
 
-				if (strcmp(curfullname,fullname) || curuser!=edsk->floppy_directory[i].user) { // new entry, flush entry!
+				if (strcmp((char*)curfullname,(char*)fullname) || curuser!=edsk->floppy_directory[i].user) { // new entry, flush entry!
 					// flush
 #define PUSH_ENTRY	if (fullname[0]) { \
 						edsk->floppy_entries[iname].isprotected=fullname[9]&0x80;fullname[9]&=0x7F; \
@@ -14807,7 +14807,7 @@ void amsdos_build_entries(struct s_edsk_global_struct *edsk) {
 						edsk->floppy_entries[iname].user=curuser; \
 						edsk->floppy_entries[iname].wrapentry=wrapentry; \
 						if (fullname[0]<0x80 && fullname[1]<0x80 && fullname[2]<0x80 && fullname[3]<0x80 && fullname[4]<0x80 && fullname[5]<0x80 && fullname[6]<0x80 && fullname[7]<0x80) { \
-							strcpy(edsk->floppy_entries[iname].filename,fullname); \
+							strcpy(edsk->floppy_entries[iname].filename,(char *)fullname); \
 							edsk->floppy_entries[iname].allocsize=filealloc; \
 							edsk->floppy_entries[iname].realsize=filesize; \
 							edsk->floppy_entries[iname].isdisplayable=1; \
@@ -14821,7 +14821,7 @@ void amsdos_build_entries(struct s_edsk_global_struct *edsk) {
 					PUSH_ENTRY; // push previous entry
 						    //
 					curuser=edsk->floppy_directory[i].user;
-					strcpy(fullname,curfullname);
+					strcpy((char*)fullname,(char*)curfullname);
 					filesize=edsk->floppy_directory[i].rc*128;
 					filealloc=0;
 					wrapentry=i;
@@ -15189,7 +15189,7 @@ struct s_edsk_global_struct *edsktool_EDSK_load(char *edskfilename) //@@TODO fai
                                 }
                         }
                 }
-        } else if (strncmp(header,"MV - CPC",8)==0) {
+        } else if (strncmp((char *)header,"MV - CPC",8)==0) {
                 printf("opening legacy DSK [%s] / creator: %-14.14s\n",edskfilename,header+34);
 
                 tracknumber=header[34+14];
@@ -15215,7 +15215,7 @@ struct s_edsk_global_struct *edsktool_EDSK_load(char *edskfilename) //@@TODO fai
                                 curtrack=t*edsk->sidenumber+face;
 
                                 i=(t*edsk->sidenumber+face)*tracksize;
-                                if (strncmp(data+i,"Track-Info\r\n",12)) {
+                                if (strncmp((char *)data+i,"Track-Info\r\n",12)) {
                                         printf("Invalid track information block side %d track %d",face,t);
                                         return NULL;
                                 }
@@ -15290,8 +15290,8 @@ void edsktool_EDSK_write_file(struct s_edsk_global_struct *edsk, char *output_fi
 //printf("write edsk %s (first sector ID #%02X\n",output_filename,edsk->track[0].sector[0].id);
         /* écriture header */
         strcpy((char *)header,"EXTENDED CPC DSK File\r\nDisk-Info\r\n");
-        sprintf(headertag,"%-9.9s","edskt");
-        strcpy((char *)header+0x22,headertag);
+        sprintf((char *)headertag,"%-9.9s","edskt");
+        strcpy((char *)header+0x22,(char*)headertag);
         header[0x30]=edsk->tracknumber;
         header[0x31]=edsk->sidenumber;
 
@@ -15553,8 +15553,8 @@ void __edsk_delfile(struct s_assenv *ae, struct s_edsk_action *action) {
 
 	amsdos_build_entries(edsk);
 	strcpy(amsdos_name,MakeAMSDOS_name(ae,filename,&amsdos_user));
-	if (amsdos_entry_exists(edsk,side,amsdos_name,amsdos_user)) {
-		amsdos_remove_entry(edsk,side,amsdos_name,amsdos_user);
+	if (amsdos_entry_exists(edsk,side,(unsigned char *)amsdos_name,amsdos_user)) {
+		amsdos_remove_entry(edsk,side,(unsigned char *)amsdos_name,amsdos_user);
 
 	} else {
 		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"EDSK DELFILE error, file [%s] not found on DSK!\n",amsdos_name);
@@ -15608,7 +15608,7 @@ void __edsk_readfile(struct s_assenv *ae, struct s_edsk_action *action) {
 	strcpy(amsdos_name,MakeAMSDOS_name(ae,filename,&amsdos_user));
 //printf("AMSDOS_NAME=[%s] / user=%d\n",amsdos_name, amsdos_user);
 
-	if (amsdos_entry_exists(edsk,side,amsdos_name,amsdos_user)) {
+	if (amsdos_entry_exists(edsk,side,(unsigned char *)amsdos_name,amsdos_user)) {
 		int wasfound=0;
 		// check sur les options et le fichier recherché
 		for (i=0;i<64;i++) {
@@ -15828,8 +15828,11 @@ void __edsk_create(struct s_assenv *ae, struct s_edsk_action *action) {
 			unsigned char vendor_inter[9]={0x41,0x46,0x42,0x47,0x43,0x48,0x44,0x49,0x45};
 			unsigned char *sectid;
 
-			if (strcmp(format,"DATA")==0)   if (interlaced) sectid=data_inter; else sectid=data_inline;
-			if (strcmp(format,"VENDOR")==0) if (interlaced) sectid=vendor_inter; else sectid=vendor_inline;
+			if (strcmp(format,"DATA")==0)   {
+				if (interlaced) sectid=data_inter; else sectid=data_inline;
+			} else if (strcmp(format,"VENDOR")==0) {
+				if (interlaced) sectid=vendor_inter; else sectid=vendor_inline;
+			}
 
                 	for (s=0;s<nbside;s++)
 			for (t=0;t<nbtrack;t++) {
@@ -17128,7 +17131,7 @@ void __CPRINIT(struct s_assenv *ae) {
 	}
 
 	// check CPR header + consistency
-	if (strncmp(cprdata,"RIFF",4)) {
+	if (strncmp((char *)cprdata,"RIFF",4)) {
 		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"[%s] has not a RIFF chunk!\n",newfilename);
 		MemFree(newfilename);
 		MemFree(cprdata);
@@ -17141,7 +17144,7 @@ void __CPRINIT(struct s_assenv *ae) {
 		MemFree(cprdata);
 		return;
 	}
-	if (strncmp(cprdata+8,"AMS!",4)) {
+	if (strncmp((char *)cprdata+8,"AMS!",4)) {
 		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"[%s] chunk must start with 'AMS!' tag!\n",newfilename);
 		MemFree(newfilename);
 		MemFree(cprdata);
@@ -17152,7 +17155,7 @@ void __CPRINIT(struct s_assenv *ae) {
 	idx=12; // skip header+tag	
 
 	// handle fmt TAG
-	if (idx+8<chunksize && !strncmp(cprdata+idx,"fmt ",4)) {
+	if (idx+8<chunksize && !strncmp((char*)cprdata+idx,"fmt ",4)) {
 		//MakeError(ae,GetCurrentFile(ae),ae->wl[ae->idx].l,"[%s] chunk must start with 'AMS!' tag!\n",newfilename);
 		//MemFree(newfilename);
 		//MemFree(cprdata);
@@ -17162,7 +17165,7 @@ void __CPRINIT(struct s_assenv *ae) {
 	}
 
 	while (idx+8<chunksize) {
-		if (strncmp(cprdata+idx,"cb",2) || cprdata[idx+2]<'0' || cprdata[idx+2]>'9' || cprdata[idx+3]<'0' || cprdata[idx+3]>'9') {
+		if (strncmp((char*)cprdata+idx,"cb",2) || cprdata[idx+2]<'0' || cprdata[idx+2]>'9' || cprdata[idx+3]<'0' || cprdata[idx+3]>'9') {
 			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"[%s] has an invalid block header! %c%c%c%c\n",newfilename,cprdata[idx],cprdata[idx+1],cprdata[idx+2],cprdata[idx+3]);
 			MemFree(newfilename);
 			MemFree(cprdata);
@@ -18329,8 +18332,8 @@ void __UTF8REMAP(struct s_assenv *ae) {
 		ae->iUtf8Remap=0;
 	} else if (!ae->wl[ae->idx].t && !ae->wl[ae->idx+1].t && ae->wl[ae->idx+2].t==1) {
 		if (StringIsQuote(ae->wl[ae->idx+1].w)) {
-			strncpy(utr.utf8Code,ae->wl[ae->idx+1].w+1,sizeof(utr.utf8Code)-1);
-			utr.utf8Len=strlen(utr.utf8Code);
+			strncpy((char *)utr.utf8Code,ae->wl[ae->idx+1].w+1,sizeof(utr.utf8Code)-1);
+			utr.utf8Len=strlen((char*)utr.utf8Code);
 			utr.utf8Code[utr.utf8Len]=0;
 			utr.utf8Len--;
 			ExpressionFastTranslate(ae,&ae->wl[ae->idx+2].w,0);
@@ -18475,11 +18478,16 @@ void __MACRO(struct s_assenv *ae) {
 			if ((SearchDico(ae,ae->wl[ae->idx+1].w,curmacro.crc))!=NULL) {
 				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Macro definition: There is already a variable with this name\n");
 			} else {
-				if ((SearchLabel(ae,ae->wl[ae->idx+1].w,curmacro.crc))!=NULL) {
-					MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Macro definition: There is already a label with this name\n");
+				struct s_label *chklab;
+				struct s_alias *chkali;
+				if ((chklab=SearchLabel(ae,ae->wl[ae->idx+1].w,curmacro.crc))!=NULL) {
+					MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Macro definition: There is already a label with this name [%s:%d]\n",
+							ae->filename[chklab->fileidx],
+							chklab->fileline);
 				} else {
-					if (SearchAlias(ae,curmacro.crc,ae->wl[ae->idx+1].w)) {
-						MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Macro definition: There is already an alias with this name\n");
+					if ((chkali=SearchAlias(ae,curmacro.crc,ae->wl[ae->idx+1].w))!=NULL) {
+						MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Macro definition: There is already an alias with this name [%s:%d] ",
+								ae->filename[ae->wl[chkali->iw].mifile],ae->wl[chkali->iw].ml);
 					} else {
 						if (IsRegister(curmacro.mnemo)) {
 							MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Macro definition: Cannot choose a register as macro name\n");
@@ -22862,7 +22870,7 @@ char *WhichColor(const char *content) {
 }
 
 unsigned char * _internal_export_REMU(struct s_assenv *ae, unsigned int *rchksize) {
-	unsigned char *remu_output=NULL;
+	char *remu_output=NULL;
 	char zedigit[128];
 	char shortlabel[64];
 	int ilocal=0,i,m;
@@ -23017,7 +23025,7 @@ unsigned char * _internal_export_REMU(struct s_assenv *ae, unsigned int *rchksiz
 	//FileWriteBinary(TMP_filename,(char*)remu_output,chunksize+8); // 8 bytes for the chunk header
 	//MemFree(remu_output);
 	*rchksize=chunksize;
-	return remu_output;
+	return (unsigned char *)remu_output;
 }
 
 int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s_rasm_info **debug)
@@ -27139,8 +27147,8 @@ printf("quotes\n");
 									if ((unsigned char)w[utidx]>126) {
 										switch ((unsigned char)w[utidx]) {
 											case 0xC2:
-												if ((unsigned char)w[utidx+1]==0xBF) w[utidx]=174; else // ¿
-												if ((unsigned char)w[utidx+1]==0xA1) w[utidx]=175; else // ¡
+												if ((unsigned char)w[utidx+1]==0xBF) w[utidx]=-82; else // ¿  (174)
+												if ((unsigned char)w[utidx+1]==0xA1) w[utidx]=-81; else // ¡ (175)
 													MakeError(ae,0,ae->filename[listing[l].ifile],listing[l].iline,"Unsupported UTF8 char for quoted string\n");
 												break;
 											case 0xC3:
@@ -27148,8 +27156,8 @@ printf("quotes\n");
 												if ((unsigned char)w[utidx+1]==0xA9) w[utidx]=123; else // é
 												if ((unsigned char)w[utidx+1]==0xA8) w[utidx]=125; else // è
 												if ((unsigned char)w[utidx+1]==0xA0) w[utidx]=64; else  // à
-												if ((unsigned char)w[utidx+1]==0x91) w[utidx]=161; else // Ñ
-												if ((unsigned char)w[utidx+1]==0xB1) w[utidx]=171; else // ñ
+												if ((unsigned char)w[utidx+1]==0x91) w[utidx]=-95; else // Ñ (161)
+												if ((unsigned char)w[utidx+1]==0xB1) w[utidx]=-85; else // ñ (171)
 												if ((unsigned char)w[utidx+1]==0xA7) {                  // ç
 													w[utidx]=92;
 													w[utidx+1]=92; // conversion to "\\"
@@ -29750,7 +29758,7 @@ void RasmAutotest(void)
 		0xBE,0xF6,0xCC,0x12,0x73};
 	unsigned char crlfbug[32]={0x20,0x0d,0x0a,0x0d,0x0a,0xa,0xa,0xd,0xd,0x20,0x0d,0x0a,0x0d,0x0a,0xa,0xa,
 				0x20,0x0d,0x0a,0x0d,0x0a,0xa,0xa,0xd,0xd,0x20,0x0d,0x0a,0x0d,0x0a,0xa,0xa};
-	unsigned char *include01="ld a,5";
+	unsigned char *include01=(unsigned char *)"ld a,5";
 
 #ifdef RDD
 	printf("\n%d bytes\n",_static_library_memory_used);
@@ -29830,7 +29838,7 @@ printf("testing rasm source integrity : activebank and maxptr update OK\n");
 #ifndef OS_WIN
 	/* Autotest preprocessing */
 	FileRemoveIfExists("rasmTesting01.asm");
-	FileWriteBinary("rasmTesting01.asm",(char *)include01,strlen(include01));
+	FileWriteBinary("rasmTesting01.asm",(char *)include01,strlen((char *)include01));
 	FileWriteBinaryClose("rasmTesting01.asm");
 #define AUTOTEST_PROPER_INCLUDE "nop:include'rasmTesting01.asm':nop:include 'rasmTesting01.asm' : nop"
 	ret=RasmAssemble(AUTOTEST_PROPER_INCLUDE,strlen(AUTOTEST_PROPER_INCLUDE),&opcode,&opcodelen);
@@ -29932,7 +29940,7 @@ printf("testing command line parameter -amper OK\n");
 
 	#define AUTOTEST_AMPER "defb 'machin&truc : ld a,&12 : bidule',0"
 	ret=RasmAssembleInfoParam(AUTOTEST_AMPER,strlen(AUTOTEST_AMPER),&opcode,&opcodelen,&debug,&param);
-	if (!ret && !strchr(opcode,'#')) {} else {printf("Autotest %03d ERROR (testing ampersand with strings)\n",cpt);MiniDump(opcode,opcodelen);for (i=0;i<debug->nberror;i++) printf("%d -> %s\n",i,debug->error[i].msg);exit(-1);}
+	if (!ret && !strchr((char *)opcode,'#')) {} else {printf("Autotest %03d ERROR (testing ampersand with strings)\n",cpt);MiniDump(opcode,opcodelen);for (i=0;i<debug->nberror;i++) printf("%d -> %s\n",i,debug->error[i].msg);exit(-1);}
 	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
 	RasmFreeInfoStruct(debug);
 printf("testing ampersand with strings OK\n");
@@ -30355,7 +30363,7 @@ printf("testing DEFS OK\n");
 
 #define AUTOTEST_STRCHAR0 "str 'roudou',0+'d','ou'"
 	ret=RasmAssemble(AUTOTEST_STRCHAR0,strlen(AUTOTEST_STRCHAR0),&opcode,&opcodelen);
-	if (!ret && opcodelen==9 && strncmp(opcode,"roudoudo",8)==0 && opcode[8]==('u'|0x80)) {} else {printf("Autotest %03d ERROR (STR+single byte)\n",cpt);exit(-1);}
+	if (!ret && opcodelen==9 && strncmp((char*)opcode,"roudoudo",8)==0 && opcode[8]==('u'|0x80)) {} else {printf("Autotest %03d ERROR (STR+single byte)\n",cpt);exit(-1);}
 	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
 printf("testing STR evolution (single byte) OK\n");
 
@@ -30373,7 +30381,7 @@ printf("testing STR evolution (single byte ter) OK\n");
 
 #define AUTOTEST_STRHEX "str 'roud\x4Fudou'"
 	ret=RasmAssemble(AUTOTEST_STRHEX,strlen(AUTOTEST_STRHEX),&opcode,&opcodelen);
-	if (!ret && opcodelen==9 && strncmp(opcode,"roudOudo",8)==0 && opcode[8]==('u'|0x80)) {} else {printf("Autotest %03d ERROR (STR+Hex escape sequence)\n",cpt);exit(-1);}
+	if (!ret && opcodelen==9 && strncmp((char*)opcode,"roudOudo",8)==0 && opcode[8]==('u'|0x80)) {} else {printf("Autotest %03d ERROR (STR+Hex escape sequence)\n",cpt);exit(-1);}
 	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
 printf("testing STR evolution (Hex escape sequence) OK\n");
 
@@ -30472,7 +30480,7 @@ printf("testing simple charset OK\n");
 printf("testing extended charset OK\n");
 	
 	ret=RasmAssemble(AUTOTEST_CHARSET3,strlen(AUTOTEST_CHARSET3),&opcode,&opcodelen);
-	if (!ret && strcmp(opcode,"ZIT JXOEA WKGVF YGB")==0) {} else {printf("Autotest %03d ERROR (charset string string)\n",cpt);exit(-1);}
+	if (!ret && strcmp((char *)opcode,"ZIT JXOEA WKGVF YGB")==0) {} else {printf("Autotest %03d ERROR (charset string string)\n",cpt);exit(-1);}
 	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
 printf("testing charset string string OK\n");
 
