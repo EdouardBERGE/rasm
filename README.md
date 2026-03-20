@@ -67,9 +67,9 @@ The project was born a few years ago (2017) because i needed a really fast assem
 
 You can play with RASM live on https://cpc-playground.iiivan.org/
 
-Arkos tracker is powered by RASM on https://www.julien-nevo.com/arkostracker/
+Arkos Tracker is powered by RASM on https://www.julien-nevo.com/arkostracker/
 
-RetroDev intégrated dev environnement with RASM byte the Lord of the Bits! https://github.com/tlotb/retrodev
+RetroDev intégrated dev environnement with RASM by the Lord of the Bits! https://github.com/tlotb/retrodev
 
 BTW there is many other assemblers you could try:
 
