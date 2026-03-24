@@ -9565,9 +9565,9 @@ void amsdos_update_edsk(struct s_edsk_global_struct *edsk);
 int amsdos_can_write(struct s_edsk_global_struct *edsk,int filesize);
 void amsdos_write_file(struct s_edsk_global_struct *edsk, int side, int user, char *filename, int protection, int hidden, unsigned char *data, int datalen);
 void amsdos_set_flags(struct s_edsk_global_struct *edsk, int side, unsigned char *entry, int protection, int hidden);
-void amsdos_remove_entry(struct s_edsk_global_struct *edsk, int side, unsigned char *entry, int amsdos_user);
+void amsdos_remove_entry(struct s_assenv *ae,struct s_edsk_global_struct *edsk, int side, unsigned char *entry, int amsdos_user);
 int amsdos_entry_exists(struct s_edsk_global_struct *edsk, int side, unsigned char *entry, int amsdos_user);
-void amsdos_build_entries(struct s_edsk_global_struct *edsk);
+void amsdos_build_entries(struct s_assenv *ae,struct s_edsk_global_struct *edsk);
 
 int EDSK_addfile(struct s_assenv *ae,char *edskfilename,int facenumber, char *filename,unsigned char *indata,int insize, int offset, int run, int tag_protection, int tag_hidden)
 {
@@ -9589,7 +9589,7 @@ int EDSK_addfile(struct s_assenv *ae,char *edskfilename,int facenumber, char *fi
 		//printf("load [%s]\n",edskfilename);
 		edsk=edsktool_EDSK_load(edskfilename);
 	}
-	amsdos_build_entries(edsk);
+	amsdos_build_entries(ae,edsk);
 
 	/* update struct */
 	size=insize+128;
@@ -9604,7 +9604,7 @@ int EDSK_addfile(struct s_assenv *ae,char *edskfilename,int facenumber, char *fi
 			MemFree(data);
 			return 0;
 		} else {
-			amsdos_remove_entry(edsk,facenumber,(unsigned char *)amsdos_name,amsdos_user);
+			amsdos_remove_entry(ae,edsk,facenumber,(unsigned char *)amsdos_name,amsdos_user);
 		}
 	}
 
@@ -14719,7 +14719,7 @@ void amsdos_set_flags(struct s_edsk_global_struct *edsk, int side, unsigned char
 	edsk->floppy_block[edsk->bstart+1].istowrite=1;
 	amsdos_update_edsk(edsk);
 }
-void amsdos_remove_entry(struct s_edsk_global_struct *edsk, int side, unsigned char *entryName, int amsdos_user) {
+void amsdos_remove_entry(struct s_assenv *ae,struct s_edsk_global_struct *edsk, int side, unsigned char *entryName, int amsdos_user) {
 	unsigned char entry[16];
 	int i;
 
@@ -14742,7 +14742,7 @@ void amsdos_remove_entry(struct s_edsk_global_struct *edsk, int side, unsigned c
 	edsk->floppy_block[edsk->bstart+1].istowrite=1;
 	amsdos_update_edsk(edsk);
 	// rebuild because there is more free space now!
-	amsdos_build_entries(edsk);
+	amsdos_build_entries(ae,edsk);
 }
 int amsdos_entry_exists(struct s_edsk_global_struct *edsk, int side, unsigned char *entryName, int amsdos_user) {
 	unsigned char entry[16];
@@ -14773,7 +14773,7 @@ int amsdos_entry_exists(struct s_edsk_global_struct *edsk, int side, unsigned ch
 }
 
 
-void amsdos_build_entries(struct s_edsk_global_struct *edsk) {
+void amsdos_build_entries(struct s_assenv *ae,struct s_edsk_global_struct *edsk) {
 	unsigned char fullname[16],curfullname[16];
 	int i,j,k,counter,isprotected,ishidden,curuser;
 	int filesize=0,filealloc=0,wrapentry=0;//warning remover
@@ -14782,13 +14782,13 @@ void amsdos_build_entries(struct s_edsk_global_struct *edsk) {
 	//***********************************************************************************************
 	//                                     make directory
 	//***********************************************************************************************
+	amsdos_init_entries(edsk); // in all cases
+
 	if (edsk->bstart!=-1) {
 		// copy vendor/data directory
 		memcpy(&edsk->floppy_directory[0] ,edsk->floppy_block[edsk->bstart].data,1024);
 		memcpy(&edsk->floppy_directory[32],edsk->floppy_block[edsk->bstart+1].data,1024);
 		qsort(edsk->floppy_directory,64,sizeof(struct s_amsdos_dir_wrapper_entry),cmpAmsdosentry);
-
-		amsdos_init_entries(edsk);
 
 		strcpy((char *)fullname,"");
 		curuser=-1;
@@ -14798,7 +14798,6 @@ void amsdos_build_entries(struct s_edsk_global_struct *edsk) {
 				curfullname[8]='.';
 				memcpy(curfullname+9,edsk->floppy_directory[i].filename+8,3);
 				curfullname[12]=0;
-
 				if (strcmp((char*)curfullname,(char*)fullname) || curuser!=edsk->floppy_directory[i].user) { // new entry, flush entry!
 					// flush
 #define PUSH_ENTRY	if (fullname[0]) { \
@@ -14839,15 +14838,25 @@ void amsdos_build_entries(struct s_edsk_global_struct *edsk) {
 			}
 		}
 		PUSH_ENTRY;
+	} else {
+		if (!ae->nowarning) {
+			rasm_printf(ae,KWARNING"[%s:%d] Warning: DSK has non standard directory\n",GetCurrentFile(ae),ae->wl[ae->idx].l);
+			if (ae->erronwarn) MaxError(ae);
+		}
 	}
+#if TRACE_EDSK
+	printf("There is %d entries\n",iname);
+#endif
 	for (i=0;i<iname;i++) {
 		// only 'normal' file can be saved
 		if (edsk->floppy_entries[i].isdisplayable) {
+			int firstUser;
 			edsk->floppy_entries[i].isondisk=1; // default, then we will see
 			j=edsk->floppy_entries[i].wrapentry;
+			firstUser=edsk->floppy_directory[j].user;
 			nextoffset=0;
 			remaining=edsk->floppy_entries[i].realsize;
-			for (counter=0;edsk->floppy_directory[j].subcpt==counter;counter++,j++) { // pas ouf mais difficile a corrompre quand meme
+			for (counter=0;edsk->floppy_directory[j].subcpt==counter && edsk->floppy_directory[j].user==firstUser;counter++,j++) { // we must avoid to mix similar entries
 				block2run=edsk->floppy_directory[j].rc>>3;
 				if (edsk->floppy_directory[j].rc&7) block2run++;
 				for (k=0;k<block2run;k++) {
@@ -15298,6 +15307,9 @@ void edsktool_EDSK_write_file(struct s_edsk_global_struct *edsk, char *output_fi
         for (t=0;t<edsk->tracknumber;t++)
         for (face=0;face<edsk->sidenumber;face++) {
                 curtrack=t*edsk->sidenumber+face;
+		if (curtrack+0x34>=256) {
+			printf("INTERNAL ERROR, header overflow\n");
+		}
                 if (edsk->track[curtrack].unformated) {
                         tracksize=0;
                 } else {
@@ -15309,7 +15321,9 @@ void edsktool_EDSK_write_file(struct s_edsk_global_struct *edsk, char *output_fi
                 }
                 header[0x34+curtrack]=tracksize>>8;
         }
-
+#if TRACE_EDSK
+        printf(KIO"Write edsk HEADER\n");
+#endif
 	FileWriteBinary(output_filename,(char*)header,256);
 
         /* écriture des pistes */
@@ -15551,10 +15565,10 @@ void __edsk_delfile(struct s_assenv *ae, struct s_edsk_action *action) {
 		return;
 	}
 
-	amsdos_build_entries(edsk);
+	amsdos_build_entries(ae,edsk);
 	strcpy(amsdos_name,MakeAMSDOS_name(ae,filename,&amsdos_user));
 	if (amsdos_entry_exists(edsk,side,(unsigned char *)amsdos_name,amsdos_user)) {
-		amsdos_remove_entry(edsk,side,(unsigned char *)amsdos_name,amsdos_user);
+		amsdos_remove_entry(ae,edsk,side,(unsigned char *)amsdos_name,amsdos_user);
 
 	} else {
 		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"EDSK DELFILE error, file [%s] not found on DSK!\n",amsdos_name);
@@ -15604,7 +15618,7 @@ void __edsk_readfile(struct s_assenv *ae, struct s_edsk_action *action) {
 		return;
 	}
 
-	amsdos_build_entries(edsk);
+	amsdos_build_entries(ae,edsk);
 	strcpy(amsdos_name,MakeAMSDOS_name(ae,filename,&amsdos_user));
 //printf("AMSDOS_NAME=[%s] / user=%d\n",amsdos_name, amsdos_user);
 
@@ -17025,8 +17039,10 @@ void __BUILDCPR(struct s_assenv *ae) {
 		ae->idx++;
 		if (strncmp(ae->wl[ae->idx].w,"SYMBOL",6)==0) {
 			ae->export_cprSymbol=1; // symbols for ACE inside cartridge
+		} else if (strcmp(ae->wl[ae->idx].w,"LEGACY")==0) {
+			ae->extendedCPR|=2; // regular CPR extended
 		} else if (strcmp(ae->wl[ae->idx].w,"EXTENDED")==0) {
-			ae->extendedCPR=1;
+			ae->extendedCPR|=1;
 		} else if (StringIsQuote(ae->wl[ae->idx].w)) {
 			int validExt=0;
 			int idx;
@@ -21314,7 +21330,6 @@ unsigned char * __internal_floatinversion(const unsigned char *data) {
 float __internal_audio_filter(const float e) {
         static float old_old_s=0.0,old_s=0.0,s=0.0;
         static float old_old_e=0.0,old_e=0.0;
-
 	// bandpass 100Hz / 7800Hz for 15625Hz acquisition
         s=e*-0.980257+old_old_e*0.980257+old_s*-0.039487+old_old_s*0.960513;
         old_old_s=old_s;
@@ -21586,7 +21601,7 @@ printf("AudioLoadSample filesize=%d st=%d normalize=%.2lf\n",filesize,sample_typ
 				} else {
 					if (!samplerepeat) {
 						/* DMA output */
-						___output(ae,sampleprevious);
+						___output(ae,samplevalue);
 						___output(ae,mypsgreg); /* volume canal A/B/C */
 					} else {
 						/* DMA pause */
@@ -21606,7 +21621,7 @@ printf("AudioLoadSample filesize=%d st=%d normalize=%.2lf\n",filesize,sample_typ
 			}
 			/* if last sample is alone */
 			if (!samplerepeat) {
-				___output(ae,sampleprevious);
+				___output(ae,samplevalue);
 				___output(ae,mypsgreg); /* volume canal A/B/C */
 			}
 			break;
@@ -21900,7 +21915,7 @@ printf("Hexbin -> surprise! we found the file!\n");
 
 		if (incwav) {
 			/* SMP,SM2,SM4,DMA */
-			int dma_args=3;
+			int dma_args=2;
 			int dma_channel=AUDIOSAMPLE_DMAC;
 			int dma_int=0,dma_repeat=0;
 			int mypsgreg=0xA;
@@ -24423,12 +24438,24 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 				if (ae->cartridge_name) {
 					sprintf(TMP_filename,"%s",ae->cartridge_name);
 				} else {
-					if (!ae->extendedCPR) sprintf(TMP_filename,"%s.cpr",ae->outputfilename);
+					if (!ae->extendedCPR && !(ae->extendedCPR&2)) sprintf(TMP_filename,"%s.cpr",ae->outputfilename);
 					else sprintf(TMP_filename,"%s.xpr",ae->outputfilename);
 				}
 				FileRemoveIfExists(TMP_filename);
-				
-				rasm_printf(ae,KIO"Write %scartridge file %s\n",ae->extendedCPR?"extended ":"",TMP_filename);
+			
+				switch (ae->extendedCPR) {
+					case 0:	rasm_printf(ae,KIO"Write cartridge file %s\n",TMP_filename);break;
+					case 1:	rasm_printf(ae,KIO"Write extended cartridge file %s\n",TMP_filename);break;
+					case 2:case 3: rasm_printf(ae,KIO"Write legacy extended cartridge file %s\n",TMP_filename);break;
+				}
+				if (ae->extendedCPR&2) {
+					if (maxrom<96) {
+						ae->extendedCPR=0; // regular CPR with moar chunks
+					} else {
+						rasm_printf(ae,KWARNING"[%s:%d] Warning: Cannot extend legacy CPR with more than 96 ROMS...\n",GetCurrentFile(ae),ae->wl[ae->idx].l);
+						if (ae->erronwarn) MaxError(ae);
+					}
+				}
 				if (!ae->snacpr) {
 					for (i=maxrom=0;i<ae->io;i++) {
 						if (ae->orgzone[i].ibank<256 && ae->orgzone[i].ibank>maxrom) maxrom=ae->orgzone[i].ibank;
