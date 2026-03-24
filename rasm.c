@@ -30964,6 +30964,19 @@ printf("testing directive SUMMEM16 OK\n");
 	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
 printf("testing formula RND function OK\n");
 
+#define AUTOTEST_EDSK_OVERWRITE_FILEK "EDSK create,'rasmoutput_test.dsk',DATA,OVERWRITE:bank:" \
+	"save 'crash.bin',0,20000,DSK,'rasmoutput_test.dsk':"\
+	"save 'crash.bin',0,8700,DSK,'rasmoutput_test.dsk':"\
+	"save 'rdd.bin',0,100,DSK,'rasmoutput_test.dsk'"
+	memset(&param,0,sizeof(struct s_parameter));
+	param.edskoverwrite=1; // else it wont work!
+	ret=RasmAssembleInfoParam(AUTOTEST_EDSK_OVERWRITE_FILEK,strlen(AUTOTEST_EDSK_OVERWRITE_FILEK),&opcode,&opcodelen,&debug,&param);
+	if (!ret) {} else {printf("Autotest %03d ERROR (testing EDSK engine overrun crash)\n",cpt);
+		for (i=0;i<debug->nberror;i++) printf("%d -> %s\n",i,debug->error[i].msg);
+		exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing EDSK engine crash with multiple overwrites of different size (related to entries)\n");
+
 #define AUTOTEST_EDSK_OVERWRITE_FILE0 "EDSK create,'rasmoutput_test.dsk',DATA,OVERWRITE:bank:" \
 "org #100 : defb 'roudoudou' : save 'machin.bin',#100,$-#100,DSK,'rasmoutput_test.dsk' : " \
 "save '1:machin.bin',#100,$-#100,DSK,'rasmoutput_test.dsk'" 
