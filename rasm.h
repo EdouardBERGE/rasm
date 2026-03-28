@@ -1,8 +1,8 @@
 #define PROGRAM_NAME      "RASM"
-#define PROGRAM_VERSION   "3.0"
-#define PROGRAM_SUBVERSION   ".9"
-#define PROGRAM_VERSION_FLOAT   "3.09"
-#define PROGRAM_DATE      "24/03/2026"
+#define PROGRAM_VERSION   "3.1"
+#define PROGRAM_SUBVERSION   ".0"
+#define PROGRAM_VERSION_FLOAT   "3.10"
+#define PROGRAM_DATE      "28/03/2026"
 #define PROGRAM_COPYRIGHT "© 2017 BERGE Edouard / roudoudou from Praline"
 #define RELEASE_NAME      "Polaris"
 
