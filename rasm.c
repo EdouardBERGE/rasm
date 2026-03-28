@@ -103,6 +103,47 @@ double fdim(double x,double y) {
 }
 #endif
 
+// simplified token builder for EQU re-entrance check
+char **getToken(char *str, int *nbToken) {
+	int i,start;
+	int st=0,cpt=0;
+	char *newToken;
+	char **tokenList=NULL;
+
+	for (i=0;str[i];i++) {
+		switch (st) {
+			default:
+			case 0: if (str[i]>='A' && str[i]<='Z') {
+					start=i;
+					st=1;
+				}
+				break;
+			case 1: if ((str[i]>='A' && str[i]<='Z') || str[i]=='_' || (str[i]>='0' && str[i]<='9')) {
+				} else {
+					newToken=MemMalloc(i-start+2);
+					memcpy(newToken,str+start,i-start);
+					newToken[i-start]=0;
+					cpt++;
+					tokenList=MemRealloc(tokenList,sizeof(char*)*cpt);
+					tokenList[cpt-1]=newToken;
+					st=0;
+				}
+		}
+	}
+	*nbToken=cpt;
+	return tokenList;
+}
+
+void print_binary_uchar(unsigned char n) {
+    for (int i = 7; i >= 0; i--) {
+        printf("%d", (n >> i) & 1);
+    }
+}
+void print_binary_uint(unsigned int n) {
+    for (int i = 31; i >= 0; i--) {
+        printf("%d", (n >> i) & 1);
+    }
+}
 
 void zx0_reverse(unsigned char *first, unsigned char *last) {
     unsigned char c;
@@ -365,6 +406,7 @@ enum e_expression {
 	E_EXPRESSION_0V32,   /* 32 bits value to current address */
 	E_EXPRESSION_0VR,    /* AMSDOS real value (5 bytes) to current address */
 	E_EXPRESSION_0VRMike,/* Microsoft IEEE-754 real value (5 bytes) to current address */
+	E_EXPRESSION_F24,    /* Float24 is a stripdown of legacy F32, see https://github.com/Zeda/z80float/tree/master/f24 */
 	E_EXPRESSION_IV8,    /* 8 bits value to current address+2 */
 	E_EXPRESSION_IV81,   /* 8 bits value+1 to current address+2 */
 	E_EXPRESSION_3V8,    /* 8 bits value to current address+3 used with LD (IX+n),n */
@@ -1495,6 +1537,7 @@ struct s_math_keyword math_keyword[]={
 #define CRC_DS 0x00004453
 #define CRC_DEFR 0x52464544
 #define CRC_DR 0x00004452
+#define CRC_DF24 0x34324644
 #define CRC_DEFF 0x46464544
 #define CRC_DF 0x00004446
 #define CRC_REPEAT 0x45500406
@@ -1574,7 +1617,7 @@ struct s_math_keyword math_keyword[]={
 
 
 /* struct declaration use special instructions for defines */
-int ICRC_DEFB,ICRC_DEFW,ICRC_DEFI,ICRC_DEFR,ICRC_DEFF,ICRC_DF,ICRC_DEFS,ICRC_DB,ICRC_DW,ICRC_DR,ICRC_DS;
+int ICRC_DEFB,ICRC_DEFW,ICRC_DEFI,ICRC_DEFR,ICRC_DEFF,ICRC_DF,ICRC_DEFS,ICRC_DB,ICRC_DW,ICRC_DR,ICRC_DS,ICRC_DF24;
 /* need to pre-declare var */
 extern struct s_asm_keyword instruction[];
 
@@ -8295,18 +8338,42 @@ printf("%s\n",curalias.translation);
 				curalias.autorise_export=ae->autorise_export;
 				curalias.iw=ae->idx;
 				if (InsertAliasToTree(ae,&curalias)) {
-					int i;
-					ObjectArrayAddDynamicValueConcat((void**)&ae->alias,&ae->ialias,&ae->malias,&curalias,sizeof(curalias));
-					for (i=0;i<ae->ialias-1;i++) {
-						/* is there previous aliases in the new alias? */
-						if (strstr(ae->alias[ae->ialias-1].translation,ae->alias[i].alias)) {
-							/* there is a match, apply alias translation */
-							ExpressionFastTranslate(ae,&ae->alias[ae->ialias-1].translation,2);
-							/* need to compute again len */
-							ae->alias[ae->ialias-1].len=strlen(ae->alias[ae->ialias-1].translation);
-							break;
+					char **tokens;
+					int i,nbToken;
+
+					printf("alias=%s\n",curalias.alias);
+					// is there the alias himself in the alias...
+					tokens=getToken(curalias.translation,&nbToken);
+					for (i=0;i<nbToken;i++) {
+						printf("token=[%s]\n",tokens[i]);
+						if (strcmp(tokens[i],curalias.alias)==0) {
+							MakeError(ae,ae->idx,GetCurrentFile(ae),GetExpLine(ae,0),"Alias are not variables, use = instead of EQU\n");
+							MemFree(curalias.translation);
+							MemFree(curalias.alias);
+							curalias.alias=NULL;
 						}
 					}
+					if (nbToken) {
+						for (i=0;i<nbToken;i++) {
+							MemFree(tokens[i]);
+						}
+						MemFree(tokens);
+					}
+					
+					if (curalias.alias) {
+						ObjectArrayAddDynamicValueConcat((void**)&ae->alias,&ae->ialias,&ae->malias,&curalias,sizeof(curalias));
+						for (i=0;i<ae->ialias-1;i++) {
+							/* is there previous aliases in the new alias? */
+							if (strstr(ae->alias[ae->ialias-1].translation,ae->alias[i].alias)) {
+								/* there is a match, apply alias translation */
+								ExpressionFastTranslate(ae,&ae->alias[ae->ialias-1].translation,2);
+								/* need to compute again len */
+								ae->alias[ae->ialias-1].len=strlen(ae->alias[ae->ialias-1].translation);
+								break;
+							}
+						}
+					}
+
 				} else {
 					MakeError(ae,ae->idx,GetCurrentFile(ae),GetExpLine(ae,0),"Duplicate alias [%s]\n",expr);
 					MemFree(curalias.translation);
@@ -9102,6 +9169,7 @@ void PushExpression(struct s_assenv *ae,const int iw,const enum e_expression zet
 			case E_EXPRESSION_0V32:curexp.ptr=ae->codeadr;ae->outputadr+=4;ae->codeadr+=4;ae->external_mapping_size=4;break;
 			case E_EXPRESSION_0VR:
 			case E_EXPRESSION_0VRMike:curexp.ptr=ae->codeadr;ae->outputadr+=5;ae->codeadr+=5;ae->external_mapping_size=5;break;
+			case E_EXPRESSION_F24:curexp.ptr=ae->codeadr;ae->outputadr+=3;ae->codeadr+=3;ae->external_mapping_size=3;break;
 			case E_EXPRESSION_IV8:
 			case E_EXPRESSION_IV81:curexp.ptr=ae->codeadr;ae->outputadr++;ae->codeadr+=3;ae->external_mapping_size=1;break;
 			case E_EXPRESSION_3V8: curexp.ptr=ae->codeadr;ae->outputadr++;ae->codeadr+=4;ae->external_mapping_size=1;break;
@@ -9159,6 +9227,7 @@ void PushExpression(struct s_assenv *ae,const int iw,const enum e_expression zet
 			case E_EXPRESSION_0V32:ae->outputadr+=4;ae->codeadr+=4;break;
 			case E_EXPRESSION_0VR:
 			case E_EXPRESSION_0VRMike:ae->outputadr+=5;ae->codeadr+=5;break;
+			case E_EXPRESSION_F24:ae->outputadr+=3;ae->codeadr+=3;break;
 			case E_EXPRESSION_IV8:
 			case E_EXPRESSION_IV81:
 			case E_EXPRESSION_3V8:ae->outputadr++;ae->codeadr++;break;
@@ -10241,6 +10310,22 @@ void PopAllExpression(struct s_assenv *ae, const int crunched_zone)
 			case E_EXPRESSION_0VRMike:
 				/* convert v double value to Microsoft 40bits REAL */
 				memcpy(&mem[ae->expression[i].wptr],__internal_MakeRosoftREAL(ae,v,i),5);
+				break;
+			case E_EXPRESSION_F24:
+				{
+				/* strip down FLOAT32 to 24 bits */
+				float vf32=(float)v; // double to float
+				unsigned int *vfp,vfi32;
+				int exponent;
+
+				vfp=(unsigned int *)&vf32; vfi32=*vfp; // big or little endian, same thing
+
+				exponent=(((vfi32>>23)&0xFF)-64)|((vfi32>>24)&0x80);
+				mem[ae->expression[i].wptr+0]=exponent&0xFF;
+				// reverse mantissa for easy 16 bits access in memory
+				mem[ae->expression[i].wptr+2]=(vfi32>>15)&0xFF;
+				mem[ae->expression[i].wptr+1]=(vfi32>>7)&0xFF;
+				}
 				break;
 			case E_EXPRESSION_IM:
 				switch (r) {
@@ -13478,6 +13563,53 @@ void _STR(struct s_assenv *ae) {
 		} while (ae->wl[ae->idx].t==0);
 	} else {
 		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"STR needs one or more quotes parameters\n");
+	}
+}
+
+void _DF24(struct s_assenv *ae) {
+	if (!ae->wl[ae->idx].t) {
+		do {
+			ae->idx++;
+			PushExpression(ae,ae->idx,E_EXPRESSION_F24);
+		} while (ae->wl[ae->idx].t==0);
+	} else {
+		if (ae->getstruct) {
+			___output(ae,0);___output(ae,0);___output(ae,0);
+		} else {
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"DF24 needs one or more parameters\n");
+		}
+	}
+}
+void _DF24_struct(struct s_assenv *ae) {
+	unsigned char *rc;
+	double v;
+	if (!ae->wl[ae->idx].t) {
+		do {
+			float vf32; // double to float
+			unsigned int *vfp,vfi32;
+			int exponent;
+
+			ae->idx++;
+			/* conversion des symboles connus */
+			ExpressionFastTranslate(ae,&ae->wl[ae->idx].w,0);
+			/* calcul de la valeur définitive de l'expression */
+			v=ComputeExpressionCore(ae,ae->wl[ae->idx].w,ae->outputadr,0);
+			/* strip down FLOAT32 to 24 bits */
+			vf32=(float)v;
+			vfp=(unsigned int *)&vf32; vfi32=*vfp; // big or little endian, same thing
+			exponent=(((vfi32>>23)&0xFF)-64)|((vfi32>>24)&0x80);
+			___output(ae,exponent&0xFF);
+			// reverse mantissa for easy 16 bits access in memory
+			___output(ae,(vfi32>>7)&0xFF);
+			___output(ae,(vfi32>>15)&0xFF);
+
+		} while (ae->wl[ae->idx].t==0);
+	} else {
+		if (ae->getstruct) {
+			___output(ae,0);___output(ae,0);___output(ae,0);
+		} else {
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"DF24 needs one or more parameters\n");
+		}
 	}
 }
 
@@ -20881,6 +21013,7 @@ void __STRUCT(struct s_assenv *ae) {
 					instruction[ICRC_DEFB].makemnemo=_DEFB_struct;instruction[ICRC_DB].makemnemo=_DEFB_struct;
 					instruction[ICRC_DEFW].makemnemo=_DEFW_struct;instruction[ICRC_DW].makemnemo=_DEFW_struct;
 					instruction[ICRC_DEFI].makemnemo=_DEFI_struct;
+					instruction[ICRC_DF24].makemnemo=_DF24_struct;
 					instruction[ICRC_DEFF].makemnemo=_DEFF_struct;instruction[ICRC_DF].makemnemo=_DEFF_struct;
 					instruction[ICRC_DEFR].makemnemo=_DEFR_struct;instruction[ICRC_DR].makemnemo=_DEFR_struct;
 					instruction[ICRC_DEFS].makemnemo=_DEFS_struct;instruction[ICRC_DS].makemnemo=_DEFS_struct;
@@ -21243,6 +21376,7 @@ void __ENDSTRUCT(struct s_assenv *ae) {
 				instruction[ICRC_DEFW].makemnemo=_DEFW;instruction[ICRC_DW].makemnemo=_DEFW;
 				instruction[ICRC_DEFI].makemnemo=_DEFI;
 			}
+			instruction[ICRC_DF24].makemnemo=_DF24;
 			instruction[ICRC_DEFF].makemnemo=_DEFF;instruction[ICRC_DF].makemnemo=_DEFF;
 			instruction[ICRC_DEFR].makemnemo=_DEFR;instruction[ICRC_DR].makemnemo=_DEFR;
 			instruction[ICRC_DEFS].makemnemo=_DEFS;instruction[ICRC_DS].makemnemo=_DEFS;
@@ -22713,6 +22847,7 @@ struct s_asm_keyword instruction[]={
 {"DI",0,0,_DI},
 {"EI",0,0,_EI},
 {"NOP",0,0,_NOP},
+{"DF24",0,0,_DF24},
 {"DEFF",0,0,_DEFF},
 {"DEFR",0,0,_DEFR},
 {"DEFB",0,0,_DEFB},
@@ -23287,6 +23422,8 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 			ICRC_DEFS=icrc;
 		} else if (strcmp(instruction[icrc].mnemo,"DS")==0) {
 			ICRC_DS=icrc;
+		} else if (strcmp(instruction[icrc].mnemo,"DF24")==0) {
+			ICRC_DF24=icrc;
 		} else if (strcmp(instruction[icrc].mnemo,"DEFI")==0) {
 			ICRC_DEFI=icrc;
 		}
@@ -23890,22 +24027,24 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 #if TRACE_LZ
 		printf("Compute all EQU which are supposed to be statics!\n");
 #endif
-		for (i=0;i<ae->ialias;i++) {
-			struct s_alias *curalias;
-			char alias_value[128];
-			double v;
-			// compute EQU defined in crunched sections
-			if (ae->alias[i].lz>=0) {
-				ae->idx=ae->alias[i].iw; // expression core hack
-				v=ComputeExpressionCore(ae,ae->alias[i].translation,ae->alias[i].ptr,0);
-				sprintf(alias_value,"%.8lf",v);
-				MemFree(ae->alias[i].translation);
-				ae->alias[i].translation=TxtStrDup(alias_value);
-				ae->alias[i].len=strlen(ae->alias[i].translation);
-				// update tree
-				curalias=SearchAlias(ae,ae->alias[i].crc,ae->alias[i].alias);
-				curalias->translation=ae->alias[i].translation;
-				curalias->len=ae->alias[i].len;
+		if (ae->ilz) {
+			for (i=0;i<ae->ialias;i++) {
+				struct s_alias *curalias;
+				char alias_value[128];
+				double v;
+				// compute EQU defined in crunched sections
+				if (ae->alias[i].lz>=0) {
+					ae->idx=ae->alias[i].iw; // expression core hack
+					v=ComputeExpressionCore(ae,ae->alias[i].translation,ae->alias[i].ptr,0);
+					sprintf(alias_value,"%.8lf",v);
+					MemFree(ae->alias[i].translation);
+					ae->alias[i].translation=TxtStrDup(alias_value);
+					ae->alias[i].len=strlen(ae->alias[i].translation);
+					// update tree
+					curalias=SearchAlias(ae,ae->alias[i].crc,ae->alias[i].alias);
+					curalias->translation=ae->alias[i].translation;
+					curalias->len=ae->alias[i].len;
+				}
 			}
 		}
 #if TRACE_LZ
