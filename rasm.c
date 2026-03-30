@@ -3390,7 +3390,7 @@ void ___output_set_limit(struct s_assenv *ae,const int zelimit)
 		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"limit exceed hardware limitation!");
 		ae->stop=1;
 	}
-	if (ae->outputadr>=0 && ae->outputadr>=limit) {
+	if (ae->outputadr>=0 && ae->outputadr>limit) {
 		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"limit too high for current output!");
 		ae->stop=1;
 	}
@@ -8341,11 +8341,11 @@ printf("%s\n",curalias.translation);
 					char **tokens;
 					int i,nbToken;
 
-					printf("alias=%s\n",curalias.alias);
+					//printf("alias=%s\n",curalias.alias);
 					// is there the alias himself in the alias...
 					tokens=getToken(curalias.translation,&nbToken);
 					for (i=0;i<nbToken;i++) {
-						printf("token=[%s]\n",tokens[i]);
+						//printf("token=[%s]\n",tokens[i]);
 						if (strcmp(tokens[i],curalias.alias)==0) {
 							MakeError(ae,ae->idx,GetCurrentFile(ae),GetExpLine(ae,0),"Alias are not variables, use = instead of EQU\n");
 							MemFree(curalias.translation);
@@ -29610,7 +29610,7 @@ struct s_autotest_keyword autotest_keyword[]={
 	{"varia{cpt}=10",1},
 	{"cpt=1:varia{cpt}=11:cpt+=1:varia{cpt}=22:varcheck=varia1+varia2:assert varcheck==33",0},
 	{"repeat 10,x:mavar{x}=x*5:mavar{x}+=2:rend:total=0:repeat 10,x:total+=mavar{x}:rend:assert total==295:nop",0},
-	{"equ $:nop",1},{"machin equ 50 equ 12:nop",1},{"total=20:equ 40:nop",1}, // invalid EQU
+	{"equ $:nop",1},{"machin equ 50 equ 12:ld hl,machin",1},{"total=20:equ 40:nop",1}, // invalid EQU
 	{"total=20:bidule=total:equ 20:nop",1},
 
 	{"nop : assert pow(2,5)==32",0},
@@ -29850,6 +29850,7 @@ struct s_autotest_keyword autotest_keyword[]={
 	{"x=5:assert clamp((cos(x*360/256)*2+2.5),0,3)==clamp((cos(x*360/256)*2+2.5),0,3):nop",0},  // comma handling with multi param functions!
 	{"assert clamp(4,2+7,1+9)==clamp(4,(2+7),(1+9)):nop ",0},
 	{"assert clamp(14*3,3*(2+7),3*(1+9)+2)==clamp(14*3,3*(2+7),(3*(1+9)+2)):nop ",0},
+	{"defs 10:limit $",0},{"defs 10:limit $:nop",1},
 	/*
 	 *
 	 * will need to test resize + format then meta review test!
