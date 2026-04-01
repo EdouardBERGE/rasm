@@ -20703,7 +20703,7 @@ void __ORG(struct s_assenv *ae) {
 	}
 	___org_close(ae);
 	
-	if (ae->wl[ae->idx+1].t!=2) {
+	if (!ae->wl[ae->idx].t) {
 		ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
 		ae->codeadr=RoundComputeExpression(ae,ae->wl[ae->idx+1].w,ae->outputadr,0,0);
 		if (ae->codeadr<0) {
