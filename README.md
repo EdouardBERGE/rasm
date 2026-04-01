@@ -73,7 +73,8 @@ RetroDev intégrated dev environnement with RASM by the Lord of the Bits! https:
 
 NEW! RASM on your CPC with developper studio! https://norecess464.weebly.com/news/pistudio-a-raspberry-pi-powered-ide-for-the-amstrad-cpc
 
-![RASM on a CPC](https://github.com/EdouardBERGE/rasm/blob/main/Norecess.png)
+![RASM on a CPC](https://github.com/EdouardBERGE/rasm/blob/master/Norecess.png)
+
 
 BTW there is many other assemblers you could try:
 
