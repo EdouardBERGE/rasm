@@ -71,6 +71,10 @@ Arkos Tracker is powered by RASM on https://www.julien-nevo.com/arkostracker/
 
 RetroDev intégrated dev environnement with RASM by the Lord of the Bits! https://github.com/tlotb/retrodev
 
+NEW! RASM on your CPC with developper studio! https://norecess464.weebly.com/news/pistudio-a-raspberry-pi-powered-ide-for-the-amstrad-cpc
+
+![RASM on a CPC](https://github.com/EdouardBERGE/rasm/blob/main/rasmNorecess.jpg)
+
 BTW there is many other assemblers you could try:
 
 - ORGAMS http://orgams.wikidot.com/ (definitely the best native Z80 assembler on any machine)
