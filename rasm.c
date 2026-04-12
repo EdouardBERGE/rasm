@@ -1200,7 +1200,7 @@ struct s_assenv {
 	int codeadrbackup,outputadrbackup; // when using NOCODE, switching back to CODE will restore physical AND logical addresses
 	struct s_orgzone *orgzone;         // each ORG is monitored to avoid conflicts
 	int io,mo;
-	int deadend;
+	int deadend,insideORG;
 	struct s_memory_localisation *memory_localisation;
 	int imemory_localisation,mmemory_localisation;
 	/* Struct */
@@ -4237,36 +4237,34 @@ char *MakeLocalLabel(struct s_assenv *ae,const char *varbuffer, int *retdek)
 	with    retdek -> build the hash string
 	***************************************************/	
 	if (!retdek) {
-		locallabel=MemMalloc(lenbuf+(ae->ir+ae->iw+3)*8+8);
+		locallabel=MemMalloc(lenbuf+(ae->ir+ae->iw+3)*10+16);
 		zepoint=strchr(varbuffer,'.');
 		if (zepoint) {
 			*zepoint=0;
 		}
 		strcpy(locallabel,varbuffer);
 	} else {
-		locallabel=MemMalloc((ae->ir+ae->iw+3)*8+4);
+		locallabel=MemMalloc((ae->ir+ae->iw+3)*10+16);
 		locallabel[0]=0;
 	}	
 //printf("locallabel=[%s] (draft)\n",locallabel);
 
 	dek=0;
-	dek+=strappend(locallabel,"R");
+	if (ae->ir) {
+		sprintf(hexdigit,"R%X",ae->repeat[ae->ir-1].value);
+		dek+=strappend(locallabel+dek,hexdigit);
+	}
 	for (i=0;i<ae->ir;i++) {
-		sprintf(hexdigit,"%04X",ae->repeat[i].cpt);
+		sprintf(hexdigit,"R%X",ae->repeat[i].cpt);
 		dek+=strappend(locallabel,hexdigit);
 	}
-	if (ae->ir) {
-		sprintf(hexdigit,"%04X",ae->repeat[ae->ir-1].value);
-		dek+=strappend(locallabel+dek,hexdigit);
-	}
 	
-	dek+=strappend(locallabel,"W");
-	for (i=0;i<ae->iw;i++) {
-		sprintf(hexdigit,"%04X",ae->whilewend[i].cpt);
+	if (ae->iw) {
+		sprintf(hexdigit,"W%X",ae->whilewend[ae->iw-1].value);
 		dek+=strappend(locallabel+dek,hexdigit);
 	}
-	if (ae->iw) {
-		sprintf(hexdigit,"%04X",ae->whilewend[ae->iw-1].value);
+	for (i=0;i<ae->iw;i++) {
+		sprintf(hexdigit,"W%X",ae->whilewend[i].cpt);
 		dek+=strappend(locallabel+dek,hexdigit);
 	}
 	/* where are we? */
@@ -4276,7 +4274,7 @@ char *MakeLocalLabel(struct s_assenv *ae,const char *varbuffer, int *retdek)
 		}
 		if (im>=0) {
 			/* si on n'est pas dans une macro, on n'indique rien */
-			sprintf(hexdigit,"M%04X",ae->macropos[im].value);
+			sprintf(hexdigit,"M%X",ae->macropos[im].value);
 			dek+=strappend(locallabel+dek,hexdigit);
 		}
 	}
@@ -4386,7 +4384,7 @@ char *TranslateTag(struct s_assenv *ae, char *varbuffer, int *touched, const int
 		/*** c o m p u t e    e x p r e s s i o n ***/
 		expr=TxtStrDup(starttag+1);
 		if (tagoption & E_TAGOPTION_REMOVESPACE) expr=TxtReplace(expr," ","",0);
-		if (enablefast) ExpressionFastTranslate(ae,&expr,0);
+		// @@TOCHECK if (enablefast) ExpressionFastTranslate(ae,&expr,0);
 		validx=(int)RoundComputeExpressionCore(ae,expr,ae->codeadr,0);
 		if (validx<0) {
 			strcpy(curvalstr,"");
@@ -8273,6 +8271,7 @@ double ComputeExpression(struct s_assenv *ae,char *expr, const int ptr, const in
 		          M A K E     A L I A S
 		*****************************************/
 		case '~':
+	//printf("MakeAlias [%s]\n",expr);
 			memset(&curalias,0,sizeof(curalias));
 			ptr_exp=expr+idx;
 			*ptr_exp=0; // on scinde l'alias de son texte
@@ -8418,6 +8417,7 @@ printf("***********\n");
 						ptr_exp=expr+idx;
 						dblexp=TxtStrDup(ptr_exp+1);
 						// assign need to fasttranslate proximity labels
+						ExpressionFastTranslate(ae,&dblexp,2);
 						v=ComputeExpressionCore(ae,dblexp,ptr,didx);
 						*ptr_exp=0;
 						/* patch operator+assign value */
@@ -8478,6 +8478,7 @@ printf("***********\n");
 									 }
 									 break;
 							}
+							//printf("variable updated\n");
 						} else {
 							switch (operatorassignment) {
 								default: /* cannot do operator on non existing variable */
@@ -8508,7 +8509,13 @@ printf("***********\n");
 		*****************************************/
 		default:break;
 	}
-	return ComputeExpressionCore(ae,expr,ptr,didx);
+
+	ptr_exp=TxtStrDup(expr);
+	ExpressionFastTranslate(ae,&ptr_exp,2);
+	v=ComputeExpressionCore(ae,ptr_exp,ptr,didx);
+	MemFree(ptr_exp);
+	return v;
+	//return ComputeExpressionCore(ae,expr,ptr,didx);
 }
 int RoundComputeExpression(struct s_assenv *ae,char *expr, const int ptr, const int didx, const int expression_expected) {
 	return floor(ComputeExpression(ae,expr,ptr,didx,expression_expected)+ae->rough);
@@ -8687,7 +8694,10 @@ printf("fast [%s]\n",expr);
 					return;
 				}
 		}
+
+		// fast does not try to translate anything beginning with a number
 		if (ivar && (varbuffer[0]<'0' || varbuffer[0]>'9')) {
+//printf("FAST will check [%s]\n",varbuffer);
 			/* numbering var or label */
 			if (curlyflag) {
 				char *minivarbuffer;
@@ -8713,6 +8723,7 @@ printf("fast [%s]\n",expr);
 				curlyflag=0;
 				/******* ivar must be updated in case of label or alias following ***********/
 				ivar=newlen;
+//printf("FAST has translated tags [%s]\n",varbuffer);
 			}
 
 			/* recherche dans dictionnaire et remplacement */
@@ -8723,14 +8734,25 @@ printf("fast [%s]\n",expr);
 #if TRACE_COMPUTE_EXPRESSION
 printf("ExpressionFastTranslate (full) => varbuffer=[%s] lz=%d\n",varbuffer,ae->lz);
 #endif
+				// le dollar seul est l'adresse courante qu'il faut remplacer
 				if (varbuffer[0]=='$' && !varbuffer[1]) {
 					if (ae->lz==-1) {
-						#ifdef OS_WIN
-						snprintf(curval,sizeof(curval)-1,"%d",ae->codeadr);
-						newlen=strlen(curval);
-						#else
-						newlen=snprintf(curval,sizeof(curval)-1,"%d",ae->codeadr);
-						#endif
+						if (ae->insideORG) {
+							#ifdef OS_WIN
+							snprintf(curval,sizeof(curval)-1,"%d",ae->outputadr);
+							newlen=strlen(curval);
+							#else
+							newlen=snprintf(curval,sizeof(curval)-1,"%d",ae->outputadr);
+							#endif
+						} else {
+							#ifdef OS_WIN
+							snprintf(curval,sizeof(curval)-1,"%d",ae->codeadr);
+							newlen=strlen(curval);
+							#else
+							newlen=snprintf(curval,sizeof(curval)-1,"%d",ae->codeadr);
+							#endif
+						}
+
 						lenw=strlen(expr);
 						if (newlen>ivar) {
 							/* realloc bigger */
@@ -8777,7 +8799,11 @@ printf("ExpressionFastTranslate (full) -> replace var (%s=%0.1lf)\n",varbuffer,v
 					}
 				}
 			}
-			/* on cherche aussi dans les labels existants => priorité aux modules!!! */   // modulmodif => pas utile?
+	#if 0
+
+		// contre-productif avec les labels de proximité et les modules...
+
+			/* si on n'a rien trouvé, on cherche aussi dans les labels existants => priorité aux modules!!! */   // modulmodif => pas utile?
 			if (!found_replace) {
 				curlabel=SearchLabel(ae,varbuffer,crc);
 				if (curlabel) {
@@ -8806,7 +8832,8 @@ printf("ExpressionFastTranslate (full) -> replace var (%s=%0.1lf)\n",varbuffer,v
 					}
 				}		
 			}
-			/* non trouve on cherche dans les alias */
+	#endif
+			/* non trouve on cherche dans les alias avec la priorités aux modules */
 			if (!found_replace) {
 
 				if (ae->module) {
@@ -8859,8 +8886,8 @@ printf("ExpressionFastTranslate SearchAlias inside module => varbuffer=[%s]\n",v
 				}
 			}
 			if (!found_replace) {
-	//printf("fasttranslate test local label\n");
-				/* non trouve c'est peut-etre un label local - mais pas de l'octal */
+				/* non trouve c'est peut-etre un label ou un alias local - mais pas de l'octal */
+				if (fullreplace) {
 				if (varbuffer[0]=='@' && (varbuffer[1]<'0' || varbuffer[1]>'9')) {
 					char *zepoint;
 					lenbuf=strlen(varbuffer);
@@ -8891,7 +8918,7 @@ printf("MakeLocalLabel(ae,varbuffer,&dek); (1)\n");
 					idx+=dek;
 					MemFree(locallabel);
 					found_replace=1;
-//printf("exprout=[%s]\n",expr);
+//printf("FAST has build local alias/label [%s]\n",expr);
 				} else if (varbuffer[0]=='.' && (varbuffer[1]<'0' || varbuffer[1]>'9')) {
 					/* proximity label */
 					lenbuf=strlen(varbuffer);
@@ -8906,13 +8933,16 @@ printf("MakeLocalLabel(ae,varbuffer,&dek); (1)\n");
 					strncpy(expr+startvar,locallabel,dek);
 					idx+=dek-lenbuf;
 					MemFree(locallabel);
+//printf("FAST has build proximity label=[%s]\n",expr);
 #if TRACE_COMPUTE_EXPRESSION
 printf("exprout=[%s]\n",expr);
 #endif
-
+				}
+			}
 //@@TODO ajouter une recherche d'alias?
 
-				} else if (varbuffer[0]=='{') {
+				//} else if (varbuffer[0]=='{') {
+				if (varbuffer[0]=='{') {
 					if (strncmp(varbuffer,"{BANK}",6)==0 || strncmp(varbuffer,"{PAGE}",6)==0) tagoffset=6; else
 					if (strncmp(varbuffer,"{PAGESET}",9)==0) tagoffset=9; else
 					if (strncmp(varbuffer,"{SIZEOF}",8)==0) tagoffset=8; else
@@ -10584,6 +10614,7 @@ void PushLabel(struct s_assenv *ae)
 		curlabel.crc=GetCRC(curlabel.name);
 		curlabel.ptr=ae->codeadr;
 		curlabel.make_alias=1;
+		curlabel.lz=-1;
 #if TRACE_STRUCT
 	printf("pushLabel (struct) [%X] [%s]   irstructfield=%d / cur idata=%d\n",curlabel.ptr,curlabel.name,ae->rasmstruct[ae->irasmstruct-1].irasmstructfield,ae->rasmstruct[ae->irasmstruct-1].rasmstructfield[ae->rasmstruct[ae->irasmstruct-1].irasmstructfield-1].idata);
 #endif
@@ -13428,7 +13459,7 @@ void _DEFS(struct s_assenv *ae) {
 			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"DEFS repeat value cannot be a string!\n");
 		}
 		if (!ae->wl[ae->idx].t) {
-			ExpressionFastTranslate(ae,&ae->wl[ae->idx].w,0);
+			//ExpressionFastTranslate(ae,&ae->wl[ae->idx].w,0);
 			ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0); /* doing FastTranslate but not a complete evaluation */
 			r=RoundComputeExpressionCore(ae,ae->wl[ae->idx].w,ae->codeadr,0);
 			if (r<0) {
@@ -13441,7 +13472,7 @@ void _DEFS(struct s_assenv *ae) {
 			}
 			ae->idx++;
 		} else if (ae->wl[ae->idx].t==1) {
-			ExpressionFastTranslate(ae,&ae->wl[ae->idx].w,0);
+			//ExpressionFastTranslate(ae,&ae->wl[ae->idx].w,0);
 			r=RoundComputeExpressionCore(ae,ae->wl[ae->idx].w,ae->codeadr,0);
 			v=0;
 			if (r<0) {
@@ -13462,8 +13493,8 @@ void _DEFS_struct(struct s_assenv *ae) {
 	} else do {
 		ae->idx++;
 		if (!ae->wl[ae->idx].t) {
-			ExpressionFastTranslate(ae,&ae->wl[ae->idx].w,0);
-			ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
+			//ExpressionFastTranslate(ae,&ae->wl[ae->idx].w,0);
+			//ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
 			r=RoundComputeExpressionCore(ae,ae->wl[ae->idx].w,ae->codeadr,0);
 			v=RoundComputeExpressionCore(ae,ae->wl[ae->idx+1].w,ae->codeadr,0);
 			if (r<0) {
@@ -13475,7 +13506,7 @@ void _DEFS_struct(struct s_assenv *ae) {
 			}
 			ae->idx++;
 		} else if (ae->wl[ae->idx].t==1) {
-			ExpressionFastTranslate(ae,&ae->wl[ae->idx].w,0);
+			//ExpressionFastTranslate(ae,&ae->wl[ae->idx].w,0);
 			r=RoundComputeExpressionCore(ae,ae->wl[ae->idx].w,ae->codeadr,0);
 			v=0;
 			if (r<0) {
@@ -13838,7 +13869,7 @@ void _DEFB_struct(struct s_assenv *ae) {
 				}
 			} else {
 				int v;
-				ExpressionFastTranslate(ae,&ae->wl[ae->idx].w,0);
+				//ExpressionFastTranslate(ae,&ae->wl[ae->idx].w,0);
 				v=RoundComputeExpressionCore(ae,ae->wl[ae->idx].w,ae->outputadr,0);
 				___output(ae,v);
 				ae->nop+=1;
@@ -13873,7 +13904,7 @@ void _DEFW_struct(struct s_assenv *ae) {
 	if (!ae->wl[ae->idx].t) {
 		do {
 			ae->idx++;
-			ExpressionFastTranslate(ae,&ae->wl[ae->idx].w,0);
+			//ExpressionFastTranslate(ae,&ae->wl[ae->idx].w,0);
 			v=RoundComputeExpressionCore(ae,ae->wl[ae->idx].w,ae->outputadr,0);
 			___output(ae,v&0xFF);___output(ae,(v>>8)&0xFF);
 		} while (ae->wl[ae->idx].t==0);
@@ -13906,7 +13937,7 @@ void _DEFI_struct(struct s_assenv *ae) {
 	if (!ae->wl[ae->idx].t) {
 		do {
 			ae->idx++;
-			ExpressionFastTranslate(ae,&ae->wl[ae->idx].w,0);
+			//ExpressionFastTranslate(ae,&ae->wl[ae->idx].w,0);
 			v=RoundComputeExpressionCore(ae,ae->wl[ae->idx].w,ae->outputadr,0);
 			___output(ae,v&0xFF);___output(ae,(v>>8)&0xFF);___output(ae,(v>>16)&0xFF);___output(ae,(v>>24)&0xFF);
 		} while (ae->wl[ae->idx].t==0);
@@ -17938,7 +17969,7 @@ void __LZCLOSE(struct s_assenv *ae) {
 
 void __LIMIT(struct s_assenv *ae) {
 	if (ae->wl[ae->idx+1].t!=2) {
-		ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
+		//ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
 		___output_set_limit(ae,RoundComputeExpression(ae,ae->wl[ae->idx+1].w,ae->outputadr,0,0));
 		ae->idx++;
 	} else {
@@ -18051,7 +18082,7 @@ void __LOCALISATION(struct s_assenv *ae) {
 			mloc.logical=256;
 			ae->idx++;
 		} else {
-			ExpressionFastTranslate(ae,&ae->wl[ae->idx+2].w,0);
+			//ExpressionFastTranslate(ae,&ae->wl[ae->idx+2].w,0);
 			mloc.logical=RoundComputeExpression(ae,ae->wl[ae->idx+2].w,ae->codeadr,0,0);
 		}
 		mloc.physical=ae->activebank;
@@ -18109,7 +18140,7 @@ void __BANK(struct s_assenv *ae) {
 			ae->lastbank=ae->activebank; // track last bank used
 			ae->activebank++;
 		} else {
-			ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
+			//ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
 			ae->lastbank=ae->activebank; // track last bank used
 			ae->activebank=RoundComputeExpression(ae,ae->wl[ae->idx+1].w,ae->codeadr,0,0); ae->maxptr=ae->memsize[ae->activebank]; // inseparable
 		}
@@ -18203,7 +18234,7 @@ void __ROMBANK(struct s_assenv *ae) {
 			rom_select=256;
 			ae->idx++;
 		} else {
-			ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
+			//ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
 			rom_select=RoundComputeExpression(ae,ae->wl[ae->idx+1].w,ae->codeadr,0,0);
 		}
 	} else {
@@ -18247,7 +18278,7 @@ void __BANKSET(struct s_assenv *ae) {
 	ae->bankmode=1;
 	
 	if (ae->wl[ae->idx+1].t!=2) {
-		ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
+		//ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
 		ae->lastbank=ae->activebank; // track last bank used
 		ae->activebank=RoundComputeExpression(ae,ae->wl[ae->idx+1].w,ae->codeadr,0,0); // inseparable particulier (see next line)
 		ae->activebank*=4; ae->maxptr=ae->memsize[ae->activebank]; // inseparable
@@ -18322,7 +18353,7 @@ void __NameROM(struct s_assenv *ae) {
 			if (strcmp(ae->wl[ae->idx+1].w,"LOWER")==0) {
 				ibank=256;
 			} else {
-				ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
+				//ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
 				ibank=RoundComputeExpression(ae,ae->wl[ae->idx+1].w,ae->codeadr,0,0);
 			}
 			if (ibank<0 || ibank>256) {
@@ -18370,7 +18401,7 @@ void __NameBANK(struct s_assenv *ae) {
 		if (!StringIsQuote(ae->wl[ae->idx+2].w)) {
 			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Syntax is NAMEBANK <bank number>,'<string>'\n");
 		} else {
-			ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
+			//ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
 			ibank=RoundComputeExpression(ae,ae->wl[ae->idx+1].w,ae->codeadr,0,0);
 			if (ibank<0 || ibank>=BANK_MAX_NUMBER) {
 				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"NAMEBANK selection must be from 0 to %d\n",BANK_MAX_NUMBER);
@@ -18411,14 +18442,14 @@ void __WRITE(struct s_assenv *ae) {
 	int lower=-1,upper=-1,bank=-1;
 
 	if (!ae->wl[ae->idx].t && strcmp(ae->wl[ae->idx+1].w,"DIRECT")==0 && !ae->wl[ae->idx+1].t) {
-		ExpressionFastTranslate(ae,&ae->wl[ae->idx+2].w,0);
+		//ExpressionFastTranslate(ae,&ae->wl[ae->idx+2].w,0);
 		lower=RoundComputeExpression(ae,ae->wl[ae->idx+2].w,ae->codeadr,0,0);
 		if (!ae->wl[ae->idx+2].t) {
 			ExpressionFastTranslate(ae,&ae->wl[ae->idx+3].w,0);
 			upper=RoundComputeExpression(ae,ae->wl[ae->idx+3].w,ae->codeadr,0,0);
 		}
 		if (!ae->wl[ae->idx+3].t) {
-			ExpressionFastTranslate(ae,&ae->wl[ae->idx+4].w,0);
+			//ExpressionFastTranslate(ae,&ae->wl[ae->idx+4].w,0);
 			bank=RoundComputeExpression(ae,ae->wl[ae->idx+4].w,ae->codeadr,0,0);
 		}
 
@@ -18484,7 +18515,7 @@ void __UTF8REMAP(struct s_assenv *ae) {
 			utr.utf8Len=strlen((char*)utr.utf8Code);
 			utr.utf8Code[utr.utf8Len]=0;
 			utr.utf8Len--;
-			ExpressionFastTranslate(ae,&ae->wl[ae->idx+2].w,0);
+			//ExpressionFastTranslate(ae,&ae->wl[ae->idx+2].w,0);
 			v=RoundComputeExpression(ae,ae->wl[ae->idx+2].w,ae->codeadr,0,0);
 			utr.ccode=v;
 			ObjectArrayAddDynamicValueConcat((void **)&ae->utf8Remap,&ae->iUtf8Remap,&ae->mUtf8Remap,&utr,sizeof(utr));
@@ -18519,7 +18550,7 @@ void __CHARSET(struct s_assenv *ae) {
 			}
 		} else {
 			/* string,value | byte,value */
-			ExpressionFastTranslate(ae,&ae->wl[ae->idx+2].w,0);
+			//ExpressionFastTranslate(ae,&ae->wl[ae->idx+2].w,0);
 			v=RoundComputeExpression(ae,ae->wl[ae->idx+2].w,ae->codeadr,0,0);
 			if (ae->wl[ae->idx+1].w[0]=='\'' || ae->wl[ae->idx+1].w[0]=='"') {
 				tquote=ae->wl[ae->idx+1].w[0];
@@ -18545,9 +18576,9 @@ void __CHARSET(struct s_assenv *ae) {
 		ae->idx+=2;
 	} else if (!ae->wl[ae->idx].t && !ae->wl[ae->idx+1].t && !ae->wl[ae->idx+2].t && ae->wl[ae->idx+3].t==1) {
 		/* start,end,value */
-		ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
-		ExpressionFastTranslate(ae,&ae->wl[ae->idx+2].w,0);
-		ExpressionFastTranslate(ae,&ae->wl[ae->idx+3].w,0);
+		//ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
+		//ExpressionFastTranslate(ae,&ae->wl[ae->idx+2].w,0);
+		//ExpressionFastTranslate(ae,&ae->wl[ae->idx+3].w,0);
 		s=RoundComputeExpression(ae,ae->wl[ae->idx+1].w,ae->codeadr,0,0);
 		e=RoundComputeExpression(ae,ae->wl[ae->idx+2].w,ae->codeadr,0,0);
 		v=RoundComputeExpression(ae,ae->wl[ae->idx+3].w,ae->codeadr,0,0);
@@ -18994,7 +19025,7 @@ void __TICKER(struct s_assenv *ae) {
 void __LET(struct s_assenv *ae) {
 	if (!ae->wl[ae->idx].t && ae->wl[ae->idx+1].t==1) {
 		ae->idx++;
-		ExpressionFastTranslate(ae,&ae->wl[ae->idx].w,0);
+		//ExpressionFastTranslate(ae,&ae->wl[ae->idx].w,0);
 		RoundComputeExpression(ae,ae->wl[ae->idx].w,ae->codeadr,0,0);
 	} else {
 		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"LET useless Winape directive need one expression\n");
@@ -19019,7 +19050,7 @@ void __RUN(struct s_assenv *ae) {
 			PushExpression(ae,ae->idx+1,E_EXPRESSION_RUN); // delayed RUN value
 			ae->idx++;
 			if (!ae->wl[ae->idx].t) {
-				ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
+				//ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
 				ramconf=RoundComputeExpression(ae,ae->wl[ae->idx+1].w,ae->codeadr,0,0);
 				ae->idx++;
 				if (ramconf<0xC0 || ramconf>0xFF) {
@@ -19131,7 +19162,7 @@ void __SNASET(struct s_assenv *ae) {
 		/* TWO parameters */
 		if (!ae->wl[ae->idx].t && ae->wl[ae->idx+1].t==1) {
 			/* parameter value */
-			ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
+			//ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
 			myvalue=RoundComputeExpression(ae,ae->wl[ae->idx+1].w,ae->codeadr,0,0);
 
 			/* Z80 register/value */
@@ -19279,11 +19310,11 @@ void __SNASET(struct s_assenv *ae) {
 			}
 		} else if (!ae->wl[ae->idx].t && !ae->wl[ae->idx+1].t && ae->wl[ae->idx+2].t==1) {
 			/* index value */
-			ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
+			//ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
 			idx=RoundComputeExpression(ae,ae->wl[ae->idx+1].w,ae->codeadr,0,0);
 
 			/* parameter value */
-			ExpressionFastTranslate(ae,&ae->wl[ae->idx+2].w,0);
+			//ExpressionFastTranslate(ae,&ae->wl[ae->idx+2].w,0);
 			myvalue=RoundComputeExpression(ae,ae->wl[ae->idx+2].w,ae->codeadr,0,0);
 
 			if (strcmp(ae->wl[ae->idx].w,"GA_PAL")==0) {
@@ -19331,7 +19362,7 @@ void __SETCPC(struct s_assenv *ae) {
 	}
 
 	if (!ae->wl[ae->idx].t && ae->wl[ae->idx+1].t==1) {
-		ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
+		//ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
 		mycpc=RoundComputeExpression(ae,ae->wl[ae->idx+1].w,ae->codeadr,0,0);
 		ae->idx++;
 		switch (mycpc) {
@@ -19365,7 +19396,7 @@ void __SETCRTC(struct s_assenv *ae) {
 	}
 
 	if (!ae->wl[ae->idx].t && ae->wl[ae->idx+1].t==1) {
-		ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
+		//ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
 		mycrtc=RoundComputeExpression(ae,ae->wl[ae->idx+1].w,ae->codeadr,0,0);
 		ae->idx++;
 	} else {
@@ -19507,7 +19538,7 @@ void __COMZ(struct s_assenv *ae, int icomz) {
 				string2print=TxtStrDup(ae->wl[ae->idx+1].w);
 			}
 
-			ExpressionFastTranslate(ae,&string2print,1);
+			//ExpressionFastTranslate(ae,&string2print,1);
 			if (hex) {
 				int zv;
 				zv=RoundComputeExpressionCore(ae,string2print,ae->codeadr,0);
@@ -19641,7 +19672,7 @@ void __PRINT(struct s_assenv *ae) {
 			} else {
 				string2print=TxtStrDup(ae->wl[ae->idx+1].w);
 			}
-			ExpressionFastTranslate(ae,&string2print,1);
+			//ExpressionFastTranslate(ae,&string2print,1);
 			if (hex) {
 				int zv;
 				zv=RoundComputeExpressionCore(ae,string2print,ae->codeadr,0);
@@ -19726,7 +19757,7 @@ void __CONFINE(struct s_assenv *ae) {
 		ae->orgzone[ae->io-1].memend=ae->outputadr; // mandatory but why???
 	}
 	if (!ae->wl[ae->idx].t) {
-		ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
+		//ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
 		aval=RoundComputeExpression(ae,ae->wl[ae->idx+1].w,ae->codeadr,0,0)-1;
 		ae->idx++;
 		while (!ae->wl[ae->idx].t) {
@@ -19735,7 +19766,7 @@ void __CONFINE(struct s_assenv *ae) {
 			} else if (strcmp(ae->wl[ae->idx+1].w,"WARNING")==0) {
 				warning=1;
 			} else /* confine with fill ? */ {
-				ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
+				//ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
 				ifill=RoundComputeExpression(ae,ae->wl[ae->idx+1].w,ae->codeadr,0,0);
 				if (ifill<0 || ifill>255) {
 					MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"ALIGN fill value must be 0 to 255\n");
@@ -19774,12 +19805,12 @@ void __ALIGN(struct s_assenv *ae) {
 		ae->orgzone[ae->io-1].memend=ae->outputadr;
 	}
 	if (!ae->wl[ae->idx].t) {
-		ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
+		//ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
 		aval=RoundComputeExpression(ae,ae->wl[ae->idx+1].w,ae->codeadr,0,0);
 		ae->idx++;
 		/* align with fill ? */
 		if (!ae->wl[ae->idx].t) {
-			ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
+			//ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
 			ifill=RoundComputeExpression(ae,ae->wl[ae->idx+1].w,ae->codeadr,0,0);
 			ae->idx++;
 			if (ifill<0 || ifill>255) {
@@ -19943,11 +19974,11 @@ void __WEND(struct s_assenv *ae) {
 
 void __STARTINGINDEX(struct s_assenv *ae) {
 	if (ae->wl[ae->idx].t==0) {
-		ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
+		//ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
 		ae->repeat_start=RoundComputeExpression(ae,ae->wl[ae->idx+1].w,0,0,0);
 		ae->idx++;
 		if (ae->wl[ae->idx].t==0) {
-			ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
+			//ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
 			ae->repeat_increment=RoundComputeExpression(ae,ae->wl[ae->idx+1].w,0,0,0);
 			ae->idx++;
 		}
@@ -19964,7 +19995,7 @@ void __REPEAT(struct s_assenv *ae) {
 	
 	if (ae->wl[ae->idx+1].t!=2) {
 		if (ae->wl[ae->idx].t==0) {
-			ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
+			//ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
 			currepeat.cpt=RoundComputeExpression(ae,ae->wl[ae->idx+1].w,0,0,0);
 
 			if (!currepeat.cpt) {
@@ -19987,7 +20018,7 @@ void __REPEAT(struct s_assenv *ae) {
 
 				/* additionnal options */
 				if (ae->wl[ae->idx].t==0) {
-					ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
+					//ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
 					vstart=RoundComputeExpression(ae,ae->wl[ae->idx+1].w,0,0,0);
 					if (ae->wl[ae->idx+1].t==0) {
 						ExpressionFastTranslate(ae,&ae->wl[ae->idx+2].w,0);
@@ -20123,7 +20154,7 @@ void __ASSERT(struct s_assenv *ae) {
 	int rexpr;
 
 	if (!ae->wl[ae->idx].t) {
-		ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
+		//ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
 		if (strlen(ae->wl[ae->idx+1].w)>29) strcpy(Dot3,"..."); else strcpy(Dot3,"");
 		rexpr=!!RoundComputeExpression(ae,ae->wl[ae->idx+1].w,ae->codeadr,0,1);
 		if (!rexpr) {
@@ -20149,7 +20180,7 @@ void __IF(struct s_assenv *ae) {
 	int rexpr;
 
 	if (!ae->wl[ae->idx].t && ae->wl[ae->idx+1].t==1) {
-		ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
+		//ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
 		rexpr=!!RoundComputeExpression(ae,ae->wl[ae->idx+1].w,ae->codeadr,0,1);
 		ifthen.v=rexpr;
 		ifthen.filename=GetCurrentFile(ae);
@@ -20181,7 +20212,7 @@ void __IF_light(struct s_assenv *ae) {
 /* test if a label or a variable where used before */
 void __IFUSED(struct s_assenv *ae) {
 	struct s_ifthen ifthen={0};
-	int rexpr,crc;
+	int rexpr,crc,lm=0;
 	struct s_label *curlabel;
 	struct s_alias *curalias;
 	struct s_expr_dico *curdico;
@@ -20203,19 +20234,21 @@ void __IFUSED(struct s_assenv *ae) {
 				strcat(labelmodule,ae->module_separator);
 				strcat(labelmodule,ae->wl[ae->idx+1].w);
 				curlabel=SearchLabel(ae,labelmodule,GetCRC(labelmodule));
+				lm=1; // we found a label inside the module
 				MemFree(labelmodule);
 			} else {
 				curlabel=SearchLabel(ae,ae->wl[ae->idx+1].w,crc);
 			}
 
 			if (curlabel) {
-				rexpr=curlabel->used;;
+				rexpr=curlabel->used;
 			} else if ((curalias=SearchAlias(ae,crc,ae->wl[ae->idx+1].w))!=NULL) {
 				rexpr=curalias->used;
 			} else {
-				rexpr=SearchUsed(ae,ae->wl[ae->idx+1].w,crc);
+				rexpr=0;
 			}
 		}
+		if (!rexpr && !lm) rexpr|=SearchUsed(ae,ae->wl[ae->idx+1].w,crc); // try again with unknown symbols except if a label was found inside the module
 		ifthen.v=rexpr;
 		ifthen.filename=GetCurrentFile(ae);
 		ifthen.line=ae->wl[ae->idx].l;
@@ -20379,7 +20412,7 @@ void __SWITCH(struct s_assenv *ae) {
 
 	if (!ae->wl[ae->idx].t && ae->wl[ae->idx+1].t==1) {
 		/* switch store the value */
-		ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
+		//ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
 		curswitch.refval=RoundComputeExpression(ae,ae->wl[ae->idx+1].w,ae->codeadr,0,1);
 		ObjectArrayAddDynamicValueConcat((void**)&ae->switchcase,&ae->isw,&ae->msw,&curswitch,sizeof(curswitch));
 		ae->idx++;
@@ -20392,7 +20425,7 @@ void __CASE(struct s_assenv *ae) {
 	
 	if (ae->isw) {
 		if (!ae->wl[ae->idx].t && ae->wl[ae->idx+1].t==1) {
-			ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
+			//ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
 			rexpr=RoundComputeExpression(ae,ae->wl[ae->idx+1].w,ae->codeadr,0,1);
 			
 			if (ae->switchcase[ae->isw-1].refval==rexpr) {
@@ -20489,7 +20522,7 @@ void __ELSEIFNOT(struct s_assenv *ae) {
 			/* il faut signifier aux suivants qu'on va jusqu'au ENDIF */
 			ae->ifthen[ae->ii-1].v=-1;
 		} else {
-			ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
+			//ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
 			ae->ifthen[ae->ii-1].v=!RoundComputeExpression(ae,ae->wl[ae->idx+1].w,ae->codeadr,0,1);
 		}
 		ae->idx++;
@@ -20520,7 +20553,7 @@ void __IFNOT(struct s_assenv *ae) {
 	int rexpr;
 
 	if (!ae->wl[ae->idx].t && ae->wl[ae->idx+1].t==1) {
-		ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
+		//ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
 		rexpr=!RoundComputeExpression(ae,ae->wl[ae->idx+1].w,ae->codeadr,0,1);
 		ifthen.v=rexpr;
 		ifthen.filename=GetCurrentFile(ae);
@@ -20578,7 +20611,7 @@ void __ELSEIF(struct s_assenv *ae) {
 			/* il faut signifier aux suivants qu'on va jusqu'au ENDIF */
 			ae->ifthen[ae->ii-1].v=-1;
 		} else {
-			ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
+			//ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
 			ae->ifthen[ae->ii-1].v=!!RoundComputeExpression(ae,ae->wl[ae->idx+1].w,ae->codeadr,0,1);
 		}
 		ae->idx++;
@@ -20633,8 +20666,8 @@ void __PROTECT(struct s_assenv *ae) {
 	int memstart,memend;
 
 	if (!ae->wl[ae->idx].t && !ae->wl[ae->idx+1].t && ae->wl[ae->idx+2].t==1) {
-		ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
-		ExpressionFastTranslate(ae,&ae->wl[ae->idx+2].w,0);
+		//ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
+		//ExpressionFastTranslate(ae,&ae->wl[ae->idx+2].w,0);
 		memstart=RoundComputeExpression(ae,ae->wl[ae->idx+1].w,0,0,0);
 		memend=RoundComputeExpression(ae,ae->wl[ae->idx+2].w,0,0,0);
 		__internal_PROTECT(ae,memstart,memend);
@@ -20704,8 +20737,10 @@ void __ORG(struct s_assenv *ae) {
 	___org_close(ae);
 	
 	if (!ae->wl[ae->idx].t) {
-		ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
+		ae->insideORG=1;
+		//ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
 		ae->codeadr=RoundComputeExpression(ae,ae->wl[ae->idx+1].w,ae->outputadr,0,0);
+		ae->insideORG=0;
 		if (ae->codeadr<0) {
 			ae->codeadr=0;
 			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"[%s:%d] cannot ORG outside memory!\n");
@@ -20723,8 +20758,10 @@ void __ORG(struct s_assenv *ae) {
 			}
 		}
 		if (!ae->wl[ae->idx+1].t && ae->wl[ae->idx+2].t!=2) {
-			ExpressionFastTranslate(ae,&ae->wl[ae->idx+2].w,0);
+			ae->insideORG=1;
+			//ExpressionFastTranslate(ae,&ae->wl[ae->idx+2].w,0);
 			ae->outputadr=RoundComputeExpression(ae,ae->wl[ae->idx+2].w,ae->outputadr,0,0);
+			ae->insideORG=0;
 			if (ae->outputadr<0) {
 				ae->outputadr=0;
 				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"[%s:%d] cannot ORG outside memory!\n");
@@ -20849,7 +20886,7 @@ void __ENUM(struct s_assenv *ae) {
 #endif
 			ae->idx++;
 			expwrk=TxtStrDup(ae->wl[ae->idx].w);
-			ExpressionFastTranslate(ae,&expwrk,0);
+			//ExpressionFastTranslate(ae,&expwrk,0);
 			start=RoundComputeExpression(ae,expwrk,ae->outputadr,0,0);
 			MemFree(expwrk);
 			if (!ae->wl[ae->idx].t) {
@@ -20859,7 +20896,7 @@ void __ENUM(struct s_assenv *ae) {
 #endif
 				ae->idx++;
 				expwrk=TxtStrDup(ae->wl[ae->idx].w);
-				ExpressionFastTranslate(ae,&expwrk,0);
+				//ExpressionFastTranslate(ae,&expwrk,0);
 				increment=RoundComputeExpression(ae,expwrk,ae->outputadr,0,0);
 				MemFree(expwrk);
 				if (!ae->wl[ae->idx].t) {
@@ -20999,6 +21036,7 @@ void __STRUCT(struct s_assenv *ae) {
 					ae->backup_outputadr=ae->outputadr;
 					ae->backup_codeadr=ae->codeadr;
 					ae->getstruct=1;
+					ae->lz=-1; // struct are not part of LZ
 					/* STRUCT = NOCODE + ORG 0 */
 					___org_close(ae);
 					ae->codeadr=0;
@@ -21035,16 +21073,20 @@ void __STRUCT(struct s_assenv *ae) {
 			if (irs==ae->irasmstruct) {
 				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Unknown STRUCT %s to insert\n",ae->wl[ae->idx+1].w);
 			} else {
-				/* create alias for sizeof */
+				char *structName;
+				int touched;
+				/* create alias for sizeof + tag translation */
+				structName=TxtStrDup(ae->wl[ae->idx+2].w);
+				structName=TranslateTag(ae,structName,&touched,1,E_TAGOPTION_REMOVESPACE);
 				if (!ae->getstruct) {
 					if (ae->wl[ae->idx+2].w[0]=='@') {
-						rasmstructalias.name=MakeLocalLabel(ae,ae->wl[ae->idx+2].w,NULL);
+						rasmstructalias.name=MakeLocalLabel(ae,structName,NULL);
 					} else {
-						rasmstructalias.name=TxtStrDup(ae->wl[ae->idx+2].w);
+						rasmstructalias.name=TxtStrDup(structName);
 					}
 				} else {
 #if TRACE_STRUCT
-printf("***** structure insertion inside struct [%s] inside struct ***\n",ae->wl[ae->idx+2].w);
+printf("***** structure insertion inside struct [%s] inside struct ***\n",structName);
 #endif
 
 					if (irs==ae->irasmstruct-1) {
@@ -21054,8 +21096,8 @@ printf("***** structure insertion inside struct [%s] inside struct ***\n",ae->wl
 					}
 
 					/* struct inside struct */
-					rasmstructalias.name=MemMalloc(strlen(ae->rasmstruct[ae->irasmstruct-1].name)+2+strlen(ae->wl[ae->idx+2].w));
-					sprintf(rasmstructalias.name,"%s.%s",ae->rasmstruct[ae->irasmstruct-1].name,ae->wl[ae->idx+2].w);
+					rasmstructalias.name=MemMalloc(strlen(ae->rasmstruct[ae->irasmstruct-1].name)+2+strlen(structName));
+					sprintf(rasmstructalias.name,"%s.%s",ae->rasmstruct[ae->irasmstruct-1].name,structName);
 				}
 				rasmstructalias.crc=GetCRC(rasmstructalias.name);
 				rasmstructalias.size=ae->rasmstruct[irs].size;
@@ -21066,7 +21108,7 @@ printf("structalias [%s] ptr=%d size=%d\n",rasmstructalias.name,rasmstructalias.
 				/* extra parameter to declare an array? */
 				if (!ae->wl[ae->idx+2].t) {
 				       if (!StringIsQuote(ae->wl[ae->idx+3].w)) {
-						ExpressionFastTranslate(ae,&ae->wl[ae->idx+3].w,0);
+						//ExpressionFastTranslate(ae,&ae->wl[ae->idx+3].w,0);
 						nbelem=RoundComputeExpression(ae,ae->wl[ae->idx+3].w,ae->outputadr,0,0);
 						if (nbelem<1) {
 							MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Struct array need a positive number of elements!\n");
@@ -21084,12 +21126,15 @@ printf("EVOL 119 - tableau! %d elem%s\n",nbelem,nbelem>1?"s":"");
 				
 				/* create label for global struct ptr */
 				//curlabel.iw=-1;
+				curlabel.lz=-1; // because struct is NOT part of LZ
 				curlabel.ptr=ae->codeadr;
 				curlabel.fileidx=ae->wl[ae->idx+2].ifile;
 
 				if (!ae->getstruct) {
-					if (ae->wl[ae->idx+2].w[0]=='@') curlabel.name=MakeLocalLabel(ae,ae->wl[ae->idx+2].w,NULL); else curlabel.name=TxtStrDup(ae->wl[ae->idx+2].w);
-					curlabel.crc=GetCRC(curlabel.name);
+					//if (ae->wl[ae->idx+2].w[0]=='@') curlabel.name=MakeLocalLabel(ae,ae->wl[ae->idx+2].w,NULL); else curlabel.name=TxtStrDup(ae->wl[ae->idx+2].w);
+					//curlabel.crc=GetCRC(curlabel.name);
+					curlabel.name=TxtStrDup(rasmstructalias.name);
+					curlabel.crc=rasmstructalias.crc;
 					PushLabelLight(ae,&curlabel);
 				} else {
 					/* or check for non-local name in struct declaration */
@@ -21101,7 +21146,7 @@ printf("EVOL 119 - tableau! %d elem%s\n",nbelem,nbelem>1?"s":"");
 						PushLabelLight(ae,&curlabel);
 					}
 					/* first field is in fact the very beginning of the structure */
-					rasmstructfield.name=TxtStrDup(ae->wl[ae->idx+2].w);
+					rasmstructfield.name=TxtStrDup(structName);
 					rasmstructfield.offset=ae->codeadr;
 					ObjectArrayAddDynamicValueConcat((void **)&ae->rasmstruct[ae->irasmstruct-1].rasmstructfield,
 							&ae->rasmstruct[ae->irasmstruct-1].irasmstructfield,&ae->rasmstruct[ae->irasmstruct-1].mrasmstructfield,
@@ -21118,8 +21163,8 @@ printf("create subfields\n");
 				for (i=0;i<ae->rasmstruct[irs].irasmstructfield;i++) {
 					curlabel.ptr=ae->codeadr+ae->rasmstruct[irs].rasmstructfield[i].offset;
 					if (!ae->getstruct) {
-						curlabel.name=MemMalloc(strlen(ae->wl[ae->idx+2].w)+strlen(ae->rasmstruct[irs].rasmstructfield[i].name)+2);
-						sprintf(curlabel.name,"%s.%s",ae->wl[ae->idx+2].w,ae->rasmstruct[irs].rasmstructfield[i].name);
+						curlabel.name=MemMalloc(strlen(structName)+strlen(ae->rasmstruct[irs].rasmstructfield[i].name)+2);
+						sprintf(curlabel.name,"%s.%s",structName,ae->rasmstruct[irs].rasmstructfield[i].name);
 						if (ae->wl[ae->idx+2].w[0]=='@') {
 							char *newlabel;
 							newlabel=MakeLocalLabel(ae,curlabel.name,NULL);
@@ -21131,8 +21176,8 @@ printf("create subfields\n");
 					/* are we using a struct in a struct definition? */
 					} else {
 						/* copy structname+label+offset in the structure */
-						rasmstructfield.name=MemMalloc(strlen(ae->wl[ae->idx+2].w)+strlen(ae->rasmstruct[irs].rasmstructfield[i].name)+2);
-						sprintf(rasmstructfield.name,"%s.%s",ae->wl[ae->idx+2].w,ae->rasmstruct[irs].rasmstructfield[i].name);
+						rasmstructfield.name=MemMalloc(strlen(structName)+strlen(ae->rasmstruct[irs].rasmstructfield[i].name)+2);
+						sprintf(rasmstructfield.name,"%s.%s",structName,ae->rasmstruct[irs].rasmstructfield[i].name);
 						rasmstructfield.offset=curlabel.ptr;
 						ObjectArrayAddDynamicValueConcat((void **)&ae->rasmstruct[ae->irasmstruct-1].rasmstructfield,
 								&ae->rasmstruct[ae->irasmstruct-1].irasmstructfield,&ae->rasmstruct[ae->irasmstruct-1].mrasmstructfield,
@@ -21148,6 +21193,8 @@ printf("create subfields\n");
 printf("pushLight [%s] %d:%X\n",curlabel.name,curlabel.ibank,curlabel.ptr);
 #endif
 				}
+				MemFree(structName);
+				structName=NULL;
 
 				/* is there any filler in the declaration? */
 				localsize=0;
@@ -21327,6 +21374,7 @@ void __ENDSTRUCT(struct s_assenv *ae) {
 			curlabel.name=TxtStrDup(ae->rasmstruct[ae->irasmstruct-1].name);
 			curlabel.crc=ae->rasmstruct[ae->irasmstruct-1].crc;
 			//curlabel.iw=-1;
+			curlabel.lz=-1; // because struct is NOT part of LZ
 			curlabel.ptr=ae->rasmstruct[ae->irasmstruct-1].size;
 			//curlabel.fileidx wont be used
 			PushLabelLight(ae,&curlabel);
@@ -21809,7 +21857,7 @@ printf("Hexbin ae->idx=%d\n",ae->idx);
 #if TRACE_HEXBIN
 printf("Hexbin get IDX\n");
 #endif
-		ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,1);
+		//ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,1);
 		hbinidx=RoundComputeExpressionCore(ae,ae->wl[ae->idx+1].w,ae->codeadr,0);
 		if (hbinidx>=ae->ih || hbinidx<0) {
 			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"internal error with binary file import (index out of bounds), please report\n");
@@ -21855,7 +21903,7 @@ printf("Hexbin check wl[%d]=[%s]\n",ae->idx,ae->wl[ae->idx].w);
 						/* reorder tiles data */
 						if (!ae->wl[ae->idx].t) {
 							ae->idx++;
-							ExpressionFastTranslate(ae,&ae->wl[ae->idx].w,1);
+							//ExpressionFastTranslate(ae,&ae->wl[ae->idx].w,1);
 							remap=RoundComputeExpressionCore(ae,ae->wl[ae->idx].w,ae->codeadr,0);
 							if (remap<1) {
 								MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"INCBIN REMAP need a proper number of columns (>1)\n");
@@ -21868,7 +21916,7 @@ printf("Hexbin check wl[%d]=[%s]\n",ae->idx,ae->wl[ae->idx].w);
 						/*** entrelace les tiles, besoin de hauteur et largeur de la tile ***/
 						if (!ae->wl[ae->idx].t) {
 							ae->idx++;
-							ExpressionFastTranslate(ae,&ae->wl[ae->idx].w,1);
+							//ExpressionFastTranslate(ae,&ae->wl[ae->idx].w,1);
 							tilex=RoundComputeExpressionCore(ae,ae->wl[ae->idx].w,ae->codeadr,0);
 							gtiles=1;
 						} else {
@@ -21879,7 +21927,7 @@ printf("Hexbin check wl[%d]=[%s]\n",ae->idx,ae->wl[ae->idx].w);
 						/*** entrelace les tiles, besoin de hauteur et largeur de la tile ***/
 						if (!ae->wl[ae->idx].t) {
 							ae->idx++;
-							ExpressionFastTranslate(ae,&ae->wl[ae->idx].w,1);
+							//ExpressionFastTranslate(ae,&ae->wl[ae->idx].w,1);
 							tilex=RoundComputeExpressionCore(ae,ae->wl[ae->idx].w,ae->codeadr,0);
 							itiles=1;
 						} else {
@@ -21890,7 +21938,7 @@ printf("Hexbin check wl[%d]=[%s]\n",ae->idx,ae->wl[ae->idx].w);
 						/* import and reorder tiles */
 						if (!ae->wl[ae->idx].t) {
 							ae->idx++;
-							ExpressionFastTranslate(ae,&ae->wl[ae->idx].w,1);
+							//ExpressionFastTranslate(ae,&ae->wl[ae->idx].w,1);
 							vtiles=RoundComputeExpressionCore(ae,ae->wl[ae->idx].w,ae->codeadr,0);
 						} else {
 							MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"INCBIN VTILES need a number of lines for reordering\n");
@@ -21908,7 +21956,7 @@ printf("Hexbin check wl[%d]=[%s]\n",ae->idx,ae->wl[ae->idx].w);
 							return;
 						}
 						expwrk=TxtStrDup(ae->wl[ae->idx].w);
-						ExpressionFastTranslate(ae,&expwrk,1);
+						//ExpressionFastTranslate(ae,&expwrk,1);
 						iValue=RoundComputeExpressionCore(ae,expwrk,ae->codeadr,0);
 						MemFree(expwrk);
 
@@ -22677,7 +22725,7 @@ void __CIPHERMEM(struct s_assenv *ae) {
 		/* cipher memory */
 		if (!ae->nocode) {
 			if (!ae->wl[ae->idx+2].t) {
-				ExpressionFastTranslate(ae,&ae->wl[ae->idx+3].w,1);
+				//ExpressionFastTranslate(ae,&ae->wl[ae->idx+3].w,1);
 				ciphermode=RoundComputeExpression(ae,ae->wl[ae->idx+3].w,ae->outputadr,0,0);
 				switch (ciphermode) {
 					default:
@@ -23654,7 +23702,7 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 			/****************************************
 			  e x e c u t e    e x p r e s s i o n   
 			****************************************/
-			ExpressionFastTranslate(ae,&wordlist[ae->idx].w,0);
+			//ExpressionFastTranslate(ae,&wordlist[ae->idx].w,0);
 			ComputeExpression(ae,wordlist[ae->idx].w,ae->codeadr,0,0);
 		}
 		ae->idx++; 
@@ -23948,7 +23996,7 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 					/* no instruction executed, this is a label or an assignement */
 					if (wordlist[ae->idx].e) {
 						double vtrace;
-						ExpressionFastTranslate(ae,&wordlist[ae->idx].w,0);
+						//ExpressionFastTranslate(ae,&wordlist[ae->idx].w,0);
 						vtrace=ComputeExpression(ae,wordlist[ae->idx].w,ae->codeadr,0,0);
 						if (strchr(wordlist[ae->idx].w,'~')) {
 							char *ctrace=TxtStrDup(wordlist[ae->idx].w);
@@ -24294,10 +24342,10 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 
 		/* start/end */
 		ae->idx=ae->poker[i].istart; /* exp hack */
-		ExpressionFastTranslate(ae,&ae->wl[ae->idx].w,0);
+		//ExpressionFastTranslate(ae,&ae->wl[ae->idx].w,0);
 		istart=RoundComputeExpression(ae,ae->wl[ae->idx].w,0,0,0);
 		ae->idx=ae->poker[i].iend; /* exp hack */
-		ExpressionFastTranslate(ae,&ae->wl[ae->idx].w,0);
+		//ExpressionFastTranslate(ae,&ae->wl[ae->idx].w,0);
 		iend=RoundComputeExpression(ae,ae->wl[ae->idx].w,0,0,0);
 
 		switch (ae->poker[i].method) {
@@ -29851,6 +29899,9 @@ struct s_autotest_keyword autotest_keyword[]={
 	{"assert clamp(4,2+7,1+9)==clamp(4,(2+7),(1+9)):nop ",0},
 	{"assert clamp(14*3,3*(2+7),3*(1+9)+2)==clamp(14*3,3*(2+7),(3*(1+9)+2)):nop ",0},
 	{"defs 10:limit $",0},{"defs 10:limit $:nop",1},
+	{"cumul=0: repeat 3,x,0: @blob equ x+1: cumul+=@blob: rend: assert cumul==6: nop",0}, // local EQU in calcules
+	{"struct bidule: john defb: paul defb: endstruct: repeat 5,x: struct bidule label{x}: rend",0}, // able to use tag in struct object name
+
 	/*
 	 *
 	 * will need to test resize + format then meta review test!

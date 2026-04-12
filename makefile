@@ -1,9 +1,9 @@
-CC=cc
+CC=clang
 EXEC=rasm.exe
 
 CFLAGS=-lm  -march=native -o $(EXEC)
-CFLAGS_OPT = $(CFLAGS) -O2
-CFLAGS_DBG = $(CFLAGS) -O0 -g -pthread
+CFLAGS_OPT = $(CFLAGS) -O2 -Wpointer-sign
+CFLAGS_DBG = $(CFLAGS) -O0 -g -pthread -Wpointer-sign
 CFLAGS_3RD = $(CFLAGS) -g -pthread -DNO_3RD_PARTIES
 
 SRC_APUDIR=./apultra-master/src
