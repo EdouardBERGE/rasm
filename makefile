@@ -122,8 +122,6 @@ reload:
 	strip $(EXEC)
 
 release:
-	$(CC) z80-master/z80.c -O2 -c -o $(Z80_MASTER_OBJ)
-
 	$(CC) $(SRC_SALVADOR)/matchfinder.c $(SALVADOR_FLAGS) -o $(SRC_SALVADOR)/matchfinder.o
 	$(CC) $(SRC_SALVADOR)/expand.c      $(SALVADOR_FLAGS) -o $(SRC_SALVADOR)/expand.o
 	$(CC) $(SRC_SALVADOR)/shrink.c      $(SALVADOR_FLAGS) -o $(SRC_SALVADOR)/shrink.o
@@ -149,7 +147,7 @@ release:
 	$(CC) $(SRC_LZSADIR)/shrink_context.c $(LZSA_FLAGS)    -o $(SRC_LZSADIR)/shrink_context.o
 	$(CC) $(SRC_LZSADIR)/shrink_inmem.c $(LZSA_FLAGS)      -o $(SRC_LZSADIR)/shrink_inmem.o
 	$(CC) $(SRC_LZSADIR)/stream.c $(LZSA_FLAGS)            -o $(SRC_LZSADIR)/stream.o
-	$(CC) rasm.c $(CFLAGS_OPT) $(APU_OBJ) $(LZSA_OBJ) $(SALVADOR_OBJ) $(Z80_MASTER_OBJ)
+	$(CC) rasm.c $(CFLAGS_OPT) $(APU_OBJ) $(LZSA_OBJ) $(SALVADOR_OBJ) -DRASM_PRODUCTION_WITHOUT_AUTOTEST
 	strip $(EXEC)
 
 clean:

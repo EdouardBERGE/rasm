@@ -87,7 +87,9 @@ int MAX_OFFSET_ZX0=32640;
 #define __FILENAME__ "3rd parties"
 /* 3rd parties compression */
 #ifndef NOAPULTRA
+#ifndef RASM_PRODUCTION_WITHOUT_AUTOTEST
 #include"z80-master/z80.h"
+#endif
 #endif
 #include"zx7.h"
 #include"lz4.h"
@@ -28012,6 +28014,9 @@ int RasmAssembleInfoParam(const char *datain, int lenin, unsigned char **dataout
 	return ret;
 }
 
+
+#ifndef RASM_PRODUCTION_WITHOUT_AUTOTEST
+
 #define AUTOTEST_REBANK "bank 1: mylabel1 nop: assert {bank}mylabel1==1:"\
 			"bank 2: mylabel2 nop: assert {bank}mylabel2==2:"\
 			"rebank: mylabel3 nop: assert {bank}mylabel3==1:"\
@@ -32390,6 +32395,8 @@ printf("checking memory\n");
 	exit(0);
 }
 
+#endif // RASM_PRODUCTION_WITHOUT_AUTOTEST
+
 
 /******************************************************
 LZ48 v005 / LZ49 v002
@@ -32953,10 +32960,12 @@ int ParseOptions(char **argv,int argc, struct s_parameter *param)
 	
 	char *sep;
 	int i=0;
-
+#ifndef RASM_PRODUCTION_WITHOUT_AUTOTEST
 	if (strcmp(argv[i],"-autotest")==0) {
 		RasmAutotest();
-	} else if (strcmp(argv[i],"-uz")==0) {
+	} else 
+#endif	
+	if (strcmp(argv[i],"-uz")==0) {
 		param->as80=2;
 	} else if (strcmp(argv[i],"-quick")==0) {
 		MAX_OFFSET_ZX0=2176;
