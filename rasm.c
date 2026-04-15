@@ -799,6 +799,8 @@ struct s_whilewend {
 	int value;
 	int maxim;
 	int while_counter;
+	char *whilevar;
+	struct s_expr_dico *whilevarstruct;
 };
 
 struct s_switchcase {
@@ -7038,57 +7040,40 @@ printf("stage 2 | page=%d | ptr=%X ibank=%d\n",page,curlabel->ptr,curlabel->iban
 										}
 										if (validx<0) {
 											/* last chance to get a keyword */
-											if (strcmp(ae->computectx->varbuffer+minusptr,"REPEAT_COUNTER")==0) {
-												if (ae->ir) {
-													curval=ae->repeat[ae->ir-1].repeat_counter;
-												} else {
-													MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"cannot use REPEAT_COUNTER keyword outside a repeat loop\n");
-													curval=0;
-												}
-											} else if (strcmp(ae->computectx->varbuffer+minusptr,"WHILE_COUNTER")==0) {
-												if (ae->iw) {
-													curval=ae->whilewend[ae->iw-1].while_counter;
-												} else {
-													MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"cannot use WHILE_COUNTER keyword outside a while loop\n");
-													curval=0;
-												}
+											/* in case the expression is a register */
+											if (IsRegister(ae->computectx->varbuffer+minusptr)) {
+												MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"cannot use register %s in this context\n",TradExpression(zeexpression));
 											} else {
-												/* in case the expression is a register */
-												if (IsRegister(ae->computectx->varbuffer+minusptr)) {
-													MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"cannot use register %s in this context\n",TradExpression(zeexpression));
+												if (IsDirective(ae->computectx->varbuffer+minusptr)) {
+													MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"cannot use directive %s in this context\n",TradExpression(zeexpression));
 												} else {
-													if (IsDirective(ae->computectx->varbuffer+minusptr)) {
-														MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"cannot use directive %s in this context\n",TradExpression(zeexpression));
-													} else {
 
-														MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"expression [%s] keyword [%s] not found in variables, labels or aliases\n",TradExpression(zeexpression),ae->computectx->varbuffer+minusptr);
+													MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"expression [%s] keyword [%s] not found in variables, labels or aliases\n",TradExpression(zeexpression),ae->computectx->varbuffer+minusptr);
 
 #if TRACE_LABEL || TRACE_COMPUTE_EXPRESSION
 if (!ae->extended_error) {
-	char *lookstr;
-	lookstr=StringLooksLike(ae,ae->computectx->varbuffer+minusptr);
-	if (lookstr) {
-		printf("LooksLike: did you mean [%s] ?\n",lookstr);
-	}
+char *lookstr;
+lookstr=StringLooksLike(ae,ae->computectx->varbuffer+minusptr);
+if (lookstr) {
+	printf("LooksLike: did you mean [%s] ?\n",lookstr);
+}
 }
 printf("DUMP des labels\n");
-	for (i=0;i<ae->il;i++) {
-		printf("%d:%04X %s\n",ae->label[i].ibank,ae->label[i].ptr,ae->label[i].name);
-	}
+for (i=0;i<ae->il;i++) {
+	printf("%d:%04X %s\n",ae->label[i].ibank,ae->label[i].ptr,ae->label[i].name);
+}
 #endif
 
-														if (ae->extended_error) {
-															char *lookstr;
-															lookstr=StringLooksLike(ae,ae->computectx->varbuffer+minusptr);
-															if (lookstr) {
-																rasm_printf(ae,KERROR" did you mean [%s] ?\n",lookstr);
-															}
+													if (ae->extended_error) {
+														char *lookstr;
+														lookstr=StringLooksLike(ae,ae->computectx->varbuffer+minusptr);
+														if (lookstr) {
+															rasm_printf(ae,KERROR" did you mean [%s] ?\n",lookstr);
 														}
 													}
 												}
-												
-												curval=0;
 											}
+											curval=0;
 										}
 									}
 								}
@@ -9071,63 +9056,6 @@ printf("exprout=[%s]\n",expr);
 				}
 			}
 			
-			
-			
-			
-			
-			
-			if (!found_replace && strcmp(varbuffer,"REPEAT_COUNTER")==0) {
-				if (ae->ir) {
-					yves=ae->repeat[ae->ir-1].repeat_counter;
-					#ifdef OS_WIN
-					snprintf(curval,sizeof(curval)-1,"%d",yves);
-					newlen=strlen(curval);
-					#else
-					newlen=snprintf(curval,sizeof(curval)-1,"%d",yves);
-					#endif
-					lenw=strlen(expr);
-					if (newlen>ivar) {
-						/* realloc bigger */
-						expr=*ptr_expr=MemRealloc(expr,lenw+newlen-ivar+1);
-					}
-					if (newlen!=ivar ) {
-						MemMove(expr+startvar+newlen,expr+startvar+ivar,lenw-startvar-ivar+1);
-						found_replace=1;
-					}
-					strncpy(expr+startvar,curval,newlen); /* copy without zero terminator */
-					found_replace=1;
-					idx=startvar+newlen;
-					ivar=0;
-				} else {
-					MakeError(ae,ae->idx,GetCurrentFile(ae),GetExpLine(ae,0),"cannot use REPEAT_COUNTER outside repeat loop\n");
-				}
-			}
-			if (!found_replace && strcmp(varbuffer,"WHILE_COUNTER")==0) {
-				if (ae->iw) {
-					yves=ae->whilewend[ae->iw-1].while_counter;
-					#ifdef OS_WIN
-					snprintf(curval,sizeof(curval)-1,"%d",yves);
-					newlen=strlen(curval);
-					#else
-					newlen=snprintf(curval,sizeof(curval)-1,"%d",yves);
-					#endif
-					lenw=strlen(expr);
-					if (newlen>ivar) {
-						/* realloc bigger */
-						expr=*ptr_expr=MemRealloc(expr,lenw+newlen-ivar+1);
-					}
-					if (newlen!=ivar ) {
-						MemMove(expr+startvar+newlen,expr+startvar+ivar,lenw-startvar-ivar+1);
-						found_replace=1;
-					}
-					strncpy(expr+startvar,curval,newlen); /* copy without zero terminator */
-					found_replace=1;
-					idx=startvar+newlen;
-					ivar=0;
-				} else {
-					MakeError(ae,ae->idx,GetCurrentFile(ae),GetExpLine(ae,0),"cannot use WHILE_COUNTER outside repeat loop\n");
-				}
-			}
 			/* unknown symbol -> add to used symbol pool */
 			if (!found_replace && ae->AutomateValidLabelFirst[varbuffer[0]&0xFF]) {
 				InsertUsedToTree(ae,varbuffer,crc);
@@ -19904,12 +19832,32 @@ void ___internal_skip_loop_block(struct s_assenv *ae, const int eloopstyle) {
 void __WHILE(struct s_assenv *ae) {
 	struct s_whilewend whilewend={0};
 	
-	if (!ae->wl[ae->idx].t && ae->wl[ae->idx+1].t==1) {
+	if (!ae->wl[ae->idx].t) {
+		if (!ae->wl[ae->idx+1].t) {
+			struct s_expr_dico *wvar;
+			int crc;
+			crc=GetCRC(ae->wl[ae->idx+2].w);
+			if ((wvar=SearchDico(ae,ae->wl[ae->idx+2].w,crc))!=NULL) {
+				wvar->v=ae->repeat_start;
+				wvar->used=1;
+			} else {
+				/* mais ne peut être un label ou un alias */
+				ExpressionSetDicoVar(ae,ae->wl[ae->idx+2].w,ae->repeat_start,0);
+				wvar=SearchDico(ae,ae->wl[ae->idx+2].w,crc);
+				wvar->used=1;
+			}
+			whilewend.whilevar=ae->wl[ae->idx+2].w;
+			whilewend.whilevarstruct=wvar;
+			if (ae->wl[ae->idx+2].t!=1) {
+				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is WHILE <expression>[,<varcounter>]\n");
+			}
+		}
+
 		ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
 		if (!ComputeExpression(ae,ae->wl[ae->idx+1].w,ae->codeadr,0,2)) {
-				/* skip while block */
-				___internal_skip_loop_block(ae,E_LOOPSTYLE_WHILE);
-				return;
+			/* skip while block */
+			___internal_skip_loop_block(ae,E_LOOPSTYLE_WHILE);
+			return;
 		} else {
 
 			/*************************************************/
@@ -19930,7 +19878,7 @@ void __WHILE(struct s_assenv *ae) {
 			ObjectArrayAddDynamicValueConcat((void**)&ae->whilewend,&ae->iw,&ae->mw,&whilewend,sizeof(whilewend));
 		}
 	} else {
-		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is WHILE <expression>\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is WHILE <expression>[,<varcounter>]\n");
 	}
 }
 void __WEND(struct s_assenv *ae) {
@@ -19949,14 +19897,18 @@ void __WEND(struct s_assenv *ae) {
 					/* refresh macro check index */
 					if (ae->iw) ae->imacropos=ae->whilewend[ae->iw-1].maxim;
 				} else {
+					struct s_expr_dico *wvar;
 					ae->whilewend[ae->iw-1].cpt++; /* for local label */
 					ae->whilewend[ae->iw-1].while_counter++;
 					ae->idx=ae->whilewend[ae->iw-1].start;
 					/* refresh macro check index */
 					ae->imacropos=ae->whilewend[ae->iw-1].maxim;
+					if (ae->whilewend[ae->iw-1].whilevarstruct) {
+						wvar=ae->whilewend[ae->iw-1].whilevarstruct;
+						wvar->v++;
+					}
 				}
 			} else {
-
 				/*************************************************/
 				/********* POP Global on Stack *******************/
 				/*************************************************/
@@ -29906,6 +29858,7 @@ struct s_autotest_keyword autotest_keyword[]={
 	{"defs 10:limit $",0},{"defs 10:limit $:nop",1},
 	{"cumul=0: repeat 3,x,0: @blob equ x+1: cumul+=@blob: rend: assert cumul==6: nop",0}, // local EQU in calcules
 	{"struct bidule: john defb: paul defb: endstruct: repeat 5,x: struct bidule label{x}: rend",0}, // able to use tag in struct object name
+	{"startingindex 0: machin=0: while machin<10,truc: assert truc==machin: nop: machin+=1: wend",0}, // while with variable for number of passes
 
 	/*
 	 *
