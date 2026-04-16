@@ -1299,6 +1299,7 @@ struct s_assenv {
 	char AutomateExpressionValidCharFirst[256];
 	char AutomateExpressionValidChar[256];
 	char AutomateExpressionDecision[256];
+	char AutomateValidVarFirst[256];
 	char AutomateValidLabelFirst[256];
 	char AutomateValidLabel[256];
 	char AutomateDigit[256];
@@ -1637,6 +1638,7 @@ A-Z variable ou fonction (cos, sin, tan, sqr, pow, mod, and, xor, mod, ...)
 #define AutomateExpressionValidCharFirstDefinition "#%0123456789.ABCDEFGHIJKLMNOPQRSTUVWXYZ_@${"
 #define AutomateExpressionValidCharDefinition "0123456789.ABCDEFGHIJKLMNOPQRSTUVWXYZ_{}@$"
 #define AutomateValidLabelFirstDefinition ".ABCDEFGHIJKLMNOPQRSTUVWXYZ_@"
+#define AutomateValidVarFirstDefinition "ABCDEFGHIJKLMNOPQRSTUVWXYZ_"
 #define AutomateValidLabelDefinition "0123456789.ABCDEFGHIJKLMNOPQRSTUVWXYZ_@{}"
 #define AutomateDigitDefinition ".0123456789"
 #define AutomateHexaDefinition "0123456789ABCDEF"
@@ -6633,16 +6635,16 @@ double ComputeExpressionCore(struct s_assenv *ae,char *original_zeexpression,con
 					if (ae->computectx->varbuffer[minusptr+0]=='$' && ivar==1) { //ae->computectx->varbuffer[minusptr+1]==0) {
 						curval=ptr;
 					} else {
-						int fastlen=ivar-minusptr;
-
 						crc=GetCRC(ae->computectx->varbuffer+minusptr);
 						/***************************************************
 						     L O O K I N G   F O R   A   F U N C T I O N
+						           only if there is a parenthesis
 						***************************************************/
-						if (fastlen<FUNCTION_MAXLENGTH && (imkey=ae->fastmath[(int)ae->computectx->varbuffer[minusptr]][fastlen])!=-1) {
-							do {
-								if (math_keyword[imkey].crc==crc && strcmp(math_keyword[imkey].mnemo+1,ae->computectx->varbuffer+minusptr+1)==0) {
-									if (c=='(') {
+						if (c=='(') {
+							int fastlen=ivar-minusptr;
+							if (fastlen<FUNCTION_MAXLENGTH && (imkey=ae->fastmath[(int)ae->computectx->varbuffer[minusptr]][fastlen])!=-1) {
+								do {
+									if (math_keyword[imkey].crc==crc && strcmp(math_keyword[imkey].mnemo+1,ae->computectx->varbuffer+minusptr+1)==0) {
 										/* push function as operator! */
 										stackelement.operator=math_keyword[imkey].operation;
 										stackelement.string=NULL;
@@ -6654,17 +6656,13 @@ double ComputeExpressionCore(struct s_assenv *ae,char *original_zeexpression,con
 										ObjectArrayAddDynamicValueConcat((void **)&ae->computectx->tokenstack,&nbtokenstack,&ae->computectx->maxtokenstack,&stackelement,sizeof(stackelement));
 										allow_minus_as_sign=1;
 										parenth++;
-									} else {
-										MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"expression [%s] - %s is a reserved keyword!\n",TradExpression(zeexpression),math_keyword[imkey].mnemo);
-										curval=0;
+										idx++;
+										goto endContinueXPR;
 									}
-									idx++;
-									ivar=0;
-									break;
-								}
-								imkey++;
-							} while (math_keyword[imkey].mnemo[0]==ae->computectx->varbuffer[minusptr]);
-							if (!ivar) continue;
+									imkey++;
+								} while (math_keyword[imkey].mnemo[0]==ae->computectx->varbuffer[minusptr]);
+								//if (!ivar) continue;
+							}
 						}
 					
 #if TRACE_COMPUTE_EXPRESSION
@@ -7131,6 +7129,7 @@ for (i=0;i<ae->il;i++) {
 			stackelement.string=NULL;
 			
 			allow_minus_as_sign=0;
+			endContinueXPR:;
 			ivar=0;
 		}
 		/************************************
@@ -8437,7 +8436,7 @@ printf("***********\n");
 					}
 				} else {
 					/* ASSIGN */
-					if ((expr[0]<'A' || expr[0]>'Z') && expr[0]!='_') {
+					if (!ae->AutomateValidVarFirst[(int)expr[0]&0xFF]) {
 						MakeError(ae,ae->idx,GetCurrentFile(ae),GetExpLine(ae,0),"variable name must begin by a letter or '_' [%s]\n",expr);
 						return 0;
 					} else {
@@ -8447,7 +8446,7 @@ printf("***********\n");
 						ptr_exp=expr+idx;
 						dblexp=TxtStrDup(ptr_exp+1);
 						// assign need to fasttranslate proximity labels
-						ExpressionFastTranslate(ae,&dblexp,2);
+						ExpressionFastTranslate(ae,&dblexp,3); // new Fast mode
 						v=ComputeExpressionCore(ae,dblexp,ptr,didx);
 						*ptr_exp=0;
 						/* patch operator+assign value */
@@ -8571,7 +8570,7 @@ void ExpressionFastTranslate(struct s_assenv *ae, char **ptr_expr, const int ful
 	static char *varbuffer=NULL;
 	static int ivar,maxivar=1;
 	char curval[256]={0};
-	int c,lenw=0,idx=0,crc,startvar=0,newlen,found_replace,yves,dek,reidx,lenbuf,rlen,tagoffset;
+	int c,lenw=0,idx=0,crc,startvar=0,newlen,found_replace,yves,dek,lenbuf,rlen,tagoffset;
 	double v;
 	char tmpuchar[16];
 	char *expr,*locallabel;
@@ -8594,16 +8593,13 @@ printf("fast [%s]\n",expr);
 	switch (ae->maxam) {
 		default:
 		case 0: /* full check */
-			if (expr[idx]=='~' || (expr[idx]=='=' && expr[idx+1]!='=')) {reidx=idx+1;break;}
-			reidx=0;
+			if (expr[idx]=='~' || (expr[idx]=='=' && expr[idx+1]!='=')) idx++; else idx=0;
 			break;
 		case 1: /* partial check with maxam */
-			if (expr[idx]=='~') {reidx=idx+1;break;}
-			reidx=0;
+			if (expr[idx]=='~') idx++; else idx=0;
 			break;
 	}
 	
-	idx=reidx;
 	while ((c=expr[idx])!=0) {
 		switch (c) {
 			/* string in expression (should never contain escaped char but need to handle this) */
@@ -8780,7 +8776,8 @@ printf("ExpressionFastTranslate (full) => varbuffer=[%s] lz=%d\n",varbuffer,ae->
 					}
 					/* qu'on le remplace ou pas on passe a la suite */
 					found_replace=1;
-				} else {
+				} else if (fullreplace!=3) {
+					// in ASSIGN mode, the computeCore will search dico without realloc/replace/thing
 					curdic=SearchDico(ae,varbuffer,crc);
 					if (curdic) {
 						v=curdic->v;
@@ -23251,6 +23248,7 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 	InitAutomate(ae->AutomateHexa,(unsigned char *)AutomateHexaDefinition);
 	InitAutomate(ae->AutomateDigit,(unsigned char *)AutomateDigitDefinition);
 	InitAutomate(ae->AutomateValidLabel,(unsigned char *)AutomateValidLabelDefinition);
+	InitAutomate(ae->AutomateValidVarFirst,(unsigned char *)AutomateValidVarFirstDefinition);
 	InitAutomate(ae->AutomateValidLabelFirst,(unsigned char *)AutomateValidLabelFirstDefinition);
 	InitAutomate(ae->AutomateExpressionValidCharExtended,(unsigned char *)AutomateExpressionValidCharExtendedDefinition);
 	InitAutomate(ae->AutomateExpressionValidCharFirst,(unsigned char *)AutomateExpressionValidCharFirstDefinition);
