@@ -4115,7 +4115,6 @@ void InsertUsedToTree(struct s_assenv *ae, const char *used, const int crc)
 	}
 
 	for (i=0;i<curusedtree->nused;i++) if (strcmp(used,curusedtree->used[i])==0) return; // already defined
-											     //
 	/* not found ok, but now used! ^_^ */
 	FieldArrayAddDynamicValueConcat(&curusedtree->used,&curusedtree->nused,&curusedtree->mused,used);
 }
@@ -8603,66 +8602,48 @@ printf("fast [%s]\n",expr);
 			reidx=0;
 			break;
 	}
-
-	idx=0;
-	/* is there ascii char? */
-	while ((c=expr[idx])!=0) {
-		if (c=='\'' || c=='"') {
-			/* one char escape code */
-			if (expr[idx+1]=='\\') {
-				if (expr[idx+2] && expr[idx+3]==c) {
-					/* no charset conversion for escaped chars */
-					c=expr[idx+2];
-					switch (c) {
-						case 'b':c='\b';break;
-						case 'v':c='\v';break;
-						case 'f':c='\f';break;
-						case '0':c='\0';break;
-						case 'r':c='\r';break;
-						case 'n':c='\n';break;
-						case 't':c='\t';break;
-						default:break;
-					}
-					sprintf(tmpuchar,"#%03X",c);
-					memcpy(expr+idx,tmpuchar,4);
-					idx+=3;
-				} else {
-					//MakeError(ae,ae->idx,GetCurrentFile(ae),GetExpLine(ae,0),"expression [%s] - Only single escaped char may be quoted\n",expr);
-					//expr[0]=0;
-					//return;
-					idx++;
-					while (expr[idx] && expr[idx]!=c) idx++;
-				}
-			} else if (expr[idx+1] && expr[idx+2]==c) {
-				if (idx>=12 && strncmp("IS_REGISTER(",&expr[idx-12],12)==0) {
-					// do not convert simple char with this function!
-				} else {
-					sprintf(tmpuchar,"#%02X",ae->charset[((unsigned int)expr[idx+1])&0xFF]);
-					memcpy(expr+idx,tmpuchar,3);
-				}
-				idx+=2;
-			} else {
-				//printf("FAST => moar than one quoted char\n");
-				//MakeError(ae,ae->idx,GetCurrentFile(ae),GetExpLine(ae,0),"expression [%s] - Only single char may be quoted\n",expr);
-				//expr[0]=0;
-				//return;
-				idx++;
-				while (expr[idx] && expr[idx]!=c) idx++;
-			}
-		}
-		idx++;
-	}
 	
 	idx=reidx;
 	while ((c=expr[idx])!=0) {
 		switch (c) {
-			/* string in expression */
+			/* string in expression (should never contain escaped char but need to handle this) */
 			case '"':
 			case '\'':
-				//printf("FAST => skip string [%s]\n",expr);
+				/* one char escape code following quote */
+				if (expr[idx+1]=='\\') {
+					if (expr[idx+2] && expr[idx+3]==c) {
+						/* no charset conversion for escaped chars */
+						c=expr[idx+2];
+						switch (c) {
+							case 'b':c='\b';break;
+							case 'v':c='\v';break;
+							case 'f':c='\f';break;
+							case '0':c='\0';break;
+							case 'r':c='\r';break;
+							case 'n':c='\n';break;
+							case 't':c='\t';break;
+							default:break;
+						}
+						sprintf(tmpuchar,"#%03X",c);
+						memcpy(expr+idx,tmpuchar,4);
+						idx+=3;
+					} else {
+						idx++;
+						while (expr[idx] && expr[idx]!=c) if (expr[idx]=='\\') idx+=2; else idx++;
+					}
+				} else if (expr[idx+1] && expr[idx+2]==c) {
+					if (idx>=12 && strncmp("IS_REGISTER(",&expr[idx-12],12)==0) {
+						// do not convert simple char with this function!
+					} else {
+						sprintf(tmpuchar,"#%02X",ae->charset[((unsigned int)expr[idx+1])&0xFF]);
+						memcpy(expr+idx,tmpuchar,3);
+					}
+					idx+=2;
+				} else {
+					idx++;
+					while (expr[idx] && expr[idx]!=c) if (expr[idx]=='\\') idx+=2; else idx++;
+				}
 				idx++;
-				while (expr[idx] && expr[idx]!=c) idx++;
-				if (expr[idx]) idx++;
 				ivar=0;
 				break;
 			/* operator / parenthesis */
@@ -20093,7 +20074,6 @@ void __REND(struct s_assenv *ae) {
 				/********* POP Global on Stack *******************/
 				/*************************************************/
 				PopGlobal(ae);
-
 			}
 		}
 	} else {
@@ -21436,18 +21416,6 @@ void __ENDSTRUCT(struct s_assenv *ae) {
 		} else {
 			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"ENDSTRUCT encountered outside STRUCT declaration\n");
 		}
-	}
-}
-
-void __MEMSPACE(struct s_assenv *ae) {
-	if (ae->getstruct==1) {
-		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"You cannot MEMSPACE inside a structure declaration\n");
-		return;
-	}
-	if (ae->wl[ae->idx].t) {
-		___new_memory_space(ae);
-	} else {
-		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"MEMSPACE directive does not need parameter\n");
 	}
 }
 
@@ -22970,7 +22938,6 @@ struct s_asm_keyword instruction[]={
 {"WRITE",0,0,__WRITE},
 {"CODE",0,0,__CODE},
 {"NOCODE",0,0,__NOCODE},
-{"MEMSPACE",0,0,__MEMSPACE},
 {"MACRO",0,0,__MACRO},
 {"ENUM",0,0,__ENUM},
 {"TICKER",0,0,__TICKER},
@@ -23480,7 +23447,7 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 	       A S S E M B L I N G    M A I N    L O O P
 	**********************************************************/
 	ae->idx=1;
-	if (!ae->verbose_assembling)
+	if (!ae->verbose_assembling) {
 	while (wordlist[ae->idx].t!=2) {
 #if TRACE_ASSEMBLE
 		{
@@ -23662,27 +23629,25 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 		  e x e c u t e    i n s t r u c t i o n
 		*****************************************/
 	       	if (!wordlist[ae->idx].e) {
-			executed=0;
+			// if short enough to be an instruction, fastmatch tell us if there is a directive for this first char and this length
 			if (ilength<INSTRUCTION_MAXLENGTH && (ifast=ae->fastmatch[(int)wordlist[ae->idx].w[0]][ilength])!=-1) {
 				do {
-					if (instruction[ifast].crc==curcrc && strcmp(instruction[ifast].mnemo+1,wordlist[ae->idx].w+1)==0) {
-						//wordlist[ae->idx].fastptr=instruction[ifast].makemnemo;
-						instruction[ifast].makemnemo(ae);
-						wordlist=ae->wl;
-						executed=1;
-						// normalement inutile => boucles!
-						while (!wordlist[ae->idx].t) {
-							ae->idx++;
+					// we have no collision with CRC on our list so we will break even it's not the directive
+					if (instruction[ifast].crc==curcrc) {
+						if (strcmp(instruction[ifast].mnemo+1,wordlist[ae->idx].w+1)==0) {
+							instruction[ifast].makemnemo(ae);
+							wordlist=ae->wl;
+							// normalement inutile => boucles!
+							while (!wordlist[ae->idx].t) {
+								ae->idx++;
+							}
+							if (ae->stop) goto endParsing; // only an instruction will stop assembling, not a macro, neither a label nor an expression
+							goto endContinue;
 						}
 						break;
 					}
 					ifast++;
-				} while (instruction[ifast].mnemo[0]==wordlist[ae->idx].w[0]);
-				if (executed) {
-					if (ae->stop) break; // only an instruction will stop assembling, not a macro, neither a label nor an expression
-					ae->idx++; 
-					continue;
-				}
+				} while (instruction[ifast].mnemo[0]==wordlist[ae->idx].w[0]); // continue scanning if first char still match
 			}
 			/*****************************************
 			       e x e c u t e    m a c r o
@@ -23703,7 +23668,10 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 			//ExpressionFastTranslate(ae,&wordlist[ae->idx].w,0);
 			ComputeExpression(ae,wordlist[ae->idx].w,ae->codeadr,0,0);
 		}
+		endContinue:;
 		ae->idx++; 
+	}
+	endParsing:;
 	} else {
 		int nooutput,ipadding;
 		printf(KLWHITE"Bnk|Real|Logic  Bytecode  [Time] Assembly\n");
