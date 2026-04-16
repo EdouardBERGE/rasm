@@ -2366,12 +2366,56 @@ int GetCRC(const char *label) {
         return crc;
 }
 
-int GetCRCandLength(const char *label, int *ilength) {
-	#undef FUNC
-	#define FUNC "GetCRC"
+static inline int GetCRCandLength(const char *label, int *ilength) {
+        #undef FUNC
+        #define FUNC "GetCRCandLength"
+        int crc;
+        int i;
 
-	*ilength=strlen(label);
-	return GetCRC(label);
+        // first bytes with fast exit
+        if (label[1]) {
+                if (label[2]) {
+                        if (label[3]) {
+                                crc=*(int *)label;
+                                i=4;
+                        } else {
+				*ilength=3;
+                                return (label[0]<<16)|(label[1]<<8)|label[2];
+                        }
+                } else {
+			*ilength=2;
+                        return (label[0]<<8)|label[1];
+                }
+        } else {
+		*ilength=1; // never zero
+                return label[0];
+        }
+
+        // batch CRC
+        while (label[i]!=0) {
+                if (label[i+1]) {
+                        if (label[i+2]) {
+                                if (label[i+3]) {
+                                        crc^=*(int *)(&label[i]);
+                                        i+=4;
+                                } else {
+					*ilength=i+3;
+                                        crc^=(label[i]<<16)|(label[i+1]<<8)|label[i+2];
+                                        return crc;
+                                }
+                        } else {
+				*ilength=i+2;
+                                crc^=(label[i]<<8)|label[i+1];
+                                return crc;
+                        }
+                } else {
+			*ilength=i+1;
+                        crc^=label[i];
+                        return crc;
+                }
+        }
+	*ilength=i;
+        return crc;
 }
 
 int IsDirective(const char *expr);
