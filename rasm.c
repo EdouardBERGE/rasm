@@ -6642,6 +6642,9 @@ double ComputeExpressionCore(struct s_assenv *ae,char *original_zeexpression,con
 						***************************************************/
 						if (c=='(') {
 							int fastlen=ivar-minusptr;
+#if TRACE_COMPUTE_EXPRESSION
+	printf("look for a function (if any) [%s]\n",ae->computectx->varbuffer+minusptr);
+#endif
 							if (fastlen<FUNCTION_MAXLENGTH && (imkey=ae->fastmath[(int)ae->computectx->varbuffer[minusptr]][fastlen])!=-1) {
 								do {
 									if (math_keyword[imkey].crc==crc && strcmp(math_keyword[imkey].mnemo+1,ae->computectx->varbuffer+minusptr+1)==0) {
@@ -6657,6 +6660,10 @@ double ComputeExpressionCore(struct s_assenv *ae,char *original_zeexpression,con
 										allow_minus_as_sign=1;
 										parenth++;
 										idx++;
+										ivar=0;
+#if TRACE_COMPUTE_EXPRESSION
+	printf("Push FUNC + OPEN ok\n");
+#endif
 										goto endContinueXPR;
 									}
 									imkey++;
@@ -7129,14 +7136,14 @@ for (i=0;i<ae->il;i++) {
 			stackelement.string=NULL;
 			
 			allow_minus_as_sign=0;
-			endContinueXPR:;
 			ivar=0;
 		}
 		/************************************
 		      C R E A T E    T O K E N
 		************************************/
 		ObjectArrayAddDynamicValueConcat((void **)&ae->computectx->tokenstack,&nbtokenstack,&ae->computectx->maxtokenstack,&stackelement,sizeof(stackelement));
-	}
+		endContinueXPR:;
+	 }
 	/*******************************************************
 	      C R E A T E    E X E C U T I O N    S T A C K
 	*******************************************************/
