@@ -23670,7 +23670,6 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 			/****************************************
 			  e x e c u t e    e x p r e s s i o n   
 			****************************************/
-			//ExpressionFastTranslate(ae,&wordlist[ae->idx].w,0);
 			ComputeExpression(ae,wordlist[ae->idx].w,ae->codeadr,0,0);
 		}
 		endContinue:;
@@ -23967,7 +23966,6 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 					/* no instruction executed, this is a label or an assignement */
 					if (wordlist[ae->idx].e) {
 						double vtrace;
-						//ExpressionFastTranslate(ae,&wordlist[ae->idx].w,0);
 						vtrace=ComputeExpression(ae,wordlist[ae->idx].w,ae->codeadr,0,0);
 						if (strchr(wordlist[ae->idx].w,'~')) {
 							char *ctrace=TxtStrDup(wordlist[ae->idx].w);
@@ -29876,6 +29874,11 @@ struct s_autotest_keyword autotest_keyword[]={
 	{"cumul=0: repeat 3,x,0: @blob equ x+1: cumul+=@blob: rend: assert cumul==6: nop",0}, // local EQU in calcules
 	{"struct bidule: john defb: paul defb: endstruct: repeat 5,x: struct bidule label{x}: rend",0}, // able to use tag in struct object name
 	{"startingindex 0: machin=0: while machin<10,truc: assert truc==machin: nop: machin+=1: wend",0}, // while with variable for number of passes
+	{"repeat 128:ld b,5:@truc djnz @truc:rend",0},
+	{"repeat 128:@bidule ld b,5:@truc djnz @truc:ld a,@truc-@bidule:rend",0},
+	{"debut:repeat 128:@bidule ld b,5:@truc djnz @truc:assert @truc-debut<256:rend",1}, // must fail
+	{"module preums: unLabel push de: deux    pop hl: defs 256: module: unLabel push de: deux    pop hl:" \
+	"jp preums_unLabel: jp deuze_unLabel: vdeux=deux : module deuze: defs 256: unLabel push de: deux    pop hl: jp preums_unLabel: jr unLabel: assert deux!=vdeux",0}, // test module priority + conflicts
 
 	/*
 	 *
