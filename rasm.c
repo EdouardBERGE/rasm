@@ -15582,7 +15582,7 @@ void __edsk_free(struct s_assenv *ae,struct s_edsk_global_struct *edsk) {
  * split track from sectors with a :
  * interval definition is possible with a dash
 *********************************************************************************/
-struct s_edsk_location *__edsk_get_location(struct s_assenv *ae,char *location, int *ret_nblocation) {
+struct s_edsk_location *__edsk_get_location(struct s_assenv *ae,char *location, int *ret_nblocation, int maxTrack) {
 	struct s_edsk_location *locations=NULL;
 	struct s_edsk_location curlocation;
 	char *duploc;
@@ -15616,15 +15616,23 @@ struct s_edsk_location *__edsk_get_location(struct s_assenv *ae,char *location, 
 			*sectorlist=0;
 //printf("tracklist [%s] sectorlist [%s]\n",split_location[idxl],sectorlist+1);
 		}
-		// process track interval
-		if ((split_interval=strchr(split_location[idxl],'-'))!=NULL) {
+		// process track extension
+		if ((split_interval=strchr(split_location[idxl],'+'))!=NULL) {
 			*split_interval=0;
 			strack=RoundComputeExpression(ae,split_location[idxl],0,0,0);
-			*split_interval='-'; // get back to original string
-			etrack=RoundComputeExpression(ae,split_interval+1,0,0,0);
+			*split_interval='+';
+			etrack=maxTrack-1;
 		} else {
-			strack=RoundComputeExpression(ae,split_location[idxl],0,0,0);
-			etrack=strack;
+			// process track interval
+			if ((split_interval=strchr(split_location[idxl],'-'))!=NULL) {
+				*split_interval=0;
+				strack=RoundComputeExpression(ae,split_location[idxl],0,0,0);
+				*split_interval='-'; // get back to original string
+				etrack=RoundComputeExpression(ae,split_interval+1,0,0,0);
+			} else {
+				strack=RoundComputeExpression(ae,split_location[idxl],0,0,0);
+				etrack=strack;
+			}
 		}
 		// check
 		if (etrack<strack) {
@@ -15875,7 +15883,7 @@ void __edsk_readsect(struct s_assenv *ae, struct s_edsk_action *action) {
 		return;
 	}
 	// param 3 is location
-	location=__edsk_get_location(ae,ae->wl[ae->idx+3].w,&nblocation);
+	location=__edsk_get_location(ae,ae->wl[ae->idx+3].w,&nblocation,edsk->tracknumber);
 	if (!location) {
 		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"EDSK READSECT error, invalid location!\n");
 		return;
@@ -16134,9 +16142,9 @@ void __edsk_gapfix(struct s_assenv *ae, struct s_edsk_action *action) {
 	if (strcmp(ae->wl[action->iw+3].w,"ALLTRACKS")==0) {
 		char fullrange[256];
 		sprintf(fullrange,"'0-%d'",edsk->tracknumber-1);
-		location=__edsk_get_location(ae,fullrange,&nblocation);
+		location=__edsk_get_location(ae,fullrange,&nblocation,edsk->tracknumber);
 	} else {
-		location=__edsk_get_location(ae,ae->wl[ae->idx+3].w,&nblocation);
+		location=__edsk_get_location(ae,ae->wl[ae->idx+3].w,&nblocation,edsk->tracknumber);
 		if (!location) {
 			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"EDSK GAPFIX error, invalid location!\n");
 			return;
@@ -16199,7 +16207,7 @@ void __edsk_check(struct s_assenv *ae, struct s_edsk_action *action) {
 		return;
 	}
 	// get location
-	location=__edsk_get_location(ae,ae->wl[ae->idx+3].w,&nblocation);
+	location=__edsk_get_location(ae,ae->wl[ae->idx+3].w,&nblocation,edsk->tracknumber);
 	if (!location) {
 		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"EDSK CHECK error, invalid location!\n");
 		return;
@@ -16287,7 +16295,7 @@ void __edsk_drop(struct s_assenv *ae, struct s_edsk_action *action) {
 		return;
 	}
 	// get location
-	location=__edsk_get_location(ae,ae->wl[ae->idx+3].w,&nblocation);
+	location=__edsk_get_location(ae,ae->wl[ae->idx+3].w,&nblocation,edsk->tracknumber);
 	if (!location) {
 		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"EDSK DROP error, invalid location!\n");
 		return;
@@ -16363,7 +16371,7 @@ void __edsk_add(struct s_assenv *ae, struct s_edsk_action *action) {
 	pp=3;
 	while (pp<action->nbparam) {
 		// get location
-		location=__edsk_get_location(ae,ae->wl[ae->idx+pp].w,&nblocation);
+		location=__edsk_get_location(ae,ae->wl[ae->idx+pp].w,&nblocation,edsk->tracknumber);
 		if (!location) {
 			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"EDSK ADD error, invalid location!\n");
 			return;
@@ -16474,7 +16482,7 @@ void __edsk_resize(struct s_assenv *ae, struct s_edsk_action *action) {
 	pp=3;
 	while (pp<action->nbparam) {
 		// get location
-		location=__edsk_get_location(ae,ae->wl[ae->idx+pp].w,&nblocation);
+		location=__edsk_get_location(ae,ae->wl[ae->idx+pp].w,&nblocation,edsk->tracknumber);
 		if (!location) {
 			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"EDSK ADD error, invalid location!\n");
 			return;
@@ -16561,7 +16569,7 @@ void __edsk_reorder(struct s_assenv *ae, struct s_edsk_action *action) {
 	pp=3;
 	while (pp<action->nbparam) {
 		// get location
-		location=__edsk_get_location(ae,ae->wl[ae->idx+pp].w,&nblocation);
+		location=__edsk_get_location(ae,ae->wl[ae->idx+pp].w,&nblocation,edsk->tracknumber);
 		if (!location) {
 			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"EDSK ADD error, invalid location!\n");
 			return;
@@ -16648,7 +16656,7 @@ void __edsk_writesect(struct s_assenv *ae, struct s_edsk_action *action) {
 	}
 
 	// get location
-	location=__edsk_get_location(ae,ae->wl[ae->idx+5].w,&nblocation);
+	location=__edsk_get_location(ae,ae->wl[ae->idx+5].w,&nblocation,edsk->tracknumber);
 	if (!location) {
 		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"EDSK WRITESECT error, invalid location!\n");
 		return;
@@ -16666,6 +16674,7 @@ void __edsk_writesect(struct s_assenv *ae, struct s_edsk_action *action) {
 			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"EDSK WRITESECT error, track %d is not formated\n",i);
 			return;
 		}
+
 		for (j=0;j<edsk->track[i*edsk->sidenumber+side].sectornumber;j++) {
 			// match ID or resizing whole track
 			if (edsk->track[i*edsk->sidenumber+side].sector[j].id==location[iloc].sectorID || location[iloc].istrack) {
@@ -16678,6 +16687,7 @@ void __edsk_writesect(struct s_assenv *ae, struct s_edsk_action *action) {
 			}
 			if (!action->isize) break;
 		}
+		if (!action->isize) break; // break again!
 	}
 	// final check
 	if (action->isize) {
