@@ -401,7 +401,6 @@ enum e_expression {
 	E_EXPRESSION_0V8,    /* 8 bits value to current address */
 	E_EXPRESSION_V8,     /* 8 bits value to current address+1 */
 	E_EXPRESSION_J16,    /* 16 bits value to current address+1 */
-	E_EXPRESSION_J16C,   /* 16 bits value to current address+1 */
 	E_EXPRESSION_V16,    /* 16 bits value to current address+1 */
 	//E_EXPRESSION_V16C,   /* 16 bits value to current address+1 */
 	E_EXPRESSION_0V16,   /* 16 bits value to current address */
@@ -1234,6 +1233,7 @@ struct s_assenv {
 	struct s_breakpoint *breakpoint;
 	int ibreakpoint,maxbreakpoint;
 	char *lastgloballabel;
+	int curProxIndex; // not used
 	//char *lastsuperglobal;
 	int lastgloballabellen, lastglobalalloc;
 	char **globalstack; /* retrieve back global from previous scope */
@@ -9115,10 +9115,25 @@ void PushExpression(struct s_assenv *ae,const int iw,const enum e_expression zet
 			SAUF si c'est une affectation
 		*/
 		switch (zetype) {
-			case E_EXPRESSION_J16C:
 			case E_EXPRESSION_J8:
-			case E_EXPRESSION_V8:
 			case E_EXPRESSION_J16:
+				// prox loc label - RASM Atlas
+				if (ae->wl[iw].w[0]=='_' && (ae->wl[iw].w[1]=='+' || ae->wl[iw].w[1]=='-') && !ae->wl[iw].w[2]) {
+					curexp.reference=MemMalloc(32);
+					if (ae->wl[iw].w[1]=='+') {
+						sprintf(curexp.reference,"LPR%dOX",ae->curProxIndex+1); // post
+					} else {
+						if (ae->curProxIndex<0) {
+							MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"You cannot use _- before declaring _ proximity label\n");
+							strcpy(curexp.reference,"LPR0OX");
+						} else {
+							sprintf(curexp.reference,"LPR%dOX",ae->curProxIndex); // ante
+						}
+					}
+					ae->codeadr-=1;
+					goto skipTransPush;
+				}
+			case E_EXPRESSION_V8:
 			case E_EXPRESSION_V16:
 			case E_EXPRESSION_IM: ae->codeadr-=1; // $ hack
 						break;
@@ -9144,6 +9159,7 @@ void PushExpression(struct s_assenv *ae,const int iw,const enum e_expression zet
 		} else {
 			ExpressionFastTranslate(ae,&ae->wl[iw].w,1);
 		}
+		skipTransPush:;
 		/* calcul adresse de reference et post-incrementation pour sauter les data */
 
 		// switch in pure order of enum
@@ -9152,7 +9168,6 @@ void PushExpression(struct s_assenv *ae,const int iw,const enum e_expression zet
 			case E_EXPRESSION_0V8:curexp.ptr=ae->codeadr;ae->outputadr++;ae->codeadr++;ae->external_mapping_size=1;break;
 			case E_EXPRESSION_V8: curexp.ptr=ae->codeadr;ae->outputadr++;ae->codeadr+=2;ae->external_mapping_size=1;break;
 			case E_EXPRESSION_J16:
-			case E_EXPRESSION_J16C:
 			case E_EXPRESSION_V16: curexp.ptr=ae->codeadr;ae->outputadr+=2;ae->codeadr+=3;ae->external_mapping_size=2;break;
 			case E_EXPRESSION_0V16:curexp.ptr=ae->codeadr;ae->outputadr+=2;ae->codeadr+=2;ae->external_mapping_size=2;break;
 			case E_EXPRESSION_0V32:curexp.ptr=ae->codeadr;ae->outputadr+=4;ae->codeadr+=4;ae->external_mapping_size=4;break;
@@ -9210,7 +9225,6 @@ void PushExpression(struct s_assenv *ae,const int iw,const enum e_expression zet
 			case E_EXPRESSION_0V8:
 			case E_EXPRESSION_V8:ae->outputadr++;ae->codeadr++;break;
 			case E_EXPRESSION_J16:
-			case E_EXPRESSION_J16C:
 			case E_EXPRESSION_V16:
 			case E_EXPRESSION_0V16:ae->outputadr+=2;ae->codeadr+=2;break;
 			case E_EXPRESSION_0V32:ae->outputadr+=4;ae->codeadr+=4;break;
@@ -10239,7 +10253,6 @@ void PopAllExpression(struct s_assenv *ae, const int crunched_zone)
 				mem[ae->expression[i].wptr]=(unsigned char)r;
 				break;
 			case E_EXPRESSION_J16:
-			case E_EXPRESSION_J16C:
 				if (ae->buildobj) {
 					int mapflag=0;
 					if (ae->nexternal) {
@@ -10494,6 +10507,29 @@ void PushLabel(struct s_assenv *ae)
 	switch (i) {
 		case 1:
 			switch (ae->wl[ae->idx].w[0]) {
+				case '_': // prox loc label - RASM Atlas
+					ae->curProxIndex++;
+					varbuffer=MemMalloc(32);
+					sprintf(varbuffer,"LPR%dOX",ae->curProxIndex);
+					curlabel.name=varbuffer; 
+					curlabel.crc=GetCRC(varbuffer);
+					curlabel.ptr=ae->codeadr;
+					curlabel.ibank=ae->activebank;
+					curlabel.iorgzone=ae->io-1;
+					curlabel.lz=ae->lz;
+					curlabel.fileidx=ae->wl[ae->idx].ifile;
+					curlabel.fileline=ae->wl[ae->idx].l;
+					curlabel.backidx=ae->il;
+					curlabel.nop=ae->nop;
+					if (InsertLabelToTree(ae,&curlabel)) {
+						ObjectArrayAddDynamicValueConcat((void **)&ae->label,&ae->il,&ae->ml,&curlabel,sizeof(curlabel));
+					} else {
+						struct s_label *searched_label;
+						searched_label=SearchLabel(ae,curlabel.name,curlabel.crc);
+						MakeError(ae,ae->idx,GetCurrentFile(ae),GetExpLine(ae,0),"Duplicate label [%s] - previously defined in [%s:%d]\n",curlabel.name,ae->filename[searched_label->fileidx],searched_label->fileline);
+						MemFree(curlabel.name);
+					}
+					return;
 				case 'A':
 				case 'B':
 				case 'C':
@@ -11163,11 +11199,11 @@ void _CALL(struct s_assenv *ae) {
 			default:
 				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Available flags for CALL are C,NC,Z,NZ,PE,PO,P,M\n");
 		}
-		PushExpression(ae,ae->idx+2,E_EXPRESSION_J16C);
+		PushExpression(ae,ae->idx+2,E_EXPRESSION_J16);
 		ae->idx+=2;
 	} else if (!ae->wl[ae->idx].t && ae->wl[ae->idx+1].t==1) {
 		___output(ae,0xCD);
-		PushExpression(ae,ae->idx+1,E_EXPRESSION_J16C);
+		PushExpression(ae,ae->idx+1,E_EXPRESSION_J16);
 		ae->idx++;
 		ae->nop+=5;ae->tick+=17;
 		ae->deadend=1;
@@ -26401,6 +26437,7 @@ printf("start prepro, alloc assenv\n");
 	ae=MemMalloc(sizeof(struct s_assenv));
 	memset(ae,0,sizeof(struct s_assenv));
 
+	ae->curProxIndex=-1;
 	ae->module_separator[0]='_';
 #if TRACE_PREPRO
 printf("paramz 1\n");
@@ -29880,6 +29917,10 @@ struct s_autotest_keyword autotest_keyword[]={
 	{"module preums: unLabel push de: deux    pop hl: defs 256: module: unLabel push de: deux    pop hl:" \
 	"jp preums_unLabel: jp deuze_unLabel: vdeux=deux : module deuze: defs 256: unLabel push de: deux    pop hl: jp preums_unLabel: jr unLabel: assert deux!=vdeux",0}, // test module priority + conflicts
 
+	{"nop : jr _+ : _ nop :  djnz _- : defs 256 : jr _+ : _ push hl : djnz _-",0}, // prox loc TI like
+	{"repeat 2 : nop : jr _+ : _ nop :  djnz _- : defs 256 : jr _+ : _ push hl : djnz _- : defs 256 : rend",0}, // prox loc TI like must work inside loops
+	{"nop : jr _- : _ nop",1}, // prox loc does not exists and must failed
+	{"nop : _ nop : jr _+",1}, // prox loc does not exists and must failed
 	/*
 	 *
 	 * will need to test resize + format then meta review test!
