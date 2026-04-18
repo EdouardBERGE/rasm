@@ -48,6 +48,10 @@ Rasm was designed to be damn FAST and handle HUGE projects. On a modern machine,
 
 - Amsdos real & Microsoft basic 40bits float support
 
+## Newschool is beautiful
+
+- native FLOAT24 declaration support (which can be use with float24 library in RASM sources asset directory)
+
 ## Documentation
 
 There is a cool French and English documentation, you should read it ;)
