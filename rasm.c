@@ -9630,20 +9630,20 @@ struct s_edsk_global_struct *edsktool_NewEDSK(char *format, int nbside);
 struct s_edsk_global_struct *edsktool_EDSK_load(char *edskfilename);
 void edsktool_EDSK_write_file(struct s_edsk_global_struct *edsk, char *output_filename);
 
-void amsdos_init_entries(struct s_edsk_global_struct *edsk);
-void amsdos_init_block(struct s_edsk_global_struct *edsk);
-void amsdos_init_directory(struct s_edsk_global_struct *edsk);
+//void amsdos_init(struct s_edsk_global_struct *edsk, int side);
+//void amsdos_init_block(struct s_edsk_global_struct *edsk);
+//void amsdos_init_directory(struct s_edsk_global_struct *edsk, int side);
 int amsdos_get_free_block(struct s_edsk_global_struct *edsk);
 int amsdos_available_space(struct s_edsk_global_struct *edsk);
 unsigned char *amsdos_get_free_entry(struct s_edsk_global_struct *edsk);
 int amsdos_available_entries(struct s_edsk_global_struct *edsk);
-void amsdos_update_edsk(struct s_edsk_global_struct *edsk);
+void amsdos_update_edsk(struct s_edsk_global_struct *edsk, int side);
 int amsdos_can_write(struct s_edsk_global_struct *edsk,int filesize);
 void amsdos_write_file(struct s_edsk_global_struct *edsk, int side, int user, char *filename, int protection, int hidden, unsigned char *data, int datalen);
 void amsdos_set_flags(struct s_edsk_global_struct *edsk, int side, unsigned char *entry, int protection, int hidden);
 void amsdos_remove_entry(struct s_assenv *ae,struct s_edsk_global_struct *edsk, int side, unsigned char *entry, int amsdos_user);
 int amsdos_entry_exists(struct s_edsk_global_struct *edsk, int side, unsigned char *entry, int amsdos_user);
-void amsdos_build_entries(struct s_assenv *ae,struct s_edsk_global_struct *edsk);
+void amsdos_build_entries(struct s_assenv *ae,struct s_edsk_global_struct *edsk, int side);
 
 int EDSK_addfile(struct s_assenv *ae,char *edskfilename,int facenumber, char *filename,unsigned char *indata,int insize, int offset, int run, int tag_protection, int tag_hidden)
 {
@@ -9665,7 +9665,7 @@ int EDSK_addfile(struct s_assenv *ae,char *edskfilename,int facenumber, char *fi
 		//printf("load [%s]\n",edskfilename);
 		edsk=edsktool_EDSK_load(edskfilename);
 	}
-	amsdos_build_entries(ae,edsk);
+	amsdos_build_entries(ae,edsk, facenumber);
 
 	/* update struct */
 	size=insize+128;
@@ -14617,19 +14617,6 @@ void PopAllHFE(struct s_assenv *ae) {
 //************************************************************************************************************************************
 
 
-void amsdos_init(struct s_edsk_global_struct *edsk) {
-	amsdos_init_block(edsk);
-	amsdos_init_directory(edsk);
-}
-
-void amsdos_init_entries(struct s_edsk_global_struct *edsk) {
-	int i;
-	memset(edsk->floppy_entries,0,sizeof(edsk->floppy_entries));
-	// init des entrées, reinit de l'alloc...
-	for (i=0;i<180;i++) {
-		edsk->floppy_block[i].isallocated=0;
-	}
-}
 void amsdos_init_block(struct s_edsk_global_struct *edsk) {
         int track=0,sector=1,block=0;
         int j;
@@ -14645,7 +14632,7 @@ void amsdos_init_block(struct s_edsk_global_struct *edsk) {
         }
 }
 
-void amsdos_init_directory(struct s_edsk_global_struct *edsk) {
+void amsdos_init_directory(struct s_edsk_global_struct *edsk, int side) {
 	int i,t,s,ob,isdata=0,isvendor=0,idSect=0;
 
 	edsk->bstart=-1;
@@ -14668,7 +14655,7 @@ void amsdos_init_directory(struct s_edsk_global_struct *edsk) {
 	}
 
 	for (ob=0;ob<180;ob++) {
-		t=edsk->floppy_block[ob].track1;
+		t=edsk->floppy_block[ob].track1*edsk->sidenumber+side;
 		if (t<edsk->tracknumber) for (s=0;s<edsk->track[t].sectornumber;s++) {
 			if (edsk->track[t].sector[s].id==(edsk->floppy_block[ob].sectorID1+idSect)) {
 				if (edsk->track[t].sector[s].size==2 && edsk->track[t].sector[s].length==512) {
@@ -14679,7 +14666,7 @@ void amsdos_init_directory(struct s_edsk_global_struct *edsk) {
 				}
 			}
 		}
-		t=edsk->floppy_block[ob].track2;
+		t=edsk->floppy_block[ob].track2*edsk->sidenumber+side;
 		if (t<edsk->tracknumber) for (s=0;s<edsk->track[t].sectornumber;s++) {
 			if (edsk->track[t].sector[s].id==(edsk->floppy_block[ob].sectorID2+idSect)) {
 				if (edsk->track[t].sector[s].size==2 && edsk->track[t].sector[s].length==512) {
@@ -14702,6 +14689,12 @@ void amsdos_init_directory(struct s_edsk_global_struct *edsk) {
                 edsk->bstart=9; // VENDOR
         }
 }
+
+void amsdos_init(struct s_edsk_global_struct *edsk, int side) {
+	amsdos_init_block(edsk);
+	amsdos_init_directory(edsk,side);
+}
+
 
 int amsdos_get_free_block(struct s_edsk_global_struct *edsk) {
 	int i,available=0;
@@ -14740,9 +14733,9 @@ int amsdos_available_entries(struct s_edsk_global_struct *edsk) {
 	}
 	return available;
 }
-void amsdos_update_edsk(struct s_edsk_global_struct *edsk) {
+void amsdos_update_edsk(struct s_edsk_global_struct *edsk, int side) {
 	int i;
-
+//printf("update side %d of EDSK (%d side(s))\n",side,edsk->sidenumber);
 	// EDSK write
 	for (i=0;i<180;i++) {
 		if (edsk->floppy_block[i].istowrite) {
@@ -14750,7 +14743,7 @@ void amsdos_update_edsk(struct s_edsk_global_struct *edsk) {
 			edsk->floppy_block[i].istowrite=0;
 			// ecriture physique du block
 			if (edsk->floppy_block[i].isdata) idSect=0xC0; else idSect=0x40;
-			t=edsk->floppy_block[i].track1;
+			t=edsk->floppy_block[i].track1*edsk->sidenumber+side;
 			for (s=0;s<edsk->track[t].sectornumber;s++) {
 				if (edsk->track[t].sector[s].id==edsk->floppy_block[i].sectorID1+idSect) break; 
 			}
@@ -14759,7 +14752,7 @@ void amsdos_update_edsk(struct s_edsk_global_struct *edsk) {
 			} else {
 				fprintf(stderr,"INTERNAL ERROR : sector to write not found track %d ID #%02X!\n",t,edsk->floppy_block[i].sectorID1); //@@TODO
 			}
-			t=edsk->floppy_block[i].track2;
+			t=edsk->floppy_block[i].track2*edsk->sidenumber+side;
 			for (s=0;s<edsk->track[t].sectornumber;s++) {
 				if (edsk->track[t].sector[s].id==edsk->floppy_block[i].sectorID2+idSect) break; 
 			}
@@ -14791,8 +14784,8 @@ void amsdos_write_file(struct s_edsk_global_struct *edsk, int side, int user, ch
 	}
 
 	catentry.user=user;
-	if (protection) filename[9]|=0x80;
-	if (hidden) filename[10]|=0x80;
+	if (protection) filename[8]|=0x80;
+	if (hidden) filename[9]|=0x80;
 	memcpy(catentry.filename,filename,11);
 
 //printf("AmsdosWriteFile bstart=%d datalen=%d protect=%d hidden=%d\n",edsk->bstart,datalen,protection,hidden);
@@ -14857,7 +14850,7 @@ void amsdos_write_file(struct s_edsk_global_struct *edsk, int side, int user, ch
 	// ecriture du catalogue forcee + ecriture des blocks modifies
 	edsk->floppy_block[edsk->bstart].istowrite=1;
 	edsk->floppy_block[edsk->bstart+1].istowrite=1;
-	amsdos_update_edsk(edsk);
+	amsdos_update_edsk(edsk,side);
 }
 
 void amsdos_set_flags(struct s_edsk_global_struct *edsk, int side, unsigned char *entry, int protection, int hidden) {
@@ -14879,7 +14872,7 @@ void amsdos_set_flags(struct s_edsk_global_struct *edsk, int side, unsigned char
 	// écriture du catalogue
 	edsk->floppy_block[edsk->bstart].istowrite=1;
 	edsk->floppy_block[edsk->bstart+1].istowrite=1;
-	amsdos_update_edsk(edsk);
+	amsdos_update_edsk(edsk, side);
 }
 void amsdos_remove_entry(struct s_assenv *ae,struct s_edsk_global_struct *edsk, int side, unsigned char *entryName, int amsdos_user) {
 	unsigned char entry[16];
@@ -14902,9 +14895,9 @@ void amsdos_remove_entry(struct s_assenv *ae,struct s_edsk_global_struct *edsk, 
 	}
 	edsk->floppy_block[edsk->bstart].istowrite=1;
 	edsk->floppy_block[edsk->bstart+1].istowrite=1;
-	amsdos_update_edsk(edsk);
+	amsdos_update_edsk(edsk, side);
 	// rebuild because there is more free space now!
-	amsdos_build_entries(ae,edsk);
+	amsdos_build_entries(ae,edsk, side);
 }
 int amsdos_entry_exists(struct s_edsk_global_struct *edsk, int side, unsigned char *entryName, int amsdos_user) {
 	unsigned char entry[16];
@@ -14935,7 +14928,7 @@ int amsdos_entry_exists(struct s_edsk_global_struct *edsk, int side, unsigned ch
 }
 
 
-void amsdos_build_entries(struct s_assenv *ae,struct s_edsk_global_struct *edsk) {
+void amsdos_build_entries(struct s_assenv *ae,struct s_edsk_global_struct *edsk, int side) {
 	unsigned char fullname[16],curfullname[16];
 	int i,j,k,counter,isprotected,ishidden,curuser;
 	int filesize=0,filealloc=0,wrapentry=0;//warning remover
@@ -14944,7 +14937,13 @@ void amsdos_build_entries(struct s_assenv *ae,struct s_edsk_global_struct *edsk)
 	//***********************************************************************************************
 	//                                     make directory
 	//***********************************************************************************************
-	amsdos_init_entries(edsk); // in all cases
+	amsdos_init(edsk,side);
+
+	memset(edsk->floppy_entries,0,sizeof(edsk->floppy_entries));
+	// init des entrées, reinit de l'alloc...
+	for (i=0;i<180;i++) {
+		edsk->floppy_block[i].isallocated=0;
+	}
 
 	if (edsk->bstart!=-1) {
 		// copy vendor/data directory
@@ -15168,7 +15167,7 @@ struct s_edsk_global_struct *edsktool_NewEDSK(char *format, int nbside) {
                         }
                         if (edsk->sidenumber==2) {
 				edsk->track[1+t*edsk->sidenumber].track=t;
-				edsk->track[1+t*edsk->sidenumber].side=1;
+				edsk->track[1+t*edsk->sidenumber].side=0; // Sinon l'Amsdos il pige rien...
 				edsk->track[1+t*edsk->sidenumber].sectornumber=9;
 				edsk->track[1+t*edsk->sidenumber].sectorsize=2;
 				edsk->track[1+t*edsk->sidenumber].gap3length=0x50;
@@ -15176,7 +15175,7 @@ struct s_edsk_global_struct *edsktool_NewEDSK(char *format, int nbside) {
 				edsk->track[1+t*edsk->sidenumber].sector=MemMalloc(edsk->track[1+t*edsk->sidenumber].sectornumber*sizeof(struct s_edsk_sector_global_struct));
 				for (s=0;s<9;s++) {
 					edsk->track[1+t*edsk->sidenumber].sector[s].track=t;
-					edsk->track[1+t*edsk->sidenumber].sector[s].side=1;
+					edsk->track[1+t*edsk->sidenumber].sector[s].side=0;
 					if (strcmp(format,"DATA")==0) edsk->track[1+t*edsk->sidenumber].sector[s].id=0xC1+s; else
 					if (strcmp(format,"VENDOR")==0) edsk->track[1+t*edsk->sidenumber].sector[s].id=0x41+s;
 					edsk->track[1+t*edsk->sidenumber].sector[s].size=2;
@@ -15222,7 +15221,7 @@ struct s_edsk_global_struct *edsktool_NewEDSK(char *format, int nbside) {
                 }
         }
 
-	amsdos_init(edsk);
+	amsdos_init(edsk,0);
         return edsk;
 }
 
@@ -15442,7 +15441,6 @@ struct s_edsk_global_struct *edsktool_EDSK_load(char *edskfilename) //@@TODO fai
                 exit(ABORT_ERROR);
         }
         fclose(f);
-	amsdos_init(edsk);
         return edsk;
 }
 
@@ -15735,11 +15733,10 @@ void __edsk_delfile(struct s_assenv *ae, struct s_edsk_action *action) {
 		return;
 	}
 
-	amsdos_build_entries(ae,edsk);
+	amsdos_build_entries(ae,edsk, side);
 	strcpy(amsdos_name,MakeAMSDOS_name(ae,filename,&amsdos_user));
 	if (amsdos_entry_exists(edsk,side,(unsigned char *)amsdos_name,amsdos_user)) {
-		amsdos_remove_entry(ae,edsk,side,(unsigned char *)amsdos_name,amsdos_user);
-
+		amsdos_remove_entry(ae,edsk,side,(unsigned char *)amsdos_name,amsdos_user); // update+rebuild
 	} else {
 		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"EDSK DELFILE error, file [%s] not found on DSK!\n",amsdos_name);
 		__edsk_free(ae,edsk);
@@ -15796,7 +15793,7 @@ void __edsk_copyfile(struct s_assenv *ae, struct s_edsk_action *action) {
 		return;
 	}
 
-	amsdos_build_entries(ae,edsk);
+	amsdos_build_entries(ae,edsk,side);
 	strcpy(amsdos_name,MakeAMSDOS_name(ae,filename,&amsdos_user));
 //printf("AMSDOS_NAME=[%s] / user=%d\n",amsdos_name, amsdos_user);
 
@@ -15820,7 +15817,7 @@ void __edsk_copyfile(struct s_assenv *ae, struct s_edsk_action *action) {
 				wasfound=1;
 	
 				// update Amsdos entries with destination floppy
-				amsdos_build_entries(ae,edskdest);
+				amsdos_build_entries(ae,edskdest,sidedest);
 
 				// we do not really care about the header
 				if (filedata[0]==amsdos_user && memcmp(filedata+1,amsdos_name,8)==0) hasHeader=1;
@@ -15918,7 +15915,7 @@ void __edsk_readfile(struct s_assenv *ae, struct s_edsk_action *action) {
 		return;
 	}
 
-	amsdos_build_entries(ae,edsk);
+	amsdos_build_entries(ae,edsk,side);
 	strcpy(amsdos_name,MakeAMSDOS_name(ae,filename,&amsdos_user));
 //printf("AMSDOS_NAME=[%s] / user=%d\n",amsdos_name, amsdos_user);
 
