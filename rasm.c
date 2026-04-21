@@ -17792,6 +17792,8 @@ void __BUILDSNA(struct s_assenv *ae) {
 	while (!ae->wl[ae->idx].t) {
 		if (strcmp(ae->wl[ae->idx+1].w,"V2")==0) {
 			ae->snapshot.version=2;
+		} else if (strcmp(ae->wl[ae->idx+1].w,"FORCE")==0) {
+			ae->autotest=1;
 		} else if (strcmp(ae->wl[ae->idx+1].w,"AUTOTEST")==0) {
 			ae->autotest=1;
 		} else if (strcmp(ae->wl[ae->idx+1].w,"CPR")==0) {
