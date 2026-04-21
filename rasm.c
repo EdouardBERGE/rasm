@@ -16091,17 +16091,10 @@ void __edsk_create(struct s_assenv *ae, struct s_edsk_action *action) {
 	int nbside,interlaced=0,overwrite=0,trueside=0;
 	int i,t,s,sect;
 
-	nbside=__edsk_get_side_from_name(action->filename);
+	nbside=__edsk_get_side_from_name(action->filename)+1;
 #if TRACE_EDSK
 	printf("edsk [%s] side %d\n",action->filename,nbside);
 #endif
-	switch (nbside) {
-		default:
-		case 0:nbside=1;break;
-		case 1:break;
-		case 2:break;
-	}
-
 	if (action->nbparam<3) {
 		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Usage is : EDSK CREATE,'edskfilename:nbside',DATA|VENDOR|UNFORMATED[,<nbtrack>|INTERLACED|OVERWRITE,...\n");
 		return;
@@ -16507,6 +16500,7 @@ void __edsk_add(struct s_assenv *ae, struct s_edsk_action *action) {
 			trueside=1;
 			break;
 		}
+		pp++;
 	} while (!ae->wl[ae->idx+pp].t);
 
 	pp=3;
@@ -31390,6 +31384,18 @@ printf("testing directive SUMMEM16 OK\n");
 	if (!ret) {} else {printf("Autotest %03d ERROR (formula func RND)\n",cpt);exit(-1);}
 	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
 printf("testing formula RND function OK\n");
+
+#define AUTOTEST_EDSK_SIDE_01 "defs 256,1 :defs 256,2: defs 256,3: defs 256,4: forsurea defs 128,3 : defs 128,0:forsureb defs 128,2 : defs 128,0:" \
+	"edsk create,'rasmoutput_test.dsk:1',DATA,OVERWRITE:" \
+	"edsk savefile,'rasmoutput_test.dsk:0','grouik.bin',#100,#200:edsk savefile,'rasmoutput_test.dsk:1','grouik.bin',0,#200:" \
+	"edsk check,'rasmoutput_test.dsk:0','0:#C6',256,forsurea:edsk check,'rasmoutput_test.dsk:1','0:#C6',256,forsureb "
+	memset(&param,0,sizeof(struct s_parameter)); //param.edskoverwrite=1;
+	ret=RasmAssembleInfoParam(AUTOTEST_EDSK_SIDE_01,strlen(AUTOTEST_EDSK_SIDE_01),&opcode,&opcodelen,&debug,&param);
+	if (!ret) {} else {printf("Autotest %03d ERROR (testing EDSK double-sided creation + savefile both sides\n",cpt);
+		for (i=0;i<debug->nberror;i++) printf("%d -> %s\n",i,debug->error[i].msg);
+		exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing EDSK double-sided creation + savefile both sides\n");
 
 #define AUTOTEST_EDSK_OVERWRITE_FILEK "EDSK create,'rasmoutput_test.dsk',DATA,OVERWRITE:bank:" \
 	"save 'crash.bin',0,20000,DSK,'rasmoutput_test.dsk':"\
