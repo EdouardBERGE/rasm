@@ -1170,7 +1170,7 @@ struct s_assenv {
 	int *memsize;
 	int nbmemsize,maxmemsize;
 	int forcetape,forcezx,forcecpr,forceROM,forceROMconcat,bankmode,snacpr;
-	int amsdos,forcesnapshot,packedbank,extendedCPR,xpr,cprinfo,cprinfo_export,dsksnapshot;
+	int amsdos,forcesnapshot,packedbank,extendedCPR,xpr,cprinfo,cprinfo_export;
 	int lastbank,activebank; // current used bank where data/code has to be written | used with outputadr (see ORG tracking)
 	char *cprinfo_filename;
 	struct s_snapshot snapshot;
@@ -17798,8 +17798,6 @@ void __BUILDSNA(struct s_assenv *ae) {
 			ae->autotest=1;
 		} else if (strcmp(ae->wl[ae->idx+1].w,"CPR")==0) {
 			ae->snacpr=1;
-		} else if (strcmp(ae->wl[ae->idx+1].w,"DSK")==0) {
-			ae->dsksnapshot=1;
 		} else if (StringIsQuote(ae->wl[ae->idx+1].w)) {
 			int validExt=0;
 			int idx;
