@@ -707,10 +707,10 @@ enum e_edsk_action {
 	E_EDSK_ACTION_CREATE=0,
 	E_EDSK_ACTION_READSECT,
 	E_EDSK_ACTION_READFILE,
-	E_EDSK_ACTION_DELFILE,
 	E_EDSK_ACTION_UPGRADE,
 	E_EDSK_ACTION_MERGE,
 	/* deferred */
+	E_EDSK_ACTION_DELFILE,
 	E_EDSK_ACTION_COPYFILE,
 	E_EDSK_ACTION_SAVEFILE,
 	E_EDSK_ACTION_WRITESECT,
@@ -14735,7 +14735,6 @@ int amsdos_available_entries(struct s_edsk_global_struct *edsk) {
 }
 void amsdos_update_edsk(struct s_edsk_global_struct *edsk, int side) {
 	int i;
-//printf("update side %d of EDSK (%d side(s))\n",side,edsk->sidenumber);
 	// EDSK write
 	for (i=0;i<180;i++) {
 		if (edsk->floppy_block[i].istowrite) {
@@ -16885,10 +16884,10 @@ void __edsk_writesect(struct s_assenv *ae, struct s_edsk_action *action) {
  * EDSK   CREATE,'filename.dsk',DATA|VENDOR|UNFORMATED,nbtracks[,INTERLACED]
  * EDSK READSECT,'filename.dsk','location',<exactsize>
  * EDSK READFILE,'filename.dsk','filename'[,<offset>[,<size>]]
- * EDSK  DELFILE,'filename.dsk','filename'
  * EDSK  UPGRADE,'filename.dsk','outputfilename.dsk'
  *
  * == deferred execution ==
+ * EDSK  DELFILE,'filename.dsk','filename'
  * EDSK  COPYFILE,'filename.dsk','filename','filename.dsk','filename'
  * EDSK  SAVEFILE,'filename.dsk','filename',<start_addr>,<length>
  * EDSK WRITESECT,'filename.dsk',<start_addr>,<length>,'location'
@@ -16998,9 +16997,9 @@ void __EDSK(struct s_assenv *ae) {
 			case E_EDSK_ACTION_CREATE: __edsk_create(ae,&curaction);break;
 			case E_EDSK_ACTION_READSECT: __edsk_readsect(ae,&curaction);break;
 			case E_EDSK_ACTION_READFILE: __edsk_readfile(ae,&curaction);break;
-			case E_EDSK_ACTION_DELFILE: __edsk_delfile(ae,&curaction);break;
 			case E_EDSK_ACTION_UPGRADE: __edsk_upgrade(ae,&curaction);break;
 			// deferred execution
+			case E_EDSK_ACTION_DELFILE:
 			case E_EDSK_ACTION_COPYFILE:
 			case E_EDSK_ACTION_SAVEFILE:
 			case E_EDSK_ACTION_MAP:
@@ -17048,6 +17047,7 @@ void PopAllEDSK(struct s_assenv *ae) {
 	for (i=0;i<ae->nbedskaction;i++) {
 		ae->idx=ae->edsk_action[i].iw; // MakeError hack
 		switch (ae->edsk_action[i].action) {
+			case E_EDSK_ACTION_DELFILE:	__edsk_delfile(ae,&ae->edsk_action[i]);break;
 			case E_EDSK_ACTION_MAP:		__edsk_map(ae,&ae->edsk_action[i]);break;
 			case E_EDSK_ACTION_GAPFIX:	__edsk_gapfix(ae,&ae->edsk_action[i]);break;
 			case E_EDSK_ACTION_MERGE:	__edsk_merge(ae,&ae->edsk_action[i]);break;
@@ -31385,6 +31385,8 @@ printf("testing directive SUMMEM16 OK\n");
 	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
 printf("testing formula RND function OK\n");
 
+	FileRemoveIfExists("rasmoutput_testbis.dsk");
+
 #define AUTOTEST_EDSK_SIDE_01 "defs 256,1 :defs 256,2: defs 256,3: defs 256,4: forsurea defs 128,3 : defs 128,0:forsureb defs 128,2 : defs 128,0:" \
 	"edsk create,'rasmoutput_test.dsk:1',DATA,OVERWRITE:" \
 	"edsk savefile,'rasmoutput_test.dsk:0','grouik.bin',#100,#200:edsk savefile,'rasmoutput_test.dsk:1','grouik.bin',0,#200:" \
@@ -31396,6 +31398,36 @@ printf("testing formula RND function OK\n");
 		exit(-1);}
 	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
 printf("testing EDSK double-sided creation + savefile both sides\n");
+
+#define AUTOTEST_EDSK_SIDE_02 " defs 256,1: defs 256,2: defs 256,3: defs 256,4: forsurea defs 128,3 : defs 128,0: forsureb defs 128,2 : defs 128,0:" \
+	"edsk create,'rasmoutput_test.dsk:1',DATA,OVERWRITE: edsk savefile,'rasmoutput_test.dsk:0','grouik.bin',#100,#200: edsk savefile,'rasmoutput_test.dsk:1','grouik.bin',0,#200:" \
+	"edsk copyfile,'rasmoutput_test.dsk:0','grouik.bin','rasmoutput_testbis.dsk:1': edsk copyfile,'rasmoutput_test.dsk:1','grouik.bin','rasmoutput_testbis.dsk:0':" \
+	"edsk check,'rasmoutput_testbis.dsk:1','0:#C6',256,forsurea: edsk check,'rasmoutput_testbis.dsk:0','0:#C6',256,forsureb "
+	memset(&param,0,sizeof(struct s_parameter)); //param.edskoverwrite=1;
+	ret=RasmAssembleInfoParam(AUTOTEST_EDSK_SIDE_02,strlen(AUTOTEST_EDSK_SIDE_02),&opcode,&opcodelen,&debug,&param);
+	if (!ret) {} else {printf("Autotest %03d ERROR (testing EDSK double-sided creation+savefile+copyfile+creation\n",cpt);
+		for (i=0;i<debug->nberror;i++) printf("%d -> %s\n",i,debug->error[i].msg);
+		exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing EDSK double-sided creation + savefile both sides + copy on another floppy inverted side + create new double side on copy\n");
+
+#define AUTOTEST_EDSK_SIDE_03 " defs 256,1: defs 256,2: defs 256,3: defs 256,4: forsurea defs 128,3 : defs 128,0: forsureb defs 128,2 : defs 128,0:" \
+	"aglapi defb 0,'AGLAPI  ': glop   defb 0,'GLOP    ': edsk create,'rasmoutput_test.dsk:1',DATA,OVERWRITE: edsk create,'rasmoutput_testbis.dsk:1',DATA,OVERWRITE:" \
+	"edsk savefile,'rasmoutput_test.dsk:0','grouik.bin',#100,#200: edsk savefile,'rasmoutput_test.dsk:1','grouik.bin',0,#200:" \
+	"edsk copyfile,'rasmoutput_test.dsk:0','grouik.bin','rasmoutput_testbis.dsk:1','glop.bin': edsk copyfile,'rasmoutput_test.dsk:1','grouik.bin','rasmoutput_testbis.dsk:0','glop.bin':" \
+	"edsk delfile,'rasmoutput_test.dsk:0','grouik.bin': edsk delfile,'rasmoutput_test.dsk:1','grouik.bin': edsk copyfile,'rasmoutput_testbis.dsk:0','glop.bin','rasmoutput_test.dsk:1','aglapi.bin':" \
+	"edsk copyfile,'rasmoutput_testbis.dsk:1','glop.bin','rasmoutput_test.dsk:0','aglapi.bin': edsk check,'rasmoutput_testbis.dsk:1','0:#C6',256,forsurea:" \
+	"edsk check,'rasmoutput_testbis.dsk:0','0:#C6',256,forsureb: edsk check,'rasmoutput_test.dsk:0','0:#C6',256,forsurea: edsk check,'rasmoutput_test.dsk:1','0:#C6',256,forsureb:" \
+	"edsk check,'rasmoutput_testbis.dsk:1','0:#C5',9,glop: edsk check,'rasmoutput_testbis.dsk:0','0:#C5',9,glop:" \
+	"edsk check,'rasmoutput_test.dsk:0','0:#C5',9,aglapi: edsk check,'rasmoutput_test.dsk:1','0:#C5',9,aglapi "
+	memset(&param,0,sizeof(struct s_parameter)); //param.edskoverwrite=1;
+	ret=RasmAssembleInfoParam(AUTOTEST_EDSK_SIDE_03,strlen(AUTOTEST_EDSK_SIDE_03),&opcode,&opcodelen,&debug,&param);
+	if (!ret) {} else {printf("Autotest %03d ERROR (testing EDSK double-sided creation+savefile+copyfile+rename+delfile+copy+rename\n",cpt);
+		for (i=0;i<debug->nberror;i++) printf("%d -> %s\n",i,debug->error[i].msg);
+		exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing EDSK double-sided create+savefile+copyfile+rename ...\n");
+
 
 #define AUTOTEST_EDSK_OVERWRITE_FILEK "EDSK create,'rasmoutput_test.dsk',DATA,OVERWRITE:bank:" \
 	"save 'crash.bin',0,20000,DSK,'rasmoutput_test.dsk':"\
