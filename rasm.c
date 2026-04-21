@@ -16088,7 +16088,7 @@ void __edsk_create(struct s_assenv *ae, struct s_edsk_action *action) {
 	struct s_edsk_global_struct *edsk;
 	char *format;
 	int nbtrack=42;
-	int nbside,interlaced=0,overwrite=0;
+	int nbside,interlaced=0,overwrite=0,trueside=0;
 	int i,t,s,sect;
 
 	nbside=__edsk_get_side_from_name(action->filename);
@@ -16108,6 +16108,7 @@ void __edsk_create(struct s_assenv *ae, struct s_edsk_action *action) {
 	}
 	// get extra param
 	for (i=4;i<=action->nbparam;i++) {
+		if (strncmp(ae->wl[ae->idx+i].w,"TRUE",4)==0) trueside=1; else 
 		if (strcmp(ae->wl[ae->idx+i].w,"INTERLACED")==0) interlaced=1; else 
 		if (strcmp(ae->wl[ae->idx+i].w,"OVERWRITE")==0) overwrite=1; else 
 			nbtrack=RoundComputeExpression(ae,ae->wl[ae->idx+i].w,ae->outputadr,0,0);
@@ -16156,7 +16157,7 @@ void __edsk_create(struct s_assenv *ae, struct s_edsk_action *action) {
 				edsk->track[t*nbside+s].sector=MemMalloc(edsk->track[t*nbside+s].sectornumber*sizeof(struct s_edsk_sector_global_struct));
 				for (sect=0;sect<9;sect++) {
 					edsk->track[t*nbside+s].sector[sect].track=t;
-					edsk->track[t*nbside+s].sector[sect].side=0;
+					if (trueside && s) edsk->track[t*nbside+s].sector[sect].side=1; else edsk->track[t*nbside+s].sector[sect].side=0;
 					edsk->track[t*nbside+s].sector[sect].id=sectid[sect];
 					edsk->track[t*nbside+s].sector[sect].size=2;
 					edsk->track[t*nbside+s].sector[sect].st1=0;
@@ -16482,6 +16483,7 @@ void __edsk_add(struct s_assenv *ae, struct s_edsk_action *action) {
 	int sectorsize;
 	int iloc,i,j,k;
 	int once=0,pp;
+	int trueside=0;
 
  	if (action->nbparam<4) {
 		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Usage is : EDSK ADD,'edskfilename:side','location',<size>\n");
@@ -16498,6 +16500,14 @@ void __edsk_add(struct s_assenv *ae, struct s_edsk_action *action) {
 		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Cannot ADD sector/track because floppy image [%s] does not have 2 sides!\n",action->filename);
 		return;
 	}
+
+	pp=3;
+	do {
+		if (strncmp(ae->wl[ae->idx+pp].w,"TRUE",4)==0) {
+			trueside=1;
+			break;
+		}
+	} while (!ae->wl[ae->idx+pp].t);
 
 	pp=3;
 	while (pp<action->nbparam) {
@@ -16543,7 +16553,7 @@ void __edsk_add(struct s_assenv *ae, struct s_edsk_action *action) {
 				// prep default track
 				edsk->track[i*edsk->sidenumber+side].unformated=0;
 				edsk->track[i*edsk->sidenumber+side].track=i;
-				edsk->track[i*edsk->sidenumber+side].side=0;
+				edsk->track[i*edsk->sidenumber+side].side=trueside;
 				edsk->track[i*edsk->sidenumber+side].sectorsize=sectorsize;
 				edsk->track[i*edsk->sidenumber+side].gap3length=0x50;
 				edsk->track[i*edsk->sidenumber+side].fillerbyte=0xE5;
@@ -16558,7 +16568,7 @@ void __edsk_add(struct s_assenv *ae, struct s_edsk_action *action) {
 				// sector info
 				j=edsk->track[i*edsk->sidenumber+side].sectornumber-1;
 				edsk->track[i*edsk->sidenumber+side].sector[j].track=i;
-				edsk->track[i*edsk->sidenumber+side].sector[j].side=side;
+				edsk->track[i*edsk->sidenumber+side].sector[j].side=trueside;
 				edsk->track[i*edsk->sidenumber+side].sector[j].id=location[iloc].sectorID;
 				edsk->track[i*edsk->sidenumber+side].sector[j].size=sectorsize;
 				edsk->track[i*edsk->sidenumber+side].sector[j].st1=0;
