@@ -32665,10 +32665,9 @@ printf("testing simple extended CPR behaviour OK\n");
 	FileRemoveIfExists("rasmoutput.sna");
 	FileRemoveIfExists("autotest_edsk.dsk");
 	FileRemoveIfExists("autotestw.dsk");
-
+#endif
 	// each compilation function is counting
 	ret=RasmAssemble(NULL,0,&opcode,&opcodelen)+RasmAssembleInfo(NULL,0,&opcode,&opcodelen,&debug)+RasmAssembleInfoParam(NULL,0,&opcode,&opcodelen,&debug,&param);
-#endif
 
 	if (sko) {
 		printf("ERROR => various opcode tests did not pass! (check backlog)\n");
