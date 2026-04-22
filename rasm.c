@@ -9322,6 +9322,7 @@ int EDSK_getdirid(const struct s_edsk_wrapper *curwrap) {
 	}
 	return -1;
 }
+// reference format : '[<user>:]<filename>'
 char *MakeAMSDOS_name(struct s_assenv *ae, char *reference_filename, int *amsdos_user)
 {
 	#undef FUNC
@@ -29757,6 +29758,10 @@ struct s_autotest_keyword autotest_keyword[]={
 	{"bunch: sc=#C1: p=5: repeat 5: repeat 9: defs 256,sc : defs 256,p: sc+=1: rend: p+=1: rend:edsk create,'autotestw.dsk',DATA,OVERWRITE:edsk writesect,'autotestw.dsk',bunch,512*9*5,'5-9:#C1-#C9'",0}, // write sectors
 	{"edsk readsect,'autotestw.dsk','5-9:#C1-#C9',512*9*5:sc=#C1:ad=0:p=5: repeat 5: repeat 9:repeat 256:assert peek(ad)==sc:ad+=1:rend:repeat 256:assert peek(ad)==p:ad+=1:rend:sc+=1:rend:p+=1:rend",0}, // enforce sectors were read
 	{"edsk writesect,'autotestw.dsk',0,513,'0:#C1'",1}, // cannot leak sectors
+	{"defs 512,1: edsk create,'rasmoutput_test.dsk:1',DATA,OVERWRITE: edsk savefile,'rasmoutput_test.dsk:0','3:grouik.bin',0,512:" \
+	 "edsk savefile,'rasmoutput_test.dsk:1','4:grouik.bin',0,512: edsk delfile,'rasmoutput_test.dsk:0','3:grouik.bin': edsk delfile,'rasmoutput_test.dsk:1','4:grouik.bin'",0}, // del with user + sides + identical names
+	{"defs 512,1: edsk create,'rasmoutput_test.dsk:1',DATA,OVERWRITE: edsk savefile,'rasmoutput_test.dsk:0','3:grouik.bin',0,512:" \
+	 "edsk savefile,'rasmoutput_test.dsk:1','4:grouik.bin',0,512: edsk delfile,'rasmoutput_test.dsk:0','4:grouik.bin': edsk delfile,'rasmoutput_test.dsk:1','3:grouik.bin'",1}, // del with user + sides + identical names but miss
 	{"struct ecran: unlabel defb: bank defb: endstruct: struct ecran unecran ",1}, // cannot BANK in struct declaration
 	{"struct ecran: unlabel defb: rombank defb: endstruct: struct ecran unecran ",1}, // cannot ROMBANK in struct declaration
 	{"struct ecran: unlabel defb: bankset defb: endstruct: struct ecran unecran ",1}, // cannot BANKSET in struct declaration
@@ -31426,8 +31431,24 @@ printf("testing EDSK double-sided creation + savefile both sides + copy on anoth
 		for (i=0;i<debug->nberror;i++) printf("%d -> %s\n",i,debug->error[i].msg);
 		exit(-1);}
 	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
-printf("testing EDSK double-sided create+savefile+copyfile+rename ...\n");
+printf("testing EDSK double-sided create+save+copy+rename\n");
 
+#define AUTOTEST_EDSK_SIDE_04 " defs 256,1: defs 256,2: defs 256,3: defs 256,4: forsurea defs 128,3 : defs 128,0: forsureb defs 128,2 : defs 128,0: " \
+	"aglapi defb 3,'AGLAPI  ': glop   defb 2,'GLOP    ': edsk create,'rasmoutput_test.dsk:1',DATA,OVERWRITE: edsk create,'rasmoutput_testbis.dsk:1',DATA,OVERWRITE: " \
+	"edsk savefile,'rasmoutput_test.dsk:0','grouik.bin',#100,#200: edsk savefile,'rasmoutput_test.dsk:1','grouik.bin',0,#200: " \
+	"edsk copyfile,'rasmoutput_test.dsk:0','grouik.bin','rasmoutput_testbis.dsk:1','2:glop.bin': edsk copyfile,'rasmoutput_test.dsk:1','grouik.bin','rasmoutput_testbis.dsk:0','2:glop.bin': " \
+	"edsk delfile,'rasmoutput_test.dsk:0','grouik.bin': edsk delfile,'rasmoutput_test.dsk:1','grouik.bin': edsk copyfile,'rasmoutput_testbis.dsk:0','2:glop.bin','rasmoutput_test.dsk:1','3:aglapi.bin': " \
+	"edsk copyfile,'rasmoutput_testbis.dsk:1','2:glop.bin','rasmoutput_test.dsk:0','3:aglapi.bin': edsk check,'rasmoutput_testbis.dsk:1','0:#C6',256,forsurea: " \
+	"edsk check,'rasmoutput_testbis.dsk:0','0:#C6',256,forsureb: edsk check,'rasmoutput_test.dsk:0','0:#C6',256,forsurea: edsk check,'rasmoutput_test.dsk:1','0:#C6',256,forsureb: " \
+	"edsk check,'rasmoutput_testbis.dsk:1','0:#C5',9,glop: edsk check,'rasmoutput_testbis.dsk:0','0:#C5',9,glop: " \
+	"edsk check,'rasmoutput_test.dsk:0','0:#C5',9,aglapi: edsk check,'rasmoutput_test.dsk:1','0:#C5',9,aglapi"
+	memset(&param,0,sizeof(struct s_parameter)); //param.edskoverwrite=1;
+	ret=RasmAssembleInfoParam(AUTOTEST_EDSK_SIDE_04,strlen(AUTOTEST_EDSK_SIDE_04),&opcode,&opcodelen,&debug,&param);
+	if (!ret) {} else {printf("Autotest %03d ERROR (testing EDSK double-sided create-copy-renam with different users\n",cpt);
+		for (i=0;i<debug->nberror;i++) printf("%d -> %s\n",i,debug->error[i].msg);
+		exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing EDSK double-sided create+save+copy+rename with different users\n");
 
 #define AUTOTEST_EDSK_OVERWRITE_FILEK "EDSK create,'rasmoutput_test.dsk',DATA,OVERWRITE:bank:" \
 	"save 'crash.bin',0,20000,DSK,'rasmoutput_test.dsk':"\
