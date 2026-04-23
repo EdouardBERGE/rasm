@@ -495,13 +495,21 @@ FILE *FileOpen(const char *filename, const char *opening_type)
 	if (strlen(opening_type)>3)
 	{
 		logerr("illegal opening type (too long)");
+#ifndef INTEGRATED_ASSEMBLY
 		exit(ABORT_ERROR);
+#else
+	return NULL;
+#endif
 	}	
 	if (strcmp(opening_type,"a") && strcmp(opening_type,"w") && strcmp(opening_type,"r")
 	 && strcmp(opening_type,"a+")  && strcmp(opening_type,"w+") && strcmp(opening_type,"r+") && strcmp(opening_type,"rb"))
 	{
 		logerr("illegal opening type [%s]\nallowed options are: r,w,a,r+,w+,a+",opening_type);
+#ifndef INTEGRATED_ASSEMBLY
 		exit(ABORT_ERROR);
+#else
+	return NULL;
+#endif
 	}		
 	
 	curfile=FileGetStructFromName(filename);
@@ -527,7 +535,11 @@ FILE *FileOpen(const char *filename, const char *opening_type)
 		if (strcmp(curfile->opening_type,opening_type))
 		{
 			logerr("You can't open the file [%s] in [%s] mode cause it's already open in [%s] mode",filename,opening_type,curfile->opening_type);
+#ifndef INTEGRATED_ASSEMBLY
 			exit(ABORT_ERROR);
+#else
+	return NULL;
+#endif
 		}
 		if (!curfile->closed) {
 			/* already opened, just return the id */
@@ -566,7 +578,11 @@ FILE *FileOpen(const char *filename, const char *opening_type)
 		
 		logerr("failed to open file [%s] with mode [%s]",filename,opening_type);
 		logerr("check empty space and permissions");
+#ifndef INTEGRATED_ASSEMBLY
 		exit(ABORT_ERROR);
+#else
+	return NULL;
+#endif
 	}
 	
 	/* go on previous position */
@@ -1020,6 +1036,8 @@ int FileWriteBinary(const char *filename,const char *data, const int n)
 	#else
 	last_id=FileOpen(filename,"a+");
 	#endif
+	if (!last_id) return -1; // pb ecriture
+
 	if (data!=NULL)
 	{	 
 		#ifdef OS_WIN
@@ -1044,12 +1062,20 @@ int FileWriteBinary(const char *filename,const char *data, const int n)
 				else{
 					logerr("error during write of %s (%d byte(s))",filename,FileGetCPT(last_id));
 				}
-				exit(ABORT_ERROR);
+#ifndef INTEGRATED_ASSEMBLY
+		exit(ABORT_ERROR);
+#else
+	return -1;
+#endif
 			}
 			else
 			{
 				logerr("error during write of %s (but no error neither eof flag set) %d byte(s) written",filename,FileGetCPT(last_id));
-				exit(INTERNAL_ERROR);
+#ifndef INTEGRATED_ASSEMBLY
+		exit(ABORT_ERROR);
+#else
+	return -1;
+#endif
 			}
 		}
 	}
