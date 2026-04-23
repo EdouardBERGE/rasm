@@ -1,10 +1,11 @@
-CC=clang
+CC=cc
 EXEC=rasm.exe
 
 CFLAGS=-lm  -march=native -o $(EXEC)
 CFLAGS_OPT = $(CFLAGS) -O2 -Wpointer-sign
 CFLAGS_DBG = $(CFLAGS) -O0 -g -pthread -Wpointer-sign
-CFLAGS_3RD = $(CFLAGS) -g -pthread -DNO_3RD_PARTIES
+CFLAGS_3RD = $(CFLAGS) -O2 -pthread -DNO_3RD_PARTIES
+CFLAGS_INT = -lm  -march=native -O2 -pthread -DNO_3RD_PARTIES
 
 SRC_APUDIR=./apultra-master/src
 SRC_LZSADIR=./lzsa-master/src
@@ -44,9 +45,12 @@ SALVADOR_OBJ+=$(SRC_SALVADOR)/shrink.o
 
 Z80_MASTER_OBJ = $(SRC_Z80_MASTER)/z80.o
 
-.PHONY: prod third debug clean
+.PHONY: prod third debug clean 
 
 default: prod
+
+integrated:
+	$(CC) rasm.c -c $(CFLAGS_INT) -DINTEGRATED_ASSEMBLY
 
 third:
 	$(CC) rasm.c $(CFLAGS_3RD)
