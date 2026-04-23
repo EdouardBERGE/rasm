@@ -83,28 +83,6 @@ cc rasm.c -O2 -lm -march=native -o rasm
 
 int MAX_OFFSET_ZX0=32640;
 
-#ifndef NO_3RD_PARTIES
-#define __FILENAME__ "3rd parties"
-/* 3rd parties compression */
-#ifndef NOAPULTRA
-#ifndef RASM_PRODUCTION_WITHOUT_AUTOTEST
-#include"z80-master/z80.h"
-#endif
-#endif
-#include"zx7.h"
-#include"lz4.h"
-#include"exomizer.h"
-
-#ifndef remainder
-	#define remainder fmod
-#endif
-
-#ifndef fdim
-double fdim(double x,double y) {
-	if (x-y>0) return x-y; else return 0.0;
-}
-#endif
-
 // simplified token builder for EQU re-entrance check
 char **getToken(char *str, int *nbToken) {
 	int i,start;
@@ -135,6 +113,39 @@ char **getToken(char *str, int *nbToken) {
 	*nbToken=cpt;
 	return tokenList;
 }
+void zx0_reverse(unsigned char *first, unsigned char *last) {
+    unsigned char c;
+
+    while (first < last) {
+        c = *first;
+        *first++ = *last;
+        *last-- = c;
+    }
+}
+
+
+#ifndef NO_3RD_PARTIES
+#define __FILENAME__ "3rd parties"
+/* 3rd parties compression */
+#ifndef NOAPULTRA
+#ifndef RASM_PRODUCTION_WITHOUT_AUTOTEST
+#include"z80-master/z80.h"
+#endif
+#endif
+#include"zx7.h"
+#include"lz4.h"
+#include"exomizer.h"
+
+#ifndef remainder
+	#define remainder fmod
+#endif
+
+#ifndef fdim
+double fdim(double x,double y) {
+	if (x-y>0) return x-y; else return 0.0;
+}
+#endif
+
 
 void print_binary_uchar(unsigned char n) {
     for (int i = 7; i >= 0; i--) {
@@ -144,16 +155,6 @@ void print_binary_uchar(unsigned char n) {
 void print_binary_uint(unsigned int n) {
     for (int i = 31; i >= 0; i--) {
         printf("%d", (n >> i) & 1);
-    }
-}
-
-void zx0_reverse(unsigned char *first, unsigned char *last) {
-    unsigned char c;
-
-    while (first < last) {
-        c = *first;
-        *first++ = *last;
-        *last-- = c;
     }
 }
 
@@ -16013,28 +16014,31 @@ void __edsk_readsect(struct s_assenv *ae, struct s_edsk_action *action) {
 		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Usage is : EDSK READSECT,'edskfilename:side',<location>,<sizetoread>   param=%d\n",action->nbparam);
 		return;
 	}
-	// param 3 is location
-	location=__edsk_get_location(ae,ae->wl[ae->idx+3].w,&nblocation,edsk->tracknumber);
-	if (!location) {
-		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"EDSK READSECT error, invalid location!\n");
-		return;
-	}
-	// param 4 is exactsize
-	sizetoread=RoundComputeExpression(ae,ae->wl[ae->idx+4].w,ae->outputadr,0,0);
-	if (sizetoread<1) {
-		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"EDSK READSECT error, invalid size to read!\n");
-		return;
-	}
-
-	// now we can read the EDSK
+	// we need to read the EDSK to have the number of available tracks
 	edsk=edsktool_EDSK_load(action->filename);
 	if (!edsk) {
 		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"EDSK READSECT error, invalid floppy image!\n");
 		return;
 	}
 
+	// param 3 is location
+	location=__edsk_get_location(ae,ae->wl[ae->idx+3].w,&nblocation,edsk->tracknumber);
+	if (!location) {
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"EDSK READSECT error, invalid location!\n");
+		__edsk_free(ae,edsk);
+		return;
+	}
+	// param 4 is exactsize
+	sizetoread=RoundComputeExpression(ae,ae->wl[ae->idx+4].w,ae->outputadr,0,0);
+	if (sizetoread<1) {
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"EDSK READSECT error, invalid size to read!\n");
+		__edsk_free(ae,edsk);
+		return;
+	}
+
 	if (side+1>edsk->sidenumber) {
 		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"EDSK READSECT error, cannot read side B as the floppy image does not contain two sides!\n");
+		__edsk_free(ae,edsk);
 		return;
 	}
 
@@ -16045,6 +16049,7 @@ void __edsk_readsect(struct s_assenv *ae, struct s_edsk_action *action) {
 			// check
 			if (edsk->track[curtrack].unformated) {
 				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"EDSK READSECT error, cannot read track %d because it's not formated!\n",location[i].track);
+				__edsk_free(ae,edsk);
 				return;
 			}
 
@@ -16077,6 +16082,7 @@ void __edsk_readsect(struct s_assenv *ae, struct s_edsk_action *action) {
 			}
 		} else {
 			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"EDSK READSECT error, cannot read track %d as the floppy image contains only %d track(s)!\n",location[i].track,edsk->tracknumber);
+			__edsk_free(ae,edsk);
 			return;
 		}
 	}
@@ -25287,14 +25293,19 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 								}
 								
 								if (!ae->flux || ae->autotest) {
-									FileWriteBinary(TMP_filename,ChunkName,4);
-									FileWriteBinary(TMP_filename,(char*)&ChunkSize,4);
+									int anyErr=0;
+									if (FileWriteBinary(TMP_filename,ChunkName,4)==-1) anyErr++;
+									if (FileWriteBinary(TMP_filename,(char*)&ChunkSize,4)==-1) anyErr++;
 									if (rlebank!=NULL) {
-										FileWriteBinary(TMP_filename,(char*)rlebank,ChunkSize);
+										if (FileWriteBinary(TMP_filename,(char*)rlebank,ChunkSize)==-1) anyErr++;
 										MemFree(rlebank);
 									} else {
 										// write unpacked data
-										FileWriteBinary(TMP_filename,(char*)&packed,ChunkSize);
+										if (FileWriteBinary(TMP_filename,(char*)&packed,ChunkSize)==-1) anyErr++;
+									}
+									if (anyErr) {
+										MakeError(ae,0,"(core)",0,"internal error during snapshot write\n");
+										break;
 									}
 								}
 							}
@@ -30143,6 +30154,8 @@ struct s_autotest_keyword autotest_keyword[]={
 	 *
 	 *
 	 *
+	{"",},
+	{"",},{"",},
 	{"",},{"",},{"",},
 	{"",},{"",},{"",},{"",},{"",},
 	{"",},{"",},{"",},{"",},{"",},{"",},
@@ -30507,7 +30520,7 @@ printf("testing %d various opcode tests OK\n",i);
 
 	idx=0;
 	while (autotest_keyword[idx].keywordtest) {
-		//if (idx>350 && idx<400) printf("%s\n",autotest_keyword[idx].keywordtest);
+		if (idx>800 && idx<900) printf("%s\n",autotest_keyword[idx].keywordtest);
 		ret=RasmAssemble(autotest_keyword[idx].keywordtest,strlen(autotest_keyword[idx].keywordtest),&opcode,&opcodelen);
 		if (!ret && !autotest_keyword[idx].result) {
 		} else if (ret && autotest_keyword[idx].result) {
