@@ -9386,248 +9386,6 @@ char *MakeAMSDOS_name(struct s_assenv *ae, char *reference_filename, int *amsdos
 }
 
 
-void _deprecated_EDSK_load(struct s_assenv *ae,struct s_edsk_wrapper *curwrap, char *edskfilename, int face)
-{
-	#undef FUNC
-	#define FUNC "EDSK_load"
-
-	unsigned char header[256];
-	unsigned char *data;
-	int tracknumber,sidenumber,tracksize,disksize;
-	int i,b,s,f,t,curtrack,sectornumber,sectorsize,sectorid,reallength;
-	int currenttrackposition=0,currentsectorposition,tmpcurrentsectorposition;
-	unsigned char checksectorid[9];
-	int curblock=0,curoffset=0;
-#if TRACE_EDSK
-	printf("EDSK_Load('%s',%d);",edskfilename,face);
-#endif
-	if (FileReadBinary(edskfilename,(char*)&header,0x100)!=0x100) {
-		rasm_printf(ae,KERROR"Cannot read EDSK header of [%s]!\n",edskfilename);
-		FreeAssenv(ae);exit(ABORT_ERROR);
-	}
-	if (strncmp((char *)header,"MV - CPC",8)==0) {
-		rasm_printf(ae,KAYGREEN"updating DSK to EDSK [%s] / creator: %s",edskfilename,header+34);
-		
-		tracknumber=header[34+14];
-		sidenumber=header[34+14+1];
-		tracksize=header[34+14+1+1]+header[34+14+1+1+1]*256;
-		rasm_printf(ae,"tracks: %d  sides:%d   track size:%d",tracknumber,sidenumber,tracksize);
-		if (tracknumber>40 || sidenumber>2) {
-			rasm_printf(ae,KERROR"[%s] DSK format is not supported in update mode (ntrack=%d nside=%d)\n",edskfilename,tracknumber,sidenumber);
-			FreeAssenv(ae);exit(ABORT_ERROR);
-		}
-		if (face>=sidenumber) {
-			rasm_printf(ae,KWARNING"[%s] Warning - DSK has no face %d - DSK updated\n",edskfilename,face);
-			if (ae->erronwarn) MaxError(ae);
-			return;
-		}
-
-		data=MemMalloc(tracksize*tracknumber*sidenumber);
-		memset(data,0,tracksize*tracknumber*sidenumber);
-		if (FileReadBinary(edskfilename,(char *)data,tracksize*tracknumber*sidenumber)!=tracksize*tracknumber*sidenumber) {
-			rasm_printf(ae,"Cannot read DSK tracks!");
-			FreeAssenv(ae);exit(ABORT_ERROR);
-		}
-		//loginfo("track data read (%dkb)",tracksize*tracknumber*sidenumber/1024);
-		f=face;
-		for (t=0;t<tracknumber;t++) {
-			curtrack=t*sidenumber+f;
-
-			i=(t*sidenumber+f)*tracksize;
-			if (strncmp((char *)data+i,"Track-Info\r\n",12)) {
-				rasm_printf(ae,"Invalid track information block side %d track %d",f,t);
-				FreeAssenv(ae);exit(ABORT_ERROR);
-			}
-			sectornumber=data[i+21];
-			sectorsize=data[i+20];
-			if (sectornumber!=9 || sectorsize!=2) {
-				rasm_printf(ae,"Cannot read [%s] Invalid DATA format",edskfilename);
-				FreeAssenv(ae);exit(ABORT_ERROR);
-			}
-			memset(checksectorid,0,sizeof(checksectorid));			
-			/* we want DATA format */
-			for (s=0;s<sectornumber;s++) {
-				if (t!=data[i+24+8*s]) {
-					rasm_printf(ae,"Invalid track number in sector %02X track %d",data[i+24+8*s+2],t);
-					FreeAssenv(ae);exit(ABORT_ERROR);
-				}
-				if (f!=data[i+24+8*s+1]) {
-					rasm_printf(ae,"Invalid side number in sector %02X track %d",data[i+24+8*s+2],t);
-					FreeAssenv(ae);exit(ABORT_ERROR);
-				}
-				if (data[i+24+8*s+2]<0xC1 || data[i+24+8*s+2]>0xC9) {
-					rasm_printf(ae,"Invalid sector ID in sector %02X track %d",data[i+24+8*s+2],t);
-					FreeAssenv(ae);exit(ABORT_ERROR);
-				} else {
-					checksectorid[data[i+24+8*s+2]-0xC1]=1;
-				}				
-				if (data[i+24+8*s+3]!=2) {
-					rasm_printf(ae,"Invalid sector size in sector %02X track %d",data[i+24+8*s+2],t);
-					FreeAssenv(ae);exit(ABORT_ERROR);
-				}
-			}
-			for (s=0;s<sectornumber;s++) {
-				if (!checksectorid[s]) {
-					rasm_printf(ae,"Missing sector %02X track %d",s+0xC1,t);
-					FreeAssenv(ae);exit(ABORT_ERROR);
-				}
-			}
-			/* piste à piste on lit les blocs DANS L'ORDRE LOGIQUE!!! */
-			for (b=0xC1;b<=0xC9;b++)
-			for (s=0;s<sectornumber;s++) {
-				if (data[i+24+8*s+2]==b) {
-					memcpy(&curwrap->blocks[curblock][curoffset],&data[i+0x100+s*512],512);
-					curoffset+=512;
-					if (curoffset>=1024) {
-						curoffset=0;
-						curblock++;
-					}
-				}
-			}
-		}
-	} else if (strncmp((char *)header,"EXTENDED",8)==0) {
-		rasm_printf(ae,KAYGREEN"updating EDSK [%s] / creator: %-14.14s\n",edskfilename,header+34);
-		tracknumber=header[34+14];
-		sidenumber=header[34+14+1];
-		// not in EDSK tracksize=header[34+14+1+1]+header[34+14+1+1+1]*256;
-#if TRACE_EDSK
-		loginfo("tracks: %d  sides:%d",tracknumber,sidenumber);
-#endif
-
-		if (sidenumber>2) {
-			rasm_printf(ae,KERROR"[%s] EDSK format is not supported in update mode (ntrack=%d nside=%d)\n",edskfilename,tracknumber,sidenumber);
-			FreeAssenv(ae);exit(ABORT_ERROR);
-		}
-		if (face>=sidenumber) {
-			rasm_printf(ae,KWARNING"[%s] EDSK has no face %d - DSK updated\n",edskfilename,face);
-			if (ae->erronwarn) MaxError(ae);
-			return;
-		}
-
-		for (i=disksize=0;i<tracknumber*sidenumber;i++) disksize+=header[0x34+i]*256;
-#if TRACE_EDSK
-	loginfo("total track size: %dkb",disksize/1024);
-#endif
-
-		data=MemMalloc(disksize);
-		memset(data,0,disksize);
-		if (FileReadBinary(edskfilename,(char *)data,disksize)!=disksize) {
-			rasm_printf(ae,KERROR"Cannot read DSK tracks!\n");
-			FreeAssenv(ae);exit(ABORT_ERROR);
-		}
-
-		f=face;
-		for (t=0;t<tracknumber && t<40;t++) {
-			int track_sectorsize;
-
-			curtrack=t*sidenumber+f;
-			i=currenttrackposition;
-			currentsectorposition=i+0x100;
-
-			if (!header[0x34+curtrack] && t<40) {
-				rasm_printf(ae,KERROR"Unexpected unformated track Side %d Track %02d\n",f,t);
-			} else {
-				currenttrackposition+=header[0x34+curtrack]*256;
-
-				if (strncmp((char *)data+i,"Track-Info\r\n",12)) {
-					rasm_printf(ae,KERROR"Invalid track information block side %d track %d\n",f,t);
-					FreeAssenv(ae);exit(ABORT_ERROR);
-				}
-				sectornumber=data[i+21];
-				track_sectorsize=data[i+20];
-				if (sectornumber!=9) {
-					rasm_printf(ae,KERROR"Unsupported track %d (sectornumber=%d sectorsize=%d)\n",t,sectornumber,sectorsize);
-					FreeAssenv(ae);exit(ABORT_ERROR);
-				}
-				memset(checksectorid,0,sizeof(checksectorid));			
-				/* we want DATA format */
-				for (s=0;s<sectornumber;s++) {
-					sectorid=data[i+24+8*s+2];
-					if (sectorid>=0xC1 && sectorid<=0xC9) checksectorid[sectorid-0xC1]=1; else {
-						rasm_printf(ae,KERROR"invalid sector id %02X for DATA track %d\n",sectorid,t);
-						return;
-					}
-					sectorsize=data[i+24+8*s+3];
-					if (sectorsize!=2) {
-						rasm_printf(ae,KERROR"invalid sector size track %d\n",t);
-						return;
-					}
-					reallength=data[i+24+8*s+6]+data[i+24+8*s+7]*256; /* real length stored */
-					if (reallength!=512) {
-						rasm_printf(ae,KERROR"invalid sector length %d for track %d\n",reallength,t);
-						return;
-					}
-#if TRACE_EDSK
-	printf("%02X ",sectorid);
-#endif
-				}
-				if (track_sectorsize!=2) {
-					rasm_printf(ae,KWARNING"track %02d has invalid sector size but sectors are OK\n",t);
-			if (ae->erronwarn) MaxError(ae);
-				}
-#if TRACE_EDSK
-	printf("\n");
-#endif
-
-				/* piste à piste on lit les blocs DANS L'ORDRE LOGIQUE!!! */
-				for (b=0xC1;b<=0xC9;b++) {
-					tmpcurrentsectorposition=currentsectorposition;
-					for (s=0;s<sectornumber;s++) {
-						if (b==data[i+24+8*s+2]) {
-							memcpy(&curwrap->blocks[curblock][curoffset],&data[tmpcurrentsectorposition],512);
-							curoffset+=512;
-							if (curoffset>=1024) {
-								curoffset=0;
-								curblock++;
-							}
-						}
-						reallength=data[i+24+8*s+6]+data[i+24+8*s+7]*256;
-						tmpcurrentsectorposition+=reallength;
-					}
-				}
-			}
-		}
-		
-		
-	} else {
-		rasm_printf(ae,KERROR"file [%s] is not a valid (E)DSK floppy image\n",edskfilename);
-		FreeAssenv(ae);exit(-923);
-	}
-	FileReadBinaryClose(edskfilename);
-	
-	/* Rasm management of (e)DSK files is AMSDOS compatible, just need to copy CATalog blocks but sort them... */
-	memcpy(&curwrap->entry[0],curwrap->blocks[0],1024);
-	memcpy(&curwrap->entry[32],curwrap->blocks[1],1024);
-	/* tri des entrées selon le user */
-	qsort(curwrap->entry,64,sizeof(struct s_edsk_wrapper_entry),cmpAmsdosentry);
-	curwrap->nbentry=64;
-	for (i=0;i<64;i++) {
-		if (curwrap->entry[i].user==0xE5) {
-			curwrap->nbentry=i;
-			break;
-		}
-	}
-#if TRACE_EDSK
-	printf("%d entr%s found\n",curwrap->nbentry,curwrap->nbentry>1?"ies":"y");
-	for (i=0;i<curwrap->nbentry;i++) {
-		printf("[%02d] - ",i);
-		if (curwrap->entry[i].user<16) {
-			printf("U%02d [%-8.8s.%c%c%c] %c%c subcpt=#%02X rc=#%02X blocks=",curwrap->entry[i].user,curwrap->entry[i].filename,
-			curwrap->entry[i].filename[8]&0x7F,curwrap->entry[i].filename[9]&0x7F,curwrap->entry[i].filename[10],
-			curwrap->entry[i].filename[8]&0x80?'P':'-',curwrap->entry[i].filename[9]&0x80?'H':'-',
-			curwrap->entry[i].subcpt,curwrap->entry[i].rc);
-			for (b=0;b<16;b++) if (curwrap->entry[i].blocks[b]) printf("%s%02X",b>0?" ":"",curwrap->entry[i].blocks[b]); else printf("%s  ",b>0?" ":"");
-			if (i&1) printf("\n"); else printf(" | ");
-		} else {
-			printf("free entry                  =    rc=    blocks=                                               ");
-			if (i&1) printf("\n"); else printf(" | ");
-		}
-	}
-	if (i&1) printf("\n");
-#endif
-}
-
-
 struct s_edsk_global_struct *edsktool_NewEDSK(char *format, int nbside);
 struct s_edsk_global_struct *edsktool_EDSK_load(char *edskfilename);
 void edsktool_EDSK_write_file(struct s_edsk_global_struct *edsk, char *output_filename);
@@ -9666,6 +9424,10 @@ int EDSK_addfile(struct s_assenv *ae,char *edskfilename,int facenumber, char *fi
 	} else {
 		//printf("load [%s]\n",edskfilename);
 		edsk=edsktool_EDSK_load(edskfilename);
+		if (!edsk) {
+			MakeError(ae,0,NULL,0,"Error loading edsk [%s]\n",edskfilename);
+			return 1;
+		}
 	}
 	amsdos_build_entries(ae,edsk, facenumber);
 
@@ -15245,13 +15007,13 @@ struct s_edsk_global_struct *edsktool_EDSK_load(char *edskfilename) //@@TODO fai
 
         f=fopen(edskfilename,"rb");
         if (!f) {
-                printf(KERROR"Cannot read EDSK header of [%s]!\n",edskfilename);
-                exit(ABORT_ERROR);
+                printf(KERROR"Cannot read EDSK header of [%s]!\n"KNORMAL,edskfilename);
+		return NULL;
         }
 
         if (fread((char*)&header,1,0x100,f)!=0x100) {
-                printf(KERROR"Cannot read EDSK header of [%s]!\n",edskfilename);
-                exit(ABORT_ERROR);
+                printf(KERROR"Cannot read EDSK header of [%s]!\n"KNORMAL,edskfilename);
+		return NULL;
         }
         if (strncmp((char *)header,"EXTENDED",8)==0) {
 #if TRACE_EDSK
@@ -15261,8 +15023,8 @@ struct s_edsk_global_struct *edsktool_EDSK_load(char *edskfilename) //@@TODO fai
                 sidenumber=header[34+14+1];
 
                 if (sidenumber<1 || sidenumber>2) {
-                        printf(KERROR"[%s] EDSK format is not supported in update mode (ntrack=%d nside=%d)\n",edskfilename,tracknumber,sidenumber);
-                        exit(ABORT_ERROR);
+                        printf(KERROR"[%s] EDSK format is not supported in update mode (ntrack=%d nside=%d)\n"KNORMAL,edskfilename,tracknumber,sidenumber);
+			return NULL;
                 }
 
                 edsk->tracknumber=tracknumber;
@@ -15307,7 +15069,7 @@ struct s_edsk_global_struct *edsktool_EDSK_load(char *edskfilename) //@@TODO fai
 
                                 if (strncmp((char *)data+i,"Track-Info\r\n",12)) {
                                         printf(KERROR"Invalid track information block side %d track %d => Header offset=%d\n",face,t,header[0x34+curtrack]*256);
-                                        exit(ABORT_ERROR);
+					return NULL;
                                 }
                                 sectornumber=data[i+21];
                                 track_sectorsize=data[i+20];
@@ -15702,8 +15464,8 @@ struct s_edsk_location *__edsk_get_location(struct s_assenv *ae,char *location, 
 ********************************************************************************************************/
 
 void __edsk_delfile(struct s_assenv *ae, struct s_edsk_action *action) {
-	struct s_edsk_global_struct *edsk;
-	struct s_edsk_location *location;
+	struct s_edsk_global_struct *edsk=NULL;
+	struct s_edsk_location *location=NULL;
 	int side,sizetoread=0x1234567,nblocation;
 	int i,curtrack,s,j,k;
 	char amsdos_name[14]={0};
@@ -15750,8 +15512,8 @@ void __edsk_delfile(struct s_assenv *ae, struct s_edsk_action *action) {
 }
 
 void __edsk_copyfile(struct s_assenv *ae, struct s_edsk_action *action) {
-	struct s_edsk_global_struct *edsk,*edskdest;
-	struct s_edsk_location *location;
+	struct s_edsk_global_struct *edsk=NULL,*edskdest=NULL;
+	struct s_edsk_location *location=NULL;
 	int side,sidedest,sizetoread=0x1234567,nblocation;
 	int i,curtrack,s,j,k;
 	char amsdos_name[14]={0};
@@ -15774,11 +15536,19 @@ void __edsk_copyfile(struct s_assenv *ae, struct s_edsk_action *action) {
 
 	// now we can read the EDSK
 	edsk=edsktool_EDSK_load(action->filename);
+	if (!edsk) {
+		MakeError(ae,0,NULL,0,"Error loading edsk [%s]\n",action->filename);
+		return;
+	}
 	// if destination does not exists, create it!
 	if (!FileExists(action->filename3)) {
 		edskdest=edsktool_NewEDSK("DATA",1+sidedest);
 	} else {
 		edskdest=edsktool_EDSK_load(action->filename3);
+		if (!edskdest) {
+			MakeError(ae,0,NULL,0,"Error loading edsk [%s]\n",action->filename3);
+			return;
+		}
 	}
 	if (!edsk || !edskdest) {
 		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"EDSK READFILE error, invalid floppy image!\n");
@@ -15880,8 +15650,8 @@ void __edsk_copyfile(struct s_assenv *ae, struct s_edsk_action *action) {
 }
 
 void __edsk_readfile(struct s_assenv *ae, struct s_edsk_action *action) {
-	struct s_edsk_global_struct *edsk;
-	struct s_edsk_location *location;
+	struct s_edsk_global_struct *edsk=NULL;
+	struct s_edsk_location *location=NULL;
 	int side,sizetoread=0x1234567,nblocation;
 	int i,curtrack,s,j,k;
 	char amsdos_name[14]={0};
@@ -16003,8 +15773,8 @@ void __edsk_readfile(struct s_assenv *ae, struct s_edsk_action *action) {
 }
 
 void __edsk_readsect(struct s_assenv *ae, struct s_edsk_action *action) {
-	struct s_edsk_global_struct *edsk;
-	struct s_edsk_location *location;
+	struct s_edsk_global_struct *edsk=NULL;
+	struct s_edsk_location *location=NULL;
 	int side,sizetoread,nblocation;
 	int i,curtrack,s,j;
 
@@ -16091,7 +15861,7 @@ void __edsk_readsect(struct s_assenv *ae, struct s_edsk_action *action) {
 }
 
 void __edsk_create(struct s_assenv *ae, struct s_edsk_action *action) {
-	struct s_edsk_global_struct *edsk;
+	struct s_edsk_global_struct *edsk=NULL;
 	char *format;
 	int nbtrack=42;
 	int nbside,interlaced=0,overwrite=0,trueside=0;
@@ -16182,7 +15952,7 @@ void __edsk_create(struct s_assenv *ae, struct s_edsk_action *action) {
 }
 
 void __edsk_upgrade(struct s_assenv *ae, struct s_edsk_action *action) {
-	struct s_edsk_global_struct *edsk;
+	struct s_edsk_global_struct *edsk=NULL;
 	// load and save, in case of DSK, you will get a fresh EDSK
 	edsk=edsktool_EDSK_load(action->filename);
 	if (edsk) {
@@ -16199,7 +15969,7 @@ void __edsk_upgrade(struct s_assenv *ae, struct s_edsk_action *action) {
 ********************************************************************************************************/
 
 void __edsk_map(struct s_assenv *ae, struct s_edsk_action *action) {
-	struct s_edsk_global_struct *edsk;
+	struct s_edsk_global_struct *edsk=NULL;
 	edsk=edsktool_EDSK_load(action->filename);
 	if (edsk) {
 		if (!ae->flux) edsktool_MAPEDSK(edsk);
@@ -16210,7 +15980,7 @@ void __edsk_map(struct s_assenv *ae, struct s_edsk_action *action) {
 }
 
 void __edsk_merge(struct s_assenv *ae, struct s_edsk_action *action) {
-	struct s_edsk_global_struct *edsk1,*edsk2;
+	struct s_edsk_global_struct *edsk1=NULL,*edsk2=NULL;
 	char *floppy1,*floppy2,*floppyres;
 	int side1,side2,i,j;
 	// merge data
@@ -16250,8 +16020,8 @@ void __edsk_merge(struct s_assenv *ae, struct s_edsk_action *action) {
 }
 
 void __edsk_gapfix(struct s_assenv *ae, struct s_edsk_action *action) {
-	struct s_edsk_global_struct *edsk;
-	struct s_edsk_location *location;
+	struct s_edsk_global_struct *edsk=NULL;
+	struct s_edsk_location *location=NULL;
 	int nblocation;
 	int side,i,j,iloc;
 
@@ -16317,8 +16087,8 @@ void __edsk_gapfix(struct s_assenv *ae, struct s_edsk_action *action) {
 
 
 void __edsk_check(struct s_assenv *ae, struct s_edsk_action *action) {
-	struct s_edsk_global_struct *edsk;
-	struct s_edsk_location *location;
+	struct s_edsk_global_struct *edsk=NULL;
+	struct s_edsk_location *location=NULL;
 	int nblocation,side;
 	int iloc,i,j,k;
 	int zebank,offset,size;
@@ -16405,8 +16175,8 @@ void __edsk_check(struct s_assenv *ae, struct s_edsk_action *action) {
 	__edsk_free(ae,edsk);
 }
 void __edsk_drop(struct s_assenv *ae, struct s_edsk_action *action) {
-	struct s_edsk_global_struct *edsk;
-	struct s_edsk_location *location;
+	struct s_edsk_global_struct *edsk=NULL;
+	struct s_edsk_location *location=NULL;
 	int nblocation,side;
 	int iloc,i,j,k;
 
@@ -16476,8 +16246,8 @@ void __edsk_drop(struct s_assenv *ae, struct s_edsk_action *action) {
 	__edsk_free(ae,edsk);
 }
 void __edsk_add(struct s_assenv *ae, struct s_edsk_action *action) {
-	struct s_edsk_global_struct *edsk;
-	struct s_edsk_location *location;
+	struct s_edsk_global_struct *edsk=NULL;
+	struct s_edsk_location *location=NULL;
 	int nblocation,side;
 	int sectorsize;
 	int iloc,i,j,k;
@@ -16597,8 +16367,8 @@ void __edsk_add(struct s_assenv *ae, struct s_edsk_action *action) {
 }
 
 void __edsk_resize(struct s_assenv *ae, struct s_edsk_action *action) {
-	struct s_edsk_global_struct *edsk;
-	struct s_edsk_location *location;
+	struct s_edsk_global_struct *edsk=NULL;
+	struct s_edsk_location *location=NULL;
 	int nblocation,side;
 	int sectorsize;
 	int iloc,i,j,pp;
@@ -16684,8 +16454,8 @@ void __edsk_resize(struct s_assenv *ae, struct s_edsk_action *action) {
 }
 
 void __edsk_reorder(struct s_assenv *ae, struct s_edsk_action *action) {
-	struct s_edsk_global_struct *edsk;
-	struct s_edsk_location *location;
+	struct s_edsk_global_struct *edsk=NULL;
+	struct s_edsk_location *location=NULL;
 	int nblocation,side;
 	int newposition;
 	int iloc,i,j,k,pp;
@@ -16802,8 +16572,8 @@ void __edsk_savefile(struct s_assenv *ae, struct s_edsk_action *action) {
 }
 
 void __edsk_writesect(struct s_assenv *ae, struct s_edsk_action *action) {
-	struct s_edsk_global_struct *edsk;
-	struct s_edsk_location *location;
+	struct s_edsk_global_struct *edsk=NULL;
+	struct s_edsk_location *location=NULL;
 	int nblocation,side;
 	int sectorsize;
 	int iloc,i,j,idata;
@@ -29769,6 +29539,9 @@ struct s_autotest_keyword autotest_keyword[]={
 	{"bunch: sc=#C1: p=5: repeat 5: repeat 9: defs 256,sc : defs 256,p: sc+=1: rend: p+=1: rend:edsk create,'autotestw.dsk',DATA,OVERWRITE:edsk writesect,'autotestw.dsk',bunch,512*9*5,'5-9:#C1-#C9'",0}, // write sectors
 	{"edsk readsect,'autotestw.dsk','5-9:#C1-#C9',512*9*5:sc=#C1:ad=0:p=5: repeat 5: repeat 9:repeat 256:assert peek(ad)==sc:ad+=1:rend:repeat 256:assert peek(ad)==p:ad+=1:rend:sc+=1:rend:p+=1:rend",0}, // enforce sectors were read
 	{"edsk writesect,'autotestw.dsk',0,513,'0:#C1'",1}, // cannot leak sectors
+	{"edsk writesect,'autotestw.dsk',0,512,'50:#C1'",1}, // cannot access non existing track
+	{"edsk readsect,'autotestw.dsk','50:#C1',512",1}, // cannot access non existing track
+	{"edsk readsect,'autotestnonexisting.dsk','5:#C1',512",1}, // cannot access non existing DSK
 	{"defs 512,1: edsk create,'rasmoutput_test.dsk:1',DATA,OVERWRITE: edsk savefile,'rasmoutput_test.dsk:0','3:grouik.bin',0,512:" \
 	 "edsk savefile,'rasmoutput_test.dsk:1','4:grouik.bin',0,512: edsk delfile,'rasmoutput_test.dsk:0','3:grouik.bin': edsk delfile,'rasmoutput_test.dsk:1','4:grouik.bin'",0}, // del with user + sides + identical names
 	{"defs 512,1: edsk create,'rasmoutput_test.dsk:1',DATA,OVERWRITE: edsk savefile,'rasmoutput_test.dsk:0','3:grouik.bin',0,512:" \
@@ -30520,7 +30293,7 @@ printf("testing %d various opcode tests OK\n",i);
 
 	idx=0;
 	while (autotest_keyword[idx].keywordtest) {
-		if (idx>800 && idx<900) printf("%s\n",autotest_keyword[idx].keywordtest);
+		//if (idx>800 && idx<900) printf("%s\n",autotest_keyword[idx].keywordtest);
 		ret=RasmAssemble(autotest_keyword[idx].keywordtest,strlen(autotest_keyword[idx].keywordtest),&opcode,&opcodelen);
 		if (!ret && !autotest_keyword[idx].result) {
 		} else if (ret && autotest_keyword[idx].result) {
