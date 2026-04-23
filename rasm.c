@@ -708,6 +708,7 @@ enum e_edsk_action {
 	E_EDSK_ACTION_CREATE=0,
 	E_EDSK_ACTION_READSECT,
 	E_EDSK_ACTION_READFILE,
+	E_EDSK_ACTION_PUTFILE,
 	E_EDSK_ACTION_UPGRADE,
 	E_EDSK_ACTION_MERGE,
 	/* deferred */
@@ -9405,6 +9406,60 @@ void amsdos_remove_entry(struct s_assenv *ae,struct s_edsk_global_struct *edsk, 
 int amsdos_entry_exists(struct s_edsk_global_struct *edsk, int side, unsigned char *entry, int amsdos_user);
 void amsdos_build_entries(struct s_assenv *ae,struct s_edsk_global_struct *edsk, int side);
 
+int EDSK_addRAWfile(struct s_assenv *ae,char *edskfilename,int facenumber, char *filename,unsigned char *indata,int insize, int tag_protection, int tag_hidden)
+{
+	#undef FUNC
+	#define FUNC "EDSK_addRAWfile"
+
+	struct s_edsk_global_struct *edsk;
+	char amsdos_name[12]={0};
+	int j,i,ia,mia,ib,ie,filesize,idxdata;
+	int fb[180],rc,idxb;
+	unsigned char *data=NULL;
+	int size=0;
+	int firstblock,amsdos_user=0;
+
+	if (!FileExists(edskfilename)) {
+		//printf("new DATA because [%s] does not exists");
+		edsk=edsktool_NewEDSK("DATA",facenumber+1);
+	} else {
+		//printf("load [%s]\n",edskfilename);
+		edsk=edsktool_EDSK_load(edskfilename);
+		if (!edsk) {
+			MakeError(ae,0,NULL,0,"Error loading edsk [%s]\n",edskfilename);
+			return 1;
+		}
+	}
+	amsdos_build_entries(ae,edsk, facenumber);
+
+	/* update struct */
+	size=insize; data=MemMalloc(size);
+	strcpy(amsdos_name,MakeAMSDOS_name(ae,filename,&amsdos_user));
+	memcpy(data,indata,insize);
+
+	/* overwrite check */
+	if (amsdos_entry_exists(edsk,facenumber,(unsigned char *)amsdos_name,amsdos_user)) {
+		if (!ae->edskoverwrite) {
+			MakeError(ae,0,NULL,0,"Error - Cannot save raw [%s] in edsk [%s] with overwrite disabled as the file already exists (use -eo command line option)\n",amsdos_name,edskfilename);
+			MemFree(data);
+			return 0;
+		} else {
+			amsdos_remove_entry(ae,edsk,facenumber,(unsigned char *)amsdos_name,amsdos_user);
+		}
+	}
+
+	if (amsdos_can_write(edsk,size)) {
+		amsdos_write_file(edsk,facenumber,amsdos_user /* user */, amsdos_name, tag_protection, tag_hidden, data, size);
+		edsktool_EDSK_write_file(edsk,edskfilename);
+		rasm_printf(ae,KIO"Write file [%s] on EDSK %s\n",amsdos_name,edskfilename);
+	} else {
+		MakeError(ae,0,NULL,0,"Error - Cannot save raw [%s] in edsk [%s] because there is not enough free blocks available\n",amsdos_name,edskfilename);
+	}
+
+	MemFree(data);
+	return 1;
+}
+
 int EDSK_addfile(struct s_assenv *ae,char *edskfilename,int facenumber, char *filename,unsigned char *indata,int insize, int offset, int run, int tag_protection, int tag_hidden)
 {
 	#undef FUNC
@@ -15511,6 +15566,69 @@ void __edsk_delfile(struct s_assenv *ae, struct s_edsk_action *action) {
 	__edsk_free(ae,edsk);
 }
 
+void __edsk_putfile(struct s_assenv *ae, struct s_edsk_action *action) {
+	struct s_edsk_global_struct *edskdest=NULL;
+	int side,sidedest,sizetoread=0x1234567;
+	int i,curtrack,s,j,k;
+	char amsdos_name[14]={0};
+	int amsdos_user=0,offset=0;
+	char *filename,*filedest;
+	int hasHeader=-1;
+	int checkSum,realsize,wasfound=0;
+
+	unsigned char *filedata=NULL;
+	int sizedest,tag_protection=0,tag_hidden=0;
+
+	sidedest=__edsk_get_side_from_name(action->filename);
+
+	if (action->nbparam<3 || action->nbparam>6) {
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Usage is : EDSK PUTFILE,'edskfilename:side','filename on host',[,'filename on dsk'][,tags]\n");
+		return;
+	}
+
+	if (!FileExists(action->filename2)) {
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"EDSK PUTFILE ERROR : source [%s] not found on host disk\n",action->filename2);
+		return;
+	}
+	sizedest=FileGetSize(action->filename2);
+	filedata=MemMalloc(sizedest);
+	if (FileReadBinary(action->filename2,(char*)filedata,sizedest)!=sizedest) {
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"EDSK PUTFILE ERROR : read error on source file [%s]\n",action->filename2);
+		return;
+	}
+	FileReadBinaryClose(action->filename2);
+
+	// filename on DSK is optional
+	if (!action->filename3) filedest=TxtStrDup(action->filename2); else filedest=action->filename3;
+
+	// if destination does not exists, create it!
+	if (!FileExists(action->filename)) {
+		edskdest=edsktool_NewEDSK("DATA",1+sidedest);
+		edsktool_EDSK_write_file(edskdest,action->filename);
+	}
+
+	// no tag ?
+	if (!ae->wl[action->iw+1].t) {
+		// we have extra-parameters
+		i=1;
+		do {
+			i++;
+			if (strncmp(ae->wl[action->iw+i].w,"PROT",4)==0) {
+				tag_protection=1;
+			} else if (strncmp(ae->wl[action->iw+i].w,"HID",3)==0) {
+				tag_hidden=1;
+			} else if (!StringIsQuote(ae->wl[action->iw+i].w)) {
+				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"EDSK PUTFILE ERROR : unexpected parameter [%s]\n",ae->wl[action->iw+i].w);
+		;		return;
+			}
+		} while (!ae->wl[action->iw+i].t);
+	}
+	// the user MUST provide a file with an AMSDOS header (or no header for ASCII file)
+	EDSK_addRAWfile(ae,action->filename,sidedest, filedest, filedata, sizedest, tag_protection, tag_hidden);
+	if (filedest!=action->filename3) MemFree(filedest);
+	MemFree(filedata);
+}
+
 void __edsk_copyfile(struct s_assenv *ae, struct s_edsk_action *action) {
 	struct s_edsk_global_struct *edsk=NULL,*edskdest=NULL;
 	struct s_edsk_location *location=NULL;
@@ -15551,14 +15669,14 @@ void __edsk_copyfile(struct s_assenv *ae, struct s_edsk_action *action) {
 		}
 	}
 	if (!edsk || !edskdest) {
-		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"EDSK READFILE error, invalid floppy image!\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"EDSK COPYFILE error, invalid floppy image!\n");
 		if (edsk) __edsk_free(ae,edsk);
 		if (edskdest) __edsk_free(ae,edskdest);
 		return;
 	}
 
 	if (side+1>edsk->sidenumber || sidedest+1>edskdest->sidenumber) {
-		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"EDSK READFILE error, cannot read side B as the floppy image does not contain two sides!\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"EDSK COPYFILE error, cannot read side B as the floppy image does not contain two sides!\n");
 		__edsk_free(ae,edsk);
 		__edsk_free(ae,edskdest);
 		return;
@@ -15610,7 +15728,7 @@ void __edsk_copyfile(struct s_assenv *ae, struct s_edsk_action *action) {
 				/* overwrite check */
 				if (amsdos_entry_exists(edskdest,sidedest,(unsigned char *)amsdos_name,amsdos_user)) {
 					if (!ae->edskoverwrite) {
-						MakeError(ae,0,NULL,0,"Error - Cannot save [%s] in edsk [%s] with overwrite disabled as the file already exists (use -eo command line option)\n",amsdos_name,action->filename3);
+						MakeError(ae,0,NULL,0,"Error - Cannot copy [%s] in edsk [%s] with overwrite disabled as the file already exists (use -eo command line option)\n",amsdos_name,action->filename3);
 						__edsk_free(ae,edsk);
 						__edsk_free(ae,edskdest);
 						MemFree(filedata);
@@ -15626,19 +15744,19 @@ void __edsk_copyfile(struct s_assenv *ae, struct s_edsk_action *action) {
 					edsktool_EDSK_write_file(edskdest,action->filename3);
 					rasm_printf(ae,KIO"Copy file [%s] on EDSK %s from EDSK %s\n",amsdos_name,action->filename3,action->filename);
 				} else {
-					MakeError(ae,0,NULL,0,"Error - Cannot save [%s] in edsk [%s] because there is not enough free blocks available\n",amsdos_name,action->filename3);
+					MakeError(ae,0,NULL,0,"Error - Cannot copy [%s] in edsk [%s] because there is not enough free blocks available\n",amsdos_name,action->filename3);
 				}
 				MemFree(filedata);
 			}
 		}
 		if (!wasfound) {
-			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"EDSK READFILE internal error, file [%s] not found after entry check!\n",filename);
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"EDSK COPYFILE internal error, file [%s] not found after entry check!\n",filename);
 			__edsk_free(ae,edsk);
 			__edsk_free(ae,edskdest);
 			return;
 		}
 	} else {
-		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"EDSK READFILE error, file [%s] not found on DSK!\n",filename);
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"EDSK COPYFILE error, file [%s] not found on DSK!\n",filename);
 		__edsk_free(ae,edsk);
 		__edsk_free(ae,edskdest);
 		return;
@@ -16553,10 +16671,18 @@ void __edsk_savefile(struct s_assenv *ae, struct s_edsk_action *action) {
 	}
 	side=__edsk_get_side_from_name(action->filename);
 
+	if (ae->rundefined) {
+		char *runWord;
+		runWord=TxtStrDup(ae->wl[ae->current_run_idx].w);
+		runValue=ComputeExpressionCore(ae,runWord,ae->outputadr,0);
+		MemFree(runWord);
+	}
+
 	if (!ae->wl[action->iw+5].t) {
 		// we have extra-parameters
-		i=6;
+		i=5;
 		do {
+			i++;
 			if (strncmp(ae->wl[action->iw+i].w,"PROT",4)==0) {
 				tag_protection=1;
 			} else if (strncmp(ae->wl[action->iw+i].w,"HID",3)==0) {
@@ -16564,7 +16690,6 @@ void __edsk_savefile(struct s_assenv *ae, struct s_edsk_action *action) {
 			} else {
 				runValue=atoi(ae->wl[action->iw+i].w);
 			}
-			i++;
 		} while (!ae->wl[action->iw+i].t);
 	}
 
@@ -16661,6 +16786,7 @@ void __edsk_writesect(struct s_assenv *ae, struct s_edsk_action *action) {
  * EDSK   CREATE,'filename.dsk',DATA|VENDOR|UNFORMATED,nbtracks[,INTERLACED]
  * EDSK READSECT,'filename.dsk','location',<exactsize>
  * EDSK READFILE,'filename.dsk','filename'[,<offset>[,<size>]]
+ * EDSK  PUTFILE,'filename.dsk','source filename on host',[,'destination filename on dsk']
  * EDSK  UPGRADE,'filename.dsk','outputfilename.dsk'
  *
  * == deferred execution ==
@@ -16695,6 +16821,7 @@ void __EDSK(struct s_assenv *ae) {
 			case 'G':if (strcmp(ae->wl[ae->idx+1].w,"GAPFIX")==0)	curaction.action=E_EDSK_ACTION_GAPFIX; else cmderr=1;break; // fix GAP to fit an ideal track
 			case 'M':if (strcmp(ae->wl[ae->idx+1].w,"MERGE")==0)	curaction.action=E_EDSK_ACTION_MERGE; else // merge edsk
 				 if (strcmp(ae->wl[ae->idx+1].w,"MAP")==0)	curaction.action=E_EDSK_ACTION_MAP; else cmderr=1;break; // map edsk
+			case 'P':if (strcmp(ae->wl[ae->idx+1].w,"PUTFILE")==0)	curaction.action=E_EDSK_ACTION_PUTFILE; else cmderr=1;break; // fix GAP to fit an ideal track
 			case 'R':if (strcmp(ae->wl[ae->idx+1].w,"RESIZE")==0)	curaction.action=E_EDSK_ACTION_RESIZE; else // resize sector
 				 if (strcmp(ae->wl[ae->idx+1].w,"REORDER")==0)	curaction.action=E_EDSK_ACTION_REORDER; else // change sector position
 				 if (strcmp(ae->wl[ae->idx+1].w,"READFILE")==0)	curaction.action=E_EDSK_ACTION_READFILE; else // read Amsdos file
@@ -16720,6 +16847,7 @@ void __EDSK(struct s_assenv *ae) {
 				nbfilename=1;break;
 			case E_EDSK_ACTION_UPGRADE:case E_EDSK_ACTION_READFILE:case E_EDSK_ACTION_DELFILE:case E_EDSK_ACTION_SAVEFILE:
 				nbfilename=2;break;
+			case E_EDSK_ACTION_PUTFILE: // dsk, source, dest
 			case E_EDSK_ACTION_MERGE: // dsk1, dsk2, dskmerged
 				nbfilename=3;break;
 			case E_EDSK_ACTION_COPYFILE: // dsk, file, dsk, file
@@ -16727,7 +16855,10 @@ void __EDSK(struct s_assenv *ae) {
 			default:MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Internal Error on EDSK action management (1)\n");break;
 		}
 		if (curaction.nbparam-1<nbfilename) {
-			if (curaction.nbparam-2<nbfilename && curaction.action==E_EDSK_ACTION_COPYFILE) {
+			if (curaction.nbparam-2<nbfilename && curaction.action==E_EDSK_ACTION_PUTFILE) {
+				// ok without last filename
+				nbfilename--;
+			} else if (curaction.nbparam-2<nbfilename && curaction.action==E_EDSK_ACTION_COPYFILE) {
 				// ok without last filename
 				nbfilename--;
 			} else {
@@ -16774,6 +16905,7 @@ void __EDSK(struct s_assenv *ae) {
 			case E_EDSK_ACTION_CREATE: __edsk_create(ae,&curaction);break;
 			case E_EDSK_ACTION_READSECT: __edsk_readsect(ae,&curaction);break;
 			case E_EDSK_ACTION_READFILE: __edsk_readfile(ae,&curaction);break;
+			case E_EDSK_ACTION_PUTFILE: __edsk_putfile(ae,&curaction);break;
 			case E_EDSK_ACTION_UPGRADE: __edsk_upgrade(ae,&curaction);break;
 			// deferred execution
 			case E_EDSK_ACTION_DELFILE:
@@ -29542,6 +29674,13 @@ struct s_autotest_keyword autotest_keyword[]={
 	{"edsk writesect,'autotestw.dsk',0,512,'50:#C1'",1}, // cannot access non existing track
 	{"edsk readsect,'autotestw.dsk','50:#C1',512",1}, // cannot access non existing track
 	{"edsk readsect,'autotestnonexisting.dsk','5:#C1',512",1}, // cannot access non existing DSK
+	{"edsk create,'rasmoutput_test.dsk',DATA,OVERWRITE:edsk putfile,'rasmoutput_test.dsk','minilib.h'",0}, // put minilib.h without header on a DSK
+	{"incbin 'minilib.h',0,512:edsk check,'rasmoutput_test.dsk:0','0:#C5',512,0",0}, // check minilib was well ASCII written
+	{"edsk putfile,'rasmoutput_test.dsk','minilib.h','other.bin'",0}, // put minilib.h as another filename
+	{"edsk putfile,'rasmoutput_test.dsk','minilib.h','prot.bin',PROT",0}, // put PROT file
+	{"edsk putfile,'rasmoutput_test.dsk','minilib.h','hidden.bin',HIDDEN",0}, // put HIDDEN file
+	{"edsk putfile,'rasmoutput_test.dsk','minilib.h','pouet.bin',POUET",1}, // pouet must failed
+	{"edsk create,'rasmoutput_test.dsk',DATA,OVERWRITE: edsk putfile,'rasmoutput_test.dsk','minilib.h','0:grouik.txt': edsk putfile,'rasmoutput_test.dsk','minilib.h','1:grouik.txt'",0}, // same name but different users with putfile
 	{"defs 512,1: edsk create,'rasmoutput_test.dsk:1',DATA,OVERWRITE: edsk savefile,'rasmoutput_test.dsk:0','3:grouik.bin',0,512:" \
 	 "edsk savefile,'rasmoutput_test.dsk:1','4:grouik.bin',0,512: edsk delfile,'rasmoutput_test.dsk:0','3:grouik.bin': edsk delfile,'rasmoutput_test.dsk:1','4:grouik.bin'",0}, // del with user + sides + identical names
 	{"defs 512,1: edsk create,'rasmoutput_test.dsk:1',DATA,OVERWRITE: edsk savefile,'rasmoutput_test.dsk:0','3:grouik.bin',0,512:" \
