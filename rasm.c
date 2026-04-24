@@ -709,6 +709,7 @@ enum e_edsk_action {
 	E_EDSK_ACTION_READSECT,
 	E_EDSK_ACTION_READFILE,
 	E_EDSK_ACTION_PUTFILE,
+	E_EDSK_ACTION_GETFILE,
 	E_EDSK_ACTION_UPGRADE,
 	E_EDSK_ACTION_MERGE,
 	/* deferred */
@@ -15629,6 +15630,131 @@ void __edsk_putfile(struct s_assenv *ae, struct s_edsk_action *action) {
 	MemFree(filedata);
 }
 
+void __edsk_getfile(struct s_assenv *ae, struct s_edsk_action *action) {
+	struct s_edsk_global_struct *edsk=NULL;
+	int side,sidedest,sizetoread=0x1234567;
+	int i,curtrack,s,j,k;
+	char amsdos_name[14]={0};
+	int amsdos_user=0,offset=0;
+	char *filename,*filedest;
+	int hasHeader=-1;
+	int checkSum,realsize,wasfound=0;
+	unsigned char *filedata=NULL;
+	int tag_noheader=0;
+
+	side=__edsk_get_side_from_name(action->filename);
+
+	// soit copyfile,source,nom, soit copyfile,source,nom,dest
+	if (action->nbparam<3 || action->nbparam>5) {
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Usage is : EDSK GETFILE,'edskfilename:side','filename'[,'filename on host disk']\n");
+		return;
+	}
+	// param 3 is filename
+	filename=action->filename2;
+	if (!action->filename3) filedest=TxtStrDup(filename); else filedest=action->filename3;
+
+	// is there a tag?
+
+	// now we can read the EDSK
+	edsk=edsktool_EDSK_load(action->filename);
+	if (!edsk) {
+		MakeError(ae,0,NULL,0,"Error loading edsk [%s]\n",action->filename);
+		return;
+	}
+	if (!edsk) {
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"EDSK GETFILE error, invalid floppy image!\n");
+		return;
+	}
+
+	if (side+1>edsk->sidenumber) {
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"EDSK GETFILE error, cannot read side B as the floppy image does not contain two sides!\n");
+		__edsk_free(ae,edsk);
+		return;
+	}
+	if (!ae->wl[action->iw+2].t) {
+		// we have extra-parameters
+		i=2;
+		do {
+			i++;
+			if (strcmp(ae->wl[action->iw+i].w,"NOHEADER")==0) {
+				tag_noheader=128;
+			}
+		} while (!ae->wl[action->iw+i].t);
+	}
+
+	amsdos_build_entries(ae,edsk,side);
+	strcpy(amsdos_name,MakeAMSDOS_name(ae,filename,&amsdos_user));
+
+	if (amsdos_entry_exists(edsk,side,(unsigned char *)amsdos_name,amsdos_user)) {
+		for (i=0;i<64;i++) {
+			if (!edsk->floppy_entries[i].filename[0]) continue;
+//printf("flopEntries[%d].filename = [%s] / user=%d ",i,edsk->floppy_entries[i].filename,edsk->floppy_entries[i].user);
+			//if (memcmp(edsk->floppy_entries[i].filename,amsdos_name,8)==0) printf("OK "); else printf("KO ");
+//			if (memcmp(edsk->floppy_entries[i].filename+9,amsdos_name+8,3)==0) printf("OK "); else printf("KO ");
+//			if (amsdos_user==edsk->floppy_entries[i].user) printf("OK "); else printf("KO ");
+//			printf("\n");
+			if (memcmp(edsk->floppy_entries[i].filename,amsdos_name,8)==0
+				&& memcmp(edsk->floppy_entries[i].filename+9,amsdos_name+8,3)==0 // skip dot and check extension
+				&& amsdos_user==edsk->floppy_entries[i].user) {
+				int hasHeader=0;
+				int ih,crch=0;
+				// first entry matching the file
+				realsize=edsk->floppy_entries[i].realsize;
+				filedata=MemMalloc(realsize);
+				memcpy(filedata,edsk->floppy_entries[i].data,realsize);
+				wasfound=1;
+				// is there a header?
+				if (realsize>128) {
+					for (ih=0;ih<66 && ih<realsize;ih++) crch+=filedata[ih];
+					if ((crch&0xFF)==filedata[67] && ((crch>>8)&0xFF)==filedata[68]) {
+						int headerSize;
+						headerSize=filedata[24]+(filedata[25]<<8);
+						if (headerSize<realsize && headerSize>realsize-1025) {
+							realsize=headerSize;
+						} else {
+							if (!ae->nowarning) {
+								rasm_printf(ae,KWARNING"[%s:%d] Warning: EDSK GETFILE file [%s] has a wrong size in header and was ignored\n",GetCurrentFile(ae),ae->wl[ae->idx].l,filename);
+								if (ae->erronwarn) MaxError(ae);
+							}
+						}
+					} else {
+						if (tag_noheader) {
+							if (!ae->nowarning) {
+								rasm_printf(ae,KWARNING"[%s:%d] Warning: EDSK GETFILE NOHEADER tag ignored as there is no header\n",GetCurrentFile(ae),ae->wl[ae->idx].l,filename);
+								if (ae->erronwarn) MaxError(ae);
+							}
+						}
+						tag_noheader=0; // pas de header
+					}
+				} else {
+					if (!ae->nowarning) {
+						rasm_printf(ae,KWARNING"[%s:%d] Warning: EDSK GETFILE NOHEADER tag ignored as the file is too small\n",GetCurrentFile(ae),ae->wl[ae->idx].l,filename);
+						if (ae->erronwarn) MaxError(ae);
+					}
+					tag_noheader=0;
+				}
+				FileRemoveIfExists(filedest);
+				FileWriteBinary(filedest,(char*)filedata+tag_noheader,realsize-tag_noheader);
+				FileWriteBinaryClose(filedest);
+				rasm_printf(ae,KIO"Write file [%s] from EDSK %s\n",filedest,action->filename);
+				MemFree(filedata);
+			}
+		}
+		if (!wasfound) {
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"EDSK GETFILE internal error, file [%s] not found after entry check!\n",filename);
+			__edsk_free(ae,edsk);
+			return;
+		}
+	} else {
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"EDSK GETFILE error, file [%s] not found on DSK!\n",filename);
+		__edsk_free(ae,edsk);
+		return;
+	}
+
+	// release edsk
+	__edsk_free(ae,edsk);
+}
+
 void __edsk_copyfile(struct s_assenv *ae, struct s_edsk_action *action) {
 	struct s_edsk_global_struct *edsk=NULL,*edskdest=NULL;
 	struct s_edsk_location *location=NULL;
@@ -15964,8 +16090,10 @@ void __edsk_readsect(struct s_assenv *ae, struct s_edsk_action *action) {
 				}
 				// warn if sector was not found
 				if (!sector_was_found) {
-					rasm_printf(ae,KWARNING"[%s:%d] Warning: EDSK READSECT sector #%02X was not found on track %d\n",GetCurrentFile(ae),ae->wl[ae->idx].l,location[i].sectorID,location[i].track);
-					if (ae->erronwarn) MaxError(ae);
+					if (!ae->nowarning) {
+						rasm_printf(ae,KWARNING"[%s:%d] Warning: EDSK READSECT sector #%02X was not found on track %d\n",GetCurrentFile(ae),ae->wl[ae->idx].l,location[i].sectorID,location[i].track);
+						if (ae->erronwarn) MaxError(ae);
+					}
 				}
 			}
 		} else {
@@ -16172,8 +16300,10 @@ void __edsk_gapfix(struct s_assenv *ae, struct s_edsk_action *action) {
 
 	for (iloc=0;iloc<nblocation;iloc++) {
 		if (!location[iloc].istrack) {
-			rasm_printf(ae,KWARNING"[%s:%d] Warning: EDSK GAPFIX location has sector definition which will be ignored!\n",GetCurrentFile(ae),ae->wl[ae->idx].l);
-			if (ae->erronwarn) MaxError(ae);
+			if (!ae->nowarning) {
+				rasm_printf(ae,KWARNING"[%s:%d] Warning: EDSK GAPFIX location has sector definition which will be ignored!\n",GetCurrentFile(ae),ae->wl[ae->idx].l);
+				if (ae->erronwarn) MaxError(ae);
+			}
 			continue;
 		}
 		i=location[iloc].track;
@@ -16249,8 +16379,10 @@ void __edsk_check(struct s_assenv *ae, struct s_edsk_action *action) {
 		}
 		// unformated special case
 		if (edsk->track[i*edsk->sidenumber+side].unformated) {
-			rasm_printf(ae,KWARNING"[%s:%d] Warning: Track %d wasn't formated, nothing to check!\n",GetCurrentFile(ae),ae->wl[ae->idx].l,i);
-			if (ae->erronwarn) MaxError(ae);
+			if (!ae->nowarning) {
+				rasm_printf(ae,KWARNING"[%s:%d] Warning: Track %d wasn't formated, nothing to check!\n",GetCurrentFile(ae),ae->wl[ae->idx].l,i);
+				if (ae->erronwarn) MaxError(ae);
+			}
 		} else {
 			if (location[iloc].istrack) {
 				// check track
@@ -16328,8 +16460,10 @@ void __edsk_drop(struct s_assenv *ae, struct s_edsk_action *action) {
 		}
 		// unformated special case
 		if (edsk->track[i*edsk->sidenumber+side].unformated) {
-			rasm_printf(ae,KWARNING"[%s:%d] Warning: Track %d wasn't formated, nothing to drop!\n",GetCurrentFile(ae),ae->wl[ae->idx].l,i);
-			if (ae->erronwarn) MaxError(ae);
+			if (!ae->nowarning) {
+				rasm_printf(ae,KWARNING"[%s:%d] Warning: Track %d wasn't formated, nothing to drop!\n",GetCurrentFile(ae),ae->wl[ae->idx].l,i);
+				if (ae->erronwarn) MaxError(ae);
+			}
 		} else {
 			if (location[iloc].istrack) {
 				// drop track
@@ -16421,8 +16555,10 @@ void __edsk_add(struct s_assenv *ae, struct s_edsk_action *action) {
 
 		for (iloc=0;iloc<nblocation;iloc++) {
 			if (location[iloc].istrack) {
-				rasm_printf(ae,KWARNING"[%s:%d] Warning: location has track definition which will be ignored!\n",GetCurrentFile(ae),ae->wl[ae->idx].l);
-				if (ae->erronwarn) MaxError(ae);
+				if (!ae->nowarning) {
+					rasm_printf(ae,KWARNING"[%s:%d] Warning: location has track definition which will be ignored!\n",GetCurrentFile(ae),ae->wl[ae->idx].l);
+					if (ae->erronwarn) MaxError(ae);
+				}
 				continue;
 			}
 			i=location[iloc].track;
@@ -16434,8 +16570,10 @@ void __edsk_add(struct s_assenv *ae, struct s_edsk_action *action) {
 			if (edsk->track[i*edsk->sidenumber+side].unformated) {
 				if (!once) {
 					// display only once per call
-					rasm_printf(ae,KWARNING"[%s:%d] Warning: Track wasn't formated, using default track properties\n",GetCurrentFile(ae),ae->wl[ae->idx].l);
-					if (ae->erronwarn) MaxError(ae);
+					if (!ae->nowarning) {
+						rasm_printf(ae,KWARNING"[%s:%d] Warning: Track wasn't formated, using default track properties\n",GetCurrentFile(ae),ae->wl[ae->idx].l);
+						if (ae->erronwarn) MaxError(ae);
+					}
 					once=1;
 				}
 				// prep default track
@@ -16540,8 +16678,10 @@ void __edsk_resize(struct s_assenv *ae, struct s_edsk_action *action) {
 			if (edsk->track[i*edsk->sidenumber+side].unformated) {
 				if (!once) {
 					// display only once per call
-					rasm_printf(ae,KWARNING"[%s:%d] Warning: Track wasn't formated, nothing to resize\n",GetCurrentFile(ae),ae->wl[ae->idx].l);
-					if (ae->erronwarn) MaxError(ae);
+					if (!ae->nowarning) {
+						rasm_printf(ae,KWARNING"[%s:%d] Warning: Track wasn't formated, nothing to resize\n",GetCurrentFile(ae),ae->wl[ae->idx].l);
+						if (ae->erronwarn) MaxError(ae);
+					}
 					once=1;
 				}
 			} else {
@@ -16620,8 +16760,10 @@ void __edsk_reorder(struct s_assenv *ae, struct s_edsk_action *action) {
 			if (edsk->track[i*edsk->sidenumber+side].unformated) {
 				if (!once) {
 					// display only once per call
-					rasm_printf(ae,KWARNING"[%s:%d] Warning: Track wasn't formated, nothing to reorder\n",GetCurrentFile(ae),ae->wl[ae->idx].l);
-					if (ae->erronwarn) MaxError(ae);
+					if (!ae->nowarning) {
+						rasm_printf(ae,KWARNING"[%s:%d] Warning: Track wasn't formated, nothing to reorder\n",GetCurrentFile(ae),ae->wl[ae->idx].l);
+						if (ae->erronwarn) MaxError(ae);
+					}
 					once=1;
 				}
 			} else {
@@ -16787,6 +16929,7 @@ void __edsk_writesect(struct s_assenv *ae, struct s_edsk_action *action) {
  * EDSK READSECT,'filename.dsk','location',<exactsize>
  * EDSK READFILE,'filename.dsk','filename'[,<offset>[,<size>]]
  * EDSK  PUTFILE,'filename.dsk','source filename on host',[,'destination filename on dsk']
+ * EDSK  GETFILE,'filename.dsk','source filename on DSK',[,'destination filename on host']
  * EDSK  UPGRADE,'filename.dsk','outputfilename.dsk'
  *
  * == deferred execution ==
@@ -16818,7 +16961,8 @@ void __EDSK(struct s_assenv *ae) {
 			         if (strcmp(ae->wl[ae->idx+1].w,"COPYFILE")==0)	curaction.action=E_EDSK_ACTION_COPYFILE; else cmderr=1;break; // copy file from one DSK to another
 			case 'D':if (strcmp(ae->wl[ae->idx+1].w,"DROP")==0)	curaction.action=E_EDSK_ACTION_DROP; else // drop track or sector
 				if (strcmp(ae->wl[ae->idx+1].w,"DELFILE")==0)	curaction.action=E_EDSK_ACTION_DELFILE; else cmderr=1;break; // delete a file on DSK
-			case 'G':if (strcmp(ae->wl[ae->idx+1].w,"GAPFIX")==0)	curaction.action=E_EDSK_ACTION_GAPFIX; else cmderr=1;break; // fix GAP to fit an ideal track
+			case 'G':if (strcmp(ae->wl[ae->idx+1].w,"GAPFIX")==0)	curaction.action=E_EDSK_ACTION_GAPFIX; else // fix GAP to fit an ideal track
+				 if (strcmp(ae->wl[ae->idx+1].w,"GETFILE")==0)	curaction.action=E_EDSK_ACTION_GETFILE; else cmderr=1;break; // get FILE from a DSK and save it on host
 			case 'M':if (strcmp(ae->wl[ae->idx+1].w,"MERGE")==0)	curaction.action=E_EDSK_ACTION_MERGE; else // merge edsk
 				 if (strcmp(ae->wl[ae->idx+1].w,"MAP")==0)	curaction.action=E_EDSK_ACTION_MAP; else cmderr=1;break; // map edsk
 			case 'P':if (strcmp(ae->wl[ae->idx+1].w,"PUTFILE")==0)	curaction.action=E_EDSK_ACTION_PUTFILE; else cmderr=1;break; // fix GAP to fit an ideal track
@@ -16848,6 +16992,7 @@ void __EDSK(struct s_assenv *ae) {
 			case E_EDSK_ACTION_UPGRADE:case E_EDSK_ACTION_READFILE:case E_EDSK_ACTION_DELFILE:case E_EDSK_ACTION_SAVEFILE:
 				nbfilename=2;break;
 			case E_EDSK_ACTION_PUTFILE: // dsk, source, dest
+			case E_EDSK_ACTION_GETFILE: 
 			case E_EDSK_ACTION_MERGE: // dsk1, dsk2, dskmerged
 				nbfilename=3;break;
 			case E_EDSK_ACTION_COPYFILE: // dsk, file, dsk, file
@@ -16855,7 +17000,7 @@ void __EDSK(struct s_assenv *ae) {
 			default:MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Internal Error on EDSK action management (1)\n");break;
 		}
 		if (curaction.nbparam-1<nbfilename) {
-			if (curaction.nbparam-2<nbfilename && curaction.action==E_EDSK_ACTION_PUTFILE) {
+			if (curaction.nbparam-2<nbfilename && (curaction.action==E_EDSK_ACTION_PUTFILE || curaction.action==E_EDSK_ACTION_GETFILE)) {
 				// ok without last filename
 				nbfilename--;
 			} else if (curaction.nbparam-2<nbfilename && curaction.action==E_EDSK_ACTION_COPYFILE) {
@@ -16906,6 +17051,7 @@ void __EDSK(struct s_assenv *ae) {
 			case E_EDSK_ACTION_READSECT: __edsk_readsect(ae,&curaction);break;
 			case E_EDSK_ACTION_READFILE: __edsk_readfile(ae,&curaction);break;
 			case E_EDSK_ACTION_PUTFILE: __edsk_putfile(ae,&curaction);break;
+			case E_EDSK_ACTION_GETFILE: __edsk_getfile(ae,&curaction);break;
 			case E_EDSK_ACTION_UPGRADE: __edsk_upgrade(ae,&curaction);break;
 			// deferred execution
 			case E_EDSK_ACTION_DELFILE:
@@ -16996,8 +17142,10 @@ void __RELOCATE(struct s_assenv *ae) {
 			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"RELOCATE directive must not be used inside NOCODE section\n");
 		}
 		if (ae->module && ae->modulen) {
-			rasm_printf(ae,KWARNING"[%s:%d] Warning: There is a MODULE defined, and RELOCATE is using module to assemble twice the code and get differences. Current MODULE will be disable at ENDRELOCATE directive\n",GetCurrentFile(ae),ae->wl[ae->idx].l);
-			if (ae->erronwarn) MaxError(ae);
+			if (!ae->nowarning) {
+				rasm_printf(ae,KWARNING"[%s:%d] Warning: There is a MODULE defined, and RELOCATE is using module to assemble twice the code and get differences. Current MODULE will be disable at ENDRELOCATE directive\n",GetCurrentFile(ae),ae->wl[ae->idx].l);
+				if (ae->erronwarn) MaxError(ae);
+			}
 		}
 
 		relocation.module=ae->module;
@@ -17598,7 +17746,10 @@ void __SNAPINIT(struct s_assenv *ae) {
 		default:
 		case 0:
 			if (snapdata[16]<3) {
-				rasm_printf(ae,KWARNING"[%s:%d] snapshot v2 [%s] without 64K/128K legacy\n",GetCurrentFile(ae),ae->wl[ae->idx].l,newfilename);
+				if (!ae->nowarning) {
+					rasm_printf(ae,KWARNING"[%s:%d] snapshot v2 [%s] without 64K/128K legacy\n",GetCurrentFile(ae),ae->wl[ae->idx].l,newfilename);
+					if (ae->erronwarn) MaxError(ae);
+				}
 				snapsize=0;
 			}
 			break;
@@ -17628,7 +17779,10 @@ void __SNAPINIT(struct s_assenv *ae) {
 	// raw copy of header for output (check for v2 or v3 ?)
 	memcpy(&ae->snapshot,snapdata,0x100);
 	if (ae->snapshot.version<2) {
-		rasm_printf(ae,KWARNING"[%s:%d] early version of snapshot, upgrading to V2, you may need to use SNASET to get a proper snapshot\n",GetCurrentFile(ae),ae->wl[ae->idx].l);
+		if (!ae->nowarning) {
+			rasm_printf(ae,KWARNING"[%s:%d] early version of snapshot, upgrading to V2, you may need to use SNASET to get a proper snapshot\n",GetCurrentFile(ae),ae->wl[ae->idx].l);
+			if (ae->erronwarn) MaxError(ae);
+		}
 		ae->snapshot.version=2;
 	}
 
@@ -30060,6 +30214,11 @@ struct s_autotest_keyword autotest_keyword[]={
 	{"repeat 2 : nop : jr _+ : _ nop :  djnz _- : defs 256 : jr _+ : _ push hl : djnz _- : defs 256 : rend",0}, // prox loc TI like must work inside loops
 	{"nop : jr _- : _ nop",1}, // prox loc does not exists and must failed
 	{"nop : _ nop : jr _+",1}, // prox loc does not exists and must failed
+	{"defs 500,66:edsk create,'rasmoutput_test.dsk',DATA,OVERWRITE:edsk savefile,'rasmoutput_test.dsk','noheader.bin',0,500:nop",0},
+	{"edsk getfile,'rasmoutput_test.dsk','noheader.bin','rasmoutput_avec.bin': edsk getfile,'rasmoutput_test.dsk','noheader.bin','rasmoutput_sans.bin',NOHEADER:" \
+	       "nop:assert filesize('rasmoutput_avec.bin')==filesize('rasmoutput_sans.bin')+128",0}, // check noheader option remove header with a proper header
+	{"edsk putfile,'rasmoutput_test.dsk','rasmoutput_sans.bin','0:sans.txt': edsk getfile,'rasmoutput_test.dsk','sans.txt','rasmoutput_avec.bin':" \
+		"edsk getfile,'rasmoutput_test.dsk','sans.txt','rasmoutput_sans.bin',NOHEADER:assert filesize('rasmoutput_avec.bin')==filesize('rasmoutput_sans.bin'):nop",0}, // noheader withtout header does nothing
 	/*
 	 *
 	 * will need to test resize + format then meta review test!
