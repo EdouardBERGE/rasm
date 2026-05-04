@@ -24475,8 +24475,9 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 							lzdata=LZ49_crunch(input_data,input_size,&lzlen);
 							break;
 						default:
-							rasm_printf(ae,"Internal error - unknown crunch method %d\n",ae->lzsection[i].lzversion);
-							exit(-12);
+							MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Crunch method not available in this version\n");
+							lzlen=0;
+
 					}
 				}
 
@@ -30596,7 +30597,7 @@ printf("testing %d various opcode tests OK\n",i);
 
 	idx=0;
 	while (autotest_keyword[idx].keywordtest) {
-		//if (idx>800 && idx<900) printf("%s\n",autotest_keyword[idx].keywordtest);
+		//if (idx>1198 && idx<1300) printf("%s\n",autotest_keyword[idx].keywordtest);
 		ret=RasmAssemble(autotest_keyword[idx].keywordtest,strlen(autotest_keyword[idx].keywordtest),&opcode,&opcodelen);
 		if (!ret && !autotest_keyword[idx].result) {
 		} else if (ret && autotest_keyword[idx].result) {
@@ -30766,6 +30767,8 @@ printf("*** multi-LZ segment test disabled as there is no APUltra support for th
 	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
 printf("testing LZ segment + ORG relocation OK\n");
 
+#ifndef NOAPULTRA
+#ifndef NO_3RD_PARTIES
 	ret=RasmAssemble(AUTOTEST_LZ004,strlen(AUTOTEST_LZ004),&opcode,&opcodelen);
 	if (!ret) {
 		int ic;
@@ -30886,6 +30889,8 @@ printf("testing memory overrun with LZ (failure test 1) OK\n");
 	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
 printf("testing memory overrun with LZ (failure test 2) OK\n");
 
+#endif
+#endif
 
 	ret=RasmAssemble(AUTOTEST_LZDEFERED,strlen(AUTOTEST_LZDEFERED),&opcode,&opcodelen);
 	if (!ret && opcodelen==7 && opcode[6]==6) {} else {printf("Autotest %03d ERROR (LZ segment + deferred $)\n",cpt);exit(-1);}
@@ -32105,7 +32110,7 @@ printf("testing LZEXO variant+offset OK\n");
 	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
 printf("testing LZEXO variant+size OK\n");
 
-
+#ifndef NOAPULTRA
 	ret=RasmAssemble(AUTOTEST_LZX0_A,strlen(AUTOTEST_LZX0_A),&opcode,&opcodelen);
 	if (!ret && opcodelen==384) {} else {printf("Autotest %03d ERROR (INCBIN + LZX0 segment)\n",cpt);MiniDump(opcode,opcodelen);exit(-1);}
 	i=opcodelen;
@@ -32165,7 +32170,7 @@ printf("testing LZX0B variant+offset OK\n");
 	if (!ret && i==opcodelen) {} else {printf("Autotest %03d ERROR (LZX0B+INCBIN+size)\n",cpt);MiniDump(opcode,opcodelen);exit(-1);}
 	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
 printf("testing LZX0B variant+size OK\n");
-
+#endif
 
 
 	ret=RasmAssemble(AUTOTEST_LZX7_A,strlen(AUTOTEST_LZX7_A),&opcode,&opcodelen);
