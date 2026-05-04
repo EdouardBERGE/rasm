@@ -148,12 +148,14 @@ double fdim(double x,double y) {
 
 
 void print_binary_uchar(unsigned char n) {
-    for (int i = 7; i >= 0; i--) {
+	int i;
+    for (i = 7; i >= 0; i--) {
         printf("%d", (n >> i) & 1);
     }
 }
 void print_binary_uint(unsigned int n) {
-    for (int i = 31; i >= 0; i--) {
+	int i;
+    for (i = 31; i >= 0; i--) {
         printf("%d", (n >> i) & 1);
     }
 }
@@ -2373,8 +2375,11 @@ int GetCRC(const char *label) {
         }
         return crc;
 }
-
+#if defined(_MSC_VER) && (_MSC_VER < 1920)
+static __inline int GetCRCandLength(const char *label, int *ilength) {
+#else
 static inline int GetCRCandLength(const char *label, int *ilength) {
+#endif
         #undef FUNC
         #define FUNC "GetCRCandLength"
         int crc;
