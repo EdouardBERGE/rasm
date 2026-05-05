@@ -3574,33 +3574,6 @@ int cmpmacros(const void * a, const void * b)
 	sb=(struct s_macro *)b;
 	if (sa->crc<sb->crc) return -1; else return 1;
 }
-int _deprecated_SearchAlias(struct s_assenv *ae, int crc, char *zemot)
-{
-    int dw,dm,du,i;
-
-	dw=0;
-	du=ae->ialias-1;
-	while (dw<=du) {
-		dm=(dw+du)>>1;
-		if (ae->alias[dm].crc==crc) {
-			/* chercher le premier de la liste */
-			while (dm>0 && ae->alias[dm-1].crc==crc) dm--;
-			/* controle sur le texte entier */
-			while (ae->alias[dm].crc==crc && strcmp(ae->alias[dm].alias,zemot)) dm++;
-			if (ae->alias[dm].crc==crc && strcmp(ae->alias[dm].alias,zemot)==0) {
-				ae->alias[dm].used++;
-//printf("[%s] found => [%s]\n",zemot,ae->alias[dm].translation);
-				return dm;
-			} else return -1;
-		} else if (ae->alias[dm].crc>crc) {
-			du=dm-1;
-		} else if (ae->alias[dm].crc<crc) {
-			dw=dm+1;
-		}
-	}
-//printf("not found\n");
-	return -1;
-}
 int SearchMacro(struct s_assenv *ae, const int crc, const char *zemot)
 {
 	int dw,dm,du,i;
@@ -8363,7 +8336,7 @@ printf("MakeAlias (2) EXPR=[%s EQU %s]\n",expr,ptr_exp2);
 			curalias.crc=GetCRC(curalias.alias);
 			curalias.ptr=ae->codeadr;
 			curalias.lz=ae->ilz;
-
+#ifndef SUPERFAST
 			if (SearchLabel(ae,curalias.alias,curalias.crc)) {
 				MakeError(ae,ae->idx,GetCurrentFile(ae),GetExpLine(ae,0),"Alias cannot override existing label [%s]\n",expr);
 				MemFree(curalias.alias);
@@ -8371,6 +8344,9 @@ printf("MakeAlias (2) EXPR=[%s EQU %s]\n",expr,ptr_exp2);
 				MakeError(ae,ae->idx,GetCurrentFile(ae),GetExpLine(ae,0),"Alias cannot override existing variable [%s]\n",expr);
 				MemFree(curalias.alias);
 			} else {
+#else
+			{
+#endif
 				curalias.translation=MemMalloc(strlen(ptr_exp2)+1+2);
 				sprintf(curalias.translation,"(%s)",ptr_exp2);
 #if TRACE_COMPUTE_EXPRESSION
@@ -8533,6 +8509,7 @@ printf("***********\n");
 									MakeError(ae,ae->idx,GetCurrentFile(ae),GetExpLine(ae,0),"Cannot do an operator assignment on non existing variable [%s]\n",expr);
 									return 0;
 								case 0: /* assign a new variable except if a label or alias already exists */
+#ifndef SUPERFAST
 									if (SearchAlias(ae,crc,dexpr)) {
 										MakeError(ae,ae->idx,GetCurrentFile(ae),GetExpLine(ae,0),"Variable cannot override existing alias [%s]\n",expr);
 										return 0;
@@ -8541,6 +8518,7 @@ printf("***********\n");
 										MakeError(ae,ae->idx,GetCurrentFile(ae),GetExpLine(ae,0),"Variable cannot override existing label [%s]\n",expr);
 										return 0;
 									}
+#endif
 									ExpressionSetDicoVar(ae,dexpr,v,0);
 									break;
 							}
@@ -10332,11 +10310,14 @@ void PushLabel(struct s_assenv *ae)
 		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Invalid first char in label declaration (%c)\n",ae->wl[ae->idx].w[0]);
 		return;
 	}
-	
+#ifndef SUPERFAST
 	switch (i) {
 		case 1:
 			switch (ae->wl[ae->idx].w[0]) {
 				case '_': // prox loc label - RASM Atlas
+#else
+	if (ae->wl[ae->idx].w[0]=='_' && !ae->wl[ae->idx].w[1]) {
+#endif
 					ae->curProxIndex++;
 					varbuffer=MemMalloc(32);
 					sprintf(varbuffer,"LPR%dOX",ae->curProxIndex);
@@ -10358,6 +10339,9 @@ void PushLabel(struct s_assenv *ae)
 						MakeError(ae,ae->idx,GetCurrentFile(ae),GetExpLine(ae,0),"Duplicate label [%s] - previously defined in [%s:%d]\n",curlabel.name,ae->filename[searched_label->fileidx],searched_label->fileline);
 						MemFree(curlabel.name);
 					}
+#ifdef SUPERFAST
+	}
+#else
 					return;
 				case 'A':
 				case 'B':
@@ -10389,15 +10373,9 @@ void PushLabel(struct s_assenv *ae)
 				return;
 			}			
 			break;
-#if 0
-		case 4:
-			if (strcmp(ae->wl[ae->idx].w,"VOID")==0) {
-				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Cannot use reserved word [%s] for label\n",ae->wl[ae->idx].w);
-				return;
-			}
-#endif
 		default:break;
 	}
+#endif
 
 	/*******************************************************
 	   v a r i a b l e s     i n    l a b e l    n a m e
@@ -10535,6 +10513,7 @@ printf("PUSH Orphan PROXIMITY label that cannot be exported [%s]->[%s]\n",ae->wl
 	else printf("PUSH => NO MODULE for local label\n");
 #endif
 
+#ifndef SUPERFAST
 			/* contrôle dico uniquement avec des labels non locaux */
 			if (SearchDico(ae,curlabel.name,curlabel.crc)) {
 				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"cannot create label [%s] as there is already a variable with the same name\n",curlabel.name);
@@ -10544,6 +10523,7 @@ printf("PUSH Orphan PROXIMITY label that cannot be exported [%s]->[%s]\n",ae->wl
 				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"cannot create label [%s] as there is already an alias with the same name\n",curlabel.name);
 				return;
 			}
+#endif
 		}
 		curlabel.ptr=ae->codeadr;
 		curlabel.ibank=ae->activebank;
