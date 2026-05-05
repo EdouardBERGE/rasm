@@ -4451,7 +4451,7 @@ char *TranslateTag(struct s_assenv *ae, char *varbuffer, int *touched, const int
 			strcpy(curvalstr,"");
 			MakeError(ae,ae->idx,GetCurrentFile(ae),GetExpLine(ae,0),"indexed tag must NOT be a negative value [%s]\n",varbuffer);
 			MemFree(expr);
-			return NULL;
+			return varbuffer;
 		} else {
 			#ifdef OS_WIN
 			snprintf(curvalstr,sizeof(curvalstr)-1,"%d",validx);
@@ -29930,6 +29930,8 @@ struct s_autotest_keyword autotest_keyword[]={
 	{" bidule : ifndef bidule : assert 0==1 : endif : nop ",0},
 	{" bidule equ 5 : ifndef bidule : assert 0==1 : endif : nop ",0},
 	{" bidule=5 : ifndef bidule : assert 0==1 : endif : nop ",0},
+
+	{"x=0 : label{x-5} nop",1}, // error + must not core dump!
 
 	// IX/IY trick removal check :)
 	{"ld hl,ix",1},
