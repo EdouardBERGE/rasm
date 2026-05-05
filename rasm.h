@@ -4,7 +4,11 @@
 #define PROGRAM_VERSION_FLOAT   "3.21"
 #define PROGRAM_DATE      "05/05/2026"
 #define PROGRAM_COPYRIGHT "© 2017 BERGE Edouard / roudoudou from Praline"
+#ifndef SUPERFAST
 #define RELEASE_NAME      "Atlas"
+#else
+#define RELEASE_NAME      "Atlas Superfast"
+#endif
 
 #define RASM_VERSION PROGRAM_NAME" v"PROGRAM_VERSION""PROGRAM_SUBVERSION" (build "PROGRAM_DATE")"
 #define RASM_SNAP_VERSION PROGRAM_NAME" v"PROGRAM_VERSION
