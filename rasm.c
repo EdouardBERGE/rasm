@@ -27897,8 +27897,8 @@ printf("instruction en cours\n");
 											ispace=0;
 											/* macro en cours, le reste est a interpreter comme une expression */
 											texpr=1;
-											break;
-										} else break;
+										}
+										break;
 									} else if (MacroFast[dm].crc>macrocrc) {
 										du=dm-1;
 									} else if (MacroFast[dm].crc<macrocrc) {
@@ -28060,6 +28060,7 @@ printf("mot precedent=[%s] t=%d\n",wordlist[nbword-1].w,wordlist[nbword-1].t);
 						/* il y avait un mot avant alors on va reorganiser la ligne */
 						/* patch NOT -> SAUF si c'est une directive */
 						int keymatched=0;
+
 						if (wordlist[nbword-1].len<INSTRUCTION_MAXLENGTH && (ifast=ae->fastmatch[(int)wordlist[nbword-1].w[0]][wordlist[nbword-1].len])!=-1) {
 							while (instruction[ifast].mnemo[0]==wordlist[nbword-1].w[0]) {
 								if (strcmp(instruction[ifast].mnemo,wordlist[nbword-1].w)==0) {
@@ -28070,18 +28071,32 @@ printf("mot precedent=[%s] t=%d\n",wordlist[nbword-1].w,wordlist[nbword-1].t);
 							}
 						}
 						if (!keymatched) {
-							int macrocrc;
-							macrocrc=GetCRC(wordlist[nbword-1].w);
-							for (i=0;i<idxmacrofast;i++) {
-								if (MacroFast[i].crc==macrocrc)
-								if (strcmp(MacroFast[i].mnemo,wordlist[nbword-1].w)==0) {
-									keymatched=1;
-									break;
+							int macrocrc,dw,dm,du,i;
+							if (idxmacrofast) {
+								macrocrc=GetCRC(wordlist[nbword-1].w);
+								dw=0;
+								du=idxmacrofast-1;
+								while (dw<=du) {
+									dm=(dw+du)>>1;
+									if (MacroFast[dm].crc==macrocrc) {
+										/* chercher le premier de la liste */
+										while (dm>0 && MacroFast[dm-1].crc==macrocrc) dm--;
+										/* controle sur le texte entier */
+										while (MacroFast[dm].crc==macrocrc && strcmp(MacroFast[dm].mnemo,wordlist[nbword-1].w)) dm++;
+										if (MacroFast[dm].crc==macrocrc && strcmp(MacroFast[dm].mnemo,wordlist[nbword-1].w)==0) {
+											keymatched=1;
+										}
+										break;
+									} else if (MacroFast[dm].crc>macrocrc) {
+										du=dm-1;
+									} else if (MacroFast[dm].crc<macrocrc) {
+										dw=dm+1;
+									}
 								}
 							}
 							if (!keymatched) {
+								// macro not found, process!
 								nbword--;
-								//StateMachineResizeBuffer(&w,lw+wordlist[nbword].len+1,&mw);
 								for (li=0;wordlist[nbword].w[li];li++) {
 									w[lw++]=wordlist[nbword].w[li];
 									w[lw]=0;
