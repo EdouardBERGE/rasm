@@ -3,10 +3,10 @@ EXEC=rasm.exe
 
 CFLAGS=-lm  -march=native -o $(EXEC)
 CFLAGS_OPT = $(CFLAGS) -O2 -Wpointer-sign
-CFLAGS_DBG = $(CFLAGS) -O1 -g -pthread -Wpointer-sign
-CFLAGS_3RD = $(CFLAGS) -O2 -pthread -DNO_3RD_PARTIES
-CFLAGS_INT = -lm  -march=native -O2 -pthread -DNO_3RD_PARTIES
-CFLAGS_FAST = $(CFLAGS) -O2 -pthread -Wpointer-sign -DSUPERFAST
+CFLAGS_DBG = $(CFLAGS) -O1 -g -Wpointer-sign
+CFLAGS_3RD = $(CFLAGS) -O2 -DNO_3RD_PARTIES
+CFLAGS_INT = -lm  -march=native -O2 -DNO_3RD_PARTIES
+CFLAGS_FAST = $(CFLAGS) -O2 -Wpointer-sign -DSUPERFAST
 
 SRC_APUDIR=./apultra-master/src
 SRC_LZSADIR=./lzsa-master/src
@@ -126,8 +126,12 @@ reload:
 	$(CC) rasm.c $(CFLAGS_OPT) $(APU_OBJ) $(LZSA_OBJ) $(SALVADOR_OBJ) $(Z80_MASTER_OBJ)
 	strip $(EXEC)
 
-superfast:
-	$(CC) rasm.c $(CFLAGS_FAST) $(APU_OBJ) $(LZSA_OBJ) $(SALVADOR_OBJ) $(Z80_MASTER_OBJ)
+superfasttc:
+	$(CC) rasm.c $(CFLAGS_FAST) $(APU_OBJ) $(LZSA_OBJ) $(SALVADOR_OBJ) $(Z80_MASTER_OBJ) -ltcmalloc_minimal
+	strip $(EXEC)
+
+superfastmi:
+	$(CC) rasm.c $(CFLAGS_FAST) $(APU_OBJ) $(LZSA_OBJ) $(SALVADOR_OBJ) $(Z80_MASTER_OBJ) -lmimalloc
 	strip $(EXEC)
 
 release:
