@@ -3555,6 +3555,14 @@ unsigned char *MakeHobetaHeader(int minmem, int maxmem, char *trdos_name) {
 }
 
 
+int cmpMacroFast(const void * a, const void * b)
+{
+	struct s_macro_fast *sa,*sb;
+	sa=(struct s_macro_fast *)a;
+	sb=(struct s_macro_fast *)b;
+	if (sa->crc<sb->crc) return -1; else return 1;
+}
+
 int cmpAmsdosentry(const void * a, const void * b)
 {
 	return memcmp(a,b,32);
@@ -27841,7 +27849,8 @@ printf("macro trigger w=[%s]\n",curw.w);
 								curmacrofast.mnemo=curw.w;
 								curmacrofast.crc=GetCRC(curw.w);
 								curmacrofast.len=curw.len;
-								ObjectArrayAddDynamicValueConcat((void**)&MacroFast,&idxmacrofast,&maxmacrofast,&curmacrofast,sizeof(struct s_macro_fast));	
+								ObjectArrayAddDynamicValueConcat((void**)&MacroFast,&idxmacrofast,&maxmacrofast,&curmacrofast,sizeof(struct s_macro_fast));
+								qsort(MacroFast,idxmacrofast,sizeof(struct s_macro_fast),cmpMacroFast);
 							}
 							macro_trigger=0;
 						} else {
@@ -27869,9 +27878,34 @@ printf("instruction en cours\n");
 									ifast++;
 								}
 							}
-							if (!keymatched) {
-								int macrocrc;
+							if (!keymatched && idxmacrofast) {
+								int macrocrc,dw,dm,du,i;
 								macrocrc=GetCRC(curw.w);
+
+								dw=0;
+								du=idxmacrofast-1;
+								while (dw<=du) {
+									dm=(dw+du)>>1;
+									if (MacroFast[dm].crc==macrocrc) {
+										/* chercher le premier de la liste */
+										while (dm>0 && MacroFast[dm-1].crc==macrocrc) dm--;
+										/* controle sur le texte entier */
+										while (MacroFast[dm].crc==macrocrc && strcmp(MacroFast[dm].mnemo,curw.w)) dm++;
+										if (MacroFast[dm].crc==macrocrc && strcmp(MacroFast[dm].mnemo,curw.w)==0) {
+											Automate[' ']=1;
+											Automate['\t']=1;
+											ispace=0;
+											/* macro en cours, le reste est a interpreter comme une expression */
+											texpr=1;
+											break;
+										} else break;
+									} else if (MacroFast[dm].crc>macrocrc) {
+										du=dm-1;
+									} else if (MacroFast[dm].crc<macrocrc) {
+										dw=dm+1;
+									}
+								}
+#if 0
 								for (keymatched=0;keymatched<idxmacrofast;keymatched++) {
 									if (MacroFast[keymatched].crc==macrocrc)
 									if (strcmp(MacroFast[keymatched].mnemo,curw.w)==0) {
@@ -27886,6 +27920,7 @@ printf("macro en cours\n");
 											break;
 									}
 								}
+#endif
 							}
 						}
 					}
