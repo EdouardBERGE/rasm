@@ -10339,10 +10339,10 @@ void PushLabel(struct s_assenv *ae)
 						MakeError(ae,ae->idx,GetCurrentFile(ae),GetExpLine(ae,0),"Duplicate label [%s] - previously defined in [%s:%d]\n",curlabel.name,ae->filename[searched_label->fileidx],searched_label->fileline);
 						MemFree(curlabel.name);
 					}
+					return;
 #ifdef SUPERFAST
 	}
 #else
-					return;
 				case 'A':
 				case 'B':
 				case 'C':
