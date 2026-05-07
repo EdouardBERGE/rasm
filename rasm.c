@@ -1479,6 +1479,7 @@ struct s_math_keyword math_keyword[]={
 #define CRC_MEND 0x444E454D
 #define CRC_ENDM 0x4D444E45
 #define CRC_MACRO 0x52434102
+#define CRC_STRUCT 0x55521707
 #define CRC_IFUSED 0x5355030D
 #define CRC_IFNUSED 0x551D030D
 #define CRC_SIN 0x0053494E
@@ -18696,74 +18697,6 @@ void __NameBANK(struct s_assenv *ae) {
 	}
 }
 
-/***
-	Winape little compatibility for CPR writing!
-*/
-void __WRITE(struct s_assenv *ae) {
-	int ok=0;
-	int lower=-1,upper=-1,bank=-1;
-
-	if (!ae->wl[ae->idx].t && strcmp(ae->wl[ae->idx+1].w,"DIRECT")==0 && !ae->wl[ae->idx+1].t) {
-		//ExpressionFastTranslate(ae,&ae->wl[ae->idx+2].w,0);
-		lower=RoundComputeExpression(ae,ae->wl[ae->idx+2].w,ae->codeadr,0,0);
-		if (!ae->wl[ae->idx+2].t) {
-			ExpressionFastTranslate(ae,&ae->wl[ae->idx+3].w,0);
-			upper=RoundComputeExpression(ae,ae->wl[ae->idx+3].w,ae->codeadr,0,0);
-		}
-		if (!ae->wl[ae->idx+3].t) {
-			//ExpressionFastTranslate(ae,&ae->wl[ae->idx+4].w,0);
-			bank=RoundComputeExpression(ae,ae->wl[ae->idx+4].w,ae->codeadr,0,0);
-		}
-
-		if (ae->maxam) {
-			if (lower==65535) lower=-1;
-			if (upper==65535) upper=-1;
-			if (bank==65535) bank=-1;
-		}
-
-		if (lower!=-1) {
-			if (lower>=0 && lower<8) {
-				ae->idx+=1;
-				__BANK(ae);	
-				ok=1;
-			} else {
-				if (!ae->nowarning) {
-					rasm_printf(ae,KWARNING"[%s:%d] Warning: WRITE DIRECT lower ROM ignored (value %d out of bounds 0-7)\n",GetCurrentFile(ae),ae->wl[ae->idx].l,lower);
-					if (ae->erronwarn) MaxError(ae);
-				}
-			}
-		} else if (upper!=-1) {
-			if (upper>=0 && ((ae->forcecpr && upper<32) || (ae->forcesnapshot && upper<BANK_MAX_NUMBER))) {
-				ae->idx+=2;
-				__BANK(ae);	
-				ok=1;
-			} else {
-				if (!ae->forcecpr && !ae->forcesnapshot) {
-					if (!ae->nowarning) {
-						rasm_printf(ae,KWARNING"[%s:%d] Warning: WRITE DIRECT select a ROM without cartridge output\n",GetCurrentFile(ae),ae->wl[ae->idx].l);
-						if (ae->erronwarn) MaxError(ae);
-					}
-				} else {
-					if (!ae->nowarning) {
-						rasm_printf(ae,KWARNING"[%s:%d] Warning: WRITE DIRECT upper ROM ignored (value %d out of bounds 0-31)\n",GetCurrentFile(ae),ae->wl[ae->idx].l,upper);
-						if (ae->erronwarn) MaxError(ae);
-					}
-				}
-			}
-		} else if (bank!=-1) {
-			/* selection de bank on ouvre un nouvel espace */
-		} else {
-			if (!ae->nowarning) {
-				rasm_printf(ae,KWARNING"[%s:%d] Warning: meaningless WRITE DIRECT\n",GetCurrentFile(ae),ae->wl[ae->idx].l);
-				if (ae->erronwarn) MaxError(ae);
-			}
-		}
-	}
-	while (!ae->wl[ae->idx].t) ae->idx++;
-	if (!ok) {
-		___new_memory_space(ae);
-	}
-}
 void __UTF8REMAP(struct s_assenv *ae) {
 	struct s_utf8Remap utr={0};
 	int v;
@@ -23242,7 +23175,6 @@ struct s_asm_keyword instruction[]={
 {"DEFAULT",0,0,__DEFAULT},
 {"SWITCH",0,0,__SWITCH},
 {"ENDSWITCH",0,0,__ENDSWITCH},
-{"WRITE",0,0,__WRITE},
 {"CODE",0,0,__CODE},
 {"NOCODE",0,0,__NOCODE},
 {"MACRO",0,0,__MACRO},
@@ -27058,10 +26990,11 @@ printf("init 3\n");
 			ae->fastmatch[i][l]=-1;
 		}
 	}
+
 	// fill fastmatch table with idx
 	for (i=0;i<nbinstruction;i++) {
 		if (ae->fastmatch[(int)instruction[i].mnemo[0]][instruction[i].length]==-1) ae->fastmatch[(int)instruction[i].mnemo[0]][instruction[i].length]=i;
-	} 
+	}
 
 	/* compute CRC for math keywords */
 	for (nbinstruction=0;math_keyword[nbinstruction].mnemo[0];nbinstruction++) {
@@ -27081,7 +27014,7 @@ printf("init 3\n");
 	// fill fastmath table with idx
 	for (i=0;i<nbinstruction;i++) {
 		if (ae->fastmath[(int)math_keyword[i].mnemo[0]][math_keyword[i].length]==-1) ae->fastmath[(int)math_keyword[i].mnemo[0]][math_keyword[i].length]=i;
-	} 
+	}
 
 	for (i=0;CharWord[i];i++) {Automate[((int)CharWord[i])&0xFF]=1;}
 	for (i=0;i<256;i++) {
@@ -27856,25 +27789,21 @@ printf("macro trigger w=[%s]\n",curw.w);
 						} else {
 							int keymatched=0;
 							if (curw.len<INSTRUCTION_MAXLENGTH && (ifast=ae->fastmatch[(int)curw.w[0]][curw.len])!=-1) {
-								while (instruction[ifast].mnemo[0]==curw.w[0]) {
-									if (strcmp(instruction[ifast].mnemo,curw.w)==0) {
-										keymatched=1;														
-										if (strcmp(curw.w,"MACRO")==0 || strcmp(curw.w,"STRUCT")==0 || strcmp(curw.w,"WRITE")==0) {
+								while ((*(short int *)instruction[ifast].mnemo)==(*(short int *)curw.w)) {
+									int a;
+									a=strcmp(instruction[ifast].mnemo,curw.w);
+									if (!a) {
 /* @@TODO AS80 compatibility patch!!! */
-											macro_trigger=curw.w[0];
+										keymatched=1;
+										if (instruction[ifast].crc==CRC_MACRO) {
+											macro_trigger='M';
+										} else if (instruction[ifast].crc==CRC_STRUCT) {
+											macro_trigger='S';
 										} else {
-											//curw.fastptr=instruction[ifast].makemnemo;
-											Automate[' ']=1;
-											Automate['\t']=1;
-											ispace=0;
-											/* instruction en cours, le reste est a interpreter comme une expression */
-#if TRACE_PREPRO
-printf("instruction en cours\n");												
-#endif
-											texpr=1;
+											Automate[' ']=1; Automate['\t']=1; ispace=0; texpr=1;
 										}
 										break;
-									}
+									} else if (a>0) break;
 									ifast++;
 								}
 							}
@@ -28062,11 +27991,14 @@ printf("mot precedent=[%s] t=%d\n",wordlist[nbword-1].w,wordlist[nbword-1].t);
 						int keymatched=0;
 
 						if (wordlist[nbword-1].len<INSTRUCTION_MAXLENGTH && (ifast=ae->fastmatch[(int)wordlist[nbword-1].w[0]][wordlist[nbword-1].len])!=-1) {
-							while (instruction[ifast].mnemo[0]==wordlist[nbword-1].w[0]) {
-								if (strcmp(instruction[ifast].mnemo,wordlist[nbword-1].w)==0) {
+							while ((*(short int *)instruction[ifast].mnemo)==(*(short int *)wordlist[nbword-1].w)) {
+								int a;
+
+								a=strcmp(instruction[ifast].mnemo,wordlist[nbword-1].w);
+								if (!a) {
 									keymatched=1;														
 									break;
-								}
+								} else if (a>0) break;
 								ifast++;
 							}
 						}
@@ -28134,6 +28066,7 @@ printf("mot precedent=[%s] t=%d\n",wordlist[nbword-1].w,wordlist[nbword-1].t);
 #if TRACE_PREPRO
 printf("END\n");
 #endif
+
 
 	// fix error in previous instruction
 	if (nbword && !wordlist[nbword-1].t) {
