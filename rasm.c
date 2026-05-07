@@ -27783,6 +27783,8 @@ printf("macro trigger w=[%s]\n",curw.w);
 								curmacrofast.crc=GetCRC(curw.w);
 								curmacrofast.len=curw.len;
 								ObjectArrayAddDynamicValueConcat((void**)&MacroFast,&idxmacrofast,&maxmacrofast,&curmacrofast,sizeof(struct s_macro_fast));
+
+								// best move in heavy stress will be to insert...
 								qsort(MacroFast,idxmacrofast,sizeof(struct s_macro_fast),cmpMacroFast);
 							}
 							macro_trigger=0;
@@ -28110,14 +28112,16 @@ printf("END\n");
 printf("free\n");
 #endif
 
-	MemFree(bval);
-	MemFree(qval);
-	MemFree(w);
+	if (ae->flux) {
+		MemFree(bval);
+		MemFree(qval);
+		MemFree(w);
+		for (l=0;l<ilisting;l++) {
+				MemFree(listing[l].listing);
+		}	
+		MemFree(listing);
+	}
 
-	for (l=0;l<ilisting;l++) {
-			MemFree(listing[l].listing);
-	}	
-	MemFree(listing);
 	/* wordlist 
 		type 0: label or instruction followed by parameter(s)
 		type 1: last word of the line, last parameter of an instruction
