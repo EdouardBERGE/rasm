@@ -28112,7 +28112,9 @@ printf("END\n");
 printf("free\n");
 #endif
 
+#ifndef __MORPHOS__
 	if (ae->flux) {
+#endif
 		MemFree(bval);
 		MemFree(qval);
 		MemFree(w);
@@ -28120,7 +28122,9 @@ printf("free\n");
 				MemFree(listing[l].listing);
 		}	
 		MemFree(listing);
+#ifndef __MORPHOS__
 	}
+#endif
 
 	/* wordlist 
 		type 0: label or instruction followed by parameter(s)
