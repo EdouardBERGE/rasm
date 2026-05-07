@@ -27516,29 +27516,13 @@ printf("quotes\n");
 							****  quote processing ***************************************
 							**************************************************************
 							*************************************************************/
+							int qempty;
 							quote_type=c;
 							w[lw++]=c;
-							//StateMachineResizeBuffer(&w,lw,&mw);
-							w[lw]=0;
+							qempty=lw+1;
 #if TRACE_PREPRO
 				printf("quote start with the char [%c] %d\n",c>31?c:'?',c);
 #endif
-							/* quoted string always starts with a single or a double quote */
-							c=listing[l].listing[idx++];
-							w[lw++]=c;
-							//StateMachineResizeBuffer(&w,lw,&mw);
-							if (c=='\\') {
-								escape_code=1;
-							} else if (c==quote_type) {
-								quote_type=0;
-								//MakeError(ae,0,ae->filename[listing[l].ifile],listing[l].iline,"Quote cannot be empty!\n");
-								if (!ae->nowarning) {
-									rasm_printf(ae,KWARNING"[%s:%d] Warning - Quote is empty\n",ae->filename[listing[l].ifile],listing[l].iline);
-									if (ae->erronwarn) MaxError(ae);
-								}
-							}
-
-							if (quote_type) // should always happend but...
 							do {
 								c=listing[l].listing[idx++];
 								if (!c) {
@@ -27557,6 +27541,13 @@ printf("quotes\n");
 											escape_code=1;
 										} else if (c==quote_type) {
 											quote_type=0;
+											// test de la quote vide
+											if (lw==qempty) {
+												if (!ae->nowarning) {
+													rasm_printf(ae,KWARNING"[%s:%d] Warning - Quote is empty\n",ae->filename[listing[l].ifile],listing[l].iline);
+													if (ae->erronwarn) MaxError(ae);
+												}
+											}
 										}
 									} else {
 										// if previous char is an escape char, do not take care about ending quote
@@ -27779,19 +27770,36 @@ printf("macro trigger w=[%s]\n",curw.w);
 #endif
 							/* add macro name to instruction pool for preprocessor but not struct or write */
 							if (macro_trigger=='M') {
-								curmacrofast.mnemo=curw.w;
-								curmacrofast.crc=GetCRC(curw.w);
-								curmacrofast.len=curw.len;
-								ObjectArrayAddDynamicValueConcat((void**)&MacroFast,&idxmacrofast,&maxmacrofast,&curmacrofast,sizeof(struct s_macro_fast));
+								int macrocrc,dw,dm,du;
 
-								// best move in heavy stress will be to insert...
-								qsort(MacroFast,idxmacrofast,sizeof(struct s_macro_fast),cmpMacroFast);
+								curmacrofast.mnemo=curw.w;
+								macrocrc=curmacrofast.crc=GetCRC(curw.w);
+								curmacrofast.len=curw.len;
+								dw=dm=0;
+								du=idxmacrofast-1;
+								if (du)
+								while (dw<=du) {
+									dm=(dw+du)>>1;
+									if (MacroFast[dm].crc==macrocrc) {
+										dw=dm;
+										break;
+									} else if (MacroFast[dm].crc>macrocrc) {
+										du=dm-1;
+									} else if (MacroFast[dm].crc<macrocrc) {
+										dw=dm+1;
+									}
+								}
+								ObjectArrayAddDynamicValueConcat((void**)&MacroFast,&idxmacrofast,&maxmacrofast,&curmacrofast,sizeof(struct s_macro_fast));
+								// décaler
+								MemMove(&MacroFast[dw+1],&MacroFast[dw],(idxmacrofast-1-dw)*sizeof(struct s_macro_fast));
+								// insérer
+								MacroFast[dw]=curmacrofast;
 							}
 							macro_trigger=0;
 						} else {
 							int keymatched=0;
 							if (curw.len<INSTRUCTION_MAXLENGTH && (ifast=ae->fastmatch[(int)curw.w[0]][curw.len])!=-1) {
-								while ((*(short int *)instruction[ifast].mnemo)==(*(short int *)curw.w)) {
+								while (instruction[ifast].mnemo[0]==curw.w[0]) {
 									int a;
 									a=strcmp(instruction[ifast].mnemo,curw.w);
 									if (!a) {
@@ -27809,6 +27817,7 @@ printf("macro trigger w=[%s]\n",curw.w);
 									ifast++;
 								}
 							}
+
 							if (!keymatched && idxmacrofast) {
 								int macrocrc,dw,dm,du,i;
 								macrocrc=GetCRC(curw.w);
@@ -27993,7 +28002,7 @@ printf("mot precedent=[%s] t=%d\n",wordlist[nbword-1].w,wordlist[nbword-1].t);
 						int keymatched=0;
 
 						if (wordlist[nbword-1].len<INSTRUCTION_MAXLENGTH && (ifast=ae->fastmatch[(int)wordlist[nbword-1].w[0]][wordlist[nbword-1].len])!=-1) {
-							while ((*(short int *)instruction[ifast].mnemo)==(*(short int *)wordlist[nbword-1].w)) {
+							while (instruction[ifast].mnemo[0]==wordlist[nbword-1].w[0]) {
 								int a;
 
 								a=strcmp(instruction[ifast].mnemo,wordlist[nbword-1].w);
