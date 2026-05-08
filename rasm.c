@@ -28681,6 +28681,11 @@ int RasmAssembleInfoParam(const char *datain, int lenin, unsigned char **dataout
 #define AUTOTEST_MACRO_CONF03   " label1 equ #100: macro label1: nop: mend: nop:"
 #define AUTOTEST_MACRO_CONF04   " label1 nop: macro label1: nop: mend: nop"
 
+#define AUTOTEST_MACRO_PREATLAS "macro 	 truc: xor a: mend: macro 	 bidule machin: ld hl,{machin}:" \
+			"mend: macro 	 encore,leparam: ld hl,{leparam}: mend: macro 	 space1 p1: ld hl,{p1}:" \
+			"mend: macro 	 space2 , 	p2: ld hl,{p2}: mend: macro 	 space3, p3: ld hl,{p3}: mend:" \
+			" truc: bidule 12: encore 50: space1 33: space2 99: space3 77"
+
 #define AUTOTEST_PROXBACK	" macro grouik: @truc djnz @truc: .unprox djnz .unprox: mend:" \
 				"ld b,2: unglobal nop: djnz unglobal: ld b,2: .unprox nop: djnz .unprox: beforelocal=$ :" \
 				"repeat 2: @unlocal: ld b,2: .unprox nop: djnz .unprox: grouik : djnz .unprox : rend: assert .unprox < beforelocal : nop"
@@ -31004,6 +31009,11 @@ printf("testing NOT operator OK\n");
 	if (!ret) {} else {printf("Autotest %03d ERROR (macro usage)\n",cpt);exit(-1);}
 	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
 printf("testing macro usage OK\n");
+	
+	ret=RasmAssemble(AUTOTEST_MACRO_PREATLAS,strlen(AUTOTEST_MACRO_PREATLAS),&opcode,&opcodelen);
+	if (!ret) {} else {printf("Autotest %03d ERROR (macro preprocessing)\n",cpt);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing macro preprocessing multiple syntax OK\n");
 	
 	ret=RasmAssemble(AUTOTEST_MACRO_CONF01,strlen(AUTOTEST_MACRO_CONF01),&opcode,&opcodelen);
 	if (ret) {} else {printf("Autotest %03d ERROR (macro name conflict with another macro)\n",cpt);exit(-1);}
