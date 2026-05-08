@@ -18937,9 +18937,36 @@ void __MACRO(struct s_assenv *ae) {
 			}
 		}
 
+#if 0
 		ObjectArrayAddDynamicValueConcat((void**)&ae->macro,&ae->imacro,&ae->mmacro,&curmacro,sizeof(curmacro));
-		/* le quicksort n'est pas optimal mais on n'est pas supposé en créer des milliers */
+		/* le quicksort n'est pas optimal mais on n'est pas supposé en créer des milliers => stress test fatigue avec 8000 macros... */
 		qsort(ae->macro,ae->imacro,sizeof(struct s_macro),cmpmacros);
+#endif
+{
+	       int macrocrc,dw,dm,du;
+
+	       macrocrc=curmacro.crc;
+	       dw=dm=0;
+	       du=ae->imacro-1;
+	       while (dw<=du) {
+		       dm=(dw+du)>>1;
+		       if (ae->macro[dm].crc==macrocrc) {
+			       dw=dm;
+			       break;
+		       } else if (ae->macro[dm].crc>macrocrc) {
+			       du=dm-1;
+		       } else if (ae->macro[dm].crc<macrocrc) {
+			       dw=dm+1;
+		       }
+		}
+		ObjectArrayAddDynamicValueConcat((void**)&ae->macro,&ae->imacro,&ae->mmacro,&curmacro,sizeof(curmacro));
+
+	       // décaler
+	       MemMove(&ae->macro[dw+1],&ae->macro[dw],(ae->imacro-1-dw)*sizeof(curmacro));
+	       // insérer
+	       ae->macro[dw]=curmacro;
+}
+
 
 		/* ajustement des mots lus */
 		if (ae->wl[idx].t==2) idx--;
@@ -23487,14 +23514,6 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 	ObjectArrayAddDynamicValueConcat((void**)&ae->orgzone,&ae->io,&ae->mo,&orgzone,sizeof(orgzone));
 	___output=___internal_output;
 	/* init des automates */
-	InitAutomate(ae->AutomateHexa,(unsigned char *)AutomateHexaDefinition);
-	InitAutomate(ae->AutomateDigit,(unsigned char *)AutomateDigitDefinition);
-	InitAutomate(ae->AutomateValidLabel,(unsigned char *)AutomateValidLabelDefinition);
-	InitAutomate(ae->AutomateValidVarFirst,(unsigned char *)AutomateValidVarFirstDefinition);
-	InitAutomate(ae->AutomateValidLabelFirst,(unsigned char *)AutomateValidLabelFirstDefinition);
-	InitAutomate(ae->AutomateExpressionValidCharExtended,(unsigned char *)AutomateExpressionValidCharExtendedDefinition);
-	InitAutomate(ae->AutomateExpressionValidCharFirst,(unsigned char *)AutomateExpressionValidCharFirstDefinition);
-	InitAutomate(ae->AutomateExpressionValidChar,(unsigned char *)AutomateExpressionValidCharDefinition);
 	ae->AutomateExpressionDecision['<']='<';
 	ae->AutomateExpressionDecision['>']='>';
 	ae->AutomateExpressionDecision['=']='=';
@@ -26593,9 +26612,6 @@ struct s_assenv *PreProcessing(char *filename, int flux, const char *datain, int
 
 	char *filename_toread;
 	
-	struct s_macro_fast *MacroFast=NULL;
-	int idxmacrofast=0,maxmacrofast=0;
-	
 	struct s_listing *listing=NULL;
 	struct s_listing curlisting;
 	int ilisting=0,maxlisting=0;
@@ -26751,6 +26767,16 @@ printf("init 0 amper=%d\n",ae->noampersand);
 		ae->setgate[i+4] =0x7FC2      +((i&31)>>2)*8-0x100*(i>>5);
 		//printf("%04X %04X\n",ae->bankgate[i+4],ae->setgate[i+4]);
 	}
+
+	/* init des automates */
+	InitAutomate(ae->AutomateHexa,(unsigned char *)AutomateHexaDefinition);
+	InitAutomate(ae->AutomateDigit,(unsigned char *)AutomateDigitDefinition);
+	InitAutomate(ae->AutomateValidLabel,(unsigned char *)AutomateValidLabelDefinition);
+	InitAutomate(ae->AutomateValidVarFirst,(unsigned char *)AutomateValidVarFirstDefinition);
+	InitAutomate(ae->AutomateValidLabelFirst,(unsigned char *)AutomateValidLabelFirstDefinition);
+	InitAutomate(ae->AutomateExpressionValidCharExtended,(unsigned char *)AutomateExpressionValidCharExtendedDefinition);
+	InitAutomate(ae->AutomateExpressionValidCharFirst,(unsigned char *)AutomateExpressionValidCharFirstDefinition);
+	InitAutomate(ae->AutomateExpressionValidChar,(unsigned char *)AutomateExpressionValidCharDefinition);
 	
 	memcpy(ae->snapshot.idmark,"MV - SNA",8);
 	ae->snapshot.registers.IM=1;
@@ -27406,18 +27432,92 @@ if (!idx) printf("L%05d=[%s]\n",l,listing[l].listing);
 					}
 				 }
 			// Freequotes
-			case 'F': if (!ival && strncmp(&listing[l].listing[idx+1],"REEQUOTES",9)==0 && ( listing[l].listing[idx+10]==' ' || listing[l].listing[idx+10]==':')) {
+			case 'F': if (!ival && strncmp(&listing[l].listing[idx+1],"REEQUOTES",9)==0 && ( listing[l].listing[idx+10]==' ' || listing[l].listing[idx+10]==':' || listing[l].listing[idx+10]<32)) {
 					ae->freequote=1;
 				  }
-			// authorized chars
+				  ival=1;
+				  break;
+			case 'M': if (!ival && strncmp(&listing[l].listing[idx+1],"ACRO",4)==0 && !ae->AutomateExpressionValidCharExtended[((int)listing[l].listing[idx+5])&0xFF]) {
+					// on est positionné juste après le tag MACRO
+					unsigned char *s=(unsigned char *)&listing[l].listing[idx+5];
+					unsigned char *p=NULL;
+					// sauter les séparateurs
+					while (*s==' ' || *s=='\t') s++;
+					if (*s && (isalnum(*s) || *s=='_')) {
+						// sauter le nom
+						s++;
+						while (isalnum(*s) || *s=='_') s++;
+						if (*s && (*s==' ' || *s=='\t' || *s==',')) {
+							// sauter les séparateurs
+							if (*s==',') {
+								p=s;
+							}
+							s++;
+							while (*s==' ' || *s=='\t' || *s==',') {
+								// est-ce qu'on trouve une virgule? => p
+								if (*s==',') {
+									p=s;
+								}
+								s++;
+							}
+							// est-ce qu'on se trouve sur un paramètre?
+							if (ae->AutomateExpressionValidCharExtended[((int)(*s))&0xFF]) {
+								// est-ce qu'il manque une virgule?
+								if (!p) {
+									s--;
+									*s=',';
+								}
+							}
+						}
+					}
+
+				  }
+				  ival=1;
+				  break;
+			case 'S': if (!ival && strncmp(&listing[l].listing[idx+1],"TRUCT",5)==0 && !ae->AutomateExpressionValidCharExtended[((int)listing[l].listing[idx+6])&0xFF]) {
+					// on est positionné juste après le tag STRUCT
+					unsigned char *s=(unsigned char *)&listing[l].listing[idx+6];
+					unsigned char *p=NULL;
+					// sauter les séparateurs
+					while (*s==' ' || *s=='\t') s++;
+					if (*s && (isalnum(*s) || *s=='_')) {
+						// sauter le nom
+						s++;
+						while (isalnum(*s) || *s=='_') s++;
+						if (*s && (*s==' ' || *s=='\t' || *s==',')) {
+							// sauter les séparateurs
+							if (*s==',') {
+								p=s;
+							}
+							s++;
+							while (*s==' ' || *s=='\t' || *s==',') {
+								// est-ce qu'on trouve une virgule? => p
+								if (*s==',') {
+									p=s;
+								}
+								s++;
+							}
+							// est-ce qu'on se trouve sur un paramètre?
+							if (ae->AutomateExpressionValidCharExtended[((int)(*s))&0xFF]) {
+								// est-ce qu'il manque une virgule?
+								if (!p) {
+									s--;
+									*s=',';
+								}
+							}
+						}
+					}
+
+				  }
+			// other authorized chars
 			case 'A':case 'B':case 'C':case 'D':case 'E':
 			case 'G':case 'H':case 'J':case 'K':case 'L':
-			case 'M':case 'N':case 'O':case 'P':case 'Q':case 'R':
-			case 'S':case 'T':case 'U':case 'V':case 'W':case 'X':
+			case 'N':case 'O':case 'P':case 'Q':case 'R':
+			case 'T':case 'U':case 'V':case 'W':case 'X':
 			case 'Y':case 'Z':
 			case '0':case '1':case '2':case '3':case '4':
 			case '5':case '6':case '7':case '8':case '9':
-			case '@':case '_':
+			case '@':case '_':case '{':case '}': // brackets are dangerous
 				ival++;
 				break;
 			// separator (even unknown one)
@@ -27674,46 +27774,6 @@ printf("*** separator='%c'   texpr=%d wordlist.t=%d wordlist.e=%d hadcomma=%d\n"
 				
 				if (lw) {
 					w[lw]=0;
-#if 0
-
-					if (texpr && !wordlist[nbword-1].t && wordlist[nbword-1].e && !hadcomma) {
-#if TRACE_PREPRO
-printf("2/2 Winape maxam operator test for expression [%s]\n",w+ispace);
-#endif
-printf("#################################\n");
-printf("#################################\n");
-printf("### seems to be dead code here...\n");
-printf("#################################\n");
-printf("#################################\n");
-						// winape operator patches before concat
-					#if 0
-						switch (lw) {
-							case 1:if (w[0]=='%') w[0]='m';break;
-							case 2:if (w[0]=='O' && w[1]=='R') {w[0]='|';w[1]=0;lw=1;}break;
-							case 3:if (w[0]=='A' && w[1]=='N' && w[2]=='D') {
-								       w[0]='&';w[1]=0;lw=1;
-							       } else if (w[0]=='X' && w[1]=='O' && w[2]=='R') {
-								       w[0]='^';w[1]=0;lw=1;
-							       }
-							default:
-						}
-					#endif
-						// only one realloc check
-						di=le=wordlist[nbword-1].len;
-						//StateMachineResizeBuffer(&w,lw+di,&mw);
-						nbword--;
-						// move new word
-						for (li=0;li<=lw;li++) w[le++]=w[li];
-						for (li=0;li<di;li++) w[li]=wordlist[nbword].w[li];
-						MemFree(wordlist[nbword].w);
-						lw=di;
-
-						/* et on modifie l'automate pour la suite! */
-						Automate[' ']=1;
-						Automate['\t']=1;
-						ispace=lw;
-					} else
-#endif
 					if (lw==3 && strcmp(w,"EQU")==0) {
 #if TRACE_PREPRO
 printf("separator => test EQU match!\n",w+ispace);
@@ -27759,108 +27819,17 @@ printf("ajout du mot [%s]\n",curw.w);
 						w[0]=0;
 
 						/* match keyword? then next spaces will be ignored*/
-						if (macro_trigger) {
-							struct s_macro_fast curmacrofast;
-							Automate[' ']=1;
-							Automate['\t']=1;
-							ispace=0;
-							texpr=1;
-#if TRACE_PREPRO
-printf("macro trigger w=[%s]\n",curw.w);
-#endif
-							/* add macro name to instruction pool for preprocessor but not struct or write */
-							if (macro_trigger=='M') {
-								int macrocrc,dw,dm,du;
-
-								curmacrofast.mnemo=curw.w;
-								macrocrc=curmacrofast.crc=GetCRC(curw.w);
-								curmacrofast.len=curw.len;
-								dw=dm=0;
-								du=idxmacrofast-1;
-								if (du)
-								while (dw<=du) {
-									dm=(dw+du)>>1;
-									if (MacroFast[dm].crc==macrocrc) {
-										dw=dm;
-										break;
-									} else if (MacroFast[dm].crc>macrocrc) {
-										du=dm-1;
-									} else if (MacroFast[dm].crc<macrocrc) {
-										dw=dm+1;
-									}
-								}
-								ObjectArrayAddDynamicValueConcat((void**)&MacroFast,&idxmacrofast,&maxmacrofast,&curmacrofast,sizeof(struct s_macro_fast));
-								// décaler
-								MemMove(&MacroFast[dw+1],&MacroFast[dw],(idxmacrofast-1-dw)*sizeof(struct s_macro_fast));
-								// insérer
-								MacroFast[dw]=curmacrofast;
-							}
-							macro_trigger=0;
-						} else {
-							int keymatched=0;
-							if (curw.len<INSTRUCTION_MAXLENGTH && (ifast=ae->fastmatch[(int)curw.w[0]][curw.len])!=-1) {
-								while (instruction[ifast].mnemo[0]==curw.w[0]) {
-									int a;
-									a=strcmp(instruction[ifast].mnemo,curw.w);
-									if (!a) {
-/* @@TODO AS80 compatibility patch!!! */
-										keymatched=1;
-										if (instruction[ifast].crc==CRC_MACRO) {
-											macro_trigger='M';
-										} else if (instruction[ifast].crc==CRC_STRUCT) {
-											macro_trigger='S';
-										} else {
-											Automate[' ']=1; Automate['\t']=1; ispace=0; texpr=1;
-										}
-										break;
-									} else if (a>0) break;
-									ifast++;
-								}
-							}
-
-							if (!keymatched && idxmacrofast) {
-								int macrocrc,dw,dm,du,i;
-								macrocrc=GetCRC(curw.w);
-
-								dw=0;
-								du=idxmacrofast-1;
-								while (dw<=du) {
-									dm=(dw+du)>>1;
-									if (MacroFast[dm].crc==macrocrc) {
-										/* chercher le premier de la liste */
-										while (dm>0 && MacroFast[dm-1].crc==macrocrc) dm--;
-										/* controle sur le texte entier */
-										while (MacroFast[dm].crc==macrocrc && strcmp(MacroFast[dm].mnemo,curw.w)) dm++;
-										if (MacroFast[dm].crc==macrocrc && strcmp(MacroFast[dm].mnemo,curw.w)==0) {
-											Automate[' ']=1;
-											Automate['\t']=1;
-											ispace=0;
-											/* macro en cours, le reste est a interpreter comme une expression */
-											texpr=1;
-										}
-										break;
-									} else if (MacroFast[dm].crc>macrocrc) {
-										du=dm-1;
-									} else if (MacroFast[dm].crc<macrocrc) {
-										dw=dm+1;
-									}
-								}
-#if 0
-								for (keymatched=0;keymatched<idxmacrofast;keymatched++) {
-									if (MacroFast[keymatched].crc==macrocrc)
-									if (strcmp(MacroFast[keymatched].mnemo,curw.w)==0) {
-											Automate[' ']=1;
-											Automate['\t']=1;
-											ispace=0;
-											/* macro en cours, le reste est a interpreter comme une expression */
-											texpr=1;
-#if TRACE_PREPRO
-printf("macro en cours\n");												
-#endif
-											break;
-									}
-								}
-#endif
+						int keymatched=0;
+						if (curw.len<INSTRUCTION_MAXLENGTH && (ifast=ae->fastmatch[(int)curw.w[0]][curw.len])!=-1) {
+							while (instruction[ifast].mnemo[0]==curw.w[0]) {
+								int a;
+								a=strcmp(instruction[ifast].mnemo,curw.w);
+								if (!a) {
+									keymatched=1;
+									Automate[' ']=1; Automate['\t']=1; ispace=0; texpr=1;
+									break;
+								} else if (a>0) break;
+								ifast++;
 							}
 						}
 					}
@@ -28015,6 +27984,7 @@ printf("mot precedent=[%s] t=%d\n",wordlist[nbword-1].w,wordlist[nbword-1].t);
 						}
 						if (!keymatched) {
 							int macrocrc,dw,dm,du,i;
+					#if 0
 							if (idxmacrofast) {
 								macrocrc=GetCRC(wordlist[nbword-1].w);
 								dw=0;
@@ -28037,6 +28007,7 @@ printf("mot precedent=[%s] t=%d\n",wordlist[nbword-1].w,wordlist[nbword-1].t);
 									}
 								}
 							}
+					#endif
 							if (!keymatched) {
 								// macro not found, process!
 								nbword--;
@@ -28145,7 +28116,7 @@ printf("free\n");
 	if (param && param->filename) {
 		MemFree(param->filename);
 	}
-	if (MacroFast) MemFree(MacroFast);
+	//if (MacroFast) MemFree(MacroFast);
 #if TRACE_PREPRO
 printf("return ae\n");
 #endif
