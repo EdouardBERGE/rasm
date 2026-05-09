@@ -2998,7 +2998,7 @@ printf("\n%d bits used for mantissa\n",ibit);
 
 
 struct s_label *SearchLabel(struct s_assenv *ae, const char *label, const int crc);
-char *GetExpFile(struct s_assenv *ae,int didx){
+char *GetExpFile(struct s_assenv *ae,const int didx){
 	#undef FUNC
 	#define FUNC "GetExpFile"
 	
@@ -3056,7 +3056,7 @@ void FreeLabelTree(struct s_assenv *ae);
 void FreeDicoTree(struct s_assenv *ae);
 void FreeAliasTree(struct s_assenv *ae);
 void FreeUsedTree(struct s_assenv *ae);
-void ExpressionFastTranslate(struct s_assenv *ae, char **ptr_expr, int fullreplace);
+void ExpressionFastTranslate(struct s_assenv *ae, char **ptr_expr, const int fullreplace);
 char *TradExpression(const char *zexp);
 
 
@@ -27819,13 +27819,11 @@ printf("ajout du mot [%s]\n",curw.w);
 						w[0]=0;
 
 						/* match keyword? then next spaces will be ignored*/
-						int keymatched=0;
 						if (curw.len<INSTRUCTION_MAXLENGTH && (ifast=ae->fastmatch[(int)curw.w[0]][curw.len])!=-1) {
 							while (instruction[ifast].mnemo[0]==curw.w[0]) {
 								int a;
 								a=strcmp(instruction[ifast].mnemo,curw.w);
 								if (!a) {
-									keymatched=1;
 									Automate[' ']=1; Automate['\t']=1; ispace=0; texpr=1;
 									break;
 								} else if (a>0) break;
