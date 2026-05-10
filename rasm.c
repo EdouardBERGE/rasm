@@ -8274,11 +8274,13 @@ void ExpressionSetDicoVar(struct s_assenv *ae,const char *name, const double v, 
 	curdic.autorise_export=ae->autorise_export;
 	curdic.external=var_external;
 	//ObjectArrayAddDynamicValueConcat((void**)&ae->dico,&ae->idic,&ae->mdic,&curdic,sizeof(curdic));
+#ifndef SUPERFAST
 	if (SearchLabel(ae,curdic.name,curdic.crc)) {
 		MakeError(ae,ae->idx,GetCurrentFile(ae),GetExpLine(ae,0),"cannot create variable [%s] as there is already a label with the same name\n",name);
 		MemFree(curdic.name);
 		return;
 	}
+#endif
 	InsertDicoToTree(ae,&curdic);
 }
 
