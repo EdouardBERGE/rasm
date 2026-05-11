@@ -4,6 +4,13 @@
     
 Rasm was designed to be damn FAST and handle HUGE projects. On a modern machine, it can assemble millions of instructions in a blink of an eye. It's way faster than the best alternatives. Rasm also runs on almost any platform : Linux x64/ARM, MacOS Intel or ARM, Windows 32 bits or 64 bits, MS-DOS and even MorphOS
 
+## Documentation
+
+There is a cool French and English documentation, you should read it ;)
+
+- EN: http://rasm.wikidot.com/english-index:home
+- FR: http://rasm.wikidot.com/
+
 ## Integrated crunched sections
 
 - Rasm know how to load&crunch on the fly files when doing INCBIN (including binaries)
@@ -52,13 +59,6 @@ Rasm was designed to be damn FAST and handle HUGE projects. On a modern machine,
 
 - native FLOAT24 declaration support (which can be use with float24 library in RASM sources asset directory)
 
-## Documentation
-
-There is a cool French and English documentation, you should read it ;)
-
-- EN: http://rasm.wikidot.com/english-index:home
-- FR: http://rasm.wikidot.com/
-
 ## Quality
 
 Each build is tested every release, with more than 1600 automated tests. We use TDD, end-to-end and exploratory testing.
@@ -66,6 +66,22 @@ Each build is tested every release, with more than 1600 automated tests. We use 
 ## History
 
 The project was born a few years ago (2017) because i needed a really fast assembler in order to finish my demo before the deadline of the Alchemy 2017. The project was quite huge with approx 350.000 words to assemble but thanks to rasm, the 512K cartridge compiled in a blink of an eye even on my slow Atom CPU. Now Rasm is the reference for huge projects and ultra-fast assembling. You can expect tens of millions instructions per second on a modern CPU.
+
+## Building RASM
+
+As RASM does not rely on library or seomething, the compilation was always intended to be easy. I made simple makefile or scripts for this
+
+### Linux
+
+make release
+
+### Windows with any recent Visual Studio release
+
+compilProd.bat
+
+### Windows XP with latest supported MSVC 15
+
+win32Prod.bat
 
 ## Links
 
