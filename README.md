@@ -71,7 +71,7 @@ The project was born a few years ago (2017) because i needed a really fast assem
 
 As RASM does not rely on library or something, the compilation was always intended to be easy. I made simple makefile or scripts for this
 
-### Linux
+### Linux / Raspberry PI
 
 > make release
 
