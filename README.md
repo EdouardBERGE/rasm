@@ -69,19 +69,19 @@ The project was born a few years ago (2017) because i needed a really fast assem
 
 ## Building RASM
 
-As RASM does not rely on library or seomething, the compilation was always intended to be easy. I made simple makefile or scripts for this
+As RASM does not rely on library or something, the compilation was always intended to be easy. I made simple makefile or scripts for this
 
 ### Linux
 
-make release
+> make release
 
 ### Windows with any recent Visual Studio release
 
-compilProd.bat
+> compilProd.bat
 
 ### Windows XP with latest supported MSVC 15
 
-win32Prod.bat
+> win32Prod.bat
 
 ## Links
 
