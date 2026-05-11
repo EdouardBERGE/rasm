@@ -75,6 +75,10 @@ As RASM does not rely on library or something, the compilation was always intend
 
 > make release
 
+### MacOS
+
+> make -f makefile.MacOS release
+
 ### Windows with any recent Visual Studio release
 
 > compilProd.bat
