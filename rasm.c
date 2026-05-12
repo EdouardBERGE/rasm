@@ -8816,40 +8816,6 @@ printf("ExpressionFastTranslate (full) -> replace var (%s=%0.1lf)\n",varbuffer,v
 					}
 				}
 			}
-	#if 0
-
-		// contre-productif avec les labels de proximité et les modules...
-
-			/* si on n'a rien trouvé, on cherche aussi dans les labels existants => priorité aux modules!!! */   // modulmodif => pas utile?
-			if (!found_replace) {
-				curlabel=SearchLabel(ae,varbuffer,crc);
-				if (curlabel) {
-					curlabel->used=1;
-					if (!curlabel->lz || ae->stage>1) {
-						yves=curlabel->ptr;
-
-						#ifdef OS_WIN
-						snprintf(curval,sizeof(curval)-1,"%d",yves);
-						newlen=strlen(curval);
-						#else
-						newlen=snprintf(curval,sizeof(curval)-1,"%d",yves);
-						#endif
-						lenw=strlen(expr);
-						if (newlen>ivar) {
-							/* realloc bigger */
-							expr=*ptr_expr=MemRealloc(expr,lenw+newlen-ivar+1);
-						}
-						if (newlen!=ivar ) {
-							MemMove(expr+startvar+newlen,expr+startvar+ivar,lenw-startvar-ivar+1);
-						}
-						strncpy(expr+startvar,curval,newlen); /* copy without zero terminator */
-						found_replace=1;
-						idx=startvar+newlen;
-						ivar=0;
-					}
-				}		
-			}
-	#endif
 			/* non trouve on cherche dans les alias avec la priorités aux modules */
 			if (!found_replace) {
 
@@ -15364,7 +15330,7 @@ void __internal_edsk_free_side(struct s_assenv *ae,struct s_edsk_global_struct *
 	int i,j;
 
 	if (side && edsk->sidenumber<2) {
-		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Invalid EDSK side!\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"INTERNAL ERROR : Invalid EDSK side!\n");
 		return;
 	}
 
@@ -16251,13 +16217,14 @@ void __edsk_merge(struct s_assenv *ae, struct s_edsk_action *action) {
 	for (i=edsk1->tracknumber;i<maxtrack;i++) newtracks[i*2].unformated=1;
 	for (i=edsk2->tracknumber;i<maxtrack;i++) newtracks[i*2+1].unformated=1;
 	// free unused sides
-	if (edsk1->sidenumber) __internal_edsk_free_side(ae,edsk1,1-side1);
-	if (edsk2->sidenumber) __internal_edsk_free_side(ae,edsk2,1-side2);
+	if (edsk1->sidenumber==2) __internal_edsk_free_side(ae,edsk1,1-side1);
+	if (edsk2->sidenumber==2) __internal_edsk_free_side(ae,edsk2,1-side2);
 	MemFree(edsk1->track);
 	MemFree(edsk2->track);
 	edsk1->track=newtracks;
 	edsk1->sidenumber=2;
 	// write merged EDSK
+	rasm_printf(ae,KIO"Write Merged EDSK file %s\n",floppyres);
 	edsktool_EDSK_write_file(edsk1,floppyres);
 }
 
@@ -31448,6 +31415,61 @@ printf("testing directive SUMMEM16 OK\n");
 printf("testing formula RND function OK\n");
 
 	FileRemoveIfExists("rasmoutput_testbis.dsk");
+
+#define AUTOTEST_EDSK_MERGE_01 "byte_format defb #E5:" \
+"edsk create,'rasmoutput_test.dsk',DATA,41,OVERWRITE:" \
+"edsk create,'rasmoutput_test2.dsk',VENDOR,41,OVERWRITE:" \
+"edsk merge,'rasmoutput_test.dsk:a','rasmoutput_test2.dsk:a','rasmoutput_test3.dsk':" \
+"edsk check,'rasmoutput_test3.dsk:a','0:#C1',1,byte_format:" \
+"edsk check,'rasmoutput_test3.dsk:b','0:#41',1,byte_format"
+	memset(&param,0,sizeof(struct s_parameter));
+	ret=RasmAssembleInfoParam(AUTOTEST_EDSK_MERGE_01,strlen(AUTOTEST_EDSK_MERGE_01),&opcode,&opcodelen,&debug,&param);
+	if (!ret) {} else {printf("Autotest %03d ERROR (testing EDSK merge from single-sides\n",cpt);
+		for (i=0;i<debug->nberror;i++) printf("%d -> %s\n",i,debug->error[i].msg);
+		exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing EDSK merge from single-sides\n");
+
+#define AUTOTEST_EDSK_MERGE_02 "byte_format defb #E5:" \
+"edsk create,'rasmoutput_test.dsk:b',DATA,41,OVERWRITE:" \
+"edsk create,'rasmoutput_test2.dsk:b',VENDOR,41,OVERWRITE:" \
+"edsk merge,'rasmoutput_test.dsk:b','rasmoutput_test2.dsk:b','rasmoutput_test3.dsk':" \
+"edsk check,'rasmoutput_test3.dsk:a','0:#C1',1,byte_format:" \
+"edsk check,'rasmoutput_test3.dsk:b','0:#41',1,byte_format" 
+        memset(&param,0,sizeof(struct s_parameter));
+        ret=RasmAssembleInfoParam(AUTOTEST_EDSK_MERGE_02,strlen(AUTOTEST_EDSK_MERGE_02),&opcode,&opcodelen,&debug,&param);
+        if (!ret) {} else {printf("Autotest %03d ERROR (testing EDSK merge from double-sides\n",cpt);
+                for (i=0;i<debug->nberror;i++) printf("%d -> %s\n",i,debug->error[i].msg);
+                exit(-1);}
+        if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing EDSK merge from double-sides\n");
+
+#define AUTOTEST_EDSK_MERGE_03 "facea defs 512,0xAA:" \
+"faceb defs 512,0xBB:" \
+"edsk create,'rasmoutput_test.dsk:b',DATA,41,OVERWRITE:" \
+"edsk create,'rasmoutput_test2.dsk:b',VENDOR,41,OVERWRITE:" \
+"edsk writesect,'rasmoutput_test.dsk:a',facea,512,'0:0xC1':" \
+"edsk writesect,'rasmoutput_test.dsk:b',faceb,512,'0:0xC1':" \
+"edsk writesect,'rasmoutput_test2.dsk:a',facea,512,'0:0x41':" \
+"edsk writesect,'rasmoutput_test2.dsk:b',faceb,512,'0:0x41':" \
+"edsk merge,'rasmoutput_test.dsk:b','rasmoutput_test2.dsk:b','rasmoutput_test3.dsk':" \
+"edsk check,'rasmoutput_test3.dsk:a','0:#C1',1,faceb:" \
+"edsk check,'rasmoutput_test3.dsk:b','0:#41',1,faceb:" \
+"edsk merge,'rasmoutput_test.dsk:a','rasmoutput_test2.dsk:b','rasmoutput_test3.dsk':" \
+"edsk check,'rasmoutput_test3.dsk:a','0:#C1',1,facea:" \
+"edsk check,'rasmoutput_test3.dsk:b','0:#41',1,faceb:" \
+"edsk merge,'rasmoutput_test.dsk:b','rasmoutput_test2.dsk:a','rasmoutput_test3.dsk':" \
+"edsk check,'rasmoutput_test3.dsk:a','0:#C1',1,faceb:" \
+"edsk check,'rasmoutput_test3.dsk:b','0:#41',1,facea"
+        memset(&param,0,sizeof(struct s_parameter)); 
+        ret=RasmAssembleInfoParam(AUTOTEST_EDSK_MERGE_03,strlen(AUTOTEST_EDSK_MERGE_03),&opcode,&opcodelen,&debug,&param);
+        if (!ret) {} else {printf("Autotest %03d ERROR (testing EDSK merge from double-sides, extended side tests\n",cpt);
+                for (i=0;i<debug->nberror;i++) printf("%d -> %s\n",i,debug->error[i].msg);
+                exit(-1);}
+        if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing EDSK merge from double-sides, extended sides tests\n");
+
+
 
 #define AUTOTEST_EDSK_SIDE_01 "defs 256,1 :defs 256,2: defs 256,3: defs 256,4: forsurea defs 128,3 : defs 128,0:forsureb defs 128,2 : defs 128,0:" \
 	"edsk create,'rasmoutput_test.dsk:1',DATA,OVERWRITE:" \

@@ -2,7 +2,7 @@
 #define PROGRAM_VERSION   "3.2"
 #define PROGRAM_SUBVERSION   ".2"
 #define PROGRAM_VERSION_FLOAT   "3.22"
-#define PROGRAM_DATE      "09/05/2026"
+#define PROGRAM_DATE      "12/05/2026"
 #define PROGRAM_COPYRIGHT "© 2017 BERGE Edouard / roudoudou from Praline"
 #ifndef SUPERFAST
 #define RELEASE_NAME      "Atlas"
