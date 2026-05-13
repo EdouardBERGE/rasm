@@ -26580,6 +26580,9 @@ struct s_assenv *PreProcessing(char *filename, int flux, const char *datain, int
 	char **zelines=NULL;
 
 	char *filename_toread;
+	// macro fast is back
+        struct s_macro_fast *MacroFast=NULL;
+        int idxmacrofast=0,maxmacrofast=0;
 	
 	struct s_listing *listing=NULL;
 	struct s_listing curlisting;
@@ -27413,9 +27416,48 @@ if (!idx) printf("L%05d=[%s]\n",l,listing[l].listing);
 					// sauter les séparateurs
 					while (*s==' ' || *s=='\t') s++;
 					if (*s && (isalnum(*s) || *s=='_')) {
-						// sauter le nom
+						// construire le nom et le sauter
+						struct s_macro_fast curmacrofast;
+						int lmak=128,imak=1;
+						curmacrofast.mnemo=MemMalloc(lmak);
+						curmacrofast.mnemo[0]=*s;
 						s++;
-						while (isalnum(*s) || *s=='_') s++;
+						while (isalnum(*s) || *s=='_') {
+							curmacrofast.mnemo[imak++]=*s;
+							if (imak==lmak) {
+								lmak*=2;
+								curmacrofast.mnemo=MemRealloc(curmacrofast.mnemo,lmak);
+							}
+							s++;
+						}
+						curmacrofast.mnemo[imak]=0;
+						curmacrofast.crc=GetCRC(curmacrofast.mnemo);
+						curmacrofast.len=imak;
+						// insertion dans le pool
+						{
+							       int dw,dm,du;
+
+							       dw=dm=0;
+							       du=idxmacrofast-1;
+							       while (dw<=du) {
+								       dm=(dw+du)>>1;
+								       if (MacroFast[dm].crc==curmacrofast.crc) {
+									       dw=dm;
+									       break;
+								       } else if (MacroFast[dm].crc>curmacrofast.crc) {
+									       du=dm-1;
+								       } else if (MacroFast[dm].crc<curmacrofast.crc) {
+									       dw=dm+1;
+								       }
+							       }
+							       ObjectArrayAddDynamicValueConcat((void**)&MacroFast,&idxmacrofast,&maxmacrofast,&curmacrofast,sizeof(curmacrofast));
+							       // décaler
+							       if (idxmacrofast>1) MemMove(&MacroFast[dw+1],&MacroFast[dw],(idxmacrofast-1-dw)*sizeof(curmacrofast));
+							       // insérer
+							       MacroFast[dw]=curmacrofast;
+						}
+
+
 						if (*s && (*s==' ' || *s=='\t' || *s==',')) {
 							// sauter les séparateurs
 							if (*s==',') {
@@ -27769,6 +27811,7 @@ printf("separator => test EQU match!\n",w+ispace);
 							MakeError(ae,0,ae->filename[listing[l].ifile],listing[l].iline,"an alias name must precede the EQU\n");
 						}
 					} else {
+						int keymatched=0;
 						curw.len=lw; curw.w=MemMalloc(lw+1); memcpy(curw.w,w,lw+1);
 						curw.l=listing[l].iline;
 						curw.ifile=listing[l].ifile;
@@ -27793,11 +27836,37 @@ printf("ajout du mot [%s]\n",curw.w);
 								int a;
 								a=strcmp(instruction[ifast].mnemo,curw.w);
 								if (!a) {
-									Automate[' ']=1; Automate['\t']=1; ispace=0; texpr=1;
+									keymatched=1;
 									break;
 								} else if (a>0) break;
 								ifast++;
 							}
+						}
+						if (!keymatched && idxmacrofast) {
+							int macrocrc,dw,dm,du,i;
+							macrocrc=GetCRC(curw.w);
+							dw=0;
+							du=idxmacrofast-1;
+							while (dw<=du) {
+								dm=(dw+du)>>1;
+								if (MacroFast[dm].crc==macrocrc) {
+									/* chercher le premier de la liste */
+									while (dm>0 && MacroFast[dm-1].crc==macrocrc) dm--;
+									/* controle sur le texte entier */
+									while (MacroFast[dm].crc==macrocrc && strcmp(MacroFast[dm].mnemo,wordlist[nbword-1].w)) dm++;
+									if (MacroFast[dm].crc==macrocrc && strcmp(MacroFast[dm].mnemo,wordlist[nbword-1].w)==0) {
+										keymatched=1;
+									}
+									break;
+								} else if (MacroFast[dm].crc>macrocrc) {
+									du=dm-1;
+								} else if (MacroFast[dm].crc<macrocrc) {
+									dw=dm+1;
+								}
+							}
+						}
+						if (keymatched) {
+							Automate[' ']=1; Automate['\t']=1; ispace=0; texpr=1;
 						}
 					}
 				} else {
@@ -27950,9 +28019,8 @@ printf("mot precedent=[%s] t=%d\n",wordlist[nbword-1].w,wordlist[nbword-1].t);
 							}
 						}
 						if (!keymatched) {
-							int macrocrc,dw,dm,du,i;
-					#if 0
 							if (idxmacrofast) {
+								int macrocrc,dw,dm,du,i;
 								macrocrc=GetCRC(wordlist[nbword-1].w);
 								dw=0;
 								du=idxmacrofast-1;
@@ -27974,7 +28042,6 @@ printf("mot precedent=[%s] t=%d\n",wordlist[nbword-1].w,wordlist[nbword-1].t);
 									}
 								}
 							}
-					#endif
 							if (!keymatched) {
 								// macro not found, process!
 								nbword--;
@@ -30150,13 +30217,13 @@ struct s_autotest_keyword autotest_keyword[]={
 	       "nop:assert filesize('rasmoutput_avec.bin')==filesize('rasmoutput_sans.bin')+128",0}, // check noheader option remove header with a proper header
 	{"edsk putfile,'rasmoutput_test.dsk','rasmoutput_sans.bin','0:sans.txt': edsk getfile,'rasmoutput_test.dsk','sans.txt','rasmoutput_avec.bin':" \
 		"edsk getfile,'rasmoutput_test.dsk','sans.txt','rasmoutput_sans.bin',NOHEADER:assert filesize('rasmoutput_avec.bin')==filesize('rasmoutput_sans.bin'):nop",0}, // noheader withtout header does nothing
+	{"macro RMR tags: ld bc,#7F80+{tags}: out (c),c: mend: ROM_OFF equ %1100: MODE_0 equ 0: RMR ROM_OFF | MODE_0 ",0}, // optim macro must keep legacy behaviour
 	/*
 	 *
 	 * will need to test resize + format then meta review test!
 	 *
 	 *
 	 *
-	{"",},
 	{"",},{"",},
 	{"",},{"",},{"",},
 	{"",},{"",},{"",},{"",},{"",},
