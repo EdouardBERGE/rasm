@@ -1,7 +1,7 @@
 #define PROGRAM_NAME      "RASM"
 #define PROGRAM_VERSION   "3.2"
-#define PROGRAM_SUBVERSION   ".3"
-#define PROGRAM_VERSION_FLOAT   "3.23"
+#define PROGRAM_SUBVERSION   ".4"
+#define PROGRAM_VERSION_FLOAT   "3.24"
 #define PROGRAM_DATE      "13/05/2026"
 #define PROGRAM_COPYRIGHT "© 2017 BERGE Edouard / roudoudou from Praline"
 #ifndef SUPERFAST
