@@ -30221,10 +30221,10 @@ struct s_autotest_keyword autotest_keyword[]={
 	{" pif=1 : res pif | 2 | 7 ,a : bit pif | 2 | 7 ,a : set pif | 2 | 7 ,a ",0}, // freestyle check on all instructions with free first param
 	{" pif=1 : res 2 | 7 ,a : bit 2 | 7 ,a : set 2 | 7 ,a ",0}, // freestyle check on all instructions with free first param
 	{" pif=1 : call pif | 2 : call 2 | pif ",0}, // freestyle check on all instructions with free first param
-	{" glop=10 : jr 15 | glop jr glop & 45 jp 45 | glop jp glop & 45 cp 45 | glop cp glop & 45 ",0}, // freestyle check on all instructions with free first param
-	{" glop=10 : im ( 45 | glop ) & 1 im glop & 45 & 1 ",0}, // freestyle check on all instructions with free first param
-	{" glop=10 : xor 45 | glop xor glop & 45 or 45 | glop or glop & 45 and 45 | glop and glop & 45 ",0}, // freestyle check on all instructions with free first param
-	{" glop=10 : sub 45 | glop sub glop & 45 add 45 | glop add glop & 45 sbc 45 | glop sbc glop & 45 adc 45 | glop adc glop & 45 ",0}, // freestyle check on all instructions with free first param
+	{" glop=10 : jr 15 | glop :jr glop & 45 :jp 45 | glop :jp glop & 45 :cp 45 | glop :cp glop & 45 ",0}, // freestyle check on all instructions with free first param
+	{" glop=10 : im ( 45 | glop ) & 1 :im glop & 45 & 1 ",0}, // freestyle check on all instructions with free first param
+	{" glop=10 : xor 45 | glop :xor glop & 45 :or 45 | glop :or glop & 45 :and 45 | glop :and glop & 45 ",0}, // freestyle check on all instructions with free first param
+	{" glop=10 : sub 45 | glop :sub glop & 45 :add 45 | glop :add glop & 45 :sbc 45 | glop :sbc glop & 45 :adc 45 | glop :adc glop & 45 ",0}, // freestyle check on all instructions with free first param
 	/*
 	 *
 	 * will need to test resize + format then meta review test!
