@@ -23270,7 +23270,7 @@ char *WhichColor(const char *content) {
 unsigned char * _internal_export_REMU(struct s_assenv *ae, unsigned int *rchksize) {
 	char *remu_output=NULL;
 	char zedigit[128];
-	char shortlabel[64];
+	char shortlabel[255];
 	int ilocal=0,i,m;
 	unsigned int chunksize;
 	int localcpt=0;
