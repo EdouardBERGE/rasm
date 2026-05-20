@@ -3599,7 +3599,7 @@ int SearchMacro(struct s_assenv *ae, const int crc, const char *zemot)
 			if (ae->macro[dm].crc==crc && strcmp(ae->macro[dm].mnemo,zemot)==0) return dm; else return -1;
 		} else if (ae->macro[dm].crc>crc) {
 			du=dm-1;
-		} else if (ae->macro[dm].crc<crc) {
+		} else { //if (ae->macro[dm].crc<crc) {
 			dw=dm+1;
 		}
 	}
@@ -9349,7 +9349,7 @@ char *MakeAMSDOS_name(struct s_assenv *ae, char *reference_filename, int *amsdos
 
 
 struct s_edsk_global_struct *edsktool_NewEDSK(char *format, int nbside);
-struct s_edsk_global_struct *edsktool_EDSK_load(char *edskfilename);
+struct s_edsk_global_struct *edsktool_EDSK_load(struct s_assenv *ae,char *edskfilename);
 void edsktool_EDSK_write_file(struct s_edsk_global_struct *edsk, char *output_filename);
 
 //void amsdos_init(struct s_edsk_global_struct *edsk, int side);
@@ -9385,7 +9385,7 @@ int EDSK_addRAWfile(struct s_assenv *ae,char *edskfilename,int facenumber, char 
 		edsk=edsktool_NewEDSK("DATA",facenumber+1);
 	} else {
 		//printf("load [%s]\n",edskfilename);
-		edsk=edsktool_EDSK_load(edskfilename);
+		edsk=edsktool_EDSK_load(ae,edskfilename);
 		if (!edsk) {
 			MakeError(ae,0,NULL,0,"Error loading edsk [%s]\n",edskfilename);
 			return 1;
@@ -9439,7 +9439,7 @@ int EDSK_addfile(struct s_assenv *ae,char *edskfilename,int facenumber, char *fi
 		edsk=edsktool_NewEDSK("DATA",facenumber+1);
 	} else {
 		//printf("load [%s]\n",edskfilename);
-		edsk=edsktool_EDSK_load(edskfilename);
+		edsk=edsktool_EDSK_load(ae,edskfilename);
 		if (!edsk) {
 			MakeError(ae,0,NULL,0,"Error loading edsk [%s]\n",edskfilename);
 			return 1;
@@ -15006,7 +15006,7 @@ struct s_edsk_global_struct *edsktool_NewEDSK(char *format, int nbside) {
         return edsk;
 }
 
-struct s_edsk_global_struct *edsktool_EDSK_load(char *edskfilename) //@@TODO faire un mécanisme de cache
+struct s_edsk_global_struct *edsktool_EDSK_load(struct s_assenv *ae,char *edskfilename) //@@TODO faire un mécanisme de cache
 {
         #undef FUNC
         #define FUNC "EDSK_load"
@@ -15025,12 +15025,12 @@ struct s_edsk_global_struct *edsktool_EDSK_load(char *edskfilename) //@@TODO fai
 
         f=fopen(edskfilename,"rb");
         if (!f) {
-                printf(KERROR"Cannot read EDSK header of [%s]!\n"KNORMAL,edskfilename);
+		MakeError(ae,0,NULL,0,"Cannot read EDSK header of [%s]\n",edskfilename);
 		return NULL;
         }
 
         if (fread((char*)&header,1,0x100,f)!=0x100) {
-                printf(KERROR"Cannot read EDSK header of [%s]!\n"KNORMAL,edskfilename);
+		MakeError(ae,0,NULL,0,"Cannot read EDSK header of [%s]\n",edskfilename);
 		return NULL;
         }
         if (strncmp((char *)header,"EXTENDED",8)==0) {
@@ -15041,7 +15041,7 @@ struct s_edsk_global_struct *edsktool_EDSK_load(char *edskfilename) //@@TODO fai
                 sidenumber=header[34+14+1];
 
                 if (sidenumber<1 || sidenumber>2) {
-                        printf(KERROR"[%s] EDSK format is not supported in update mode (ntrack=%d nside=%d)\n"KNORMAL,edskfilename,tracknumber,sidenumber);
+			MakeError(ae,0,NULL,0,"Invalid side number %d in [%s]\n",sidenumber,edskfilename);
 			return NULL;
                 }
 
@@ -15061,7 +15061,7 @@ struct s_edsk_global_struct *edsktool_EDSK_load(char *edskfilename) //@@TODO fai
                 data=MemMalloc(disksize);
                 memset(data,0,disksize);
                 if ((ctrlsize=fread((char *)data,1,disksize,f))!=disksize) {
-                        printf(KERROR"Cannot read EDSK tracks! expecting %d bytes but read %d bytes\n"KNORMAL,disksize,ctrlsize);
+			MakeError(ae,0,NULL,0,"Cannot read EDSK tracks! expecting %d bytes but read %d bytes\n",disksize,ctrlsize);
                         // This is not a fatal Error anymore to allow further analysis
                 }
 
@@ -15082,11 +15082,12 @@ struct s_edsk_global_struct *edsktool_EDSK_load(char *edskfilename) //@@TODO fai
                         } else {
                                 currenttrackposition+=header[0x34+curtrack]*256;
                                 if (currenttrackposition>ctrlsize) {
-                                        printf(KERROR"Track %d side %d is declared as %04X bytes long but there is only %04X remaining\n"KNORMAL,t,face,header[0x34+curtrack]*256,ctrlsize-(currenttrackposition-header[0x34+curtrack]*256));
+					MakeError(ae,0,NULL,0,"Track %d side %d is declared as %04X bytes long but there is only %04X remaining\n",
+							t,face,header[0x34+curtrack]*256,ctrlsize-(currenttrackposition-header[0x34+curtrack]*256));
                                 }
 
                                 if (strncmp((char *)data+i,"Track-Info\r\n",12)) {
-                                        printf(KERROR"Invalid track information block side %d track %d => Header offset=%d\n",face,t,header[0x34+curtrack]*256);
+					MakeError(ae,0,NULL,0,"Invalid track information block side %d track %d => Header offset=%d\n",face,t,header[0x34+curtrack]*256);
 					return NULL;
                                 }
                                 sectornumber=data[i+21];
@@ -15131,8 +15132,8 @@ struct s_edsk_global_struct *edsktool_EDSK_load(char *edskfilename) //@@TODO fai
                                         edsk->track[curtrack].sector[s].data=MemMalloc(reallength);
 
                                         if (currentsectorposition+reallength>ctrlsize) {
-                                                printf(KERROR"Invalid side %d track %d => sector data of ID %02X outside EDSK!\n",face,t,sectorid);
-                                                exit(ABORT_ERROR);
+						MakeError(ae,0,NULL,0,"Invalid side %d track %d => sector data of ID %02X outside EDSK!\n",face,t,sectorid);
+						return NULL;
                                         } else {
                                                 memcpy(edsk->track[curtrack].sector[s].data,&data[currentsectorposition],reallength);
                                         }
@@ -15141,7 +15142,7 @@ struct s_edsk_global_struct *edsktool_EDSK_load(char *edskfilename) //@@TODO fai
                         }
                 }
         } else if (strncmp((char *)header,"MV - CPC",8)==0) {
-                printf("opening legacy DSK [%s] / creator: %-14.14s\n",edskfilename,header+34);
+                rasm_printf(ae,KIO"opening legacy DSK [%s] / creator: %-14.14s\n"KNORMAL,edskfilename,header+34);
 
                 tracknumber=header[34+14];
                 sidenumber=header[34+14+1];
@@ -15149,8 +15150,8 @@ struct s_edsk_global_struct *edsktool_EDSK_load(char *edskfilename) //@@TODO fai
                 edsk->sidenumber=sidenumber;
                 tracksize=header[34+14+1+1]+header[34+14+1+1+1]*256;
 
-                printf("tracks: %d sides: %d ",edsk->tracknumber,edsk->sidenumber);
-                printf("track size: %dkb disk size: %dkb\n",tracksize/1024,tracksize*edsk->tracknumber*edsk->sidenumber/1024);
+                rasm_printf(ae,"tracks: %d sides: %d ",edsk->tracknumber,edsk->sidenumber);
+                rasm_printf(ae,"track size: %dkb disk size: %dkb\n",tracksize/1024,tracksize*edsk->tracknumber*edsk->sidenumber/1024);
 
                 data=MemMalloc(tracksize*edsk->tracknumber*edsk->sidenumber);
                 if (fread(data,1,tracksize*edsk->tracknumber*edsk->sidenumber,f)!=tracksize*edsk->tracknumber*edsk->sidenumber) {
@@ -15218,8 +15219,8 @@ struct s_edsk_global_struct *edsktool_EDSK_load(char *edskfilename) //@@TODO fai
                 }
 
         } else {
-                printf(KERROR"file [%s] is not a valid EDSK floppy image\n",edskfilename);
-                exit(ABORT_ERROR);
+		MakeError(ae,0,NULL,0,"file [%s] is not a valid EDSK floppy image\n",edskfilename);
+		return NULL;
         }
         fclose(f);
         return edsk;
@@ -15502,7 +15503,7 @@ void __edsk_delfile(struct s_assenv *ae, struct s_edsk_action *action) {
 	filename=action->filename2;
 
 	// now we can read the EDSK
-	edsk=edsktool_EDSK_load(action->filename);
+	edsk=edsktool_EDSK_load(ae,action->filename);
 	if (!edsk) {
 		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"EDSK DELFILE error, invalid floppy image!\n");
 		return;
@@ -15618,7 +15619,7 @@ void __edsk_getfile(struct s_assenv *ae, struct s_edsk_action *action) {
 	// is there a tag?
 
 	// now we can read the EDSK
-	edsk=edsktool_EDSK_load(action->filename);
+	edsk=edsktool_EDSK_load(ae,action->filename);
 	if (!edsk) {
 		MakeError(ae,0,NULL,0,"Error loading edsk [%s]\n",action->filename);
 		return;
@@ -15667,7 +15668,7 @@ void __edsk_getfile(struct s_assenv *ae, struct s_edsk_action *action) {
 				wasfound=1;
 				// is there a header?
 				if (realsize>128) {
-					for (ih=0;ih<66 && ih<realsize;ih++) crch+=filedata[ih];
+					for (ih=0;ih<66;ih++) crch+=filedata[ih];
 					if ((crch&0xFF)==filedata[67] && ((crch>>8)&0xFF)==filedata[68]) {
 						int headerSize;
 						headerSize=filedata[24]+(filedata[25]<<8);
@@ -15741,7 +15742,7 @@ void __edsk_copyfile(struct s_assenv *ae, struct s_edsk_action *action) {
 	if (!action->filename4) filedest=TxtStrDup(filename); else filedest=action->filename4;
 
 	// now we can read the EDSK
-	edsk=edsktool_EDSK_load(action->filename);
+	edsk=edsktool_EDSK_load(ae,action->filename);
 	if (!edsk) {
 		MakeError(ae,0,NULL,0,"Error loading edsk [%s]\n",action->filename);
 		return;
@@ -15750,7 +15751,7 @@ void __edsk_copyfile(struct s_assenv *ae, struct s_edsk_action *action) {
 	if (!FileExists(action->filename3)) {
 		edskdest=edsktool_NewEDSK("DATA",1+sidedest);
 	} else {
-		edskdest=edsktool_EDSK_load(action->filename3);
+		edskdest=edsktool_EDSK_load(ae,action->filename3);
 		if (!edskdest) {
 			MakeError(ae,0,NULL,0,"Error loading edsk [%s]\n",action->filename3);
 			return;
@@ -15880,7 +15881,7 @@ void __edsk_readfile(struct s_assenv *ae, struct s_edsk_action *action) {
 	if (action->nbparam==5) sizetoread=RoundComputeExpression(ae,ae->wl[ae->idx+5].w,ae->outputadr,0,0);
 
 	// now we can read the EDSK
-	edsk=edsktool_EDSK_load(action->filename);
+	edsk=edsktool_EDSK_load(ae,action->filename);
 	if (!edsk) {
 		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"EDSK READFILE error, invalid floppy image!\n");
 		return;
@@ -15991,7 +15992,7 @@ void __edsk_readsect(struct s_assenv *ae, struct s_edsk_action *action) {
 		return;
 	}
 	// we need to read the EDSK to have the number of available tracks
-	edsk=edsktool_EDSK_load(action->filename);
+	edsk=edsktool_EDSK_load(ae,action->filename);
 	if (!edsk) {
 		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"EDSK READSECT error, invalid floppy image!\n");
 		return;
@@ -16162,7 +16163,7 @@ void __edsk_create(struct s_assenv *ae, struct s_edsk_action *action) {
 void __edsk_upgrade(struct s_assenv *ae, struct s_edsk_action *action) {
 	struct s_edsk_global_struct *edsk=NULL;
 	// load and save, in case of DSK, you will get a fresh EDSK
-	edsk=edsktool_EDSK_load(action->filename);
+	edsk=edsktool_EDSK_load(ae,action->filename);
 	if (edsk) {
 		edsktool_EDSK_write_file(edsk,action->filename2);
 		__edsk_free(ae,edsk);
@@ -16178,7 +16179,7 @@ void __edsk_upgrade(struct s_assenv *ae, struct s_edsk_action *action) {
 
 void __edsk_map(struct s_assenv *ae, struct s_edsk_action *action) {
 	struct s_edsk_global_struct *edsk=NULL;
-	edsk=edsktool_EDSK_load(action->filename);
+	edsk=edsktool_EDSK_load(ae,action->filename);
 	if (edsk) {
 		if (!ae->flux) edsktool_MAPEDSK(edsk);
 		__edsk_free(ae,edsk);
@@ -16201,8 +16202,8 @@ void __edsk_merge(struct s_assenv *ae, struct s_edsk_action *action) {
 	side1=__edsk_get_side_from_name(floppy1);
 	side2=__edsk_get_side_from_name(floppy2);
 
-	edsk1=edsktool_EDSK_load(floppy1);
-	edsk2=edsktool_EDSK_load(floppy2);
+	edsk1=edsktool_EDSK_load(ae,floppy1);
+	edsk2=edsktool_EDSK_load(ae,floppy2);
 	if (side1 && edsk1->sidenumber<2) { MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Cannot merge EDSK because floppy image [%s] does not have 2 sides\n",floppy1); return; }
 	if (side2 && edsk2->sidenumber<2) { MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Cannot merge EDSK because floppy image [%s] does not have 2 sides\n",floppy2); return; }
 
@@ -16239,7 +16240,7 @@ void __edsk_gapfix(struct s_assenv *ae, struct s_edsk_action *action) {
 		return;
 	}
 	side=__edsk_get_side_from_name(action->filename);
-	edsk=edsktool_EDSK_load(action->filename);
+	edsk=edsktool_EDSK_load(ae,action->filename);
 	if (!edsk) {
 		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Error loading [%s]\n",action->filename);
 		return;
@@ -16309,7 +16310,7 @@ void __edsk_check(struct s_assenv *ae, struct s_edsk_action *action) {
 		return;
 	}
 	side=__edsk_get_side_from_name(action->filename);
-	edsk=edsktool_EDSK_load(action->filename);
+	edsk=edsktool_EDSK_load(ae,action->filename);
 	if (!edsk) {
 		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Error loading [%s]\n",action->filename);
 		return;
@@ -16399,7 +16400,7 @@ void __edsk_drop(struct s_assenv *ae, struct s_edsk_action *action) {
 	}
 	// load and check side
 	side=__edsk_get_side_from_name(action->filename);
-	edsk=edsktool_EDSK_load(action->filename);
+	edsk=edsktool_EDSK_load(ae,action->filename);
 	if (!edsk) {
 		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Error loading [%s]\n",action->filename);
 		return;
@@ -16475,7 +16476,7 @@ void __edsk_add(struct s_assenv *ae, struct s_edsk_action *action) {
 	}
 	// load and check side
 	side=__edsk_get_side_from_name(action->filename);
-	edsk=edsktool_EDSK_load(action->filename);
+	edsk=edsktool_EDSK_load(ae,action->filename);
 	if (!edsk) {
 		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Error loading [%s]\n",action->filename);
 		return;
@@ -16599,7 +16600,7 @@ void __edsk_resize(struct s_assenv *ae, struct s_edsk_action *action) {
 	}
 	// load and check side
 	side=__edsk_get_side_from_name(action->filename);
-	edsk=edsktool_EDSK_load(action->filename);
+	edsk=edsktool_EDSK_load(ae,action->filename);
 	if (!edsk) {
 		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Error loading [%s]\n",action->filename);
 		return;
@@ -16688,7 +16689,7 @@ void __edsk_reorder(struct s_assenv *ae, struct s_edsk_action *action) {
 	}
 	// load and check side
 	side=__edsk_get_side_from_name(action->filename);
-	edsk=edsktool_EDSK_load(action->filename);
+	edsk=edsktool_EDSK_load(ae,action->filename);
 	if (!edsk) {
 		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Error loading [%s]\n",action->filename);
 		return;
@@ -16820,7 +16821,7 @@ void __edsk_writesect(struct s_assenv *ae, struct s_edsk_action *action) {
 	}
 	// load and check side
 	side=__edsk_get_side_from_name(action->filename);
-	edsk=edsktool_EDSK_load(action->filename);
+	edsk=edsktool_EDSK_load(ae,action->filename);
 	if (!edsk) {
 		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Error loading [%s]\n",action->filename);
 		return;
@@ -18924,7 +18925,7 @@ void __MACRO(struct s_assenv *ae) {
 			       break;
 		       } else if (ae->macro[dm].crc>macrocrc) {
 			       du=dm-1;
-		       } else if (ae->macro[dm].crc<macrocrc) {
+		       } else { //if (ae->macro[dm].crc<macrocrc) {
 			       dw=dm+1;
 		       }
 		}
@@ -24890,7 +24891,7 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 					chunk_endian=(ChunkSize>>16)&0xFF;FileWriteBinary(TMP_filename,(char*)&chunk_endian,1);
 					chunk_endian=(ChunkSize>>24)&0xFF;FileWriteBinary(TMP_filename,(char*)&chunk_endian,1);
 					ChunkName[0]=0;
-					ChunkName[1]=32;
+					ChunkName[1]=32; // NBBK
 					FileWriteBinary(TMP_filename,ChunkName,2);
 				}
 				
