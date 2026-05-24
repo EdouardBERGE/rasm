@@ -127,11 +127,11 @@ reload:
 	strip $(EXEC)
 
 superfasttc:
-	$(CC) rasm.c $(CFLAGS_FAST) $(APU_OBJ) $(LZSA_OBJ) $(SALVADOR_OBJ) $(Z80_MASTER_OBJ) -ltcmalloc_minimal
+	clang rasm.c $(CFLAGS_FAST) $(APU_OBJ) $(LZSA_OBJ) $(SALVADOR_OBJ) $(Z80_MASTER_OBJ) -ltcmalloc_minimal
 	strip $(EXEC)
 
 superfastmi:
-	$(CC) rasm.c $(CFLAGS_FAST) $(APU_OBJ) $(LZSA_OBJ) $(SALVADOR_OBJ) $(Z80_MASTER_OBJ) -lmimalloc
+	clang rasm.c $(CFLAGS_FAST) $(APU_OBJ) $(LZSA_OBJ) $(SALVADOR_OBJ) $(Z80_MASTER_OBJ) -lmimalloc
 	strip $(EXEC)
 
 release:
