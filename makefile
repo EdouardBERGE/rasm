@@ -1,4 +1,4 @@
-CC=clang
+CC=cc
 EXEC=rasm.exe
 
 CFLAGS=-lm  -march=native -o $(EXEC)
