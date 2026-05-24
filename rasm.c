@@ -9380,6 +9380,8 @@ int EDSK_addRAWfile(struct s_assenv *ae,char *edskfilename,int facenumber, char 
 	int size=0;
 	int firstblock,amsdos_user=0;
 
+	// RAW FILE
+	//
 	if (!FileExists(edskfilename)) {
 		//printf("new DATA because [%s] does not exists");
 		edsk=edsktool_NewEDSK("DATA",facenumber+1);
@@ -16764,10 +16766,10 @@ void __edsk_reorder(struct s_assenv *ae, struct s_edsk_action *action) {
 void __edsk_savefile(struct s_assenv *ae, struct s_edsk_action *action) {
 	int iloc,i,j,idata;
 	int once=0,side;
-	int runValue=0x100,tag_protection=0,tag_hidden=0;
+	int runValue=-1,tag_protection=0,tag_hidden=0,tag_raw=0;
 
  	if (action->nbparam<5) {
-		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Usage is : EDSK SAVEFILE,'edskfilename:side','filename',<offset>,<size>[,PROT,HIDDEN,<runAdress>]\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Usage is : EDSK SAVEFILE,'edskfilename:side','filename',<offset>,<size>[,PROT,HIDDEN,RAW,<runAdress>]\n");
 		return;
 	}
 	// check action
@@ -16791,15 +16793,27 @@ void __edsk_savefile(struct s_assenv *ae, struct s_edsk_action *action) {
 			i++;
 			if (strncmp(ae->wl[action->iw+i].w,"PROT",4)==0) {
 				tag_protection=1;
+			} else if (strncmp(ae->wl[action->iw+i].w,"RAW",3)==0) {
+				tag_raw=1;
 			} else if (strncmp(ae->wl[action->iw+i].w,"HID",3)==0) {
 				tag_hidden=1;
-			} else {
+			} else if (runValue==-1) {
 				runValue=atoi(ae->wl[action->iw+i].w);
+			} else {
+				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Unexpected parameter, usage is : EDSK SAVEFILE,'edskfilename:side','filename',<offset>,<size>[,PROT,HIDDEN,RAW,<runAdress>]\n");
+				return;
 			}
 		} while (!ae->wl[action->iw+i].t);
 	}
 
-	EDSK_addfile(ae,action->filename,side, action->filename2,ae->mem[action->ibank]+action->ioffset, action->isize, action->ioffset, runValue,tag_protection,tag_hidden);
+	if (runValue==-1) runValue=0x100;
+
+	if (tag_raw) {
+		// RAW FILE
+		EDSK_addRAWfile(ae,action->filename,side,action->filename2,ae->mem[action->ibank]+action->ioffset,action->isize, tag_protection, tag_hidden);
+	} else {
+		EDSK_addfile(ae,action->filename,side, action->filename2,ae->mem[action->ibank]+action->ioffset, action->isize, action->ioffset, runValue,tag_protection,tag_hidden);
+	}
 }
 
 void __edsk_writesect(struct s_assenv *ae, struct s_edsk_action *action) {
@@ -16899,7 +16913,7 @@ void __edsk_writesect(struct s_assenv *ae, struct s_edsk_action *action) {
  * == deferred execution ==
  * EDSK  DELFILE,'filename.dsk','filename'
  * EDSK  COPYFILE,'filename.dsk','filename','filename.dsk','filename'
- * EDSK  SAVEFILE,'filename.dsk','filename',<start_addr>,<length>
+ * EDSK  SAVEFILE,'filename.dsk','filename',<start_addr>,<length>[,RAW]
  * EDSK WRITESECT,'filename.dsk',<start_addr>,<length>,'location'
  * EDSK    GAPFIX,'filename.dsk',TRACK|ALLTRACKS,<track>
  * EDSK       MAP,'filename.dsk'
@@ -22537,130 +22551,144 @@ if (curhexbin->crunch) printf("CRUNCHED! (%d)\n",curhexbin->crunch);
 					outputdata[outputidx++]=ae->hexbin[hbinidx].data[idx];
 				}
 			}
-	
+
 			// any kind of preprocessing may be crunched!	
-			switch (curhexbin->crunch) {
-				#ifndef NO_3RD_PARTIES
-				case 4:
-					newdata=LZ4_crunch(outputdata,outputidx,&outputidx);
-					MemFree(outputdata);
-					outputdata=newdata;
-					#if TRACE_PREPRO
-					rasm_printf(ae,KVERBOSE"crunched with LZ4 into %d byte(s)\n",outputidx);
-					#endif
-					break;
+			if (size) {
+				switch (curhexbin->crunch) {
+					#ifndef NO_3RD_PARTIES
+					case 4:
+						newdata=LZ4_crunch(outputdata,outputidx,&outputidx);
+						MemFree(outputdata);
+						outputdata=newdata;
+						#if TRACE_PREPRO
+						rasm_printf(ae,KVERBOSE"crunched with LZ4 into %d byte(s)\n",outputidx);
+						#endif
+						break;
 #ifndef NOAPULTRA
-				case 70:
-					{
-					unsigned char *input_data;
+					case 70:
+						{
+						unsigned char *input_data;
 
-					if (!ae->nowarning)
-					if (!ae->nocrunchwarning && outputidx>=20000) rasm_printf(ae,KWARNING"ZX0 is crunching %.1fkb this may take a while, be patient...\n",outputidx/1024.0);
-					input_data=MemMalloc(outputidx); memcpy(input_data,outputdata,outputidx); // copy buffer to input
-					outputdata=MemRealloc(outputdata,salvador_get_max_compressed_size(outputidx)); // enlarge output buffer
-					memset(outputdata,0,salvador_get_max_compressed_size(outputidx)); // then raz !
-					outputidx=salvador_compress(input_data,outputdata,outputidx,salvador_get_max_compressed_size(outputidx),1,32640,0,NULL,NULL);
-					MemFree(input_data);
-					#if TRACE_PREPRO
-					rasm_printf(ae,KVERBOSE"crunched with ZX0 into %d byte(s)\n",outputidx);
-					#endif
-					}
-					break;
-				case 71:
-					{
-					unsigned char *input_data;
+						if (!ae->nowarning)
+						if (!ae->nocrunchwarning && outputidx>=20000) rasm_printf(ae,KWARNING"ZX0 is crunching %.1fkb this may take a while, be patient...\n",outputidx/1024.0);
+						input_data=MemMalloc(outputidx); memcpy(input_data,outputdata,outputidx); // copy buffer to input
+						outputdata=MemRealloc(outputdata,salvador_get_max_compressed_size(outputidx)); // enlarge output buffer
+						memset(outputdata,0,salvador_get_max_compressed_size(outputidx)); // then raz !
+						outputidx=salvador_compress(input_data,outputdata,outputidx,salvador_get_max_compressed_size(outputidx),1,32640,0,NULL,NULL);
+						MemFree(input_data);
+						#if TRACE_PREPRO
+						rasm_printf(ae,KVERBOSE"crunched with ZX0 into %d byte(s)\n",outputidx);
+						#endif
+						}
+						break;
+					case 71:
+						{
+						unsigned char *input_data;
 
-					if (!ae->nowarning)
-					if (!ae->nocrunchwarning && outputidx>=20000) rasm_printf(ae,KWARNING"ZX0 is crunching %.1fkb this may take a while, be patient...\n",outputidx/1024.0);
-					input_data=MemMalloc(outputidx);
-					memcpy(input_data,outputdata,outputidx);
-					memset(outputdata,0,outputidx);
-					zx0_reverse(input_data,input_data+outputidx-1);
-					outputidx=salvador_compress(input_data,outputdata,outputidx,outputidx,1+2 /* FLG_IS_BACKWARD */ ,32640,0,NULL,NULL);
-					zx0_reverse(outputdata,outputdata+outputidx-1);
-					MemFree(input_data);
-					#if TRACE_PREPRO
-					rasm_printf(ae,KVERBOSE"crunched with ZX0 backward into %d byte(s)\n",outputidx);
-					#endif
-					}
-					break;
+						if (!ae->nowarning)
+						if (!ae->nocrunchwarning && outputidx>=20000) rasm_printf(ae,KWARNING"ZX0 is crunching %.1fkb this may take a while, be patient...\n",outputidx/1024.0);
+						input_data=MemMalloc(outputidx);
+						memcpy(input_data,outputdata,outputidx);
+						memset(outputdata,0,outputidx);
+						zx0_reverse(input_data,input_data+outputidx-1);
+						outputidx=salvador_compress(input_data,outputdata,outputidx,outputidx,1+2 /* FLG_IS_BACKWARD */ ,32640,0,NULL,NULL);
+						zx0_reverse(outputdata,outputdata+outputidx-1);
+						MemFree(input_data);
+						#if TRACE_PREPRO
+						rasm_printf(ae,KVERBOSE"crunched with ZX0 backward into %d byte(s)\n",outputidx);
+						#endif
+						}
+						break;
 #endif // NOAPULTRA
-				case 7:
-					{
-					int slzlen;
-					newdata=ZX7_compress(zx7_optimize(outputdata, outputidx), outputdata, outputidx, &slzlen);
-					outputidx=slzlen;
-					MemFree(outputdata);
-					outputdata=newdata;
-					#if TRACE_PREPRO
-					rasm_printf(ae,KVERBOSE"crunched with ZX7 into %d byte(s)\n",outputidx);
-					#endif
-					}
-					break;
-				case 8:
-					if (!ae->nowarning)
-					if (!ae->nocrunchwarning && outputidx>=512) rasm_printf(ae,KWARNING"Exomizer is crunching %.1fkb this may take a while, be patient...\n",outputidx/1024.0);
-					newdata=Exomizer_crunch(outputdata,outputidx,&outputidx);
-					MemFree(outputdata);
-					outputdata=newdata;
-					#if TRACE_PREPRO
-					rasm_printf(ae,KVERBOSE"crunched with Exomizer into %d byte(s)\n",outputidx);
-					#endif
-					break;
+					case 7:
+						{
+						int slzlen;
+						newdata=ZX7_compress(zx7_optimize(outputdata, outputidx), outputdata, outputidx, &slzlen);
+						outputidx=slzlen;
+						MemFree(outputdata);
+						outputdata=newdata;
+						#if TRACE_PREPRO
+						rasm_printf(ae,KVERBOSE"crunched with ZX7 into %d byte(s)\n",outputidx);
+						#endif
+						}
+						break;
+					case 8:
+						if (!ae->nowarning)
+						if (!ae->nocrunchwarning && outputidx>=512) rasm_printf(ae,KWARNING"Exomizer is crunching %.1fkb this may take a while, be patient...\n",outputidx/1024.0);
+						newdata=Exomizer_crunch(outputdata,outputidx,&outputidx);
+						MemFree(outputdata);
+						outputdata=newdata;
+						#if TRACE_PREPRO
+						rasm_printf(ae,KVERBOSE"crunched with Exomizer into %d byte(s)\n",outputidx);
+						#endif
+						break;
 #ifndef NOAPULTRA
-				case 17:
-					if (!ae->nowarning)
-					if (!ae->nocrunchwarning && outputidx>=1024) rasm_printf(ae,KWARNING"AP-Ultra is crunching %.1fkb this may take a while, be patient...\n",outputidx/1024.0);
-					{
-					int nnewlen;
-					APULTRA_crunch(outputdata,outputidx,&newdata,&nnewlen);
-					outputidx=nnewlen;
-					}
-					MemFree(outputdata);
-					outputdata=newdata;
-					#if TRACE_PREPRO
-					rasm_printf(ae,KVERBOSE"crunched with AP-Ultra into %d byte(s)\n",outputidx);
+					case 17:
+						if (!ae->nowarning)
+						if (!ae->nocrunchwarning && outputidx>=1024) rasm_printf(ae,KWARNING"AP-Ultra is crunching %.1fkb this may take a while, be patient...\n",outputidx/1024.0);
+						{
+						int nnewlen;
+						APULTRA_crunch(outputdata,outputidx,&newdata,&nnewlen);
+						outputidx=nnewlen;
+						}
+						MemFree(outputdata);
+						outputdata=newdata;
+						#if TRACE_PREPRO
+						rasm_printf(ae,KVERBOSE"crunched with AP-Ultra into %d byte(s)\n",outputidx);
+						#endif
+						break;
+					case 18:
+						if (!ae->nowarning)
+						if (!ae->nocrunchwarning && outputidx>=16384 && curhexbin->version==2) rasm_printf(ae,KWARNING"LZSA2 is crunching %.1fkb this may take a while, be patient...\n",outputidx/1024.0);
+						{
+						int nnewlen;
+						LZSA_crunch(outputdata,outputidx,&newdata,&nnewlen,curhexbin->version,curhexbin->minmatch);
+						if (nnewlen==0) {
+							if (outputidx>65536)
+							MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"LZSA cannot crunch more than 64K in RAW MODE\n");
+							else
+							MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"LZSA cannot crunch this and i dont know why!\n");
+						}
+						outputidx=nnewlen;
+						}
+						MemFree(outputdata);
+						outputdata=newdata;
+						#if TRACE_PREPRO
+						rasm_printf(ae,KVERBOSE"crunched with LZSA%d into %d byte(s)\n",curhexbin->version,outputidx);
+						#endif
+						break;
 					#endif
-					break;
-				case 18:
-					if (!ae->nowarning)
-					if (!ae->nocrunchwarning && outputidx>=16384 && curhexbin->version==2) rasm_printf(ae,KWARNING"LZSA2 is crunching %.1fkb this may take a while, be patient...\n",outputidx/1024.0);
-					{
-					int nnewlen;
-					LZSA_crunch(outputdata,outputidx,&newdata,&nnewlen,curhexbin->version,curhexbin->minmatch);
-					if (nnewlen==0) {
-						if (outputidx>65536)
-						MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"LZSA cannot crunch more than 64K in RAW MODE\n");
-						else
-						MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"LZSA cannot crunch this and i dont know why!\n");
-					}
-					outputidx=nnewlen;
-					}
-					MemFree(outputdata);
-					outputdata=newdata;
-					#if TRACE_PREPRO
-					rasm_printf(ae,KVERBOSE"crunched with LZSA%d into %d byte(s)\n",curhexbin->version,outputidx);
-					#endif
-					break;
-				#endif
 #endif
-				case 48:
-					newdata=LZ48_crunch(outputdata,outputidx,&outputidx);
-					MemFree(outputdata);
-					outputdata=newdata;
-					#if TRACE_PREPRO
-					rasm_printf(ae,KVERBOSE"crunched with LZ48 into %d byte(s)\n",outputidx);
-					#endif
-					break;
-				case 49:
-					newdata=LZ49_crunch(outputdata,outputidx,&outputidx);
-					MemFree(outputdata);
-					outputdata=newdata;
-					#if TRACE_PREPRO
-					rasm_printf(ae,KVERBOSE"crunched with LZ49 into %d byte(s)\n",outputidx);
-					#endif
-					break;
-				default:break;
+					case 48:
+						newdata=LZ48_crunch(outputdata,outputidx,&outputidx);
+						MemFree(outputdata);
+						outputdata=newdata;
+						#if TRACE_PREPRO
+						rasm_printf(ae,KVERBOSE"crunched with LZ48 into %d byte(s)\n",outputidx);
+						#endif
+						break;
+					case 49:
+						newdata=LZ49_crunch(outputdata,outputidx,&outputidx);
+						MemFree(outputdata);
+						outputdata=newdata;
+						#if TRACE_PREPRO
+						rasm_printf(ae,KVERBOSE"crunched with LZ49 into %d byte(s)\n",outputidx);
+						#endif
+						break;
+					default:break;
+				}
+
+				if (curhexbin->crunch) {
+					if (!outputidx || outputidx>=size) {
+						MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Cannot crunch [%s]\n",ae->hexbin[hbinidx].filename);
+					}
+				}
+			} else {
+				if (!ae->nowarning) {
+					rasm_printf(ae,KWARNING"[%s:%d] Warning: wont try to crunch no data at all\n",GetCurrentFile(ae),ae->wl[ae->idx].l);
+					if (ae->erronwarn) MaxError(ae);
+				}
+				outputidx=0;
 			}
 
 			if (overwritecheck) {
@@ -24315,8 +24343,10 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 				input_data=&ae->mem[ae->lzsection[i].ibank][ae->lzsection[i].memstart];
 				input_size=ae->lzsection[i].memend-ae->lzsection[i].memstart;
 				if (!input_size) {
-					rasm_printf(ae,KWARNING"[%s:%d] Warning: crunched section is empty\n",GetCurrentFile(ae),ae->wl[ae->idx].l);
-					if (ae->erronwarn) MaxError(ae);
+					if (!ae->nowarning) {
+						rasm_printf(ae,KWARNING"[%s:%d] Warning: crunched section is empty\n",GetCurrentFile(ae),ae->wl[ae->idx].l);
+						if (ae->erronwarn) MaxError(ae);
+					}
 				} else {
 					switch (ae->lzsection[i].lzversion) {
 
@@ -24390,10 +24420,12 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 					}
 				}
 
-				if (input_size<lzlen) {
+				if (input_size<lzlen || lzlen<=0) {
 					//MakeError(ae,ae->filename[ae->wl[ae->lzsection[i].iw].ifile],ae->wl[ae->lzsection[i].iw].l,"As the LZ section cannot crunch data, Rasm may not guarantee assembled file!\n");
-					rasm_printf(ae,KWARNING"Warning: LZ section is bigger than original, it wont be crunched!\n");
-					if (ae->erronwarn) MaxError(ae);
+					if (!ae->nowarning) {
+						rasm_printf(ae,KWARNING"Warning: LZ section is bigger than original, it wont be crunched!\n");
+						if (ae->erronwarn) MaxError(ae);
+					}
 					continue;
 				}
 
@@ -29831,6 +29863,7 @@ struct s_autotest_keyword autotest_keyword[]={
 	{"edsk putfile,'rasmoutput_test.dsk','minilib.h','prot.bin',PROT",0}, // put PROT file
 	{"edsk putfile,'rasmoutput_test.dsk','minilib.h','hidden.bin',HIDDEN",0}, // put HIDDEN file
 	{"edsk putfile,'rasmoutput_test.dsk','minilib.h','pouet.bin',POUET",1}, // pouet must failed
+	{"noHeader defb 'noHeader',0:edsk create,'rasmoutput_test.dsk',DATA,OVERWRITE:edsk savefile,'rasmoutput_test.dsk','monfic1.txt',0,9,RAW:edsk check,'rasmoutput_test.dsk','0:0xC5',9,noHeader",0}, // raw file check
 	{"edsk create,'rasmoutput_test.dsk',DATA,OVERWRITE: edsk putfile,'rasmoutput_test.dsk','minilib.h','0:grouik.txt': edsk putfile,'rasmoutput_test.dsk','minilib.h','1:grouik.txt'",0}, // same name but different users with putfile
 	{"defs 512,1: edsk create,'rasmoutput_test.dsk:1',DATA,OVERWRITE: edsk savefile,'rasmoutput_test.dsk:0','3:grouik.bin',0,512:" \
 	 "edsk savefile,'rasmoutput_test.dsk:1','4:grouik.bin',0,512: edsk delfile,'rasmoutput_test.dsk:0','3:grouik.bin': edsk delfile,'rasmoutput_test.dsk:1','4:grouik.bin'",0}, // del with user + sides + identical names
@@ -31491,6 +31524,23 @@ printf("testing formula RND function OK\n");
 
 	FileRemoveIfExists("rasmoutput_testbis.dsk");
 
+#define AUTOTEST_EDSK_RAWFILE "noHeaderA defb 'noHeaderA',0 : noHeaderB defb 'noHeaderB',0 :" \
+	"edsk create,'rasmoutput_test.dsk:b',DATA,OVERWRITE:" \
+	"edsk savefile,'rasmoutput_test.dsk','monfic1.txt',noHeaderA,10,RAW:" \
+	"edsk savefile,'rasmoutput_test.dsk:1','monfic1.txt',noHeaderB,10,RAW:" \
+	"edsk check,'rasmoutput_test.dsk:0','0:0xC5',10,noHeaderA:" \
+	"edsk check,'rasmoutput_test.dsk:1','0:0xC5',10,noHeaderB:" \
+	"edsk check,'rasmoutput_test.dsk:a','0:0xC5',10,noHeaderA:" \
+	"edsk check,'rasmoutput_test.dsk:b','0:0xC5',10,noHeaderB"
+	memset(&param,0,sizeof(struct s_parameter));
+	ret=RasmAssembleInfoParam(AUTOTEST_EDSK_RAWFILE,strlen(AUTOTEST_EDSK_RAWFILE),&opcode,&opcodelen,&debug,&param);
+	if (!ret) {} else {printf("Autotest %03d ERROR (testing EDSK raw file and sides\n",cpt);
+		for (i=0;i<debug->nberror;i++) printf("%d -> %s\n",i,debug->error[i].msg);
+		exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing EDSK SAVE RAW and sides\n");
+
+																									  //
 #define AUTOTEST_EDSK_MERGE_01 "byte_format defb #E5:" \
 "edsk create,'rasmoutput_test.dsk',DATA,41,OVERWRITE:" \
 "edsk create,'rasmoutput_test2.dsk',VENDOR,41,OVERWRITE:" \
@@ -31924,6 +31974,118 @@ printf("testing gray coding tile size check error OK\n");
 	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
 	RasmFreeInfoStruct(debug);
 printf("testing zigzag gray coding tile size check error OK\n");
+
+
+#define AUTOTEST_NOCRUNCH_MUST_WARN "lzx0 : defb 'atukhols' : lzclose"
+	memset(&param,0,sizeof(struct s_parameter));
+	param.erronwarn=1;
+	ret=RasmAssembleInfoParam(AUTOTEST_NOCRUNCH_MUST_WARN,strlen(AUTOTEST_NOCRUNCH_MUST_WARN),&opcode,&opcodelen,&debug,&param);
+	if (ret) {} else {printf("Autotest %03d ERROR (No crunch with ZX0 segment must warn+error)\n",cpt);exit(-1);}
+	RasmFreeInfoStruct(debug);
+	param.erronwarn=0;
+	ret=RasmAssembleInfoParam(AUTOTEST_NOCRUNCH_MUST_WARN,strlen(AUTOTEST_NOCRUNCH_MUST_WARN),&opcode,&opcodelen,&debug,&param);
+	if (!ret && opcodelen==8) {} else {printf("Autotest %03d ERROR (No crunch with ZX0 segment must compile and warn)\n",cpt);exit(-1);}
+	RasmFreeInfoStruct(debug);
+printf("Testing no crunch with ZX0  segment warn+error OK\n");
+
+#define AUTOTEST_NOCRUNCH_MUST_WARN2 "lzx0b : defb 'atukhols' : lzclose"
+	param.erronwarn=1;
+	ret=RasmAssembleInfoParam(AUTOTEST_NOCRUNCH_MUST_WARN2,strlen(AUTOTEST_NOCRUNCH_MUST_WARN2),&opcode,&opcodelen,&debug,&param);
+	if (ret) {} else {printf("Autotest %03d ERROR (No crunch with ZX0b segment must warn+error)\n",cpt);exit(-1);}
+	RasmFreeInfoStruct(debug);
+	param.erronwarn=0;
+	ret=RasmAssembleInfoParam(AUTOTEST_NOCRUNCH_MUST_WARN2,strlen(AUTOTEST_NOCRUNCH_MUST_WARN2),&opcode,&opcodelen,&debug,&param);
+	if (!ret && opcodelen==8) {} else {printf("Autotest %03d ERROR (No crunch with ZX0b segment must compile and warn)\n",cpt);exit(-1);}
+	RasmFreeInfoStruct(debug);
+printf("Testing no crunch with ZX0b segment warn+error OK\n");
+
+#define AUTOTEST_NOCRUNCH_MUST_WARN3 "lz4 : defb 'atukhols' : lzclose"
+	param.erronwarn=1;
+	ret=RasmAssembleInfoParam(AUTOTEST_NOCRUNCH_MUST_WARN3,strlen(AUTOTEST_NOCRUNCH_MUST_WARN3),&opcode,&opcodelen,&debug,&param);
+	if (ret) {} else {printf("Autotest %03d ERROR (No crunch with LZ4 segment must warn+error)\n",cpt);exit(-1);}
+	RasmFreeInfoStruct(debug);
+	param.erronwarn=0;
+	ret=RasmAssembleInfoParam(AUTOTEST_NOCRUNCH_MUST_WARN3,strlen(AUTOTEST_NOCRUNCH_MUST_WARN3),&opcode,&opcodelen,&debug,&param);
+	if (!ret && opcodelen==8) {} else {printf("Autotest %03d ERROR (No crunch with LZ4 segment must compile and warn)\n",cpt);exit(-1);}
+	RasmFreeInfoStruct(debug);
+printf("Testing no crunch with LZ4  segment warn+error OK\n");
+
+#define AUTOTEST_NOCRUNCH_MUST_WARN4 "lz48 : defb 'atukhols' : lzclose"
+	param.erronwarn=1;
+	ret=RasmAssembleInfoParam(AUTOTEST_NOCRUNCH_MUST_WARN4,strlen(AUTOTEST_NOCRUNCH_MUST_WARN4),&opcode,&opcodelen,&debug,&param);
+	if (ret) {} else {printf("Autotest %03d ERROR (No crunch with LZ48 segment must warn+error)\n",cpt);exit(-1);}
+	RasmFreeInfoStruct(debug);
+	param.erronwarn=0;
+	ret=RasmAssembleInfoParam(AUTOTEST_NOCRUNCH_MUST_WARN4,strlen(AUTOTEST_NOCRUNCH_MUST_WARN4),&opcode,&opcodelen,&debug,&param);
+	if (!ret && opcodelen==8) {} else {printf("Autotest %03d ERROR (No crunch with LZ48 segment must compile and warn)\n",cpt);exit(-1);}
+	RasmFreeInfoStruct(debug);
+printf("Testing no crunch with LZ48 segment warn+error OK\n");
+
+#define AUTOTEST_NOCRUNCH_MUST_WARN5 "lz49 : defb 'atukhols' : lzclose"
+	param.erronwarn=1;
+	ret=RasmAssembleInfoParam(AUTOTEST_NOCRUNCH_MUST_WARN5,strlen(AUTOTEST_NOCRUNCH_MUST_WARN5),&opcode,&opcodelen,&debug,&param);
+	if (ret) {} else {printf("Autotest %03d ERROR (No crunch with LZ49 segment must warn+error)\n",cpt);exit(-1);}
+	RasmFreeInfoStruct(debug);
+	param.erronwarn=0;
+	ret=RasmAssembleInfoParam(AUTOTEST_NOCRUNCH_MUST_WARN5,strlen(AUTOTEST_NOCRUNCH_MUST_WARN5),&opcode,&opcodelen,&debug,&param);
+	if (!ret && opcodelen==8) {} else {printf("Autotest %03d ERROR (No crunch with LZ49 segment must compile and warn)\n",cpt);exit(-1);}
+	RasmFreeInfoStruct(debug);
+printf("Testing no crunch with LZ49 segment warn+error OK\n");
+
+#define AUTOTEST_NOCRUNCH_MUST_WARN6 "lzexo : defb 'atukhols' : lzclose"
+	param.erronwarn=1;
+	ret=RasmAssembleInfoParam(AUTOTEST_NOCRUNCH_MUST_WARN6,strlen(AUTOTEST_NOCRUNCH_MUST_WARN6),&opcode,&opcodelen,&debug,&param);
+	if (ret) {} else {printf("Autotest %03d ERROR (No crunch with EXO  segment must warn+error)\n",cpt);exit(-1);}
+	RasmFreeInfoStruct(debug);
+	param.erronwarn=0;
+	ret=RasmAssembleInfoParam(AUTOTEST_NOCRUNCH_MUST_WARN6,strlen(AUTOTEST_NOCRUNCH_MUST_WARN6),&opcode,&opcodelen,&debug,&param);
+	if (!ret && opcodelen==8) {} else {printf("Autotest %03d ERROR (No crunch with EXO  segment must compile and warn)\n",cpt);exit(-1);}
+	RasmFreeInfoStruct(debug);
+printf("Testing no crunch with EXO  segment warn+error OK\n");
+
+#define AUTOTEST_NOCRUNCH_MUST_WARN7 "lzapu : defb 'atukhols' : lzclose"
+	param.erronwarn=1;
+	ret=RasmAssembleInfoParam(AUTOTEST_NOCRUNCH_MUST_WARN7,strlen(AUTOTEST_NOCRUNCH_MUST_WARN7),&opcode,&opcodelen,&debug,&param);
+	if (ret) {} else {printf("Autotest %03d ERROR (No crunch with APU segment must warn+error)\n",cpt);exit(-1);}
+	RasmFreeInfoStruct(debug);
+	param.erronwarn=0;
+	ret=RasmAssembleInfoParam(AUTOTEST_NOCRUNCH_MUST_WARN7,strlen(AUTOTEST_NOCRUNCH_MUST_WARN7),&opcode,&opcodelen,&debug,&param);
+	if (!ret && opcodelen==8) {} else {printf("Autotest %03d ERROR (No crunch with APU segment must compile and warn)\n",cpt);exit(-1);}
+	RasmFreeInfoStruct(debug);
+printf("Testing no crunch with APU  segment warn+error OK\n");
+
+#define AUTOTEST_NOCRUNCH_MUST_WARN8 "lzsa1 : defb 'atukhols' : lzclose"
+	param.erronwarn=1;
+	ret=RasmAssembleInfoParam(AUTOTEST_NOCRUNCH_MUST_WARN8,strlen(AUTOTEST_NOCRUNCH_MUST_WARN8),&opcode,&opcodelen,&debug,&param);
+	if (ret) {} else {printf("Autotest %03d ERROR (No crunch with LZSA1 segment must warn+error)\n",cpt);exit(-1);}
+	RasmFreeInfoStruct(debug);
+	param.erronwarn=0;
+	ret=RasmAssembleInfoParam(AUTOTEST_NOCRUNCH_MUST_WARN8,strlen(AUTOTEST_NOCRUNCH_MUST_WARN8),&opcode,&opcodelen,&debug,&param);
+	if (!ret && opcodelen==8) {} else {printf("Autotest %03d ERROR (No crunch with LZSA1 segment must compile and warn)\n",cpt);exit(-1);}
+	RasmFreeInfoStruct(debug);
+printf("Testing no crunch with LZSA1 segment warn+error OK\n");
+
+#define AUTOTEST_NOCRUNCH_MUST_WARN9 "lzsa2 : defb 'atukhols' : lzclose"
+	param.erronwarn=1;
+	ret=RasmAssembleInfoParam(AUTOTEST_NOCRUNCH_MUST_WARN9,strlen(AUTOTEST_NOCRUNCH_MUST_WARN9),&opcode,&opcodelen,&debug,&param);
+	if (ret) {} else {printf("Autotest %03d ERROR (No crunch with LZSA2 segment must warn+error)\n",cpt);exit(-1);}
+	RasmFreeInfoStruct(debug);
+	param.erronwarn=0;
+	ret=RasmAssembleInfoParam(AUTOTEST_NOCRUNCH_MUST_WARN9,strlen(AUTOTEST_NOCRUNCH_MUST_WARN9),&opcode,&opcodelen,&debug,&param);
+	if (!ret && opcodelen==8) {} else {printf("Autotest %03d ERROR (No crunch with LZSA2 segment must compile and warn)\n",cpt);exit(-1);}
+	RasmFreeInfoStruct(debug);
+printf("Testing no crunch with LZSA2 segment warn+error OK\n");
+
+#define AUTOTEST_NOCRUNCH_MUST_WARNA "lzx7 : defb 'atukhols' : lzclose"
+	param.erronwarn=1;
+	ret=RasmAssembleInfoParam(AUTOTEST_NOCRUNCH_MUST_WARNA,strlen(AUTOTEST_NOCRUNCH_MUST_WARNA),&opcode,&opcodelen,&debug,&param);
+	if (ret) {} else {printf("Autotest %03d ERROR (No crunch with ZX7 segment must warn+error)\n",cpt);exit(-1);}
+	RasmFreeInfoStruct(debug);
+	param.erronwarn=0;
+	ret=RasmAssembleInfoParam(AUTOTEST_NOCRUNCH_MUST_WARNA,strlen(AUTOTEST_NOCRUNCH_MUST_WARNA),&opcode,&opcodelen,&debug,&param);
+	if (!ret && opcodelen==8) {} else {printf("Autotest %03d ERROR (No crunch with ZX7 segment must compile and warn)\n",cpt);exit(-1);}
+	RasmFreeInfoStruct(debug);
+printf("Testing no crunch with ZX7  segment warn+error OK\n");
 
 
 /************************** segfault test **********************/
