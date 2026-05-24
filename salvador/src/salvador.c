@@ -152,6 +152,12 @@ static int zx0_compress(const char *pszInFilename, const char *pszOutFilename, c
    nOriginalSize = (size_t)ftell(f_in);
    fseek(f_in, 0, SEEK_SET);
 
+   if (nOriginalSize > 0 && nDictionarySize > (size_t)-1 - nOriginalSize) {
+      fclose(f_in);
+      if (f_dict) fclose(f_dict);
+      fprintf(stderr, "combined dictionary and input sizes overflow for '%s'\n", pszInFilename);
+      return 100;
+   }
    pDecompressedData = (unsigned char*)malloc(nDictionarySize + nOriginalSize);
    if (!pDecompressedData) {
       fclose(f_in);
