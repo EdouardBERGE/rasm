@@ -15687,7 +15687,7 @@ void __edsk_putfile(struct s_assenv *ae, struct s_edsk_action *action) {
 		memcpy(newdata+128,filedata,sizedest);
 		MemFree(filedata);
 		filedata=newdata;
-
+		sizedest+=128;
 		EDSK_addRAWfile(ae,action->filename,sidedest, filedest, filedata, sizedest, tag_protection, tag_hidden);
 	} else {
 		// the user MUST provide a file with an AMSDOS header (or no header for ASCII file)
