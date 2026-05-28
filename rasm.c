@@ -735,6 +735,7 @@ struct s_edsk_action {
 	int ibank;
 	int ioffset;
 	int isize;
+	int outputadr;
 	// deferred calculation info
 	int iw,nbparam;
 	char *filename;
@@ -3460,7 +3461,7 @@ void ___output_set_limit(struct s_assenv *ae,const int zelimit)
 	ae->maxptr=limit;
 }
 
-unsigned char *MakeAMSDOSHeader(int run, int minmem, int maxmem, char *amsdos_name, int amsdos_user) {
+unsigned char *_internal_MakeAMSDOSHeader(int run, int minmem, int maxmem, char *amsdos_name, int amsdos_user, int zeType) {
 	#undef FUNC
 	#define FUNC "MakeAMSDOSHeader"
 	
@@ -3482,7 +3483,7 @@ unsigned char *MakeAMSDOSHeader(int run, int minmem, int maxmem, char *amsdos_na
 	AmsdosHeader[0]=amsdos_user;
 	memcpy(AmsdosHeader+1,amsdos_name,11);
 
-	AmsdosHeader[18]=2; /* 0 basic 1 basic protege 2 binaire */
+	AmsdosHeader[18]=zeType; /* 0 basic 1 basic protege 2 binaire */
 	AmsdosHeader[19]=(maxmem-minmem)&0xFF;
 	AmsdosHeader[20]=(maxmem-minmem)>>8;
 	AmsdosHeader[21]=minmem&0xFF;
@@ -3517,6 +3518,9 @@ unsigned char *MakeAMSDOSHeader(int run, int minmem, int maxmem, char *amsdos_na
 	sprintf((char *)AmsdosHeader+0x47+17," created by %-9.9s ",RASM_SNAP_VERSION);
 
 	return AmsdosHeader;
+}
+unsigned char *MakeAMSDOSHeader(int run, int minmem, int maxmem, char *amsdos_name, int amsdos_user) {
+	return _internal_MakeAMSDOSHeader(run,minmem,maxmem,amsdos_name,amsdos_user,2); // BINARY
 }
 
 unsigned char *MakeHobetaHeader(int minmem, int maxmem, char *trdos_name) {
@@ -15539,15 +15543,15 @@ void __edsk_putfile(struct s_assenv *ae, struct s_edsk_action *action) {
 	char amsdos_name[14]={0};
 	int amsdos_user=0,offset=0;
 	char *filename,*filedest;
-	int hasHeader=-1;
 	int checkSum,realsize,wasfound=0;
 
 	unsigned char *filedata=NULL;
-	int sizedest,tag_protection=0,tag_hidden=0;
+	int sizedest,tag_protection=0,tag_hidden=0,tag_binary=0,tag_ascii=0,tag_load=0,tag_exec=0,tag_amsdos=0,tag_basic=0,tag_type=-1,tag_basicP=0;
+	int hasHeader=-1;
 
 	sidedest=__edsk_get_side_from_name(action->filename);
 
-	if (action->nbparam<3 || action->nbparam>6) {
+	if (action->nbparam<3 || action->nbparam>11) {
 		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Usage is : EDSK PUTFILE,'edskfilename:side','filename on host',[,'filename on dsk'][,tags]\n");
 		return;
 	}
@@ -15560,6 +15564,7 @@ void __edsk_putfile(struct s_assenv *ae, struct s_edsk_action *action) {
 	filedata=MemMalloc(sizedest);
 	if (FileReadBinary(action->filename2,(char*)filedata,sizedest)!=sizedest) {
 		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"EDSK PUTFILE ERROR : read error on source file [%s]\n",action->filename2);
+		MemFree(filedata);
 		return;
 	}
 	FileReadBinaryClose(action->filename2);
@@ -15579,18 +15584,116 @@ void __edsk_putfile(struct s_assenv *ae, struct s_edsk_action *action) {
 		i=1;
 		do {
 			i++;
-			if (strncmp(ae->wl[action->iw+i].w,"PROT",4)==0) {
-				tag_protection=1;
-			} else if (strncmp(ae->wl[action->iw+i].w,"HID",3)==0) {
-				tag_hidden=1;
+			if (strncmp(ae->wl[action->iw+i].w,"PROT",4)==0) { tag_protection=1; } else
+			if (strncmp(ae->wl[action->iw+i].w,"HID",3)==0) { tag_hidden=1;	} else
+			if (strcmp(ae->wl[action->iw+i].w,"BINARY")==0) { tag_binary=1;	} else
+			if (strcmp(ae->wl[action->iw+i].w,"BASIC")==0) { tag_basic=1;	} else
+			if (strcmp(ae->wl[action->iw+i].w,"AMSDOS")==0) { tag_amsdos=1;	} else
+			if (strcmp(ae->wl[action->iw+i].w,"BASIC_PROTECTED")==0) { tag_basicP=1;} else
+			if (strcmp(ae->wl[action->iw+i].w,"ASCII")==0) { tag_ascii=1;} else
+			if (strncmp(ae->wl[action->iw+i].w,"LOAD=",5)==0) {
+				char *paradup;
+				paradup=TxtStrDup(ae->wl[action->iw+i].w+5);
+				tag_load=RoundComputeExpression(ae,paradup,action->outputadr,0,0);
+				MemFree(paradup);
+			} else if (strncmp(ae->wl[action->iw+i].w,"TYPE=",5)==0) {
+				char *paradup;
+				paradup=TxtStrDup(ae->wl[action->iw+i].w+5);
+				tag_type=RoundComputeExpression(ae,paradup,action->outputadr,0,0);
+				MemFree(paradup);
+			} else if (strncmp(ae->wl[action->iw+i].w,"EXEC=",5)==0) {
+				char *paradup;
+				paradup=TxtStrDup(ae->wl[action->iw+i].w+5);
+				tag_exec=RoundComputeExpression(ae,paradup,action->outputadr,0,0);
+				MemFree(paradup);
 			} else if (!StringIsQuote(ae->wl[action->iw+i].w)) {
 				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"EDSK PUTFILE ERROR : unexpected parameter [%s]\n",ae->wl[action->iw+i].w);
-		;		return;
+				MemFree(filedata);
+				return;
 			}
 		} while (!ae->wl[action->iw+i].t);
 	}
-	// the user MUST provide a file with an AMSDOS header (or no header for ASCII file)
-	EDSK_addRAWfile(ae,action->filename,sidedest, filedest, filedata, sizedest, tag_protection, tag_hidden);
+
+	if (tag_amsdos) {
+		if (tag_ascii) {
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"EDSK PUTFILE ERROR : ASCII file is NOT part of AMSDOS thing (no header)\n");
+			return;
+		}
+		if ((tag_type!=-1) && (tag_binary+tag_ascii+tag_basic)) {
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"EDSK PUTFILE ERROR : do not use BASIC,ASCII or BINARY tags when TYPE is defined\n");
+			return;
+		}
+		if (tag_binary+tag_ascii+tag_basic>1) {
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"EDSK PUTFILE ERROR : BASIC,ASCII and BINARY tags are mutually exclusive\n");
+			return;
+		}
+		if (tag_type==-1) {
+			if (tag_binary) { tag_type=2; } else
+			if (tag_basic) { tag_type=0; } else
+			if (tag_basicP) { tag_type=1; } else {
+				if (!ae->nowarning) {
+					rasm_printf(ae,KWARNING"[%s:%d] Warning: EDSK PUTFILE file [%s] has no type defined, using BINARY\n",GetCurrentFile(ae),ae->wl[ae->idx].l,filedest);
+					if (ae->erronwarn) MaxError(ae);
+				}
+				tag_type=2; // binary as default
+			}
+		} else {
+			// rien
+		}
+	} else {
+		if (tag_load|tag_exec|tag_binary|tag_ascii|tag_basic|tag_basicP) {
+			if (!ae->nowarning) {
+				rasm_printf(ae,KWARNING"[%s:%d] Warning: EDSK PUTFILE header tags (binary,basic,load,exec...) will be ignored without AMSDOS tag!\n",GetCurrentFile(ae),ae->wl[ae->idx].l);
+				if (ae->erronwarn) MaxError(ae);
+			}
+		}
+	}
+
+	// create an AMSDOS header as it is requested by the user
+	if (tag_amsdos) {
+		unsigned char *newdata;
+		char amsdos_name[32];
+		int amsdos_user;
+
+		if (tag_type<0 || tag_type>2) {
+			if (tag_type>255) {
+				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"EDSK PUTFILE ERROR : invalid type value (%d)\n",tag_type);
+				tag_exec=0;
+				MemFree(filedata);
+				return;
+			}
+			if (!ae->nowarning) {
+				rasm_printf(ae,KWARNING"[%s:%d] Warning: EDSK PUTFILE file [%s] has a non standard type (%d)\n",GetCurrentFile(ae),ae->wl[ae->idx].l,filedest,tag_type);
+				if (ae->erronwarn) MaxError(ae);
+			}
+		}
+		if (tag_exec<0 || tag_exec>65535) {
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"EDSK PUTFILE ERROR : invalid execution value (%d)\n",tag_exec);
+			tag_exec=0;
+			MemFree(filedata);
+			return;
+		}
+		if (tag_load<0 || tag_load>65535) {
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"EDSK PUTFILE ERROR : invalid loading value (%d)\n",tag_load);
+			tag_load=0;
+			MemFree(filedata);
+			return;
+		}
+
+		strcpy(amsdos_name,MakeAMSDOS_name(ae,filedest,&amsdos_user));
+
+		newdata=MemMalloc(sizedest+128);
+		memcpy(newdata,_internal_MakeAMSDOSHeader(tag_exec, tag_load, tag_load+sizedest, amsdos_name, amsdos_user, tag_type),128);
+		memcpy(newdata+128,filedata,sizedest);
+		MemFree(filedata);
+		filedata=newdata;
+
+		EDSK_addRAWfile(ae,action->filename,sidedest, filedest, filedata, sizedest, tag_protection, tag_hidden);
+	} else {
+		// the user MUST provide a file with an AMSDOS header (or no header for ASCII file)
+		EDSK_addRAWfile(ae,action->filename,sidedest, filedest, filedata, sizedest, tag_protection, tag_hidden);
+	}
+
 	if (filedest!=action->filename3) MemFree(filedest);
 	MemFree(filedata);
 }
@@ -16091,7 +16194,7 @@ void __edsk_create(struct s_assenv *ae, struct s_edsk_action *action) {
 		if (strncmp(ae->wl[ae->idx+i].w,"TRUE",4)==0) trueside=1; else 
 		if (strcmp(ae->wl[ae->idx+i].w,"INTERLACED")==0) interlaced=1; else 
 		if (strcmp(ae->wl[ae->idx+i].w,"OVERWRITE")==0) overwrite=1; else 
-			nbtrack=RoundComputeExpression(ae,ae->wl[ae->idx+i].w,ae->outputadr,0,0);
+			nbtrack=RoundComputeExpression(ae,ae->wl[ae->idx+i].w,action->outputadr,0,0);
 	}
 	format=ae->wl[ae->idx+3].w;
 
@@ -16506,7 +16609,7 @@ void __edsk_add(struct s_assenv *ae, struct s_edsk_action *action) {
 			return;
 		}
 		// get sectorsize
-		sectorsize=RoundComputeExpression(ae,ae->wl[ae->idx+pp+1].w,0,0,0);
+		sectorsize=RoundComputeExpression(ae,ae->wl[ae->idx+pp+1].w,action->outputadr,0,0);
 		switch (sectorsize) {
 			case 0:case 1:case 2:case 3:case 4:case 5:case 6:break; // almost regular size
 			case  128:sectorsize=0;break;
@@ -16621,7 +16724,7 @@ void __edsk_resize(struct s_assenv *ae, struct s_edsk_action *action) {
 			return;
 		}
 		// get sectorsize
-		sectorsize=RoundComputeExpression(ae,ae->wl[ae->idx+pp+1].w,0,0,0);
+		sectorsize=RoundComputeExpression(ae,ae->wl[ae->idx+pp+1].w,action->outputadr,0,0);
 		switch (sectorsize) {
 			case 0:case 1:case 2:case 3:case 4:case 5:case 6:break; // almost regular size
 			case  128:sectorsize=0;break;
@@ -16710,7 +16813,7 @@ void __edsk_reorder(struct s_assenv *ae, struct s_edsk_action *action) {
 			return;
 		}
 		// get new position
-		newposition=RoundComputeExpression(ae,ae->wl[ae->idx+pp+1].w,0,0,0);
+		newposition=RoundComputeExpression(ae,ae->wl[ae->idx+pp+1].w,action->outputadr,0,0);
 
 		for (iloc=0;iloc<nblocation;iloc++) {
 			i=location[iloc].track;
@@ -16994,8 +17097,13 @@ void __EDSK(struct s_assenv *ae) {
 		for (i=0;i<nbfilename;i++) {
 			// enforce filename is a string!
 			if (!StringIsQuote(ae->wl[ae->idx+2+i].w)) {
-				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"EDSK syntax is : EDSK <COMMAND>,'<EDSK filename>',<parameters>...\n");
-				return;
+				if (i+1==nbfilename && (curaction.action==E_EDSK_ACTION_PUTFILE || curaction.action==E_EDSK_ACTION_GETFILE)) {
+					// is ok
+					break;
+				} else {
+					MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"EDSK syntax is : EDSK <COMMAND>,'<EDSK filename>',<parameters>...\n");
+					return;
+				}
 			}
 			tmpfilename=TxtStrDup(ae->wl[ae->idx+2+i].w);
 			/* need to upper case tags */
@@ -17008,6 +17116,7 @@ void __EDSK(struct s_assenv *ae) {
 
 			if (ae->wl[ae->idx+2+i].t) break; // not enough param, do not parse next instruction!
 		}
+		curaction.outputadr=ae->outputadr;
 		curaction.iw=ae->idx;
 		curaction.filename=filename[0];
 		curaction.filename2=filename[1];
@@ -31523,6 +31632,37 @@ printf("testing directive SUMMEM16 OK\n");
 printf("testing formula RND function OK\n");
 
 	FileRemoveIfExists("rasmoutput_testbis.dsk");
+
+#define AUTOTEST_EDSK_IMPORT_EXPORT0 "roudoudou: repeat 50: defb 'roudoudou',0: rend: " \
+	"edsk create,'rasmoutput_test.dsk',VENDOR,OVERWRITE:" \
+	"edsk savefile,'rasmoutput_test.dsk','rasm.bin',0,256,RAW:" \
+	"edsk check,'rasmoutput_test.dsk','2:0x45',256,roudoudou:" \
+	"save 'rasmoutput_test.bin',0,256"
+#define AUTOTEST_EDSK_IMPORT_EXPORT1 "roudoudou: repeat 50: defb 'roudoudou',0: rend:" \
+	"edsk create,'rasmoutput_test.dsk',DATA,OVERWRITE:" \
+	"edsk putfile,'rasmoutput_test.dsk','rasmoutput_test.bin':" \
+	"edsk check,'rasmoutput_test.dsk','0:0xC5',256,roudoudou"
+#define AUTOTEST_EDSK_IMPORT_EXPORT2 "edsk create,'rasmoutput_test.dsk',VENDOR,OVERWRITE: edsk delfile,'rasmoutput_test.dsk','rasmoutp.bin':" \
+	"edsk putfile,'rasmoutput_test.dsk','rasmoutput_test.bin',AMSDOS,BINARY,LOAD=0xC000:" \
+	"edsk putfile,'rasmoutput_test.dsk','rasmoutput_test.bin','dest.Scr',AMSDOS,TYPE=2,LOAD=0xC000,EXEC=0x100,PROT,HIDDEN:" \
+	"lenom defb 0,'RASMOUTPBIN': edsk check,'rasmoutput_test.dsk','2:0x45',12,lenom"
+
+	memset(&param,0,sizeof(struct s_parameter));
+	ret=RasmAssembleInfoParam(AUTOTEST_EDSK_IMPORT_EXPORT0,strlen(AUTOTEST_EDSK_IMPORT_EXPORT0),&opcode,&opcodelen,&debug,&param);
+	if (!ret) {} else {printf("Autotest %03d ERROR (testing EDSK raw file and sides\n",cpt);
+		for (i=0;i<debug->nberror;i++) printf("%d -> %s\n",i,debug->error[i].msg); exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+	memset(&param,0,sizeof(struct s_parameter));
+	ret=RasmAssembleInfoParam(AUTOTEST_EDSK_IMPORT_EXPORT1,strlen(AUTOTEST_EDSK_IMPORT_EXPORT1),&opcode,&opcodelen,&debug,&param);
+	if (!ret) {} else {printf("Autotest %03d ERROR (testing EDSK raw file and sides\n",cpt);
+		for (i=0;i<debug->nberror;i++) printf("%d -> %s\n",i,debug->error[i].msg); exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+	memset(&param,0,sizeof(struct s_parameter));
+	ret=RasmAssembleInfoParam(AUTOTEST_EDSK_IMPORT_EXPORT2,strlen(AUTOTEST_EDSK_IMPORT_EXPORT2),&opcode,&opcodelen,&debug,&param);
+	if (!ret) {} else {printf("Autotest %03d ERROR (testing EDSK raw file and sides\n",cpt);
+		for (i=0;i<debug->nberror;i++) printf("%d -> %s\n",i,debug->error[i].msg); exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing EDSK RAW export + Header import\n");
 
 #define AUTOTEST_EDSK_RAWFILE "noHeaderA defb 'noHeaderA',0 : noHeaderB defb 'noHeaderB',0 :" \
 	"edsk create,'rasmoutput_test.dsk:b',DATA,OVERWRITE:" \
