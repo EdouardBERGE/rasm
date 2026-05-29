@@ -31644,6 +31644,30 @@ printf("testing formula RND function OK\n");
 
 	FileRemoveIfExists("rasmoutput_testbis.dsk");
 
+#define AUTOTEST_EDSK_GETFILE_NH0 "grouik defb 'roudoudou' : save 'grouik.txt',grouik,9"
+	memset(&param,0,sizeof(struct s_parameter));
+	ret=RasmAssembleInfoParam(AUTOTEST_EDSK_GETFILE_NH0,strlen(AUTOTEST_EDSK_GETFILE_NH0),&opcode,&opcodelen,&debug,&param);
+	if (!ret) {} else {printf("Autotest %03d ERROR (testing EDSK GETFILE with/without NOHEADER (preparation)\n",cpt);
+		for (i=0;i<debug->nberror;i++) printf("%d -> %s\n",i,debug->error[i].msg); exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+	memset(&param,0,sizeof(struct s_parameter));
+#define AUTOTEST_EDSK_GETFILE_NH1 "	edsk create,'rasmoutput_test.dsk',DATA,OVERWRITE:" \
+"edsk putfile,'rasmoutput_test.dsk','grouik.txt',AMSDOS,BINARY: edsk putfile,'rasmoutput_test.dsk','grouik.txt','header.lss':" \
+"edsk getfile,'rasmoutput_test.dsk','grouik.txt','grouik_copy.txt': edsk getfile,'rasmoutput_test.dsk','grouik.txt','grouik_copy_no.txt',NOHEADER:" \
+"edsk getfile,'rasmoutput_test.dsk','header.lss','headerless_copy.txt': edsk getfile,'rasmoutput_test.dsk','header.lss','headerless_copy_no.txt',NOHEADER"
+	memset(&param,0,sizeof(struct s_parameter));
+	ret=RasmAssembleInfoParam(AUTOTEST_EDSK_GETFILE_NH1,strlen(AUTOTEST_EDSK_GETFILE_NH1),&opcode,&opcodelen,&debug,&param);
+	if (!ret) {} else {printf("Autotest %03d ERROR (testing EDSK GETFILE with/without NOHEADER (preparation)\n",cpt);
+		for (i=0;i<debug->nberror;i++) printf("%d -> %s\n",i,debug->error[i].msg); exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+	memset(&param,0,sizeof(struct s_parameter));
+
+	if (FileGetSize("grouik_copy.txt")!=9+128) {printf("Autotest %03d ERROR (testing EDSK GETFILE with/without NOHEADER => getfile with header KO\n",cpt);exit(1);}
+	if (FileGetSize("grouik_copy_no.txt")!=9) {printf("Autotest %03d ERROR (testing EDSK GETFILE with/without NOHEADER => getfile without header KO\n",cpt);exit(1);}
+	if (FileGetSize("headerless_copy.txt")!=128) {printf("Autotest %03d ERROR (testing EDSK GETFILE with/without NOHEADER => getfile headerless copy 1/2 KO\n",cpt);exit(1);}
+	if (FileGetSize("headerless_copy_no.txt")!=128) {printf("Autotest %03d ERROR (testing EDSK GETFILE with/without NOHEADER => getfile headerless copy 2/2 KO\n",cpt);exit(1);}
+printf("testing EDSK GETFILE with/without NOHEADER OK\n");
+
 #define AUTOTEST_EDSK_IMPORT_EXPORT0 "roudoudou: repeat 50: defb 'roudoudou',0: rend: " \
 	"edsk create,'rasmoutput_test.dsk',VENDOR,OVERWRITE:" \
 	"edsk savefile,'rasmoutput_test.dsk','rasm.bin',0,256,RAW:" \
@@ -31660,17 +31684,17 @@ printf("testing formula RND function OK\n");
 
 	memset(&param,0,sizeof(struct s_parameter));
 	ret=RasmAssembleInfoParam(AUTOTEST_EDSK_IMPORT_EXPORT0,strlen(AUTOTEST_EDSK_IMPORT_EXPORT0),&opcode,&opcodelen,&debug,&param);
-	if (!ret) {} else {printf("Autotest %03d ERROR (testing EDSK raw file and sides\n",cpt);
+	if (!ret) {} else {printf("Autotest %03d ERROR (testing EDSK import/export 1\n",cpt);
 		for (i=0;i<debug->nberror;i++) printf("%d -> %s\n",i,debug->error[i].msg); exit(-1);}
 	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
 	memset(&param,0,sizeof(struct s_parameter));
 	ret=RasmAssembleInfoParam(AUTOTEST_EDSK_IMPORT_EXPORT1,strlen(AUTOTEST_EDSK_IMPORT_EXPORT1),&opcode,&opcodelen,&debug,&param);
-	if (!ret) {} else {printf("Autotest %03d ERROR (testing EDSK raw file and sides\n",cpt);
+	if (!ret) {} else {printf("Autotest %03d ERROR (testing EDSK import/export 2\n",cpt);
 		for (i=0;i<debug->nberror;i++) printf("%d -> %s\n",i,debug->error[i].msg); exit(-1);}
 	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
 	memset(&param,0,sizeof(struct s_parameter));
 	ret=RasmAssembleInfoParam(AUTOTEST_EDSK_IMPORT_EXPORT2,strlen(AUTOTEST_EDSK_IMPORT_EXPORT2),&opcode,&opcodelen,&debug,&param);
-	if (!ret) {} else {printf("Autotest %03d ERROR (testing EDSK raw file and sides\n",cpt);
+	if (!ret) {} else {printf("Autotest %03d ERROR (testing EDSK import/export 3\n",cpt);
 		for (i=0;i<debug->nberror;i++) printf("%d -> %s\n",i,debug->error[i].msg); exit(-1);}
 	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
 printf("testing EDSK RAW export + Header import\n");
