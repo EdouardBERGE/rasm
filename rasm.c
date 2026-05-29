@@ -15778,7 +15778,8 @@ void __edsk_getfile(struct s_assenv *ae, struct s_edsk_action *action) {
 						int headerSize;
 						headerSize=filedata[24]+(filedata[25]<<8);
 						if (headerSize<realsize && headerSize>realsize-1025) {
-							realsize=headerSize;
+							// we have a realist size in the header
+							realsize=headerSize+128;
 						} else {
 							if (!ae->nowarning) {
 								rasm_printf(ae,KWARNING"[%s:%d] Warning: EDSK GETFILE file [%s] has a wrong size in header and was ignored\n",GetCurrentFile(ae),ae->wl[ae->idx].l,filename);
@@ -15802,7 +15803,17 @@ void __edsk_getfile(struct s_assenv *ae, struct s_edsk_action *action) {
 					tag_noheader=0;
 				}
 				FileRemoveIfExists(filedest);
-				FileWriteBinary(filedest,(char*)filedata+tag_noheader,realsize-tag_noheader);
+				switch (tag_noheader) {
+					case 0: FileWriteBinary(filedest,(char*)filedata,realsize);
+						break;
+					case 128: FileWriteBinary(filedest,(char*)filedata+128,realsize-128);
+						break;
+					default: MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"EDSK GETFILE internal error with tag_noheader, please report\n",filename);
+						 break;
+				}
+				if (!tag_noheader) {
+				}
+
 				FileWriteBinaryClose(filedest);
 				rasm_printf(ae,KIO"Write file [%s] from EDSK %s\n",filedest,action->filename);
 				MemFree(filedata);
