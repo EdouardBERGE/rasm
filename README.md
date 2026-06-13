@@ -61,7 +61,7 @@ There is a cool French and English documentation, you should read it ;)
 
 ## Quality
 
-Each build is tested every release, with 1700 automated tests. We use TDD, end-to-end and exploratory testing.
+Each build is tested every release, with 1880 automated tests. We use TDD, end-to-end and exploratory testing.
 
 ## History
 
@@ -74,6 +74,10 @@ As RASM does not rely on library or something, the compilation was always intend
 ### Linux / Raspberry PI
 
 > make release
+
+On Linux you can expect significant performance improvements with the mimalloc library
+
+> make superfastmi
 
 ### MacOS
 
