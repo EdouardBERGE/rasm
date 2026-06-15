@@ -839,7 +839,7 @@ E_IFTHEN_TYPE_END
 
 struct s_ifthen {
 	char *filename;
-	int line,v;
+	int line,v,first;
 	enum e_ifthen_type type;
 };
 
@@ -20509,36 +20509,40 @@ void __IFUSED(struct s_assenv *ae) {
 	struct s_expr_dico *curdico;
 	
 	if (!ae->wl[ae->idx].t && ae->wl[ae->idx+1].t==1) {
-		if (!ae->AutomateValidLabelFirst[((int)ae->wl[ae->idx+1].w[0])&0xFF]) {
+		char *currentVar;
+		int touched=0;
+		currentVar=TranslateTag(ae,TxtStrDup(ae->wl[ae->idx+1].w),&touched,1,E_TAGOPTION_REMOVESPACE);
+		crc=GetCRC(currentVar);
+		if (!ae->AutomateValidLabelFirst[((int)currentVar[0])&0xFF]) {
 			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"IFUSED argument must be a variable, alias or a label\n");
 			return;
 		}
-		crc=GetCRC(ae->wl[ae->idx+1].w);
-		if ((curdico=SearchDico(ae,ae->wl[ae->idx+1].w,crc))!=NULL) {
+		if ((curdico=SearchDico(ae,currentVar,crc))!=NULL) {
 			rexpr=curdico->used;
 		} else {
 			char *labelmodule=NULL;
 			// first look for module label!
 			if (ae->module) {
-				labelmodule=MemMalloc(ae->modulen+2+strlen(ae->wl[ae->idx+1].w));
+				labelmodule=MemMalloc(ae->modulen+2+strlen(currentVar));
 				strcpy(labelmodule,ae->module);
 				strcat(labelmodule,ae->module_separator);
-				strcat(labelmodule,ae->wl[ae->idx+1].w);
+				strcat(labelmodule,currentVar);
 				curlabel=SearchLabel(ae,labelmodule,GetCRC(labelmodule));
 				lm=1; // we found a label inside the module
 				MemFree(labelmodule);
 			} else {
-				curlabel=SearchLabel(ae,ae->wl[ae->idx+1].w,crc);
+				curlabel=SearchLabel(ae,currentVar,crc);
 			}
 
 			if (curlabel) {
 				rexpr=curlabel->used;
-			} else if ((curalias=SearchAlias(ae,crc,ae->wl[ae->idx+1].w))!=NULL) {
+			} else if ((curalias=SearchAlias(ae,crc,currentVar))!=NULL) {
 				rexpr=curalias->used;
 			} else {
 				rexpr=0;
 			}
 		}
+		if (touched) MemFree(currentVar);
 		if (!rexpr && !lm) rexpr|=SearchUsed(ae,ae->wl[ae->idx+1].w,crc); // try again with unknown symbols except if a label was found inside the module
 		ifthen.v=rexpr;
 		ifthen.filename=GetCurrentFile(ae);
@@ -20580,31 +20584,38 @@ void __IFDEF(struct s_assenv *ae) {
 	int rexpr,crc;
 	
 	if (!ae->wl[ae->idx].t && ae->wl[ae->idx+1].t==1) {
-		crc=GetCRC(ae->wl[ae->idx+1].w);
-		if ((SearchDico(ae,ae->wl[ae->idx+1].w,crc))!=NULL) {
+		char *currentVar;
+		int touched=0;
+		//glop
+		currentVar=TranslateTag(ae,TxtStrDup(ae->wl[ae->idx+1].w),&touched,1,E_TAGOPTION_REMOVESPACE);
+		crc=GetCRC(currentVar);
+
+		if ((SearchDico(ae,currentVar,crc))!=NULL) {
 			rexpr=1;
 		} else {
 			char *labelmodule=NULL;
 			// first look for module label!
 			if (ae->module) {
-				labelmodule=MemMalloc(ae->modulen+2+strlen(ae->wl[ae->idx+1].w));
+				labelmodule=MemMalloc(ae->modulen+2+strlen(currentVar));
 				strcpy(labelmodule,ae->module);
 				strcat(labelmodule,ae->module_separator);
-				strcat(labelmodule,ae->wl[ae->idx+1].w);
+				strcat(labelmodule,currentVar);
 			}
 			if (labelmodule && (SearchLabel(ae,labelmodule,GetCRC(labelmodule)))!=NULL) {
 				rexpr=1;
-			} else if ((SearchLabel(ae,ae->wl[ae->idx+1].w,crc))!=NULL) {
+			} else if ((SearchLabel(ae,currentVar,crc))!=NULL) {
 				rexpr=1;
-			} else if (SearchAlias(ae,crc,ae->wl[ae->idx+1].w)) {
+			} else if (SearchAlias(ae,crc,currentVar)) {
 					rexpr=1;
-			} else if (SearchMacro(ae,crc,ae->wl[ae->idx+1].w)>=0) {
+			} else if (SearchMacro(ae,crc,currentVar)>=0) {
 					rexpr=1;
 			} else {
 				rexpr=0;
 			}
 			if (labelmodule) MemFree(labelmodule);
 		}
+		if (touched) MemFree(currentVar);
+
 		ifthen.v=rexpr;
 		ifthen.filename=GetCurrentFile(ae);
 		ifthen.line=ae->wl[ae->idx].l;
@@ -20634,31 +20645,37 @@ void __IFNDEF(struct s_assenv *ae) {
 	int rexpr,crc;
 	
 	if (!ae->wl[ae->idx].t && ae->wl[ae->idx+1].t==1) {
-		crc=GetCRC(ae->wl[ae->idx+1].w);
-		if ((SearchDico(ae,ae->wl[ae->idx+1].w,crc))!=NULL) {
+		char *currentVar;
+		int touched=0;
+		//glop
+		currentVar=TranslateTag(ae,TxtStrDup(ae->wl[ae->idx+1].w),&touched,1,E_TAGOPTION_REMOVESPACE);
+		crc=GetCRC(currentVar);
+		if ((SearchDico(ae,currentVar,crc))!=NULL) {
 			rexpr=0;
 		} else {
 			char *labelmodule=NULL;
 			// first look for module label!
 			if (ae->module) {
-				labelmodule=MemMalloc(ae->modulen+2+strlen(ae->wl[ae->idx+1].w));
+				labelmodule=MemMalloc(ae->modulen+2+strlen(currentVar));
 				strcpy(labelmodule,ae->module);
 				strcat(labelmodule,ae->module_separator);
-				strcat(labelmodule,ae->wl[ae->idx+1].w);
+				strcat(labelmodule,currentVar);
 			}
 			if (ae->module && (SearchLabel(ae,labelmodule,GetCRC(labelmodule)))!=NULL) {
 				rexpr=0;
-			} else if ((SearchLabel(ae,ae->wl[ae->idx+1].w,crc))!=NULL) {
+			} else if ((SearchLabel(ae,currentVar,crc))!=NULL) {
 				rexpr=0;
-			} else if (SearchAlias(ae,crc,ae->wl[ae->idx+1].w)) {
+			} else if (SearchAlias(ae,crc,currentVar)) {
 					rexpr=0;
-			} else if (SearchMacro(ae,crc,ae->wl[ae->idx+1].w)>=0) {
+			} else if (SearchMacro(ae,crc,currentVar)>=0) {
 				rexpr=0;
 			} else {
 				rexpr=1;
 			}
 			if (labelmodule) MemFree(labelmodule);
 		}
+		if (touched) MemFree(currentVar);
+
 		ifthen.v=rexpr;
 		ifthen.filename=GetCurrentFile(ae);
 		ifthen.line=ae->wl[ae->idx].l;
@@ -20805,37 +20822,53 @@ void __ENDSWITCH(struct s_assenv *ae) {
 }
 void __ELSEIFNOT(struct s_assenv *ae) {
 
-	if (!ae->wl[ae->idx].t && ae->wl[ae->idx+1].t==1) {
-		ae->ifthen[ae->ii-1].type=E_IFTHEN_TYPE_ELSEIFNOT;
-		ae->ifthen[ae->ii-1].line=ae->wl[ae->idx].l;
-		ae->ifthen[ae->ii-1].filename=GetCurrentFile(ae);
-		if (ae->ifthen[ae->ii-1].v) {
-			/* il faut signifier aux suivants qu'on va jusqu'au ENDIF */
-			ae->ifthen[ae->ii-1].v=-1;
+	if (ae->ii) {
+		if (!ae->wl[ae->idx].t && ae->wl[ae->idx+1].t==1) {
+			if (ae->ifthen[ae->ii-1].first) {
+				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"unexpected ELSEIFNOT (no previous IF or previous ELSE)\n");
+			} else {
+				ae->ifthen[ae->ii-1].type=E_IFTHEN_TYPE_ELSEIFNOT;
+				ae->ifthen[ae->ii-1].line=ae->wl[ae->idx].l;
+				ae->ifthen[ae->ii-1].filename=GetCurrentFile(ae);
+				if (ae->ifthen[ae->ii-1].v) {
+					/* il faut signifier aux suivants qu'on va jusqu'au ENDIF */
+					ae->ifthen[ae->ii-1].v=-1;
+				} else {
+					//ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
+					ae->ifthen[ae->ii-1].v=!RoundComputeExpression(ae,ae->wl[ae->idx+1].w,ae->codeadr,0,1);
+				}
+			}
+			ae->idx++;
 		} else {
-			//ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
-			ae->ifthen[ae->ii-1].v=!RoundComputeExpression(ae,ae->wl[ae->idx+1].w,ae->codeadr,0,1);
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"ELSEIFNOT need one expression\n");
 		}
-		ae->idx++;
 	} else {
-		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"ELSEIFNOT need one expression\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"ELSEIFNOT encounter whereas there is no referent IF\n");
 	}
 }
 void __ELSEIFNOT_light(struct s_assenv *ae) {
 
-	if (!ae->wl[ae->idx].t && ae->wl[ae->idx+1].t==1) {
-		ae->ifthen[ae->ii-1].type=E_IFTHEN_TYPE_ELSEIFNOT;
-		ae->ifthen[ae->ii-1].line=ae->wl[ae->idx].l;
-		ae->ifthen[ae->ii-1].filename=GetCurrentFile(ae);
-		if (ae->ifthen[ae->ii-1].v) {
-			/* il faut signifier aux suivants qu'on va jusqu'au ENDIF */
-			ae->ifthen[ae->ii-1].v=-1;
+	if (ae->ii) {
+		if (!ae->wl[ae->idx].t && ae->wl[ae->idx+1].t==1) {
+			if (ae->ifthen[ae->ii-1].first) {
+				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"unexpected ELSEIFNOT (no previous IF or previous ELSE)\n");
+			} else {
+				ae->ifthen[ae->ii-1].type=E_IFTHEN_TYPE_ELSEIFNOT;
+				ae->ifthen[ae->ii-1].line=ae->wl[ae->idx].l;
+				ae->ifthen[ae->ii-1].filename=GetCurrentFile(ae);
+				if (ae->ifthen[ae->ii-1].v) {
+					/* il faut signifier aux suivants qu'on va jusqu'au ENDIF */
+					ae->ifthen[ae->ii-1].v=-1;
+				} else {
+					ae->ifthen[ae->ii-1].v=0;
+				}
+			}
+			ae->idx++;
 		} else {
-			ae->ifthen[ae->ii-1].v=0;
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"ELSEIFNOT need one expression\n");
 		}
-		ae->idx++;
 	} else {
-		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"ELSEIFNOT need one expression\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"ELSEIFNOT encounter whereas there is no referent IF\n");
 	}
 }
 
@@ -20876,15 +20909,20 @@ void __IFNOT_light(struct s_assenv *ae) {
 void __ELSE(struct s_assenv *ae) {
 	if (ae->ii) {
 		if (ae->wl[ae->idx].t==1) {
-			/* ELSE a executer seulement si celui d'avant est a zero */
-			switch (ae->ifthen[ae->ii-1].v) {
-				case -1:break;
-				case 0:ae->ifthen[ae->ii-1].v=1;break;
-				case 1:ae->ifthen[ae->ii-1].v=0;break;
+			if (ae->ifthen[ae->ii-1].first) {
+				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"unexpected ELSE (no previous IF or previous ELSE)\n");
+			} else {
+				/* ELSE a executer seulement si celui d'avant est a zero */
+				switch (ae->ifthen[ae->ii-1].v) {
+					case -1:break;
+					case 0:ae->ifthen[ae->ii-1].v=1;break;
+					case 1:ae->ifthen[ae->ii-1].v=0;break;
+				}
+				ae->ifthen[ae->ii-1].first=1;
+				ae->ifthen[ae->ii-1].type=E_IFTHEN_TYPE_ELSE;
+				ae->ifthen[ae->ii-1].line=ae->wl[ae->idx].l;
+				ae->ifthen[ae->ii-1].filename=GetCurrentFile(ae);
 			}
-			ae->ifthen[ae->ii-1].type=E_IFTHEN_TYPE_ELSE;
-			ae->ifthen[ae->ii-1].line=ae->wl[ae->idx].l;
-			ae->ifthen[ae->ii-1].filename=GetCurrentFile(ae);
 		} else {
 			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"ELSE does not need any parameter\n");
 		}
@@ -20894,37 +20932,52 @@ void __ELSE(struct s_assenv *ae) {
 }
 void __ELSEIF(struct s_assenv *ae) {
 
-	if (!ae->wl[ae->idx].t && ae->wl[ae->idx+1].t==1) {
-		ae->ifthen[ae->ii-1].type=E_IFTHEN_TYPE_ELSEIF;
-		ae->ifthen[ae->ii-1].line=ae->wl[ae->idx].l;
-		ae->ifthen[ae->ii-1].filename=GetCurrentFile(ae);
-		if (ae->ifthen[ae->ii-1].v) {
-			/* il faut signifier aux suivants qu'on va jusqu'au ENDIF */
-			ae->ifthen[ae->ii-1].v=-1;
+	if (ae->ii) {
+		if (!ae->wl[ae->idx].t && ae->wl[ae->idx+1].t==1) {
+			if (ae->ifthen[ae->ii-1].first) {
+				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"unexpected ELSEIF (no previous IF or previous ELSE)\n");
+			} else {
+				ae->ifthen[ae->ii-1].type=E_IFTHEN_TYPE_ELSEIF;
+				ae->ifthen[ae->ii-1].line=ae->wl[ae->idx].l;
+				ae->ifthen[ae->ii-1].filename=GetCurrentFile(ae);
+				if (ae->ifthen[ae->ii-1].v) {
+					/* il faut signifier aux suivants qu'on va jusqu'au ENDIF */
+					ae->ifthen[ae->ii-1].v=-1;
+				} else {
+					//ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
+					ae->ifthen[ae->ii-1].v=!!RoundComputeExpression(ae,ae->wl[ae->idx+1].w,ae->codeadr,0,1);
+				}
+			}
+			ae->idx++;
 		} else {
-			//ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
-			ae->ifthen[ae->ii-1].v=!!RoundComputeExpression(ae,ae->wl[ae->idx+1].w,ae->codeadr,0,1);
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"ELSEIF need one expression\n");
 		}
-		ae->idx++;
 	} else {
-		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"ELSEIF need one expression\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"ELSEIF encounter whereas there is no referent IF\n");
 	}
 }
 void __ELSEIF_light(struct s_assenv *ae) {
-
-	if (!ae->wl[ae->idx].t && ae->wl[ae->idx+1].t==1) {
-		ae->ifthen[ae->ii-1].type=E_IFTHEN_TYPE_ELSEIF;
-		ae->ifthen[ae->ii-1].line=ae->wl[ae->idx].l;
-		ae->ifthen[ae->ii-1].filename=GetCurrentFile(ae);
-		if (ae->ifthen[ae->ii-1].v) {
-			/* il faut signifier aux suivants qu'on va jusqu'au ENDIF */
-			ae->ifthen[ae->ii-1].v=-1;
+	if (ae->ii) {
+		if (!ae->wl[ae->idx].t && ae->wl[ae->idx+1].t==1) {
+			if (ae->ifthen[ae->ii-1].first) {
+				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"unexpected ELSE (no previous IF or previous ELSE)\n");
+			} else {
+				ae->ifthen[ae->ii-1].type=E_IFTHEN_TYPE_ELSEIF;
+				ae->ifthen[ae->ii-1].line=ae->wl[ae->idx].l;
+				ae->ifthen[ae->ii-1].filename=GetCurrentFile(ae);
+				if (ae->ifthen[ae->ii-1].v) {
+					/* il faut signifier aux suivants qu'on va jusqu'au ENDIF */
+					ae->ifthen[ae->ii-1].v=-1;
+				} else {
+					ae->ifthen[ae->ii-1].v=0;
+				}
+			}
+			ae->idx++;
 		} else {
-			ae->ifthen[ae->ii-1].v=0;
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"ELSEIF need one expression\n");
 		}
-		ae->idx++;
 	} else {
-		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"ELSEIF need one expression\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"ELSEIF encounter whereas there is no referent IF\n");
 	}
 }
 void __ENDIF(struct s_assenv *ae) {
@@ -30353,6 +30406,40 @@ struct s_autotest_keyword autotest_keyword[]={
 	{" or (iy-129)",1}, {" cp (iy+128)",1}, {" cp (iy-129)",1}, {"and (iy+128)",1}, {"and (iy-129)",1}, {"set 0,(iy+128),d",1},
 	{"set 0,(iy-129),b",1}, {"res 0,(iy+128),e",1}, {"res 0,(iy-129),c",1}, {"set 0,(iy+128)",1}, {"set 0,(iy-129)",1},
 	{"res 0,(iy+128)",1}, {"res 0,(iy-129)",1}, {"bit 0,(iy+128)",1}, {"bit 0,(iy-129)",1},
+	// wrong ELSE
+	{"if 0 : nop : else : nop : else : nop : endif",1},
+	{"if 0 : nop : else : nop : elseif 0 : nop : endif",1},
+	{"if 0 : nop : else : nop : elseifnot 0 : nop : endif",1},
+	{"if 0 : nop : elseif 0 : nop : else : nop : else : endif",1},
+	{"if 0 : nop : elseif 0 : nop : else : nop : elseif 0 : nop : endif",1},
+	{"if 0 : nop : elseif 0 : nop : else : nop : elseifnot 0 : nop : endif",1},
+	{"ELSE",1},
+	{"ENDIF",1},
+	{"ELSEIF 0",1},
+	{"ELSEIF 1",1},
+	{"ELSEIFNOT 0",1},
+	{"ELSEIFNOT 1",1},
+	{"IF 0",1},
+	{"IF 1",1},
+	{"IF 0:ELSE",1},
+	{"IF 0:ELSEIF 0",1},
+	{"IF 0:ELSEIFNOT 0",1},
+	{"ENDIF:ENDIF",1},
+	{"IF 0:ENDIF:ENDIF",1},
+	{"IF 0:ELSE:ENDIF:ENDIF",1},
+	{"IF 0:ELSE:ELSE:ENDIF",1},
+	{"IF 0:ELSEIF 0:ELSE:ELSE:ENDIF",1},
+	{"IF 0:ELSE:ELSEIF 0:ENDIF",1},
+	{"IF 0:ELSE:ELSEIFNOT 1:ENDIF",1},
+	{"IF 0:ELSE:ELSEIF 0:ENDIF",1},
+	{"IF 0:ELSE:ELSEIFNOT 0:ENDIF",1},
+	{"IF 0:ENDIF:ELSE",1},
+	{"IF 0:ENDIF:ELSEIF 0",1},
+	{"IF 0:ENDIF:ELSEIFNOT 0",1},
+	{"IF 0:IF 0:ENDIF",1},
+	{"IF 0:IF 0",1},
+	{"IF 0:IF 0:ELSE",1},
+	{"IF 0:IF 0:ENDIF:ENDIF:ENDIF",1},
 
 	/*
 	 *
@@ -30725,7 +30812,7 @@ printf("testing %d various opcode tests OK\n",i);
 
 	idx=0;
 	while (autotest_keyword[idx].keywordtest) {
-		//if (idx>1198 && idx<1300) printf("%s\n",autotest_keyword[idx].keywordtest);
+		//if (idx>1400) printf("%s\n",autotest_keyword[idx].keywordtest);
 		ret=RasmAssemble(autotest_keyword[idx].keywordtest,strlen(autotest_keyword[idx].keywordtest),&opcode,&opcodelen);
 		if (!ret && !autotest_keyword[idx].result) {
 		} else if (ret && autotest_keyword[idx].result) {
@@ -31410,6 +31497,14 @@ printf("testing ticker OK\n");
 	if (!ret) {} else {printf("Autotest %03d ERROR (ifdef ifused)\n",cpt);exit(-1);}
 	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
 printf("testing IFDEF / IFUSED OK\n");
+
+#define AUTOTEST_IFDEF_TAG "machin5=50: idx=5: zob=1: if machin{idx}==50 : nop : else : zob=0 : endif:" \
+	"ifdef machin{idx} : nop : else : zob=0 : endif:ifndef machin{idx} : zob=0 : else : nop : endif:" \
+	"ifused machin{idx} : nop: else : zob=0 : endif:ifnused machin{idx} : zob=0 : else : nop : endif: assert zob==1"
+	ret=RasmAssemble(AUTOTEST_IFDEF_TAG,strlen(AUTOTEST_IFDEF_TAG),&opcode,&opcodelen);
+	if (!ret) {} else {printf("Autotest %03d ERROR (ifdef/ifused with tags)\n",cpt);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing IFDEF/IFUSED with tags OK\n");
 
 	ret=RasmAssemble(AUTOTEST_SIZEOF_BUG0,strlen(AUTOTEST_SIZEOF_BUG0),&opcode,&opcodelen); // bug report Anrikun
 	if (ret) {} else {printf("Autotest %03d ERROR (must not sizeof an unknown struct)\n",cpt);exit(-1);}
