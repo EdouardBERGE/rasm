@@ -1161,6 +1161,10 @@ struct s_filebyte_cache {
 	unsigned int occ;
 };
 
+struct s_globalLabelStack {
+	char *label;
+	int len;
+};
 
 /*******************************************
         G L O B A L     S T R U C T
@@ -1242,10 +1246,11 @@ struct s_assenv {
 	struct s_breakpoint *breakpoint;
 	int ibreakpoint,maxbreakpoint;
 	char *lastgloballabel;
+	int lastgloballabelMaxAlloc;
 	int curProxIndex; // not used
 	//char *lastsuperglobal;
-	int lastgloballabellen, lastglobalalloc;
-	char **globalstack; /* retrieve back global from previous scope */
+	int lastgloballabellen;
+	struct s_globalLabelStack *globalLabelStack; /* retrieve back global from previous scope */
 	int igs,mgs;
 	char *source_bigbuffer;   // huge buffer which will be preserved from preprocessing
 	int source_bigbuffer_len; // len of this buffer which will be used to get back label case
@@ -2301,6 +2306,8 @@ void InitAutomate(char *autotab, const unsigned char *def)
 void StateMachineResizeBuffer(char **ABuf, const int idx, int *ASize) {
 	#undef FUNC
 	#define FUNC "StateMachineResizeBuffer"
+	int refSize=0;
+	if (!ASize) ASize=&refSize;
 
 	if (idx>=*ASize) {
 		*ASize=idx;
@@ -2320,18 +2327,6 @@ __forceinline int GetCRC(char *label) {
 static inline int GetCRC(char *label) {
 #endif
 #endif
-
-int _oldGetCRC(const char *label) {
-	#undef FUNC
-	#define FUNC "GetCRC"
-	int crc=0x12345678;
-	int i=0;
-
-	while (label[i]!=0) {
-		crc=(crc<<9)^(crc+label[i++]);
-	}
-	return crc;
-}
 
 int GetCRC(const char *label) {
         #undef FUNC
@@ -2531,7 +2526,6 @@ int StringIsQuote(const char *w)
 	}
 	return 0;
 }
-
 char *StringRemoveQuotes(struct s_assenv *ae,const char *w) {
 	char *newstr;
 	static char *dummy="NULL";
@@ -3225,13 +3219,13 @@ void FreeAssenv(struct s_assenv *ae)
 	if (ae->mmacro) MemFree(ae->macro);
 
 	for (i=0;i<ae->igs;i++) {
-		if (ae->globalstack[i]) MemFree(ae->globalstack[i]);
+		if (ae->globalLabelStack[i].label) MemFree(ae->globalLabelStack[i].label);
 	}
-	if (ae->mgs) MemFree(ae->globalstack);
-	if (ae->lastglobalalloc) {
+	if (ae->mgs) MemFree(ae->globalLabelStack);
+	if (ae->lastgloballabel) {
 		MemFree(ae->lastgloballabel);
-		ae->lastglobalalloc=0;
 		ae->lastgloballabel=NULL;
+		ae->lastgloballabellen=0;
 	}
 	/* EDSK + HFE */
 	for (i=0;i<ae->nbedskaction;i++) {
@@ -4268,7 +4262,7 @@ char *MakeLocalLabel(struct s_assenv *ae,const char *varbuffer, int *retdek)
 	/* not so local labels */
 	if (varbuffer[0]=='.') {
 		/* create reference */
-		if (ae->lastgloballabel) {
+		if (ae->lastgloballabellen) {
 			locallabel=MemMalloc(strlen(varbuffer)+1+ae->lastgloballabellen);
 			sprintf(locallabel,"%s%s",ae->lastgloballabel,varbuffer);
 			if (retdek) *retdek=0;
@@ -5389,7 +5383,7 @@ int __COUNTNOPS(struct s_assenv *ae,char *label1, char *label2, int didx)
 		if (ae->dams) {
 			newLabel1=label1+1; // skip dot in DAMS mode
 		} else {
-			if (ae->lastgloballabel) {
+			if (ae->lastgloballabellen) {
 				newLabel1=MemMalloc(strlen(label1)+1+ae->lastgloballabellen);
 				sprintf(newLabel1,"%s%s",ae->lastgloballabel,label1);
 				alloc1=1;
@@ -5402,7 +5396,7 @@ int __COUNTNOPS(struct s_assenv *ae,char *label1, char *label2, int didx)
 		if (ae->dams) {
 			newLabel2=label2+1; // skip dot in DAMS mode
 		} else {
-			if (ae->lastgloballabel) {
+			if (ae->lastgloballabellen) {
 				newLabel2=MemMalloc(strlen(label2)+1+ae->lastgloballabellen);
 				sprintf(newLabel2,"%s%s",ae->lastgloballabel,label2);
 				alloc2=1;
@@ -10425,16 +10419,19 @@ void PushLabel(struct s_assenv *ae)
 			curlabel.local=1;
 			curlabel.localsize=strlen(varbuffer);
 			curlabel.name=MakeLocalLabel(ae,varbuffer,NULL);  MemFree(varbuffer);
-			curlabel.crc=GetCRC(curlabel.name);
+			curlabel.crc=GetCRCandLength(curlabel.name,&ae->lastgloballabellen);
 
+			StateMachineResizeBuffer(&ae->lastgloballabel,ae->lastgloballabellen+1,&ae->lastgloballabelMaxAlloc);
 			/* local labels ALSO set new reference */
-			if (ae->lastglobalalloc) {
+#if 0
+			if (ae->lastgloballabel) {
 //printf("push LOCAL is freeing lastgloballabel\n");
 				MemFree(ae->lastgloballabel);
 			}
-			ae->lastgloballabel=TxtStrDup(curlabel.name);
-			ae->lastgloballabellen=strlen(ae->lastgloballabel);
-			ae->lastglobalalloc=1;
+			ae->lastgloballabel=MemMalloc(ae->lastgloballabellen+1);
+#endif
+			memcpy(ae->lastgloballabel,curlabel.name,ae->lastgloballabellen+1);
+			//ae->lastgloballabellen=strlen(ae->lastgloballabel);
 //printf("push LOCAL as reference [%d] for proximity label -> [%s]\n",im, ae->lastgloballabel);
 
 		} else {
@@ -10455,7 +10452,7 @@ void PushLabel(struct s_assenv *ae)
 						curlabel.crc=GetCRC(curlabel.name);
 					} else {
 						/* proximity labels */
-						if (ae->lastgloballabel) {
+						if (ae->lastgloballabellen) {
 							curlabel.name=MemMalloc(strlen(varbuffer)+1+ae->lastgloballabellen);
 							sprintf(curlabel.name,"%s%s",ae->lastgloballabel,varbuffer);
 							MemFree(varbuffer);
@@ -10478,13 +10475,12 @@ printf("PUSH Orphan PROXIMITY label that cannot be exported [%s]->[%s]\n",ae->wl
 	printf("PUSH => GLOBAL [%s]\n",varbuffer);
 #endif
 					curlabel.name=varbuffer; 
-					curlabel.crc=GetCRC(varbuffer);
+					curlabel.crc=GetCRCandLength(varbuffer,&ae->lastgloballabellen);
 
 					/* global labels set new reference */
-					if (ae->lastglobalalloc) MemFree(ae->lastgloballabel);
-					ae->lastgloballabel=TxtStrDup(curlabel.name);
-					ae->lastgloballabellen=strlen(curlabel.name);
-					ae->lastglobalalloc=1;
+					//if (ae->lastgloballabel) MemFree(ae->lastgloballabel);
+					//ae->lastgloballabel=MemMalloc(ae->lastgloballabellen+1);
+					memcpy(ae->lastgloballabel,curlabel.name,ae->lastgloballabellen+1);
 					break;
 			}
 
@@ -17388,7 +17384,7 @@ void __internal_LOCAL(struct s_assenv *ae, int localval) {
 		freeflag=0;
 	
 		/* local label */	
-		if (ae->wl[ae->idx].w[0]=='.' && ae->lastgloballabel) {
+		if (ae->wl[ae->idx].w[0]=='.' && ae->lastgloballabellen) {
 			localname=MemMalloc(strlen(ae->wl[ae->idx].w)+1+ae->lastgloballabellen);
 			sprintf(localname,"%s%s",ae->lastgloballabel,ae->wl[ae->idx].w);
 			freeflag=1;
@@ -17421,7 +17417,7 @@ void __internal_EXPORT(struct s_assenv *ae, int exportval) {
 		freeflag=0;
 	
 		/* local label */	
-		if (ae->wl[ae->idx].w[0]=='.' && ae->lastgloballabel) {
+		if (ae->wl[ae->idx].w[0]=='.' && ae->lastgloballabellen) {
 			localname=MemMalloc(strlen(ae->wl[ae->idx].w)+1+ae->lastgloballabellen);
 			sprintf(localname,"%s%s",ae->lastgloballabel,ae->wl[ae->idx].w);
 			freeflag=1;
@@ -18837,37 +18833,44 @@ void __CHARSET(struct s_assenv *ae) {
 }
 
 void PushGlobal(struct s_assenv *ae) {
-	char *zelast;
-	if (ae->lastgloballabel) zelast=TxtStrDup(ae->lastgloballabel); else zelast=NULL;
-	ObjectArrayAddDynamicValueConcat((void **)&ae->globalstack,&ae->igs,&ae->mgs,&zelast,sizeof(char *));
+	struct s_globalLabelStack curGLS;
+
+	if (ae->lastgloballabellen) {
+		curGLS.label=MemMalloc(ae->lastgloballabellen+1);
+		memcpy(curGLS.label,ae->lastgloballabel,ae->lastgloballabellen+1);
+		curGLS.len=ae->lastgloballabellen;
+	} else {
+		curGLS.label=NULL;
+		curGLS.len=0;
+	}
+	ObjectArrayAddDynamicValueConcat((void **)&ae->globalLabelStack,&ae->igs,&ae->mgs,&curGLS,sizeof(struct s_globalLabelStack));
 
 #if TRACE_LABEL
-printf("==> PushGlobal on Stack [%s] igs=%d\n",zelast,ae->igs);
+printf("==> PushGlobal on Stack [%s] igs=%d\n",curGLS.label?curGLS.label:"(null)",ae->igs);
 #endif
 }
 
 void PopGlobal(struct s_assenv *ae) {
-	if (ae->igs) {
+	//if (ae->igs) {
 		ae->igs--;
 #if TRACE_LABEL
-printf("<== PopGlobal on Stack [%s] igs=%d\n",ae->globalstack[ae->igs],ae->igs+1);
+printf("<== PopGlobal on Stack [%s] igs=%d\n",ae->globalLabelStack[ae->igs].label,ae->igs+1);
 #endif
-		if (ae->lastglobalalloc) MemFree(ae->lastgloballabel);
+		//if (ae->lastgloballabel) MemFree(ae->lastgloballabel);
 
-		if (ae->globalstack[ae->igs]) {
-			ae->lastgloballabel=TxtStrDup(ae->globalstack[ae->igs]);
-			ae->lastgloballabellen=strlen(ae->lastgloballabel);
-			ae->lastglobalalloc=1;
+		if (ae->globalLabelStack[ae->igs].len) {
+			//ae->lastgloballabel=TxtStrDupLen(ae->globalstack[ae->igs],&ae->lastgloballabellen);
+			ae->lastgloballabellen=ae->globalLabelStack[ae->igs].len;
+			memcpy(ae->lastgloballabel,ae->globalLabelStack[ae->igs].label,ae->lastgloballabellen+1);
+			MemFree(ae->globalLabelStack[ae->igs].label);
 		} else {
-			ae->lastgloballabel=NULL;
+			//ae->lastgloballabel=NULL;  permanent alloc!
 			ae->lastgloballabellen=0;
-			ae->lastglobalalloc=0;
 		}
 
-		if (ae->globalstack[ae->igs]) MemFree(ae->globalstack[ae->igs]);
-	} else {
-		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"PopGlobal INTERNAL ERROR / Please report\n");
-	}
+	//} else {
+	//	MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"PopGlobal INTERNAL ERROR / Please report\n");
+	//}
 }
 
 
@@ -19151,7 +19154,6 @@ struct s_wordlist *__MACRO_EXECUTE(struct s_assenv *ae, const int imacro) {
 					curmacropos.level=ae->macropos[ae->imacropos-1].level+1;
 				}
 			}
-
 			ObjectArrayAddDynamicValueConcat((void**)&ae->macropos,&ae->imacropos,&ae->mmacropos,&curmacropos,sizeof(curmacropos));
 			
 			/* are we in a repeat/while block? */
@@ -19164,6 +19166,11 @@ struct s_wordlist *__MACRO_EXECUTE(struct s_assenv *ae, const int imacro) {
 					ae->macropos[idad].end+=ae->macro[imacro].nbword-1-nbparam-reload; /* coz la macro compte un mot! */
 				}
 			}
+
+//printf("after expand =>\n");
+//			for (idad=0;idad<ae->imacropos;idad++) {
+//				printf("macro %d => %d [%d / L=%d / pushed=%d]\n",ae->macropos[idad].start,ae->macropos[idad].end,ae->macropos[idad].value,ae->macropos[idad].level,ae->macropos[idad].pushed);
+//			}
 			
 	#if 0
 			for (idad=0;idad<ae->imacropos;idad++) {
@@ -23970,7 +23977,6 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 		*****************************************/
 		if (ae->imacropos) {
 			int icheckm;
-
 			/* we must close */
 			for (icheckm=0;icheckm<ae->imacropos;icheckm++) {
 				if (ae->idx==ae->macropos[icheckm].end) {
@@ -23981,18 +23987,21 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 					}
 				}
 			}
-			/* before opening */
+			/* before opening / macro are sorted by 'start' value */
 			for (icheckm=0;icheckm<ae->imacropos;icheckm++) {
 				if (ae->idx==ae->macropos[icheckm].start) {
 					PushGlobal(ae);
 					ae->macropos[icheckm].pushed=1;
+				} else if (ae->idx<ae->macropos[icheckm].start) {
+					break;
 				}
 			}
-
 			/* are we still in a macro? */
 			if (ae->idx>=ae->macropos[0].end) {
+		//		printf("macro final test\n");
 				/* are we out of all repetition blocks? */
 				if (!ae->ir && !ae->iw) {
+			//		printf("all done => PURGE\n");
 					ae->imacropos=0;
 				}
 			}
@@ -27258,6 +27267,7 @@ printf("remove comz, merge lines, upper case for code\n");
 	StateMachineResizeBuffer(&w,midx+256,&mw);
 	StateMachineResizeBuffer(&bval,midx+256,&sval);
 	StateMachineResizeBuffer(&qval,midx+256,&sqval);
+	StateMachineResizeBuffer(&ae->lastgloballabel,midx+256,&ae->lastgloballabelMaxAlloc);
 
 	for (i=0;zelines[i];i++) {
 		curlisting.ifile=0;
@@ -30812,7 +30822,7 @@ printf("testing %d various opcode tests OK\n",i);
 
 	idx=0;
 	while (autotest_keyword[idx].keywordtest) {
-		//if (idx>1400) printf("%s\n",autotest_keyword[idx].keywordtest);
+		//if (idx>1200) printf("%s\n",autotest_keyword[idx].keywordtest);
 		ret=RasmAssemble(autotest_keyword[idx].keywordtest,strlen(autotest_keyword[idx].keywordtest),&opcode,&opcodelen);
 		if (!ret && !autotest_keyword[idx].result) {
 		} else if (ret && autotest_keyword[idx].result) {
