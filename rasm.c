@@ -17499,7 +17499,7 @@ void __BUILDZX(struct s_assenv *ae) {
 void __BUILDCPR(struct s_assenv *ae) {
 	while (!ae->wl[ae->idx].t) {
 		ae->idx++;
-		if (strncmp(ae->wl[ae->idx].w,"SYMBOL",6)==0) {
+		if (strcmp(ae->wl[ae->idx].w,"SYMBOL")==0 || strcmp(ae->wl[ae->idx].w,"SYMBOLS")==0) {
 			ae->export_cprSymbol=1; // symbols for ACE inside cartridge
 		} else if (strcmp(ae->wl[ae->idx].w,"LEGACY")==0) {
 			ae->extendedCPR|=2; // regular CPR extended
@@ -17525,7 +17525,7 @@ void __BUILDCPR(struct s_assenv *ae) {
 				}
 			}
 		} else {
-			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"BUILDCPR unknown parameter, may be EXTENDED or 'filename'\n");
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"BUILDCPR unknown parameter, may be EXTENDED, LEGACY, SYMBOL(S) or 'filename'\n");
 		}
 	}
 	if (!ae->forcesnapshot && !ae->forcetape && !ae->forcezx && !ae->forceROM) {
