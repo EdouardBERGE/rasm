@@ -18993,20 +18993,19 @@ void __MACRO(struct s_assenv *ae) {
 			// déclencheur inclusif (pas trop laxiste non plus)
 			if ((startCHR=strchr(curmacro.wc[i].w,'{'))!=NULL) {
 				IntArrayAddDynamicValueConcat(&curmacro.replaceidx,&curmacro.nbreplace,&curmacro.maxreplace,i);
-#if 0
 				// try to maxArg!
 				if (curmacro.multiArg) {
 					startCHR++;
-					if (isdigit(startCHR)) {
+					if (isdigit(*startCHR)) {
 						int curIndex;
-						curIndex=atoi(startCHR);
-						if (curIndex>curmacro.maxArg) curmacro.maxArg=curIndex;
-						IntArrayAddDynamicValueConcat(&curmacro.replaceOffset,&curmacro.nbOffset,&curmacro.maxOffset,curIndex);
-					} else {
-						IntArrayAddDynamicValueConcat(&curmacro.replaceOffset,&curmacro.nbOffset,&curmacro.maxOffset,-1);
+
+						// is there a substitution?
+						if (strchr(startCHR,'|')<strchr(startCHR,'}')) {
+							curIndex=atoi(startCHR);
+							if (curIndex>curmacro.maxArg) curmacro.maxArg=curIndex;
+						}
 					}
 				}
-#endif
 			}
 		}
 
@@ -19143,6 +19142,7 @@ struct s_wordlist *__MACRO_EXECUTE(struct s_assenv *ae, const int imacro) {
 					}
 				}
 			}
+
 			/* free macro call as we will overwrite it */
 			MemFree(ae->wl[ae->idx].w);
 			/* is there a void to free? */
@@ -30560,6 +30560,12 @@ struct s_autotest_keyword autotest_keyword[]={
 	{"IF 0:IF 0",1},
 	{"IF 0:IF 0:ELSE",1},
 	{"IF 0:IF 0:ENDIF:ENDIF:ENDIF",1},
+
+	{"macro macro1,arg1,...:defb {4}:mend:macro1 1,2,3,4",1}, // not enough param
+	{"macro macro1,arg1,...:defb {4|=4}:mend:macro1 1,2,3,4",0}, // missing param replacement
+	{"macro macro1,...:defb {3}:mend:macro1 1,2,3,4",0}, // full variable is ok
+	{"macro macro1,...:nop:assert {#}==0:mend:macro1 ",0}, // full variable test
+	{"macro macro1,...:nop:assert {#}==0:mend:macro1 (void)",0}, // void must not count
 
 	/*
 	 *
