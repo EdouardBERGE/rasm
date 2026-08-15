@@ -856,8 +856,11 @@ struct s_macro {
 	int *replaceidx;
 	int nbreplace,maxreplace;
 	/**/
+	/**/
 	char **param;
 	int nbparam;
+	int multiArg;
+	int maxArg;
 };
 
 struct s_macro_position {
@@ -18938,16 +18941,21 @@ void __MACRO(struct s_assenv *ae) {
 				__STOP(ae);
 			}
 			if (getparam) {
-				/* on prepare les parametres au remplacement */
-				zeparam=MemMalloc(strlen(ae->wl[idx].w)+3);
-				if (ae->as80) {
-					sprintf(zeparam,"%s",ae->wl[idx].w);
+				if (strcmp(ae->wl[idx].w,"...")==0) {
+					// skip this but enable multi-arg
+					curmacro.multiArg=1;
 				} else {
-					sprintf(zeparam,"{%s}",ae->wl[idx].w);
+					/* on prepare les parametres au remplacement */
+					zeparam=MemMalloc(strlen(ae->wl[idx].w)+3);
+					if (ae->as80) {
+						sprintf(zeparam,"%s",ae->wl[idx].w);
+					} else {
+						sprintf(zeparam,"{%s}",ae->wl[idx].w);
+					}
+					curmacro.nbparam++;
+					curmacro.param=MemRealloc(curmacro.param,curmacro.nbparam*sizeof(char **));
+					curmacro.param[curmacro.nbparam-1]=zeparam;
 				}
-				curmacro.nbparam++;
-				curmacro.param=MemRealloc(curmacro.param,curmacro.nbparam*sizeof(char **));
-				curmacro.param[curmacro.nbparam-1]=zeparam;
 				if (ae->wl[idx].t) {
 					/* duplicate parameters without brackets MUST be an OPTION */
 					getparam=0;
@@ -18967,6 +18975,8 @@ void __MACRO(struct s_assenv *ae) {
 		}
 
 		for (i=0;i<curmacro.nbword;i++) {
+			char *startCHR;
+
 			/* tags in upper case for replacement in quotes */
 			if (StringIsQuote(curmacro.wc[i].w)) {
 				int lm,touched;
@@ -18981,10 +18991,26 @@ void __MACRO(struct s_assenv *ae) {
 				}
 			}
 			// déclencheur inclusif (pas trop laxiste non plus)
-			if (strchr(curmacro.wc[i].w,'{')) {
+			if ((startCHR=strchr(curmacro.wc[i].w,'{'))!=NULL) {
 				IntArrayAddDynamicValueConcat(&curmacro.replaceidx,&curmacro.nbreplace,&curmacro.maxreplace,i);
+#if 0
+				// try to maxArg!
+				if (curmacro.multiArg) {
+					startCHR++;
+					if (isdigit(startCHR)) {
+						int curIndex;
+						curIndex=atoi(startCHR);
+						if (curIndex>curmacro.maxArg) curmacro.maxArg=curIndex;
+						IntArrayAddDynamicValueConcat(&curmacro.replaceOffset,&curmacro.nbOffset,&curmacro.maxOffset,curIndex);
+					} else {
+						IntArrayAddDynamicValueConcat(&curmacro.replaceOffset,&curmacro.nbOffset,&curmacro.maxOffset,-1);
+					}
+				}
+#endif
 			}
 		}
+
+		//printf("maxUsedArg=%d\n",curmacro.maxArg);
 
 #if 0
 		ObjectArrayAddDynamicValueConcat((void**)&ae->macro,&ae->imacro,&ae->mmacro,&curmacro,sizeof(curmacro));
@@ -19083,7 +19109,7 @@ struct s_wordlist *__MACRO_EXECUTE(struct s_assenv *ae, const int imacro) {
 	}
 	/* macro must avoid extra params! */
 	
-	/* cannot VOID a macro with parameters! */
+	/* cannot VOID a macro with parameters! => refaire en mieux */
 	if (ae->macro[imacro].nbparam && strcmp(ae->wl[ae->idx+1].w,"(VOID)")==0) {
 		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"MACRO [%s] has %d parameter%s\n",ae->macro[imacro].mnemo,ae->macro[imacro].nbparam,ae->macro[imacro].nbparam>1?"s":"");
 		while (!ae->wl[ae->idx].t) {
@@ -19091,7 +19117,7 @@ struct s_wordlist *__MACRO_EXECUTE(struct s_assenv *ae, const int imacro) {
 		}
 		ae->idx++;
 	} else {
-		if (nbparam!=ae->macro[imacro].nbparam) {
+		if (!ae->macro[imacro].multiArg && nbparam!=ae->macro[imacro].nbparam) {
 			lenparam=1; // macro without parameters!
 			for (i=0;i<ae->macro[imacro].nbparam;i++) {
 				lenparam+=strlen(ae->macro[imacro].param[i])+3;
@@ -19109,6 +19135,14 @@ struct s_wordlist *__MACRO_EXECUTE(struct s_assenv *ae, const int imacro) {
 			}
 			ae->idx++;
 		} else {
+			if (ae->macro[imacro].multiArg) {
+				if (nbparam>ae->macro[imacro].maxArg && nbparam>ae->macro[imacro].nbparam) {
+					if (!ae->nowarning) {
+						rasm_printf(ae,KWARNING"[%s:%d] Warning: useless parameters in macro that wont be used\n",GetCurrentFile(ae),ae->wl[ae->idx].l);
+						if (ae->erronwarn) MaxError(ae);
+					}
+				}
+			}
 			/* free macro call as we will overwrite it */
 			MemFree(ae->wl[ae->idx].w);
 			/* is there a void to free? */
@@ -19202,13 +19236,87 @@ struct s_wordlist *__MACRO_EXECUTE(struct s_assenv *ae, const int imacro) {
 			}
 			/* replace only where it was supposed to be */
 			idx=ae->idx;
-			for (k=0;k<ae->macro[imacro].nbreplace;k++) {
-				j=idx+ae->macro[imacro].replaceidx[k];
-				for (i=0;i<nbparam;i++) {
-					ae->wl[j].w=TxtReplace(ae->wl[j].w,ae->macro[imacro].param[i],cpybackup[i].w,0);
+
+			if (ae->macro[imacro].multiArg) {
+				char *startCHR;
+				char paramNumber[32]={0};
+				char paramMap[32]={0};
+				int pidx,ptoCopy;
+				for (k=0;k<ae->macro[imacro].nbreplace;k++) {
+					j=idx+ae->macro[imacro].replaceidx[k];
+
+					// expand digits
+					startCHR=strchr(ae->wl[j].w,'{');
+					if (startCHR) {
+						startCHR++;
+						switch (*startCHR) {
+							case '#':
+								if (startCHR[1]=='}') {
+									if (!paramNumber[0]) sprintf(paramNumber,"%d",nbparam);
+									ae->wl[j].w=TxtReplace(ae->wl[j].w,"{#}",paramNumber,0);
+								}
+								break;
+							case '0': case '1': case '2': case '3': case '4':
+							case '5': case '6': case '7': case '8': case '9':
+									// enforce this is a single digit or digit+alternative
+									pidx=1;
+									while (isdigit(startCHR[pidx])) pidx++;
+									if (startCHR[pidx]=='}') {
+										// absolute index
+										ptoCopy=atoi(startCHR);
+										if (ptoCopy<nbparam) {
+											sprintf(paramMap,"{%d}",ptoCopy);
+											ae->wl[j].w=TxtReplace(ae->wl[j].w,paramMap,cpybackup[ptoCopy].w,0);
+										} else {
+											MakeError(ae,j,GetCurrentFile(ae),ae->wl[j].l,"cannot map param %d as there was only %d in this MACRO call\n",ptoCopy,nbparam); // spec
+										}
+									} else if (startCHR[pidx]=='|' && startCHR[pidx+1]=='=') {
+										char *fullParam;
+										int icp=0;
+										ptoCopy=atoi(startCHR);
+										while (startCHR[icp] && startCHR[icp]!='}') icp++;
+										icp+=3;
+										fullParam=MemMalloc(icp);
+										memcpy(fullParam,startCHR-1,icp-1);
+										fullParam[icp-1]=0;
+										// absolute+alternative
+										if (ptoCopy<nbparam) {
+											ae->wl[j].w=TxtReplace(ae->wl[j].w,fullParam,cpybackup[ptoCopy].w,0); // param exists
+											MemFree(fullParam);
+										} else {
+											char *endParam;
+											char *endStart;
+											endStart=strchr(fullParam,'='); // cannot be NULL
+											endParam=TxtStrDup(endStart+1);
+											if (endParam[0]) endParam[strlen(endParam)-1]=0; // no more '}' at the end
+											ae->wl[j].w=TxtReplace(ae->wl[j].w,fullParam,endParam,0);
+											MemFree(fullParam);
+											MemFree(endParam);
+										}
+									} else {
+										MakeError(ae,j,GetCurrentFile(ae),ae->wl[j].l,"Looks like there is a wrong tag inside macro, expecting endmark '}' or ':=', not '%c'\n",startCHR[pidx]); // spec
+									}
+								break;
+							default:break;
+						}
+
+					}
+					for (i=0;i<ae->macro[imacro].nbparam;i++) {
+						ae->wl[j].w=TxtReplace(ae->wl[j].w,ae->macro[imacro].param[i],cpybackup[i].w,0);
+					}
+					ae->wl[j].len=strlen(ae->wl[j].w); // car la longueur est susceptible d'avoir changé
 				}
-				ae->wl[j].len=strlen(ae->wl[j].w); // car la longueur est susceptible d'avoir changé
+			} else {
+				for (k=0;k<ae->macro[imacro].nbreplace;k++) {
+					j=idx+ae->macro[imacro].replaceidx[k];
+
+					for (i=0;i<nbparam;i++) {
+						ae->wl[j].w=TxtReplace(ae->wl[j].w,ae->macro[imacro].param[i],cpybackup[i].w,0);
+					}
+					ae->wl[j].len=strlen(ae->wl[j].w); // car la longueur est susceptible d'avoir changé
+				}
 			}
+			// do not need anymore parameter backup
 			for (i=0;i<nbparam;i++) MemFree(cpybackup[i].w);
 			MemFree(cpybackup);
 
@@ -25078,7 +25186,9 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 								if (i) lm=strlen(ae->iwnameromsna[i])-2; else lm=0; // cannot have a ROM physically in 0 with snapshots
 							}
 						}
-						if (ae->cprinfo) rasm_printf(ae,KVERBOSE"WriteCPR bank %2d of %5d byte%s start at #%04X",ae->snacpr?backi:i,endoffset-offset,endoffset-offset>1?"s":" ",offset);
+						if (ae->cprinfo) {
+							rasm_printf(ae,KVERBOSE"Bank %2d - Size %5db (%3d%%)/Start #%04X",ae->snacpr?backi:i,endoffset-offset,(endoffset-offset)*100/16384,offset);
+						}
 						if (endoffset-offset>16384) {
 							rasm_printf(ae,KERROR"\nROM %d is too big!!! (%d byte%s too large)"KVERBOSE,i,endoffset-offset-16384,endoffset-offset-16384>1?"s":"");
 							rasm_printf(ae,KERROR"lowest  ORG [%s:%d] at #%04X\n"KVERBOSE,ae->filename[ae->orgzone[idstart].ifile],ae->orgzone[idstart].iline,offset);
@@ -25090,13 +25200,13 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 						}
 						if (ae->cprinfo) {
 							if (lm) {
-								rasm_printf(ae," (%-*.*s)\n",lm,lm,ae->iwnamebank[i]+1);
+								rasm_printf(ae,"/%-*.*s\n",lm,lm,ae->iwnamebank[i]+1);
 							} else {
 								rasm_printf(ae,"\n");
 							}
 						}
 					} else {
-						if (ae->cprinfo) rasm_printf(ae,KVERBOSE"WriteCPR bank %2d (empty)\n",i);
+						if (ae->cprinfo) rasm_printf(ae,KVERBOSE"Bank %2d - size     0b\n",i);
 					}
 					ChunkSize=16384;
 					if (ae->extendedCPR) {
@@ -25199,7 +25309,7 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 						/* to avoid ROM smaller than 16K at the end of working memory */
 						if (offset>49152) offset=49152;
 
-						if (i<4 || i+4>maxrom) rasm_printf(ae,KVERBOSE"WriteROM bank %3d of %5d byte%s start at #%04X\n",i,endoffset-offset,endoffset-offset>1?"s":" ",offset);
+						if (i<4 || i+4>maxrom) rasm_printf(ae,KVERBOSE"ROM Bank %3d - size %5d byte%s / start #%04X\n",i,endoffset-offset,endoffset-offset>1?"s":" ",offset);
 						else if (!noflood) {rasm_printf(ae,KVERBOSE"[...]\n");noflood=1;}
 
 						FileWriteBinary(TMP_filename,(char *)(ae->mem[i]+offset),endoffset-offset);
@@ -31331,6 +31441,13 @@ printf("testing ELSEIFNOT OK\n");
 	if (!ret) {} else {printf("Autotest %03d ERROR (ifdef macro)\n",cpt);exit(-1);}
 	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
 printf("testing IFDEF & MACRO OK\n");
+
+#define AUTOTEST_MACRO_MULTIARG01 "macro multi,arg1,arg2,...: if {#}==3 : nop : else : assert 0==1,'wrong param number for this test' : endif: mend:"\
+	"multi 4,5,6: macro multi2,arg1,...: if {#}==5 : defb {4} : endif: defb {50|=#77} : mend: multi2 0,1,2,3,#44"
+	ret=RasmAssemble(AUTOTEST_MACRO_MULTIARG01,strlen(AUTOTEST_MACRO_MULTIARG01),&opcode,&opcodelen);
+	if (!ret && opcodelen==3 && opcode[0]==0 && opcode[1]==0x44 && opcode[2]==0x77) {} else {printf("Autotest %03d ERROR (macro multiarg) len=%d\n",cpt,opcodelen);MiniDump(opcode,opcodelen);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing macro multi-arg OK\n");
 	
 	ret=RasmAssemble(AUTOTEST_LABNUM,strlen(AUTOTEST_LABNUM),&opcode,&opcodelen);
 	if (!ret) {} else {printf("Autotest %03d ERROR (variables in labels)\n",cpt);exit(-1);}
