@@ -32385,6 +32385,7 @@ printf("testing gray coding tile size check error OK\n");
 printf("testing zigzag gray coding tile size check error OK\n");
 
 
+#ifndef NO_3RD_PARTIES
 #define AUTOTEST_NOCRUNCH_MUST_WARN "lzx0 : defb 'atukhols' : lzclose"
 	memset(&param,0,sizeof(struct s_parameter));
 	param.erronwarn=1;
@@ -32495,6 +32496,7 @@ printf("Testing no crunch with LZSA2 segment warn+error OK\n");
 	if (!ret && opcodelen==8) {} else {printf("Autotest %03d ERROR (No crunch with ZX7 segment must compile and warn)\n",cpt);exit(-1);}
 	RasmFreeInfoStruct(debug);
 printf("Testing no crunch with ZX7  segment warn+error OK\n");
+#endif
 
 
 /************************** segfault test **********************/
