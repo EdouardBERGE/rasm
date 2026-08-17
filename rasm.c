@@ -2240,15 +2240,93 @@ char *rasm_GetPath(char *filename) {
 
 	return curpath;
 }
+
+
+/* MAKE PATH FOR INCLUDE/SAVE/.. TAKE / and \ AS SEPERATOR AND CASE INSENSITIVE, REGARDLESS OF THE HOST PLATFORM */
+
+/* normalizes in place to whatever the current OS actually expects as a seperator, so a path written with
+   Windows style backslashes still resolves correctly on Linux / macOS, and vice versa. Filenames here are
+   never escape-processed (see StringRemoveQuotes), so a plain unconditional swap is safe. */
+void NormalizePathSeparators(char *filename) {
+#ifdef OS_WIN
+	TxtReplace(filename,"/","\\",1);
+#else
+	TxtReplace(filename,"\\","/",1);
+#endif
+}
+
+#ifdef OS_WIN
+void ResolveCaseInsensitivePath(char *path) { /* Windows filesystems are already case-insensitive */ }
+#else
+/* Path and file names are case sensitive on Linux/macOS but not on Windows. Recognize path and file
+   names case insensitively on all platforms for code interchangeability: if "path" doesn't exist
+   exactly as written, walk it component by component and substitute whatever the containing directory
+   actually contains, case-insensitively, rewriting "path" in place. Leaves "path" untouched if no full
+   match is found (the caller's normal "file not found" handling then applies unchanged). */
+void ResolveCaseInsensitivePath(char *path) {
+	char resolved[PATH_MAX];
+	char matched[PATH_MAX];
+	char *pathcopy,*component;
+	int ridx=0;
+	DIR *dir;
+	struct dirent *entry;
+
+	if (FileExists(path)) return;
+
+	pathcopy=TxtStrDup(path);
+	resolved[0]=0;
+	if (pathcopy[0]=='/') {
+		resolved[0]='/';
+		resolved[1]=0;
+		ridx=1;
+	}
+
+	component=strtok(pathcopy,"/");
+	while (component) {
+		char candidate[PATH_MAX];
+		int found=0;
+
+		snprintf(candidate,sizeof(candidate),"%s%s",resolved,component);
+		if (FileExists(candidate)) {
+			found=1;
+		} else {
+			dir=opendir(ridx?resolved:".");
+			if (dir) {
+				while ((entry=readdir(dir))!=NULL) {
+					if (strcasecmp(entry->d_name,component)==0) {
+						strcpy(matched,entry->d_name);
+						component=matched;
+						found=1;
+						break;
+					}
+				}
+				closedir(dir);
+			}
+		}
+		if (!found) {
+			MemFree(pathcopy);
+			return;
+		}
+		ridx+=snprintf(resolved+ridx,sizeof(resolved)-ridx,"%s",component);
+		component=strtok(NULL,"/");
+		if (component) {
+			resolved[ridx++]='/';
+			resolved[ridx]=0; /* opendir() below needs "resolved" null-terminated on every iteration */
+		}
+	}
+	resolved[ridx]=0;
+	strcpy(path,resolved);
+	MemFree(pathcopy);
+}
+#endif
 char *MergePath(struct s_assenv *ae,char *dadfilename, char *filename) {
 	#undef FUNC
 	#define FUNC "MergePath"
 
 	static char curpath[PATH_MAX];
 
+	NormalizePathSeparators(filename);
 #ifdef OS_WIN
-	TxtReplace(filename,"/","\\",1);
-
 	if (filename[0] && filename[1]==':' && filename[2]=='\\') {
 		/* chemin absolu */
 		strcpy(curpath,filename);
@@ -2265,18 +2343,6 @@ char *MergePath(struct s_assenv *ae,char *dadfilename, char *filename) {
 		}
 	}
 #else
-	int idxr;
-	for (idxr=0;filename[idxr];idxr++) {
-		if (filename[idxr]=='\\' && (
-			filename[idxr+1]=='-' ||
-			filename[idxr+1]=='_' ||
-			(filename[idxr+1]>='0' && filename[idxr+1]<='9') ||
-			(filename[idxr+1]>='a' && filename[idxr+1]<='z') ||
-			(filename[idxr+1]>='A' && filename[idxr+1]<='Z')
-		)) {
-			filename[idxr]='/';
-		}
-	}
 	if (filename[0]=='/') {
 		/* chemin absolu */
 		strcpy(curpath,filename);
@@ -2289,6 +2355,7 @@ char *MergePath(struct s_assenv *ae,char *dadfilename, char *filename) {
 	}
 #endif
 
+	ResolveCaseInsensitivePath(curpath);
 	return curpath;
 }
 
@@ -9847,7 +9914,7 @@ void PopAllSave(struct s_assenv *ae)
 	unsigned char *AmsdosHeader;
 	char *dskfilename;
 	char *filename;
-	int offset,size,run;
+	int offset,size,run,savelimit;
 	int i,is,erreur=0,touched,dummy_user=0;
 	int tag_protect=0, tag_hidden=0;
 	
@@ -9884,17 +9951,25 @@ void PopAllSave(struct s_assenv *ae)
 			run=offset;
 		}
 
-		if (size<1 || size>65536) {
+		/* DSK/TAPE/AMSDOS/HOBETA targets are hardware-format-shaped (16-bit load/exec
+		   addresses, 64K-native disk/tape structures) and always stay capped at 64K; a
+		   plain file SAVE may exceed 64K if its bank was grown via LIMIT ...,EXTENDED */
+		if (ae->save[is].dsk || ae->save[is].tape || ae->save[is].amsdos || ae->save[is].hobeta) {
+			savelimit=65536;
+		} else {
+			savelimit=ae->memsize[ae->save[is].ibank];
+		}
+		if (size<1 || size>savelimit) {
 			MakeError(ae,0,NULL,0,"cannot save [%s] as the size is invalid!\n",filename);
 			MemFree(filename);
 			continue;
 		}
-		if (offset<0 || offset>65535) {
+		if (offset<0 || offset>savelimit-1) {
 			MakeError(ae,0,NULL,0,"cannot save [%s] as the offset is invalid!\n",filename);
 			MemFree(filename);
 			continue;
 		}
-		if (offset+size>65536) {
+		if (offset+size>savelimit) {
 			MakeError(ae,0,NULL,0,"cannot save [%s] as the offset+size will be out of bounds!\n",filename);
 			MemFree(filename);
 			continue;
@@ -17513,6 +17588,7 @@ void __BUILDCPR(struct s_assenv *ae) {
 			int idx;
 			ae->cartridge_name=ae->wl[ae->idx].w+1;
 			ae->cartridge_name[strlen(ae->cartridge_name)-1]=0;
+			NormalizePathSeparators(ae->cartridge_name);
 
 			if (strlen(ae->cartridge_name)>4) {
 				idx=strlen(ae->cartridge_name)-4;
@@ -22985,6 +23061,7 @@ void __SAVE(struct s_assenv *ae) {
 			ko=0;
 		} else {
 			if (!ae->wl[ae->idx+1].t) {
+				NormalizePathSeparators(ae->wl[ae->idx + 1].w);
 				filename=TxtStrDup(ae->wl[ae->idx+1].w);
 				/* need to upper case tags */
 				for (lm=touched=0;filename[lm];lm++) {
