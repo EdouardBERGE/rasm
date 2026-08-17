@@ -1217,6 +1217,7 @@ struct s_assenv {
 	/* ORG tracking */
 	int codeadr,outputadr,nocode;      // codeadr is logical code position | outputadr is physical code position | nocode is a flag 1: no code to output 0: output code
 	int codeadrbackup,outputadrbackup; // when using NOCODE, switching back to CODE will restore physical AND logical addresses
+	int codeadrwrapwarned;             // avoids spamming one warning per byte when codeadr wraps past 0xFFFF in an EXTENDED bank, reset by __ORG
 	struct s_orgzone *orgzone;         // each ORG is monitored to avoid conflicts
 	int io,mo;
 	int deadend,insideORG;
@@ -3418,6 +3419,33 @@ void ___internal_output_disabled(struct s_assenv *ae,const unsigned char v)
 	#define FUNC "fake ___output"
 }
 
+void ___check_codeadr_wrap(struct s_assenv *ae)
+{
+	/* codeadr (the logical Z80 program counter) must stay a valid 16-bit address. Inside an
+	   EXTENDED bank outputadr may run way past 0xFFFF, so codeadr wraps back to 0 instead of
+	   growing unbounded -- warn once per phase (reset whenever __ORG explicitly sets codeadr).
+	   Called before a byte or expression is emitted so simply reaching #10000 as a
+	   terminal position (e.g. a DS that fills exactly up to the 64K boundary) never warns 
+	   Only actually placing something beyond it does.
+	   Crunched (LZ) sections are exempt: there, codeadr legitimately grows past 0xFFFF as part
+	   of the pre-existing crunch/decompress accounting and gets corrected afterwards via the
+	   lzshift relocation pass -- wrapping it here would corrupt that (e.g. relative jumps). */
+	int i;
+
+	if (ae->codeadr>0xFFFF) {
+		for (i=ae->ilz-1;i>=0;i--) {
+			if (ae->lzsection[i].ibank==ae->activebank) return;
+		}
+		ae->codeadr&=0xFFFF;
+		if (!ae->codeadrwrapwarned) {
+			ae->codeadrwrapwarned=1;
+			if (!ae->nowarning) {
+				rasm_printf(ae,KWARNING"[%s:%d] Warning: codeadr wrapped to #0000 (physical output kept growing past 64K)\n",GetCurrentFile(ae),ae->wl[ae->idx].l);
+				if (ae->erronwarn) MaxError(ae);
+			}
+		}
+	}
+}
 void ___internal_output_extend(struct s_assenv *ae,const unsigned char v)
 {
 	/* limit exceededn, second chance if crunched section */
@@ -3454,13 +3482,13 @@ void ___internal_output_extend(struct s_assenv *ae,const unsigned char v)
 	// eventually write byte ^_^
 	ae->mem[ae->activebank][ae->outputadr++]=v;
 	ae->codeadr++;
-
 }
 void ___internal_output(struct s_assenv *ae,const unsigned char v)
 {
 	#undef FUNC
 	#define FUNC "___output"
 
+	___check_codeadr_wrap(ae);
 	if (ae->outputadr<ae->maxptr) {
 		ae->mem[ae->activebank][ae->outputadr++]=v;
 		ae->codeadr++;
@@ -3472,7 +3500,8 @@ void ___internal_output_nocode(struct s_assenv *ae,const unsigned char v)
 {
 	#undef FUNC
 	#define FUNC "___output (nocode)"
-	
+
+	___check_codeadr_wrap(ae);
 	if (ae->outputadr<ae->maxptr) {
 		/* struct definition always in NOCODE */
 		if (ae->getstruct) {
@@ -3504,16 +3533,28 @@ void ___internal_output_nocode(struct s_assenv *ae,const unsigned char v)
 }
 
 
-void ___output_set_limit(struct s_assenv *ae,const int zelimit)
+void ___output_set_limit(struct s_assenv *ae,const int zelimit,const int extended)
 {
 	#undef FUNC
 	#define FUNC "___output_set_limit"
 
 	int limit=65536;
-	
+
 	if (zelimit<=limit) {
 		/* apply limit */
 		limit=zelimit;
+	} else if (extended) {
+		/* explicit opt-in: grow the active bank's buffer past the usual 64K hardware
+		   limitation so outputadr (physical write position) may exceed 0xFFFF -- codeadr
+		   (the logical Z80 program counter) is untouched by this and stays 16 - bit, see __ORG
+		   This is useful to create one single large binary, spanning multiple 64k logical blocks. 
+		*/
+		limit=zelimit;
+		ae->mem[ae->activebank]=MemRealloc(ae->mem[ae->activebank],limit);
+		if (limit>ae->memsize[ae->activebank]) {
+			memset(ae->mem[ae->activebank]+ae->memsize[ae->activebank],0,limit-ae->memsize[ae->activebank]);
+		}
+		ae->memsize[ae->activebank]=limit;
 	} else {
 		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"limit exceed hardware limitation!");
 		ae->stop=1;
@@ -6694,7 +6735,12 @@ double ComputeExpressionCore(struct s_assenv *ae,char *original_zeexpression,con
 						curlyflag=0;
 					}
 
-					if (ae->computectx->varbuffer[minusptr+0]=='$' && ivar==1) { //ae->computectx->varbuffer[minusptr+1]==0) {
+	                /* $$ is always the current physical output position (outputadr), unlike a single $ whose meaning 
+					depends on what the caller passed as ptr. E.g. ORG $+100 treats $ as outputadr, while JR $ treats it as codeadr. 
+					(for compatibility with original rasm notation) */
+	                if (ae->computectx->varbuffer[minusptr + 0]=='$' && ae->computectx->varbuffer[minusptr + 1]=='$' && ivar == 2+minusptr) {
+						curval=ae->outputadr;
+					} else if (ae->computectx->varbuffer[minusptr+0]=='$' && ivar==1+minusptr) { //ae->computectx->varbuffer[minusptr+1]==0) {
 						curval=ptr;
 					} else {
 						crc=GetCRC(ae->computectx->varbuffer+minusptr);
@@ -7087,22 +7133,37 @@ printf("stage 2 | page=%d | ptr=%X ibank=%d\n",page,curlabel->ptr,curlabel->iban
 										curalias->used=1;
 										newlen=curalias->len;
 										lenw=strlen(zeexpression);
-										if (newlen>ivar) {
+										/* a leading unary minus lives in zeexpression[startvar..startvar+minusptr) and is
+										   not part of the alias name (looked up via varbuffer + minusptr) 
+										   It must be preserved, so only the ivar-minusptr chars after it are replaced 
+										   otherwise - SOME_EXPRESSION would lose the minus if SOME_EXPRESSION was a forward reference,
+										   and silently resolve to the positive value instead, with no error raised */
+										if (newlen>ivar-minusptr) {
 											/* realloc bigger */
 											if (original) {
-												expr=MemMalloc(lenw+newlen-ivar+1);
+												expr=MemMalloc(lenw+newlen-(ivar-minusptr)+1);
 												memcpy(expr,zeexpression,lenw+1);
 												zeexpression=expr;
 												original=0;
 											} else {
-												zeexpression=MemRealloc(zeexpression,lenw+newlen-ivar+1);
+												zeexpression=MemRealloc(zeexpression,lenw+newlen-(ivar-minusptr)+1);
 											}
 										}
 										/* startvar? */
-										if (newlen!=ivar) {
-											MemMove(zeexpression+startvar+newlen,zeexpression+startvar+ivar,lenw-startvar-ivar+1);
+										if (newlen!=ivar-minusptr) {
+											MemMove(zeexpression+startvar+minusptr+newlen,zeexpression+startvar+ivar,lenw-startvar-ivar+1);
 										}
-										strncpy(zeexpression+startvar,curalias->translation,newlen); /* copy without zero terminator */
+										strncpy(zeexpression+startvar+minusptr,curalias->translation,newlen); /* copy without zero terminator */
+										if (minusptr && !ae->AutomateExpressionValidCharFirst[(int)zeexpression[startvar + minusptr]&0xFF]) {
+											/* the preserved unary "-" no longer merges into a signed literal now that the alias
+											   text follows it (e.g. "-SOME_ALIAS" expanding to "-(3+4)*2") - push the same
+											   empty token used for a leading "-(" at function entry (the "double hack",
+											   ~line 6246), since that one-time check ran before this alias substitution
+											   and never saw the resulting text */
+											memset(&stackelement,0,sizeof(stackelement));
+											ObjectArrayAddDynamicValueConcat((void **)&ae->computectx->tokenstack,&nbtokenstack,&ae->computectx->maxtokenstack,&stackelement,sizeof(stackelement));
+											allow_minus_as_sign=0;
+										}
 										idx=startvar;
 										ivar=0;
 										continue;
@@ -7511,11 +7572,37 @@ printf("=== STACK EXECUTION ===\n");
 				case E_COMPUTE_OPERATION_ADD:if (paccu>1) accu[paccu-2]=((int)accu[paccu-2]+(int)accu[paccu-1])&workinterval;paccu--;break;
 				case E_COMPUTE_OPERATION_SUB:if (paccu>1) accu[paccu-2]=((int)accu[paccu-2]-(int)accu[paccu-1])&workinterval;paccu--;break;
 				case E_COMPUTE_OPERATION_MUL:if (paccu>1) accu[paccu-2]=((int)accu[paccu-2]*(int)accu[paccu-1])&workinterval;paccu--;break;
-				case E_COMPUTE_OPERATION_DIV:if (paccu>1) accu[paccu-2]=((int)accu[paccu-2]/(int)accu[paccu-1])&workinterval;paccu--;break;
+				/* DIV/MOD must emulate unsigned (16 bit/workinterval) division: operands are masked to
+				   workinterval BEFORE dividing, not after. Otherwise a negative intermediate (e.g. from "-$") 
+				   keeps C's signed truncating semantics through the division and only gets bit-masked into a huge
+				   positive afterwards (e.g. -3 mod 256 becoming 65533 instead of the correct 253) */
+				case E_COMPUTE_OPERATION_DIV:
+					if (paccu>1) {
+						int divisor=((int)accu[paccu-1])&workinterval;
+						if (divisor==0) {
+							MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"division by zero in expression [%s]\n",TradExpression(zeexpression));
+							accu[paccu-2]=0;
+						} else {
+							accu[paccu-2]=(((int)accu[paccu-2])&workinterval)/divisor;
+						}
+					}
+					paccu--;
+					break;
 				case E_COMPUTE_OPERATION_AND:if (paccu>1) accu[paccu-2]=((int)accu[paccu-2]&(int)accu[paccu-1])&workinterval;paccu--;break;
 				case E_COMPUTE_OPERATION_OR:if (paccu>1) accu[paccu-2]=((int)accu[paccu-2]|(int)accu[paccu-1])&workinterval;paccu--;break;
 				case E_COMPUTE_OPERATION_XOR:if (paccu>1) accu[paccu-2]=((int)accu[paccu-2]^(int)accu[paccu-1])&workinterval;paccu--;break;
-				case E_COMPUTE_OPERATION_MOD:if (paccu>1) accu[paccu-2]=((int)accu[paccu-2]%(int)accu[paccu-1])&workinterval;paccu--;break;
+				case E_COMPUTE_OPERATION_MOD:
+					if (paccu>1) {
+						int divisor=((int)accu[paccu-1])&workinterval;
+						if (divisor==0) {
+							MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"division by zero (mod) in expression [%s]\n",TradExpression(zeexpression));
+							accu[paccu-2]=0;
+						} else {
+							accu[paccu-2]=(((int)accu[paccu-2])&workinterval)%divisor;
+						}
+					}
+					paccu--;
+					break;
 				case E_COMPUTE_OPERATION_SHL:if (paccu>1) accu[paccu-2]=((int)accu[paccu-2])<<((int)accu[paccu-1]);
 								if (((int)accu[paccu-1])>31 || ((int)accu[paccu-1])<-31) {
 									if (!ae->nowarning) {
@@ -7955,12 +8042,33 @@ printf("=== STACK EXECUTION ===\n");
 				case E_COMPUTE_OPERATION_ADD:if (paccu>1) accu[paccu-2]+=accu[paccu-1];paccu--;break;
 				case E_COMPUTE_OPERATION_SUB:if (paccu>1) accu[paccu-2]-=accu[paccu-1];paccu--;break;
 				case E_COMPUTE_OPERATION_MUL:if (paccu>1) accu[paccu-2]*=accu[paccu-1];paccu--;break;
-				case E_COMPUTE_OPERATION_DIV:if (paccu>1) accu[paccu-2]/=accu[paccu-1];paccu--;break;
+				case E_COMPUTE_OPERATION_DIV:
+					if (paccu>1) {
+						if (accu[paccu-1]==0) {
+							MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"division by zero in expression [%s]\n",TradExpression(zeexpression));
+							accu[paccu-2]=0;
+						} else {
+							accu[paccu-2]/=accu[paccu-1];
+						}
+					}
+					paccu--;
+					break;
 				case E_COMPUTE_OPERATION_AND:if (paccu>1) accu[paccu-2]=((int)floor(accu[paccu-2]+0.5))&((int)floor(accu[paccu-1]+0.5));paccu--;break;
 				case E_COMPUTE_OPERATION_OR:if (paccu>1) accu[paccu-2]=((int)floor(accu[paccu-2]+0.5))|((int)floor(accu[paccu-1]+0.5));paccu--;break;
 				case E_COMPUTE_OPERATION_XOR:if (paccu>1) accu[paccu-2]=((int)floor(accu[paccu-2]+0.5))^((int)floor(accu[paccu-1]+0.5));paccu--;break;
 				case E_COMPUTE_OPERATION_NOT:/* half operator, half function */ if (paccu>0) accu[paccu-1]=!((int)floor(accu[paccu-1]+0.5));break;
-				case E_COMPUTE_OPERATION_MOD:if (paccu>1) accu[paccu-2]=((int)floor(accu[paccu-2]+0.5))%((int)floor(accu[paccu-1]+0.5));paccu--;break;
+				case E_COMPUTE_OPERATION_MOD:
+					if (paccu>1) {
+						int divisor=(int)floor(accu[paccu-1]+0.5);
+						if (divisor==0) {
+							MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"division by zero (mod) in expression [%s]\n",TradExpression(zeexpression));
+							accu[paccu-2]=0;
+						} else {
+							accu[paccu-2]=((int)floor(accu[paccu-2]+0.5))%divisor;
+						}
+					}
+					paccu--;
+					break;
 				case E_COMPUTE_OPERATION_SHL:if (paccu>1) accu[paccu-2]=((int)floor(accu[paccu-2]+0.5))<<((int)floor(accu[paccu-1]+0.5));
 								if (((int)accu[paccu-1])>31 || ((int)accu[paccu-1])<-31) {
 									if (!ae->nowarning) {
@@ -8818,8 +8926,33 @@ printf("fast [%s]\n",expr);
 #if TRACE_COMPUTE_EXPRESSION
 printf("ExpressionFastTranslate (full) => varbuffer=[%s] lz=%d\n",varbuffer,ae->lz);
 #endif
+				// $$ is always the current physical output position (outputadr), usable anywhere
+				// (unlike $ which means codeadr everywhere except for ORG address expression)
+				if (varbuffer[0]=='$' && varbuffer[1]=='$' && !varbuffer[2]) {
+					if (ae->lz==-1) {
+						#ifdef OS_WIN
+						snprintf(curval,sizeof(curval)-1,"%d",ae->outputadr);
+						newlen=strlen(curval);
+						#else
+						newlen=snprintf(curval,sizeof(curval)-1,"%d",ae->outputadr);
+						#endif
+
+						lenw=strlen(expr);
+						if (newlen>ivar) {
+							/* realloc bigger */
+							expr=*ptr_expr=MemRealloc(expr,lenw+newlen-ivar+1);
+						}
+						if (newlen!=ivar ) {
+							MemMove(expr+startvar+newlen,expr+startvar+ivar,lenw-startvar-ivar+1);
+							found_replace=1;
+						}
+						strncpy(expr+startvar,curval,newlen); /* copy without zero terminator */
+						idx=startvar+newlen;
+						ivar=0;
+					}
+					found_replace=1;
 				// le dollar seul est l'adresse courante qu'il faut remplacer
-				if (varbuffer[0]=='$' && !varbuffer[1]) {
+				} else if (varbuffer[0]=='$' && !varbuffer[1]) {
 					if (ae->lz==-1) {
 						if (ae->insideORG) {
 							#ifdef OS_WIN
@@ -10103,6 +10236,12 @@ void PopAllExpression(struct s_assenv *ae, const int crunched_zone)
 				/* for enhanced 16bits instructions */
 				r++;
 			case E_EXPRESSION_IV8:
+				/* IX/IY are patched to the literal "%0" before evaluation (see PushExpression), so
+				   "(iy-4)" is actually evaluated as the subtraction "0-4", not the signed literal
+				   "-4" - in maxam mode every operator result gets masked to workinterval, 
+				   so that subtraction comes back as the 16bit unsigned wraparound 65532 rather than -4. 
+				   Normalize before range-checking below */
+				if (r>32767) r-=65536;
 				if (r>127 || r<-128) {
 					// horrible patch in order to display a proper error message
 					ae->wl[ae->expression[i].iw].w[1]='I';
@@ -18352,9 +18491,20 @@ void __LZCLOSE(struct s_assenv *ae) {
 }
 
 void __LIMIT(struct s_assenv *ae) {
+	int zelimit,extended = 0;
 	if (ae->wl[ae->idx+1].t!=2) {
 		//ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
-		___output_set_limit(ae,RoundComputeExpression(ae,ae->wl[ae->idx+1].w,ae->outputadr,0,0));
+		zelimit=RoundComputeExpression(ae,ae->wl[ae->idx+1].w,ae->outputadr,0,0);
+		if (!ae->wl[ae->idx+1].t) {
+			/* comma present -> optional EXTENDED keyword to allow >64K */
+			if (strcmp(ae->wl[ae->idx+2].w,"EXTENDED")==0) {
+				extended=1;
+				ae->idx++;
+			} else {
+				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"LIMIT 2nd parameter must be EXTENDED\n");
+			}
+		}
+		___output_set_limit(ae,zelimit,extended);
 		ae->idx++;
 	} else {
 		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"LIMIT directive need one integer parameter\n");
@@ -20588,7 +20738,7 @@ void __REND(struct s_assenv *ae) {
 void __UNTIL(struct s_assenv *ae) {
 	if (ae->ir>0) {
 		if (ae->repeat[ae->ir-1].cpt>=0) {
-			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"[%s:%d] UNTIL encounter whereas referent REPEAT n was waiting for REND\n");
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"UNTIL encounter whereas referent REPEAT n was waiting for REND\n");
 		} else {
 			if (ae->wl[ae->idx].t==0 && ae->wl[ae->idx+1].t==1) {
 				ae->repeat[ae->ir-1].repeat_counter++;
@@ -21272,14 +21422,17 @@ void __ORG(struct s_assenv *ae) {
 	___org_close(ae);
 	
 	if (!ae->wl[ae->idx].t) {
+		ae->codeadrwrapwarned = 0; // a new explicit ORG re-arms the codeadr-wrap warning
 		ae->insideORG=1;
 		//ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
 		ae->codeadr=RoundComputeExpression(ae,ae->wl[ae->idx+1].w,ae->outputadr,0,0);
 		ae->insideORG=0;
 		if (ae->codeadr<0) {
 			ae->codeadr=0;
-			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"[%s:%d] cannot ORG outside memory!\n");
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"cannot ORG outside memory!\n");
 		} else if (ae->codeadr>0xFFFF) {
+			/* codeadr is the logical Z80 program counter and must always stay a valid 16-bit
+			   address, even inside an EXTENDED bank -- only outputadr (see below) may grow past 64K */
 			iscrunched=0;
 			for (i=ae->ilz-1;i>=0;i--) {
 				if (ae->lzsection[i].ibank==ae->activebank) {
@@ -21289,7 +21442,7 @@ void __ORG(struct s_assenv *ae) {
 			}
 			if (!iscrunched) {
 				ae->codeadr=0;
-				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"[%s:%d] cannot ORG outside memory!\n");
+				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"cannot ORG outside memory!\n");
 			}
 		}
 		if (!ae->wl[ae->idx+1].t && ae->wl[ae->idx+2].t!=2) {
@@ -21299,7 +21452,7 @@ void __ORG(struct s_assenv *ae) {
 			ae->insideORG=0;
 			if (ae->outputadr<0) {
 				ae->outputadr=0;
-				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"[%s:%d] cannot ORG outside memory!\n");
+				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"cannot ORG outside memory!\n");
 			} else if (ae->outputadr>0xFFFF) {
 				iscrunched=0;
 				for (i=ae->ilz-1;i>=0;i--) {
@@ -21308,9 +21461,11 @@ void __ORG(struct s_assenv *ae) {
 						break;
 					}
 				}
-				if (!iscrunched) {
+				/* LIMIT ...,EXTENDED grows memsize[] past 64K for the active bank -- that's
+				   the explicit opt-in that allows outputadr (physical write position) to grow too */
+				if (!iscrunched && ae->memsize[ae->activebank]<=0x10000) {
 					ae->outputadr=0;
-					MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"[%s:%d] cannot ORG outside memory!\n");
+					MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"cannot ORG outside memory!\n");
 				}
 			}
 			ae->idx+=2;
@@ -21319,7 +21474,7 @@ void __ORG(struct s_assenv *ae) {
 			ae->idx++;
 		}
 	} else {
-		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"[%s:%d] ORG code location[,output location]\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"ORG code location[,output location]\n");
 		return;
 	}
 	
@@ -22102,9 +22257,9 @@ printf("AudioLoadSample filesize=%d st=%d normalize=%.2lf\n",filesize,sample_typ
 
 	if (!brut) {
 		if (strncmp(wav_header->Format,"WAVE",4)) {
-			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"[%s:%d] WAV import - unsupported audio sample type (format must be 'WAVE')\n");
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"WAV import - unsupported audio sample type (format must be 'WAVE')\n");
 			return;
-		}
+			}
 		controlsize=wav_header->SubChunk1Size[0]+wav_header->SubChunk1Size[1]*256+wav_header->SubChunk1Size[2]*65536+wav_header->SubChunk1Size[3]*256*65536;
 		if (controlsize!=16) {
 			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"WAV import - invalid wav chunk size (subchunk1 control)\n");
@@ -24861,7 +25016,7 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 #if TRACE_ORG
 		printf("ORG: B%03d %s#%04X-#%04X InPlace=%d\n",ae->orgzone[i].ibank,ae->orgzone[i].protect?"Protect ":"",ae->orgzone[i].memstart,ae->orgzone[i].memend,ae->orgzone[i].inplace);
 #endif
-		if (ae->orgzone[i].memend>0x10000) {
+		if (ae->orgzone[i].memend > 0x10000 && ae->memsize[ae->orgzone[i].ibank]<=0x10000) { // only report output overflow, if the bank isn't opted for LIMIT,,EXTENDED
 			MakeError(ae,0,ae->filename[ae->orgzone[i].ifile],ae->orgzone[i].iline,"ORG section is overflowing 64K bank by %d byte%s\n",
 					ae->orgzone[i].memend-0x10000,ae->orgzone[i].memend-0x10000>1?"s":"");
 		}
@@ -28215,7 +28370,9 @@ printf("ajout du mot [%s]\n",curw.w);
 						}
 					}
 				} else {
-					if (hadcomma) {
+					/* whitespace after ',' used to trigger an error even when the real problem was an
+                       unknown preceding op; only report genuinely empty params like ",<none or any number of whitespaces>," here */
+					if (hadcomma && c==',') {
 						if (!ae->macro_multi_line) {
 							MakeError(ae,0,ae->filename[listing[l].ifile],listing[l].iline,"empty parameter right after word [%s]\n",nbword>1?wordlist[nbword-1].w:"(null)");
 						}
