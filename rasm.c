@@ -424,7 +424,7 @@ enum e_expression {
 	E_EXPRESSION_BRS     /* delayed shifting for BIT, RES, SET */
 };
 
-struct s_expression {	
+struct s_expression {
 	char *reference;          /* backup when used inside loop (or macro?) */
 	int iw;                   /* word index in the main wordlist */
 	int o;                    /* offset de depart 0, 1 ou 3 selon l'opcode */
@@ -435,6 +435,15 @@ struct s_expression {
 	int ibank;                /* ibank of expression */
 	int iorgzone;             /* org of expression */
 	char *module;
+	/*  RELOCATE SUPPORT FOR STATEMENTS REFERENCING $ (current code address) */
+	int wcodeadr;              /* codeadr of the instruction's literal field - captured before the pre-existing
+	                               "$" rewind resets codeadr back to the opcode start, so the real
+	                               write address of the literal isn't lost until its use in RELOCATE_TABLE */
+	int relocblock;            /* 1 if this expression was pushed while a RELOCATE_START/END block was active */
+	int relocdollar;           /* 1 if the raw source token contained a "$" before ExpressionFastTranslate
+	                               resolved it to a literal number - combined with relocblock, lets
+	                               RELOCATE_TABLE recognize "$" as a relocatable position even though
+	                               by scan time the text only shows the already-substituted number */
 };
 
 struct s_expr_dico {
@@ -485,6 +494,7 @@ struct s_label {
 	int autorise_export,backidx,local_export;
 	int make_alias;
 	int used;
+	int relocatable; /* 1 = defined inside a RELOCATE_START..RELOCATE_END block */
 };
 
 struct s_alias {
@@ -1206,7 +1216,7 @@ struct s_assenv {
 	char **rawfile; // case export
 	int *rawlen;    // case export
 	int nberr,flux;
-#define INSTRUCTION_MAXLENGTH 14
+#define INSTRUCTION_MAXLENGTH 15	  // upped by 1 as RELOCATE_START is 15 Chars (including 0-terminator) instead of 14
 	int fastmatch[256][INSTRUCTION_MAXLENGTH];
 #define FUNCTION_MAXLENGTH 14
 	int fastmath[256][FUNCTION_MAXLENGTH];
@@ -1391,6 +1401,16 @@ struct s_assenv {
 	/* relocation */
 	struct s_relocation *relocation;
 	int irelocation,mrelocation;
+	/* RELOCATE_START/RELOCATE_END/RELOCATE_TABLE (WinAPE/SymbOS-style inline relocation table) */
+	int relocblockactive; // 0=inactive, 1=REGULAR, 2=HIGH
+	int relocmode;        // locked to REGULAR or HIGH on first RELOCATE_START, mismatch is an error
+	int relocblockidx;    // ae->idx of the currently open RELOCATE_START, for error messages
+	int relocbank;        // bank the (first) RELOCATE_START was opened in - locked in for the whole
+	                      // file, because RELOCATE_TABLE entries carry no per-address bank tag and
+	                      // get one shared offset applied by the loader; a RELOCATE_START opened in
+	                      // a different bank would silently mix in addresses from unrelated memory,
+	                      // so it is rejected with an error instead (see __RELOCATE_START)
+	int relocbankset;     // 1 once relocbank has been captured
 };
 
 /*************************************
@@ -9270,9 +9290,13 @@ void PushExpression(struct s_assenv *ae,const int iw,const enum e_expression zet
 	struct s_expression curexp={0};
 	unsigned char bakXY=0;
 
+	___check_codeadr_wrap(ae);
 	if (!ae->nocode) {
 		curexp.iw=iw;
 		curexp.wptr=ae->outputadr;
+		curexp.wcodeadr = ae->codeadr; // true runtime address of the value, before any "$" hack adjustment below
+		curexp.relocblock = ae->relocblockactive?1:0;
+		curexp.relocdollar = strchr(ae->wl[iw].w,'$')?1:0; // capture before ExpressionFastTranslate replaces "$" with a literal number below
 		curexp.zetype=zetype;
 		curexp.ibank=ae->activebank;
 		curexp.iorgzone=ae->io-1;
@@ -10531,6 +10555,7 @@ void PushLabel(struct s_assenv *ae)
 					curlabel.ibank=ae->activebank;
 					curlabel.iorgzone=ae->io-1;
 					curlabel.lz=ae->lz;
+					curlabel.relocatable = ae->relocblockactive?1:0;
 					curlabel.fileidx=ae->wl[ae->idx].ifile;
 					curlabel.fileline=ae->wl[ae->idx].l;
 					curlabel.backidx=ae->il;
@@ -10735,6 +10760,7 @@ printf("PUSH Orphan PROXIMITY label that cannot be exported [%s]->[%s]\n",ae->wl
 		curlabel.ibank=ae->activebank;
 		curlabel.iorgzone=ae->io-1;
 		curlabel.lz=ae->lz;
+		curlabel.relocatable = ae->relocblockactive?1:0;
 	}
 
 //printf("PushLabel(%s) name=%s crc=%X lz=%d\n",curlabel.name,curlabel.name?curlabel.name:"null",curlabel.crc,curlabel.lz);
@@ -17520,6 +17546,264 @@ printf("-------------------------------------------------\n");
 	}
 }
 
+/*************************************************************************************************
+ * RELOCATE_START / RELOCATE_END / RELOCATE_TABLE
+ *
+ * WinAPE/SymbOS-style inline relocation table generator (unrelated to the original RELOCATE/ENDRELOCATE above).
+ * Any regular label defined between RELOCATE_START and RELOCATE_END is tagged "relocatable".
+ * RELOCATE_TABLE then scans every 16bit value written so far - DEFW/DW/struct-field data words and
+ * instruction operands (LD reg,nn, JP/CALL nn, LD (nn),reg, ...) alike, since a relocation table
+ * entry marks a 16bit memory slot whose stored value is an address into the relocatable block, and
+ * it needs fixing up on load regardless of whether that slot was written by a data directive or as
+ * part of an instruction encoding - and, for every one whose source expression references a
+ * relocatable label, emits its position as a table entry. This only needs the
+ * position of the value (always known immediately) rather than its resolved value (only known
+ * after the final fixup sweep), so the table can be written inline, at the spot where
+ * RELOCATE_TABLE appears, with no size ambiguity.
+ *************************************************************************************************/
+
+/*  Handling of reloc label arithmetic: 
+	First count how many "relocatable atoms" appear in 'expr'. (Occurrences of a label tagged relocatable,
+	plus dollar_atom)
+	A count of exactly 1 is a genuine single relocatable address, and gets recorded to the table as is.
+	2 or more means the expression combines several relocatable atoms - those need to be checked
+	using ___RelocNetZero() below to tell apart a difference (e.g. LABEL_A-LABEL_B: both sides shift by
+	the same delta on load, so the assembled value is already correct and no entry is needed) from
+	a sum or anything else whose post-load value would need more than the single delta a table
+	entry can add (e.g. LABEL_A+LABEL_B needs *two* deltas) - those get an error instead of being
+	silently left wrong. */
+static int ___RelocCountAtoms(struct s_assenv *ae, const char *expr, int dollar_atom) {
+	int i=0,start,len,count=dollar_atom;
+	char buf[256];
+	struct s_label *lbl;
+
+	while (expr[i]) {
+		if (ae->AutomateValidLabelFirst[(unsigned char)expr[i]]) {
+			start=i;
+			i++;
+			while (ae->AutomateValidLabel[(unsigned char)expr[i]]) i++;
+			len=i-start; if (len>255) len=255;
+			memcpy(buf,expr+start,len); buf[len]=0;
+			lbl=SearchLabel(ae,buf,GetCRC(buf));
+			if (lbl && lbl->relocatable) count++;
+		} else {
+			i++;
+		}
+	}
+	return count;
+}
+
+/* only meaningful when ___RelocCountAtoms() above returned 2 or more: decides whether that
+   combination of relocatable atoms provably needs zero delta fixup (safe to leave out of the
+   table, e.g. LABEL_A-LABEL_B, or LABEL_A-LABEL_B+LABEL_C-LABEL_D) by tracking, for every
+   relocatable atom found, the +1/-1 sign it carries at its position in the expression (through
+   nested parentheses, so "-(A-B)" is recognized too) and checking whether those signs sum to 0.
+   Only plain +/- combinations are analyzed: a relocatable atom (or a parenthesized group
+   containing one) directly multiplied or divided has an effective delta coefficient this doesn't
+   attempt to compute, so that's conservatively treated as unsafe too - this will raise an
+   error message later on. */
+static int ___RelocNetZero(struct s_assenv *ae, const char *expr) {
+	int i=0,start,len;
+	char buf[256];
+	struct s_label *lbl;
+	int depth=0;
+	int signstack[64];
+	int relocstack[64]; /* did this parenthesis level contain a relocatable atom (directly or via a nested group)? */
+	int cursign;
+	int netsum=0;
+	int lastreloc=0; /* did the previous atom/group end in something relocatable, for the "*"/"/" adjacency check */
+
+	signstack[0]=1;
+	relocstack[0]=0;
+	cursign=1;
+	while (expr[i]) {
+		char c=expr[i];
+		if (c==' ' || c=='\t') { i++; continue; }
+		if (c=='(') {
+			if (depth<63) { depth++; signstack[depth]=signstack[depth-1]*cursign; relocstack[depth]=0; }
+			cursign=signstack[depth<64?depth:63];
+			lastreloc=0;
+			i++;
+			continue;
+		}
+		if (c==')') {
+			int grouphadreloc=relocstack[depth<64?depth:63];
+			if (depth>0) depth--;
+			if (grouphadreloc) relocstack[depth]=1;
+			lastreloc=grouphadreloc;
+			i++;
+			continue;
+		}
+		if (c=='+') { cursign=signstack[depth]; lastreloc=0; i++; continue; }
+		if (c=='-') { cursign=-signstack[depth]; lastreloc=0; i++; continue; }
+		if (c=='*' || c=='/') {
+			if (lastreloc) return 0; /* relocatable atom (or group) directly scaled -- coefficient unknown */
+			lastreloc=0;
+			i++;
+			continue;
+		}
+		if (ae->AutomateValidLabelFirst[(unsigned char)c]) {
+			start=i;
+			i++;
+			while (ae->AutomateValidLabel[(unsigned char)expr[i]]) i++;
+			len=i-start; if (len>255) len=255;
+			memcpy(buf,expr+start,len); buf[len]=0;
+			lbl=SearchLabel(ae,buf,GetCRC(buf));
+			if (lbl && lbl->relocatable) {
+				netsum+=cursign;
+				relocstack[depth]=1;
+				lastreloc=1;
+			} else {
+				lastreloc=0;
+			}
+			continue;
+		}
+		lastreloc=0;
+		i++;
+	}
+	return netsum==0;
+}
+
+/* create (or update, if RELOCATE_TABLE is used more than once) a forward-reference-capable symbol,
+   the same way EQU-created labels work, so it can be used in the source before RELOCATE_TABLE itself */
+static void ___RelocSetSymbol(struct s_assenv *ae, char *name, int value) {
+	struct s_label *lbl;
+	int crc=GetCRC(name);
+
+	lbl=SearchLabel(ae,name,crc);
+	if (lbl) {
+		lbl->ptr=value;
+	} else {
+		struct s_label curlabel={0};
+
+		curlabel.name=TxtStrDup(name);
+		curlabel.crc=crc;
+		curlabel.ptr=value;
+		curlabel.ibank=ae->activebank;
+		curlabel.iorgzone=ae->io-1;
+		curlabel.lz=ae->lz;
+		curlabel.fileidx=ae->wl[ae->idx].ifile;
+		curlabel.fileline=ae->wl[ae->idx].l;
+		curlabel.autorise_export=ae->autorise_export;
+		curlabel.backidx=ae->il;
+		curlabel.nop=ae->nop;
+		if (InsertLabelToTree(ae,&curlabel)) {
+			ObjectArrayAddDynamicValueConcat((void **)&ae->label,&ae->il,&ae->ml,&curlabel,sizeof(curlabel));
+		} else {
+			MemFree(curlabel.name); // cannot happen, SearchLabel above already returned NULL
+		}
+	}
+}
+
+void __RELOCATE_START(struct s_assenv *ae) {
+	int ishigh=0;
+
+	if (!ae->wl[ae->idx].t) {
+		if (strcmp(ae->wl[ae->idx+1].w,"HIGH")==0) {
+			ishigh=1;
+			ae->idx++;
+		} else {
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"usage is RELOCATE_START [HIGH]\n");
+			return;
+		}
+	}
+	if (ae->relocblockactive) {
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"RELOCATE_START: a relocation block is already open (see RELOCATE_START in [%s:%d])\n",ae->filename[ae->wl[ae->relocblockidx].ifile],ae->wl[ae->relocblockidx].l);
+		return;
+	}
+	if (ae->lz>=0) {
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"RELOCATE_START must not be used inside a crunched section\n");
+		return;
+	}
+	if (ae->ir || ae->iw) {
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"RELOCATE_START must not be used inside a loop section\n");
+		return;
+	}
+	if (ae->nocode) {
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"RELOCATE_START must not be used inside a NOCODE section\n");
+		return;
+	}
+	if (ae->relocbankset && ae->relocbank!=ae->activebank) {
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"RELOCATE_START must stay in the same BANK for every block feeding the same RELOCATE_TABLE\n");
+		return;
+	}
+	if (ae->relocmode && ae->relocmode!=(ishigh?2:1)) {
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"RELOCATE_START: HIGH mode cannot be mixed with regular mode in the same file\n");
+		return;
+	}
+	ae->relocmode=ishigh?2:1;
+	ae->relocblockactive=ishigh?2:1;
+	ae->relocblockidx=ae->idx;
+	if (!ae->relocbankset) {
+		ae->relocbank=ae->activebank;
+		ae->relocbankset=1;
+	}
+}
+
+void __RELOCATE_END(struct s_assenv *ae) {
+	if (ae->wl[ae->idx].t) {
+		if (!ae->relocblockactive) {
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"RELOCATE_END: no RELOCATE_START block is open\n");
+			return;
+		}
+		ae->relocblockactive=0;
+	} else {
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"RELOCATE_END directive must be used without parameter\n");
+	}
+}
+
+void __RELOCATE_TABLE(struct s_assenv *ae) {
+	int subtract_offset=0;
+	int i,count=0;
+	int targetbank;
+	int ishigh=(ae->relocmode==2);
+	int *addrs=NULL;
+
+	if (ae->relocblockactive) {
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"RELOCATE_TABLE: a RELOCATE_START block is still open (missing RELOCATE_END)\n");
+		return;
+	}
+	if (!ae->wl[ae->idx].t) {
+		ae->idx++;
+		subtract_offset=RoundComputeExpression(ae,ae->wl[ae->idx].w,ae->outputadr,0,0);
+	}
+
+	targetbank=ae->relocbankset?ae->relocbank:ae->activebank;
+
+	for (i=0;i<ae->ie;i++) {
+		char *exprtext;
+		int atomcount;
+
+		if (ae->expression[i].ibank!=targetbank) continue;
+		if (ae->expression[i].lz>=0) continue;
+		switch (ae->expression[i].zetype) {
+			case E_EXPRESSION_0V16:
+			case E_EXPRESSION_V16:
+			case E_EXPRESSION_J16:
+			case E_EXPRESSION_IV16: break;
+			default: continue;
+		}
+		exprtext=ae->expression[i].reference?ae->expression[i].reference:ae->wl[ae->expression[i].iw].w;
+		atomcount=___RelocCountAtoms(ae,exprtext,ae->expression[i].relocblock && ae->expression[i].relocdollar);
+		if (atomcount==1) {
+			addrs=MemRealloc(addrs,(count+1)*sizeof(int));
+			addrs[count++]=ae->expression[i].wcodeadr+(ishigh?1:0)-subtract_offset;
+		} else if (atomcount>=2 && !___RelocNetZero(ae,exprtext)) {
+			MakeError(ae,ae->expression[i].iw,GetExpFile(ae,i),ae->wl[ae->expression[i].iw].l,
+				"RELOCATE_TABLE: expression [%s] combines relocatable addresses in a way that cannot be relocated correctly (would need more than one fixup delta)\n",exprtext);
+		}
+	}
+
+	for (i=0;i<count;i++) {
+		___output(ae,addrs[i]&0xFF);
+		___output(ae,(addrs[i]>>8)&0xFF);
+	}
+	if (addrs) MemFree(addrs);
+
+	___RelocSetSymbol(ae,"RELOCATE_COUNT",count); // source tokens are uppercased before reaching label lookup, match that here
+	___RelocSetSymbol(ae,"RELOCATE_SIZE",count*2);
+	}
+
 
 // symbol export
 void __SYMBOL(struct s_assenv *ae) {
@@ -21818,6 +22102,7 @@ printf("EVOL 119 - tableau! %d elem%s\n",nbelem,nbelem>1?"s":"");
 				//curlabel.iw=-1;
 				curlabel.lz=-1; // because struct is NOT part of LZ
 				curlabel.ptr=ae->codeadr;
+				curlabel.relocatable = ae->relocblockactive?1:0;
 				curlabel.fileidx=ae->wl[ae->idx+2].ifile;
 
 				if (!ae->getstruct) {
@@ -23735,6 +24020,9 @@ struct s_asm_keyword instruction[]={
 {"LOCALISATION",0,0,__LOCALISATION},
 {"RELOCATE",0,0,__RELOCATE},
 {"ENDRELOCATE",0,0,__ENDRELOCATE},
+{"RELOCATE_START",0,0,__RELOCATE_START},
+{"RELOCATE_END",0,0,__RELOCATE_END},
+{"RELOCATE_TABLE",0,0,__RELOCATE_TABLE},
 {"EDSK",0,0,__EDSK},
 {"HFE",0,0,__HFE},
 {"ERRRD",0,0,__ERRRD},
@@ -27473,7 +27761,7 @@ printf("init 3\n");
 	// count instructions and fill crc/length in the dynamic array of RASM instructions
 	for (nbinstruction=0;instruction[nbinstruction].mnemo[0];nbinstruction++) {
 		instruction[nbinstruction].crc=GetCRCandLength(instruction[nbinstruction].mnemo,&instruction[nbinstruction].length);
-		if (instruction[nbinstruction].length>INSTRUCTION_MAXLENGTH) {
+		if (instruction[nbinstruction].length >= INSTRUCTION_MAXLENGTH) {
 			rasm_printf(ae,"Internal Error, please resize fastmatch length for [%s] with %d\n",instruction[nbinstruction].mnemo,instruction[nbinstruction].length+1);
 			exit(-666);
 		}
