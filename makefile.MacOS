@@ -108,3 +108,7 @@ install:
 
 clean:
 	rm -f $(APU_OBJ) $(LZSA_OBJ) $(SALVADOR_OBJ) apultra-master/src/apultra.o lzsa-master/src/shrink_streaming.o lzsa-master/src/expand_streaming.o z80-master/z80.o 
+	rm -f rasmoutput_avec.bin rasmoutput_sans.bin rasmoutput_test.bin rasmoutput_test.dsk \
+		rasmoutput_test2.dsk rasmoutput_test3.dsk rasmoutput_testbis.dsk autotest_edsk.dsk \
+		autotestw.dsk grouik.txt grouik_copy.txt grouik_copy_no.txt headerless_copy.txt \
+		headerless_copy_no.txt

@@ -1,2 +1,17 @@
 *.o
 rasm.exe
+rasm
+rasmoutput_avec.bin
+rasmoutput_sans.bin
+rasmoutput_test.bin
+rasmoutput_test.dsk
+rasmoutput_test2.dsk
+rasmoutput_test3.dsk
+rasmoutput_testbis.dsk
+autotest_edsk.dsk
+autotestw.dsk
+grouik_copy_no.txt
+grouik_copy.txt
+grouik.txt
+headerless_copy_no.txt
+headerless_copy.txt

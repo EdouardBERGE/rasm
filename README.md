@@ -4,6 +4,41 @@
     
 Rasm was designed to be damn FAST and handle HUGE projects. On a modern machine, it can assemble millions of instructions in a blink of an eye (peak performance around 100 millions instructions per second). It's way faster than the best alternatives. Rasm also runs on almost any platform : Linux x64/ARM, MacOS Intel or ARM, Windows 32 bits or 64 bits, MS-DOS and even MorphOS
 
+## This fork (vs upstream EdouardBERGE/rasm)
+
+*File Handling*:
+- New: path/filename lookups (`INCLUDE`, `SAVE`, ...) are now case-insensitive on case-sensitive filesystems (Linux/macOS), matching Windows/WinAPE behaviour.
+- New: quoted filenames (`SAVE`, `BUILDCPR`, `INCLUDE`, ...) accept either `\` or `/` as path separator regardless of host OS; the wrong one is normalized instead of producing a literal backslash-named file on Linux/macOS.
+- Changed: plain-file `SAVE` (no DSK/TAPE/AMSDOS/HOBETA) accepts offset/size beyond 64K when the bank is `EXTENDED`; hardware-bound SAVE variants stay capped at 64K.
+
+*Relocation Tables*:
+- New: `RELOCATE_START [HIGH]` / `RELOCATE_END` / `RELOCATE_TABLE [subtract_offset]`, WinAPE/SymbOS-compatible relocation table generator (distinct from the pre-existing `RELOCATE`/`ENDRELOCATE`). Labels, as well as '$'/'$$' inside the block are tracked as relocatable. `RELOCATE_TABLE` scans every 16bit slot assembled so far — `DEFW`/`DW`/struct fields as well as instruction operands (`LD reg,nn`, `JP`/`CALL nn`, `LD (nn),reg`, ...) — and records the position of every one whose value is exactly a single relocatable address plus/minus a compile-time constant. An expression combining two or more relocatable references is recorded only when it's provably delta-invariant, i.e. a plain `+`/`-` combination whose signs cancel out to a net zero (e.g. `labelA-labelB`, or `labelA-labelB+labelC-labelD`, even through nested parentheses like `-(labelA-labelB)`). Such a value needs no fixup at all. Anything else that combines multiple relocatable items like a sum (`labelA+labelB`), or one scaled by multiplication/division, cannot be expressed with the single per-entry fixup delta the table format supports. Those cases will throw an assembler error.
+Without `HIGH`, each table entry stores the position of the low byte of each 16bit slot to fix, thus pointing to the whole LittleEndian word. 
+With `HIGH`, the table entries point to the high byte of each 16bit slot to fix. This makes the file "page relocatable" by just adding an 8 bit delta to where the pointer points.   
+The table is written inline, wherever `RELOCATE_TABLE` is placed. Its format is (word)RELOCATE_COUNT, (word)RELOCATE_SIZE, n*(word)SymbolAddress
+- Changed: `INSTRUCTION_MAXLENGTH` upped by one to support `RELOCATE_START`/`RELOCATE_TABLE`, as they need 15 bytes with the zero-termination included.
+
+*Assembler*:
+- New: `$$` symbol, always the current physical output position (`outputadr`), usable in any expression — unlike `$`, whose meaning is context-dependent (`codeadr` normally, but
+outputadr in ORG like ORG $+100). This behavior is preserved, so we don't break existing code. 
+- New: `codeadr` overflow past `0xFFFF` now wraps to 0 with a warning instead of growing unbounded.
+  Can be silenced by `-nowarning`.
+- New: `LIMIT <value>,EXTENDED` opts a bank into output past 64K (`outputadr`); `codeadr` (Z80 PC) still must stay a valid 16-bit address.
+- Fixed: tokenizer false positive ("empty parameter right after word") on an unrecognized mnemonic followed by `, ` (comma then space) before its next argument; only a genuinely empty slot (`,,`) is flagged now.
+- Fixed: Maxam mode (`-m`) — `DIV`/`MOD` masked their result to unsigned 16-bit *after* dividing instead of masking the operands first, so e.g. `-3 mod 256` returned 65533 instead of the correct (floored-modulo, Maxam) 253.
+- Fixed: `ld a,(<indexreg>-number)`, or any variant with a negative index offset, now also works in maxam mode. See rasm.c:10263 for details.
+- Fixed: a lone `$`/`$$` immediately preceded by a unary minus (e.g. `-$`) failed to resolve ("keyword not found") in immediately-evaluated contexts such as `DS`'s size argument.
+- Fixed: aN unary minus before a forward-referenced `EQU` constant or anything that is handled as an alias (e.g. `ld de,-foo` with `foo equ 14` defined later) resolved to the wrong (positive) value. The alias substitution mechanism overwrote the minus sign itself, and once preserved, needed the same "leading unary minus" handling used at expression start to correctly wrap it around a parenthesized alias expansion.
+- Fixed: division/modulo by zero in an expression now reports an error instead of crashing rasm (SIGFPE).
+- Fixed: `ORG` beyond 64K outside a crunched section segfaulted (missing `MakeError` format args) instead of reporting a clean error.
+- Fixed: Removed stray direct formatting `[%s:%d]` at rasm.c:21025, 21716, 21729, 21739, 21752, 22545.
+ 
+*General*:
+- New: `.gitignore` covers selftest output files.
+- New: `Makefile.linux` builds rasm without the `.exe` extension; `make -f Makefile.linux windows64` cross-builds for Windows-x86-64 using mingw.
+- Changed: the `clean` target in `makefile`, `Makefile.linux`, and `makefile.MacOS` also removes selftest output files (not the binary itself).
+
+
 ## Documentation
 
 There is a cool French and English documentation, you should read it ;)
