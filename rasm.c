@@ -9328,7 +9328,9 @@ printf("exprout=[%s]\n",expr);
 	}
 }
 
-void PushExpression(struct s_assenv *ae,const int iw,const enum e_expression zetype)
+void (*PushExpression)(struct s_assenv *ae,const int iw,const enum e_expression zetype);
+
+void __PushExpression_wrap(struct s_assenv *ae,const int iw,const enum e_expression zetype)
 {
 	#undef FUNC
 	#define FUNC "PushExpression"
@@ -9338,6 +9340,164 @@ void PushExpression(struct s_assenv *ae,const int iw,const enum e_expression zet
 
 	//___check_codeadr_wrap(ae);
 	//
+	if (!ae->nocode) {
+		curexp.iw=iw;
+		curexp.wptr=ae->outputadr;
+		curexp.wcodeadr = ae->codeadr; // true runtime address of the value, before any "$" hack adjustment below
+		curexp.relocblock = ae->relocblockactive?1:0;
+		curexp.relocdollar = strchr(ae->wl[iw].w,'$')?1:0; // capture before ExpressionFastTranslate replaces "$" with a literal number below
+		curexp.zetype=zetype;
+		curexp.ibank=ae->activebank;
+		curexp.iorgzone=ae->io-1;
+		curexp.lz=ae->lz;
+		/* need the module to know where we are */
+		if (ae->module) curexp.module=TxtStrDup(ae->module); else curexp.module=NULL;
+		/* on traduit de suite les variables du dictionnaire pour les boucles et increments
+			SAUF si c'est une affectation
+		*/
+		switch (zetype) {
+			case E_EXPRESSION_J8:
+			case E_EXPRESSION_J16:
+				// prox loc label - RASM Atlas
+				if (ae->wl[iw].w[0]=='_' && (ae->wl[iw].w[1]=='+' || ae->wl[iw].w[1]=='-') && !ae->wl[iw].w[2]) {
+					curexp.reference=MemMalloc(32);
+					if (ae->wl[iw].w[1]=='+') {
+						sprintf(curexp.reference,"LPR%dOX",ae->curProxIndex+1); // post
+					} else {
+						if (ae->curProxIndex<0) {
+							MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"You cannot use _- before declaring _ proximity label\n");
+							strcpy(curexp.reference,"LPR0OX");
+						} else {
+							sprintf(curexp.reference,"LPR%dOX",ae->curProxIndex); // ante
+						}
+					}
+					ae->codeadr-=1;
+					goto skipTransPush;
+				}
+			case E_EXPRESSION_V8:
+			case E_EXPRESSION_V16:
+			case E_EXPRESSION_IM: ae->codeadr-=1; // $ hack
+						break;
+			case E_EXPRESSION_IV8:
+			case E_EXPRESSION_IV81:
+					     // patch IX/IY because they dont exist anymore as constants
+					     bakXY=ae->wl[iw].w[2];
+					     ae->wl[iw].w[1]='%';
+					     ae->wl[iw].w[2]='0';
+			case E_EXPRESSION_IV16: ae->codeadr-=2; // $ hack
+						break;
+			case E_EXPRESSION_3V8: ae->codeadr-=3; // $ hack
+						break;
+			default:break;
+		}
+		if (ae->ir || ae->iw || ae->imacro) {
+			curexp.reference=TxtStrDup(ae->wl[iw].w);
+			ExpressionFastTranslate(ae,&curexp.reference,1);
+			if (bakXY) {
+				ae->wl[iw].w[1]='I';
+				ae->wl[iw].w[2]=bakXY;
+			}
+		} else {
+			ExpressionFastTranslate(ae,&ae->wl[iw].w,1);
+		}
+		skipTransPush:;
+		/* calcul adresse de reference et post-incrementation pour sauter les data */
+
+		// switch in pure order of enum
+		switch (zetype) {
+			case E_EXPRESSION_J8: curexp.ptr=ae->codeadr;ae->outputadr++;ae->codeadr+=2;ae->external_mapping_size=1;break;
+			case E_EXPRESSION_0V8:curexp.ptr=ae->codeadr;ae->outputadr++;ae->codeadr++;ae->external_mapping_size=1;break;
+			case E_EXPRESSION_V8: curexp.ptr=ae->codeadr;ae->outputadr++;ae->codeadr+=2;ae->external_mapping_size=1;break;
+			case E_EXPRESSION_J16:
+			case E_EXPRESSION_V16: curexp.ptr=ae->codeadr;ae->outputadr+=2;ae->codeadr+=3;ae->external_mapping_size=2;break;
+			case E_EXPRESSION_0V16:curexp.ptr=ae->codeadr;ae->outputadr+=2;ae->codeadr+=2;ae->external_mapping_size=2;break;
+			case E_EXPRESSION_0V32:curexp.ptr=ae->codeadr;ae->outputadr+=4;ae->codeadr+=4;ae->external_mapping_size=4;break;
+			case E_EXPRESSION_0VR:
+			case E_EXPRESSION_0VRMike:curexp.ptr=ae->codeadr;ae->outputadr+=5;ae->codeadr+=5;ae->external_mapping_size=5;break;
+			case E_EXPRESSION_F24:curexp.ptr=ae->codeadr;ae->outputadr+=3;ae->codeadr+=3;ae->external_mapping_size=3;break;
+			case E_EXPRESSION_IV8:
+			case E_EXPRESSION_IV81:curexp.ptr=ae->codeadr;ae->outputadr++;ae->codeadr+=3;ae->external_mapping_size=1;break;
+			case E_EXPRESSION_3V8: curexp.ptr=ae->codeadr;ae->outputadr++;ae->codeadr+=4;ae->external_mapping_size=1;break;
+			case E_EXPRESSION_IV16:curexp.ptr=ae->codeadr;ae->outputadr+=2;ae->codeadr+=4;ae->external_mapping_size=2;break;
+			case E_EXPRESSION_RST:
+			case E_EXPRESSION_RSTC:curexp.ptr=ae->codeadr;ae->outputadr++;ae->codeadr++;ae->external_mapping_size=0;break;
+			case E_EXPRESSION_IM:  curexp.ptr=ae->codeadr;ae->outputadr++;ae->codeadr+=2;ae->external_mapping_size=0;break;
+			case E_EXPRESSION_RUN:
+			case E_EXPRESSION_ZXRUN:
+			case E_EXPRESSION_ZXSTACK:ae->external_mapping_size=0;break;
+			case E_EXPRESSION_BRS:curexp.ptr=ae->codeadr;ae->external_mapping_size=0;break; // minimum syndical
+			default:break;
+		}
+
+		if (ae->outputadr<=ae->maxptr) {  // = compare because done AFTER simili value assignment
+			ObjectArrayAddDynamicValueConcat((void **)&ae->expression,&ae->ie,&ae->me,&curexp,sizeof(curexp));
+		} else {
+			int requested_block;
+			int i,iscrunched=0;
+
+			for (i=ae->ilz-1;i>=0;i--) {
+				if (ae->lzsection[i].ibank==ae->activebank) {
+					iscrunched=1;
+					break;
+				}
+			}
+			if (!iscrunched) {
+				/* to avoid double error message */
+				if (!ae->stop) MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"(PushExpr) output exceed limit %04X\n",ae->maxptr); else MaxError(ae);
+				ae->stop=1;
+				return;
+			}
+			if (ae->maxptr&0xFFFF) {
+				rasm_printf(ae,KWARNING"Warning: Specific limits are not applied when using crunched sections, cause memory blocks are moved unpredictably\n");
+				if (ae->erronwarn) MaxError(ae);
+			}
+#if TRACE_LZ
+	printf("**output exceed limit** (PushExpr) extending memory space\n");
+#endif
+			requested_block=ae->outputadr>>16;
+			ae->mem[ae->activebank]=MemRealloc(ae->mem[ae->activebank],(requested_block+1)*65536);
+			ae->maxptr=(requested_block+1)*65536;
+			// eventually write expression ^_^
+			ObjectArrayAddDynamicValueConcat((void **)&ae->expression,&ae->ie,&ae->me,&curexp,sizeof(curexp));
+		}
+	} else {
+		switch (zetype) {
+			case E_EXPRESSION_J8:
+			case E_EXPRESSION_0V8:
+			case E_EXPRESSION_V8:ae->outputadr++;ae->codeadr++;break;
+			case E_EXPRESSION_J16:
+			case E_EXPRESSION_V16:
+			case E_EXPRESSION_0V16:ae->outputadr+=2;ae->codeadr+=2;break;
+			case E_EXPRESSION_0V32:ae->outputadr+=4;ae->codeadr+=4;break;
+			case E_EXPRESSION_0VR:
+			case E_EXPRESSION_0VRMike:ae->outputadr+=5;ae->codeadr+=5;break;
+			case E_EXPRESSION_F24:ae->outputadr+=3;ae->codeadr+=3;break;
+			case E_EXPRESSION_IV8:
+			case E_EXPRESSION_IV81:
+			case E_EXPRESSION_3V8:ae->outputadr++;ae->codeadr++;break;
+			case E_EXPRESSION_IV16:ae->outputadr+=2;ae->codeadr+=2;break;
+			case E_EXPRESSION_RST:
+			case E_EXPRESSION_RSTC:
+			case E_EXPRESSION_IM:ae->outputadr++;ae->codeadr++;break;
+			case E_EXPRESSION_RUN:break;
+			case E_EXPRESSION_ZXRUN:break;
+			case E_EXPRESSION_ZXSTACK:break;
+			case E_EXPRESSION_BRS:break;
+		}
+		if (ae->outputadr>ae->maxptr) {
+			if (!ae->stop) MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"(PushExpr) NOCODE output exceed limit %04X\n",ae->maxptr); else MaxError(ae);
+			ae->stop=1;
+		}
+	}
+}
+void __PushExpression(struct s_assenv *ae,const int iw,const enum e_expression zetype)
+{
+	#undef FUNC
+	#define FUNC "PushExpression"
+
+	struct s_expression curexp={0};
+	unsigned char bakXY=0;
+
 	if (!ae->nocode) {
 		curexp.iw=iw;
 		curexp.wptr=ae->outputadr;
@@ -24318,8 +24478,10 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 	ObjectArrayAddDynamicValueConcat((void**)&ae->orgzone,&ae->io,&ae->mo,&orgzone,sizeof(orgzone));
 	if (ae->wrap_addr) {
 		___output=___internal_output_wrap;
+		PushExpression=__PushExpression_wrap;
 	} else {
 		___output=___internal_output;
+		PushExpression=__PushExpression;
 	}
 	/* init des automates */
 	ae->AutomateExpressionDecision['<']='<';
