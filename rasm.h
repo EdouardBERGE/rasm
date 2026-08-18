@@ -1,7 +1,7 @@
 #define PROGRAM_NAME      "RASM"
 #define PROGRAM_VERSION   "3.2"
-#define PROGRAM_SUBVERSION   ".6"
-#define PROGRAM_VERSION_FLOAT   "3.26"
+#define PROGRAM_SUBVERSION   ".7"
+#define PROGRAM_VERSION_FLOAT   "3.27"
 #define PROGRAM_DATE      "16/08/2026"
 #define PROGRAM_COPYRIGHT "© 2017 BERGE Edouard / roudoudou from Praline"
 #ifndef SUPERFAST
@@ -64,6 +64,7 @@ struct s_parameter {
 	int enforce_symbol_case;
 	int verbose_assembling;
 	int macro_multi_line;
+	int wrap_addr;
 };
 
 struct s_debug_error {

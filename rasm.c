@@ -1216,9 +1216,9 @@ struct s_assenv {
 	char **rawfile; // case export
 	int *rawlen;    // case export
 	int nberr,flux;
-#define INSTRUCTION_MAXLENGTH 15	  // upped by 1 as RELOCATE_START is 15 Chars (including 0-terminator) instead of 14
+#define INSTRUCTION_MAXLENGTH 14	  // this does NOT include zero terminator ^_^
 	int fastmatch[256][INSTRUCTION_MAXLENGTH];
-#define FUNCTION_MAXLENGTH 14
+#define FUNCTION_MAXLENGTH 14 // no terminator included too
 	int fastmath[256][FUNCTION_MAXLENGTH];
 	unsigned char charset[256];
 	struct s_utf8Remap *utf8Remap;
@@ -1411,6 +1411,7 @@ struct s_assenv {
 	                      // a different bank would silently mix in addresses from unrelated memory,
 	                      // so it is rejected with an error instead (see __RELOCATE_START)
 	int relocbankset;     // 1 once relocbank has been captured
+	int wrap_addr;
 };
 
 /*************************************
@@ -3503,12 +3504,58 @@ void ___internal_output_extend(struct s_assenv *ae,const unsigned char v)
 	ae->mem[ae->activebank][ae->outputadr++]=v;
 	ae->codeadr++;
 }
+void ___internal_output_wrap(struct s_assenv *ae,const unsigned char v)
+{
+	#undef FUNC
+	#define FUNC "___output wrap"
+
+	if (ae->outputadr<ae->maxptr) {
+		ae->mem[ae->activebank][ae->outputadr++]=v;
+		ae->codeadr++;
+	} else {
+		___internal_output_extend(ae,v);
+	}
+}
+void ___internal_output_nocode_wrap(struct s_assenv *ae,const unsigned char v)
+{
+	#undef FUNC
+	#define FUNC "___output (nocode) wrap"
+
+	___check_codeadr_wrap(ae);
+	if (ae->outputadr<ae->maxptr) {
+		/* struct definition always in NOCODE */
+		if (ae->getstruct) {
+			int irs,irsf;
+			irs=ae->irasmstruct-1;
+			irsf=ae->rasmstruct[irs].irasmstructfield-1;
+			if (irsf>=0) {
+#if TRACE_STRUCT
+	printf("output_nocode irs=%d irsf=%d idata=%d\n",irs,irsf,ae->rasmstruct[irs].rasmstructfield[irsf].idata);
+#endif
+				/* ajouter les data du flux au champ de la structure */			
+				ObjectArrayAddDynamicValueConcat((void**)&ae->rasmstruct[irs].rasmstructfield[irsf].data,
+					&ae->rasmstruct[irs].rasmstructfield[irsf].idata,
+					&ae->rasmstruct[irs].rasmstructfield[irsf].mdata,
+					&v,sizeof(unsigned char));
+			} else {
+				rasm_printf(ae,KWARNING"[%s:%d] Warning: Structure field has no reference, did you forget a label?\n",GetCurrentFile(ae),ae->wl[ae->idx].l);
+				if (ae->erronwarn) MaxError(ae);
+			}
+		}
+		
+		ae->outputadr++;
+		ae->codeadr++;
+	} else {
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"output exceed limit %04X\n",ae->maxptr);
+		ae->stop=1;
+		___output=___internal_output_disabled;
+	}
+}
 void ___internal_output(struct s_assenv *ae,const unsigned char v)
 {
 	#undef FUNC
 	#define FUNC "___output"
 
-	___check_codeadr_wrap(ae);
 	if (ae->outputadr<ae->maxptr) {
 		ae->mem[ae->activebank][ae->outputadr++]=v;
 		ae->codeadr++;
@@ -3521,7 +3568,6 @@ void ___internal_output_nocode(struct s_assenv *ae,const unsigned char v)
 	#undef FUNC
 	#define FUNC "___output (nocode)"
 
-	___check_codeadr_wrap(ae);
 	if (ae->outputadr<ae->maxptr) {
 		/* struct definition always in NOCODE */
 		if (ae->getstruct) {
@@ -9290,7 +9336,8 @@ void PushExpression(struct s_assenv *ae,const int iw,const enum e_expression zet
 	struct s_expression curexp={0};
 	unsigned char bakXY=0;
 
-	___check_codeadr_wrap(ae);
+	//___check_codeadr_wrap(ae);
+	//
 	if (!ae->nocode) {
 		curexp.iw=iw;
 		curexp.wptr=ae->outputadr;
@@ -21688,10 +21735,18 @@ void ___org_new(struct s_assenv *ae, int nocode) {
 	orgzone.iline=ae->wl[ae->idx].l;
 	orgzone.nocode=ae->nocode=nocode;
 
-	if (nocode) {
-		___output=___internal_output_nocode;
+	if (ae->wrap_addr) {
+		if (nocode) {
+			___output=___internal_output_nocode_wrap;
+		} else {
+			___output=___internal_output_wrap;
+		}
 	} else {
-		___output=___internal_output;
+		if (nocode) {
+			___output=___internal_output_nocode;
+		} else {
+			___output=___internal_output;
+		}
 	}
 	
 	ObjectArrayAddDynamicValueConcat((void**)&ae->orgzone,&ae->io,&ae->mo,&orgzone,sizeof(orgzone));
@@ -24260,7 +24315,11 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 	orgzone.ibank=BANK_MAX_NUMBER;
 	orgzone.inplace=1;
 	ObjectArrayAddDynamicValueConcat((void**)&ae->orgzone,&ae->io,&ae->mo,&orgzone,sizeof(orgzone));
-	___output=___internal_output;
+	if (ae->wrap_addr) {
+		___output=___internal_output_wrap;
+	} else {
+		___output=___internal_output;
+	}
 	/* init des automates */
 	ae->AutomateExpressionDecision['<']='<';
 	ae->AutomateExpressionDecision['>']='>';
@@ -27472,6 +27531,7 @@ printf("paramz 1\n");
 		ae->rom_name=param->rom_name;
 		ae->checkmode=param->checkmode;
 		ae->noampersand=param->noampersand;
+		ae->wrap_addr=param->wrap_addr;
 		ae->module_separator[0]=param->module_separator;
 		ae->enforce_symbol_case=param->enforce_symbol_case;
 		if (param->rough) ae->maxam=0; else ae->maxam=1;
@@ -27761,7 +27821,7 @@ printf("init 3\n");
 	// count instructions and fill crc/length in the dynamic array of RASM instructions
 	for (nbinstruction=0;instruction[nbinstruction].mnemo[0];nbinstruction++) {
 		instruction[nbinstruction].crc=GetCRCandLength(instruction[nbinstruction].mnemo,&instruction[nbinstruction].length);
-		if (instruction[nbinstruction].length >= INSTRUCTION_MAXLENGTH) {
+		if (instruction[nbinstruction].length > INSTRUCTION_MAXLENGTH) {
 			rasm_printf(ae,"Internal Error, please resize fastmatch length for [%s] with %d\n",instruction[nbinstruction].mnemo,instruction[nbinstruction].length+1);
 			exit(-666);
 		}
@@ -34232,6 +34292,7 @@ void Usage(int help)
 		printf("-utf8            convert symbols from french or spanish keyboard inside quotes\n");
 		printf("-fq              do not bother with special chars inside quotes\n");
 		printf(KLWHITE"MISCELLANEOUS:\n"KNORMAL);
+		printf("-wrap            force code address to wrap inside 64K\n");
 		printf("-quick           enable fast mode for ZX0 crunching\n");
 		printf("-cprquiet        do not display ROM detailed informations\n");
 		printf("-map             display information during early assembling stages\n");
@@ -34519,6 +34580,8 @@ int ParseOptions(char **argv,int argc, struct s_parameter *param)
 		param->utf8enable=1;
 	} else if (strcmp(argv[i],"-twe")==0) {
 		param->erronwarn=1;
+	} else if (strcmp(argv[i],"-wrap")==0) {
+		param->wrap_addr=1;
 	} else if (strcmp(argv[i],"-mml")==0) {
 		param->macro_multi_line=1;
 	} else if (strcmp(argv[i],"-map")==0) {
