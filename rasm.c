@@ -1216,7 +1216,7 @@ struct s_assenv {
 	char **rawfile; // case export
 	int *rawlen;    // case export
 	int nberr,flux;
-#define INSTRUCTION_MAXLENGTH 14	  // this does NOT include zero terminator ^_^
+#define INSTRUCTION_MAXLENGTH 15	  // this does NOT include zero terminator but arrays start from zero index!
 	int fastmatch[256][INSTRUCTION_MAXLENGTH];
 #define FUNCTION_MAXLENGTH 14 // no terminator included too
 	int fastmath[256][FUNCTION_MAXLENGTH];
@@ -27821,7 +27821,7 @@ printf("init 3\n");
 	// count instructions and fill crc/length in the dynamic array of RASM instructions
 	for (nbinstruction=0;instruction[nbinstruction].mnemo[0];nbinstruction++) {
 		instruction[nbinstruction].crc=GetCRCandLength(instruction[nbinstruction].mnemo,&instruction[nbinstruction].length);
-		if (instruction[nbinstruction].length > INSTRUCTION_MAXLENGTH) {
+		if (instruction[nbinstruction].length >= INSTRUCTION_MAXLENGTH) {
 			rasm_printf(ae,"Internal Error, please resize fastmatch length for [%s] with %d\n",instruction[nbinstruction].mnemo,instruction[nbinstruction].length+1);
 			exit(-666);
 		}
