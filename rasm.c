@@ -17840,6 +17840,7 @@ void __RELOCATE_TABLE(struct s_assenv *ae) {
 				"RELOCATE_TABLE: expression [%s] combines relocatable addresses in a way that cannot be relocated correctly (would need more than one fixup delta)\n",exprtext);
 		}
 	}
+//printf("relocate table will produce %d words\n",count);
 
 	for (i=0;i<count;i++) {
 		___output(ae,addrs[i]&0xFF);
@@ -32069,6 +32070,24 @@ printf("testing delayed EQU + $ OK\n");
 	if (!ret && !(opcodelen&1) && opcodelen && memcmp(opcode,opcode+(opcodelen>>1),opcodelen>>1)==0) {} else {printf("Autotest %03d ERROR (delayed EQU + $) r=%d l=%d\n",cpt,ret,opcodelen);MiniDump(opcode,opcodelen);exit(-1);}
 	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
 printf("testing instructions + $ OK\n");
+
+#define AUTOTEST_DOUBLE_DOLLAR "nop: assert $==1: assert $$==1: org 0x100,$: assert $==0x100: assert $$==1: org $: assert $==1"
+	ret=RasmAssemble(AUTOTEST_DOUBLE_DOLLAR,strlen(AUTOTEST_DOUBLE_DOLLAR),&opcode,&opcodelen);
+	if (!ret && opcodelen==1) {} else {printf("Autotest %03d ERROR (testing $$) r=%d l=%d\n",cpt,ret,opcodelen);MiniDump(opcode,opcodelen);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing $$ OK\n");
+
+#define AUTOTEST_RELOCATE_WINAPE "nop 128: previous_os: nop 128: org #0000,$$: RELOCATE_START:" \
+	"    ld hl, some_data: some_label: ld a,(hl): or a: jp nz, some_label: jr more_code :" \
+	" more_code: jp os_function       : jp previous_os       : some_data  db 'hi there',0:" \
+	"some_data_end: length_of_some_data: dw some_data_end - some_data : pointer_to_some_data: dw some_data :" \
+	"pointer_inside_some_data: dw some_data + 5 : RELOCATE_END: os_function  equ #F000 :" \
+	" reltable_ofs: RELOCATE_TABLE : assert reltable_ofs+8==$"
+	ret=RasmAssemble(AUTOTEST_RELOCATE_WINAPE,strlen(AUTOTEST_RELOCATE_WINAPE),&opcode,&opcodelen);
+	if (!ret) {} else {printf("Autotest %03d ERROR (relocate_table) r=%d l=%d\n",cpt,ret,opcodelen);MiniDump(opcode,opcodelen);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing relocate_start/end/table OK\n");
+
 
 	ret=RasmAssemble(AUTOTEST_DELAYNUM,strlen(AUTOTEST_DELAYNUM),&opcode,&opcodelen);
 	if (!ret && opcodelen==9 && opcode[0]==6 && opcode[2]==7 && opcode[4]==8) {} else {printf("Autotest %03d ERROR (delayed expr labels) r=%d l=%d\n",cpt,ret,opcodelen);MiniDump(opcode,opcodelen);exit(-1);}
