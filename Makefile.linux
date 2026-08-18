@@ -1,5 +1,5 @@
 CC=cc
-EXEC=rasm.exe
+EXEC=rasm
 
 CFLAGS=-lm  -march=native -o $(EXEC)
 CFLAGS_OPT = $(CFLAGS) -O2 -Wpointer-sign
@@ -7,6 +7,9 @@ CFLAGS_DBG = $(CFLAGS) -O1 -g -Wpointer-sign
 CFLAGS_3RD = $(CFLAGS) -O2 -DNO_3RD_PARTIES
 CFLAGS_INT = -lm  -march=native -O2 -DNO_3RD_PARTIES
 CFLAGS_FAST = $(CFLAGS) -O2 -Wpointer-sign -DSUPERFAST
+
+CC_WIN64=x86_64-w64-mingw32-gcc
+CFLAGS_WIN64=-lm -static -O2 -o rasm.exe
 
 SRC_APUDIR=./apultra-master/src
 SRC_LZSADIR=./lzsa-master/src
@@ -46,7 +49,7 @@ SALVADOR_OBJ+=$(SRC_SALVADOR)/shrink.o
 
 Z80_MASTER_OBJ = $(SRC_Z80_MASTER)/z80.o
 
-.PHONY: prod third debug clean 
+.PHONY: prod third debug clean windows64
 
 default: prod
 
@@ -163,10 +166,42 @@ release:
 	$(CC) rasm.c $(CFLAGS_OPT) $(APU_OBJ) $(LZSA_OBJ) $(SALVADOR_OBJ) -DRASM_PRODUCTION_WITHOUT_AUTOTEST
 	strip $(EXEC)
 
+windows64:
+	$(CC_WIN64) z80-master/z80.c -O2 -c -o $(Z80_MASTER_OBJ)
+
+	$(CC_WIN64) $(SRC_SALVADOR)/matchfinder.c $(SALVADOR_FLAGS) -o $(SRC_SALVADOR)/matchfinder.o
+	$(CC_WIN64) $(SRC_SALVADOR)/expand.c      $(SALVADOR_FLAGS) -o $(SRC_SALVADOR)/expand.o
+	$(CC_WIN64) $(SRC_SALVADOR)/shrink.c      $(SALVADOR_FLAGS) -o $(SRC_SALVADOR)/shrink.o
+
+	$(CC_WIN64) $(SRC_APUDIR)/expand.c $(APU_FLAGS)                                -o $(SRC_APUDIR)/expand.o
+	$(CC_WIN64) $(SRC_APUDIR)/matchfinder.c $(APU_FLAGS)                           -o $(SRC_APUDIR)/matchfinder.o
+	$(CC_WIN64) $(SRC_APUDIR)/shrink.c $(APU_FLAGS)                                -o $(SRC_APUDIR)/shrink.o
+
+	$(CC_WIN64) $(SRC_LZSADIR)/libdivsufsort/lib/divsufsort.c $(APU_FLAGS)         -o $(SRC_APUDIR)/libdivsufsort/lib/divsufsort.o
+	$(CC_WIN64) $(SRC_LZSADIR)/libdivsufsort/lib/divsufsort_utils.c $(APU_FLAGS)   -o $(SRC_APUDIR)/libdivsufsort/lib/divsufsort_utils.o
+	$(CC_WIN64) $(SRC_LZSADIR)/libdivsufsort/lib/sssort.c $(APU_FLAGS)             -o $(SRC_APUDIR)/libdivsufsort/lib/sssort.o
+	$(CC_WIN64) $(SRC_LZSADIR)/libdivsufsort/lib/trsort.c $(APU_FLAGS)             -o $(SRC_APUDIR)/libdivsufsort/lib/trsort.o
+
+	$(CC_WIN64) $(SRC_LZSADIR)/matchfinder.c $(LZSA_FLAGS)       -o $(SRC_LZSADIR)/matchfinder.o
+	$(CC_WIN64) $(SRC_LZSADIR)/dictionary.c $(LZSA_FLAGS)        -o $(SRC_LZSADIR)/dictionary.o
+	$(CC_WIN64) $(SRC_LZSADIR)/expand_block_v1.c $(LZSA_FLAGS)   -o $(SRC_LZSADIR)/expand_block_v1.o
+	$(CC_WIN64) $(SRC_LZSADIR)/expand_block_v2.c $(LZSA_FLAGS)   -o $(SRC_LZSADIR)/expand_block_v2.o
+	$(CC_WIN64) $(SRC_LZSADIR)/expand_context.c $(LZSA_FLAGS)    -o $(SRC_LZSADIR)/expand_context.o
+	$(CC_WIN64) $(SRC_LZSADIR)/expand_inmem.c $(LZSA_FLAGS)      -o $(SRC_LZSADIR)/expand_inmem.o
+	$(CC_WIN64) $(SRC_LZSADIR)/frame.c $(LZSA_FLAGS)             -o $(SRC_LZSADIR)/frame.o
+	$(CC_WIN64) $(SRC_LZSADIR)/shrink_block_v1.c $(LZSA_FLAGS)   -o $(SRC_LZSADIR)/shrink_block_v1.o
+	$(CC_WIN64) $(SRC_LZSADIR)/shrink_block_v2.c $(LZSA_FLAGS)   -o $(SRC_LZSADIR)/shrink_block_v2.o
+	$(CC_WIN64) $(SRC_LZSADIR)/shrink_context.c $(LZSA_FLAGS)    -o $(SRC_LZSADIR)/shrink_context.o
+	$(CC_WIN64) $(SRC_LZSADIR)/shrink_inmem.c $(LZSA_FLAGS)      -o $(SRC_LZSADIR)/shrink_inmem.o
+	$(CC_WIN64) $(SRC_LZSADIR)/stream.c $(LZSA_FLAGS)            -o $(SRC_LZSADIR)/stream.o
+
+	$(CC_WIN64) rasm.c $(CFLAGS_WIN64) $(APU_OBJ) $(LZSA_OBJ) $(SALVADOR_OBJ) $(Z80_MASTER_OBJ)
+	x86_64-w64-mingw32-strip rasm.exe
+
 clean:
 	rm -f $(APU_OBJ) $(LZSA_OBJ) $(SALVADOR_OBJ) $(Z80_MASTER_OBJ)
-	rm -f rasmoutput_avec.bin rasmoutput_sans.bin rasmoutput_test.bin \
-		rasmoutput_test.dsk rasmoutput_test2.dsk rasmoutput_test3.dsk rasmoutput_testbis.dsk \
-		autotest_edsk.dsk autotestw.dsk grouik.txt grouik_copy.txt grouik_copy_no.txt \
-		headerless_copy.txt headerless_copy_no.txt
+	rm -f rasmoutput_avec.bin rasmoutput_sans.bin rasmoutput_test.bin rasmoutput_test.dsk \
+		rasmoutput_test2.dsk rasmoutput_test3.dsk rasmoutput_testbis.dsk autotest_edsk.dsk \
+		autotestw.dsk grouik.txt grouik_copy.txt grouik_copy_no.txt headerless_copy.txt \
+		headerless_copy_no.txt
 

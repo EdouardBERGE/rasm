@@ -424,7 +424,7 @@ enum e_expression {
 	E_EXPRESSION_BRS     /* delayed shifting for BIT, RES, SET */
 };
 
-struct s_expression {	
+struct s_expression {
 	char *reference;          /* backup when used inside loop (or macro?) */
 	int iw;                   /* word index in the main wordlist */
 	int o;                    /* offset de depart 0, 1 ou 3 selon l'opcode */
@@ -435,6 +435,15 @@ struct s_expression {
 	int ibank;                /* ibank of expression */
 	int iorgzone;             /* org of expression */
 	char *module;
+	/*  RELOCATE SUPPORT FOR STATEMENTS REFERENCING $ (current code address) */
+	int wcodeadr;              /* codeadr of the instruction's literal field - captured before the pre-existing
+	                               "$" rewind resets codeadr back to the opcode start, so the real
+	                               write address of the literal isn't lost until its use in RELOCATE_TABLE */
+	int relocblock;            /* 1 if this expression was pushed while a RELOCATE_START/END block was active */
+	int relocdollar;           /* 1 if the raw source token contained a "$" before ExpressionFastTranslate
+	                               resolved it to a literal number - combined with relocblock, lets
+	                               RELOCATE_TABLE recognize "$" as a relocatable position even though
+	                               by scan time the text only shows the already-substituted number */
 };
 
 struct s_expr_dico {
@@ -485,6 +494,7 @@ struct s_label {
 	int autorise_export,backidx,local_export;
 	int make_alias;
 	int used;
+	int relocatable; /* 1 = defined inside a RELOCATE_START..RELOCATE_END block */
 };
 
 struct s_alias {
@@ -1206,7 +1216,7 @@ struct s_assenv {
 	char **rawfile; // case export
 	int *rawlen;    // case export
 	int nberr,flux;
-#define INSTRUCTION_MAXLENGTH 14
+#define INSTRUCTION_MAXLENGTH 15	  // upped by 1 as RELOCATE_START is 15 Chars (including 0-terminator) instead of 14
 	int fastmatch[256][INSTRUCTION_MAXLENGTH];
 #define FUNCTION_MAXLENGTH 14
 	int fastmath[256][FUNCTION_MAXLENGTH];
@@ -1217,6 +1227,7 @@ struct s_assenv {
 	/* ORG tracking */
 	int codeadr,outputadr,nocode;      // codeadr is logical code position | outputadr is physical code position | nocode is a flag 1: no code to output 0: output code
 	int codeadrbackup,outputadrbackup; // when using NOCODE, switching back to CODE will restore physical AND logical addresses
+	int codeadrwrapwarned;             // avoids spamming one warning per byte when codeadr wraps past 0xFFFF in an EXTENDED bank, reset by __ORG
 	struct s_orgzone *orgzone;         // each ORG is monitored to avoid conflicts
 	int io,mo;
 	int deadend,insideORG;
@@ -1390,6 +1401,16 @@ struct s_assenv {
 	/* relocation */
 	struct s_relocation *relocation;
 	int irelocation,mrelocation;
+	/* RELOCATE_START/RELOCATE_END/RELOCATE_TABLE (WinAPE/SymbOS-style inline relocation table) */
+	int relocblockactive; // 0=inactive, 1=REGULAR, 2=HIGH
+	int relocmode;        // locked to REGULAR or HIGH on first RELOCATE_START, mismatch is an error
+	int relocblockidx;    // ae->idx of the currently open RELOCATE_START, for error messages
+	int relocbank;        // bank the (first) RELOCATE_START was opened in - locked in for the whole
+	                      // file, because RELOCATE_TABLE entries carry no per-address bank tag and
+	                      // get one shared offset applied by the loader; a RELOCATE_START opened in
+	                      // a different bank would silently mix in addresses from unrelated memory,
+	                      // so it is rejected with an error instead (see __RELOCATE_START)
+	int relocbankset;     // 1 once relocbank has been captured
 };
 
 /*************************************
@@ -2240,15 +2261,93 @@ char *rasm_GetPath(char *filename) {
 
 	return curpath;
 }
+
+
+/* MAKE PATH FOR INCLUDE/SAVE/.. TAKE / and \ AS SEPERATOR AND CASE INSENSITIVE, REGARDLESS OF THE HOST PLATFORM */
+
+/* normalizes in place to whatever the current OS actually expects as a seperator, so a path written with
+   Windows style backslashes still resolves correctly on Linux / macOS, and vice versa. Filenames here are
+   never escape-processed (see StringRemoveQuotes), so a plain unconditional swap is safe. */
+void NormalizePathSeparators(char *filename) {
+#ifdef OS_WIN
+	TxtReplace(filename,"/","\\",1);
+#else
+	TxtReplace(filename,"\\","/",1);
+#endif
+}
+
+#ifdef OS_WIN
+void ResolveCaseInsensitivePath(char *path) { /* Windows filesystems are already case-insensitive */ }
+#else
+/* Path and file names are case sensitive on Linux/macOS but not on Windows. Recognize path and file
+   names case insensitively on all platforms for code interchangeability: if "path" doesn't exist
+   exactly as written, walk it component by component and substitute whatever the containing directory
+   actually contains, case-insensitively, rewriting "path" in place. Leaves "path" untouched if no full
+   match is found (the caller's normal "file not found" handling then applies unchanged). */
+void ResolveCaseInsensitivePath(char *path) {
+	char resolved[PATH_MAX];
+	char matched[PATH_MAX];
+	char *pathcopy,*component;
+	int ridx=0;
+	DIR *dir;
+	struct dirent *entry;
+
+	if (FileExists(path)) return;
+
+	pathcopy=TxtStrDup(path);
+	resolved[0]=0;
+	if (pathcopy[0]=='/') {
+		resolved[0]='/';
+		resolved[1]=0;
+		ridx=1;
+	}
+
+	component=strtok(pathcopy,"/");
+	while (component) {
+		char candidate[PATH_MAX];
+		int found=0;
+
+		snprintf(candidate,sizeof(candidate),"%s%s",resolved,component);
+		if (FileExists(candidate)) {
+			found=1;
+		} else {
+			dir=opendir(ridx?resolved:".");
+			if (dir) {
+				while ((entry=readdir(dir))!=NULL) {
+					if (strcasecmp(entry->d_name,component)==0) {
+						strcpy(matched,entry->d_name);
+						component=matched;
+						found=1;
+						break;
+					}
+				}
+				closedir(dir);
+			}
+		}
+		if (!found) {
+			MemFree(pathcopy);
+			return;
+		}
+		ridx+=snprintf(resolved+ridx,sizeof(resolved)-ridx,"%s",component);
+		component=strtok(NULL,"/");
+		if (component) {
+			resolved[ridx++]='/';
+			resolved[ridx]=0; /* opendir() below needs "resolved" null-terminated on every iteration */
+		}
+	}
+	resolved[ridx]=0;
+	strcpy(path,resolved);
+	MemFree(pathcopy);
+}
+#endif
 char *MergePath(struct s_assenv *ae,char *dadfilename, char *filename) {
 	#undef FUNC
 	#define FUNC "MergePath"
 
 	static char curpath[PATH_MAX];
 
+	NormalizePathSeparators(filename);
 #ifdef OS_WIN
-	TxtReplace(filename,"/","\\",1);
-
 	if (filename[0] && filename[1]==':' && filename[2]=='\\') {
 		/* chemin absolu */
 		strcpy(curpath,filename);
@@ -2265,18 +2364,6 @@ char *MergePath(struct s_assenv *ae,char *dadfilename, char *filename) {
 		}
 	}
 #else
-	int idxr;
-	for (idxr=0;filename[idxr];idxr++) {
-		if (filename[idxr]=='\\' && (
-			filename[idxr+1]=='-' ||
-			filename[idxr+1]=='_' ||
-			(filename[idxr+1]>='0' && filename[idxr+1]<='9') ||
-			(filename[idxr+1]>='a' && filename[idxr+1]<='z') ||
-			(filename[idxr+1]>='A' && filename[idxr+1]<='Z')
-		)) {
-			filename[idxr]='/';
-		}
-	}
 	if (filename[0]=='/') {
 		/* chemin absolu */
 		strcpy(curpath,filename);
@@ -2289,6 +2376,7 @@ char *MergePath(struct s_assenv *ae,char *dadfilename, char *filename) {
 	}
 #endif
 
+	ResolveCaseInsensitivePath(curpath);
 	return curpath;
 }
 
@@ -3351,6 +3439,33 @@ void ___internal_output_disabled(struct s_assenv *ae,const unsigned char v)
 	#define FUNC "fake ___output"
 }
 
+void ___check_codeadr_wrap(struct s_assenv *ae)
+{
+	/* codeadr (the logical Z80 program counter) must stay a valid 16-bit address. Inside an
+	   EXTENDED bank outputadr may run way past 0xFFFF, so codeadr wraps back to 0 instead of
+	   growing unbounded -- warn once per phase (reset whenever __ORG explicitly sets codeadr).
+	   Called before a byte or expression is emitted so simply reaching #10000 as a
+	   terminal position (e.g. a DS that fills exactly up to the 64K boundary) never warns 
+	   Only actually placing something beyond it does.
+	   Crunched (LZ) sections are exempt: there, codeadr legitimately grows past 0xFFFF as part
+	   of the pre-existing crunch/decompress accounting and gets corrected afterwards via the
+	   lzshift relocation pass -- wrapping it here would corrupt that (e.g. relative jumps). */
+	int i;
+
+	if (ae->codeadr>0xFFFF) {
+		for (i=ae->ilz-1;i>=0;i--) {
+			if (ae->lzsection[i].ibank==ae->activebank) return;
+		}
+		ae->codeadr&=0xFFFF;
+		if (!ae->codeadrwrapwarned) {
+			ae->codeadrwrapwarned=1;
+			if (!ae->nowarning) {
+				rasm_printf(ae,KWARNING"[%s:%d] Warning: codeadr wrapped to #0000 (physical output kept growing past 64K)\n",GetCurrentFile(ae),ae->wl[ae->idx].l);
+				if (ae->erronwarn) MaxError(ae);
+			}
+		}
+	}
+}
 void ___internal_output_extend(struct s_assenv *ae,const unsigned char v)
 {
 	/* limit exceededn, second chance if crunched section */
@@ -3387,13 +3502,13 @@ void ___internal_output_extend(struct s_assenv *ae,const unsigned char v)
 	// eventually write byte ^_^
 	ae->mem[ae->activebank][ae->outputadr++]=v;
 	ae->codeadr++;
-
 }
 void ___internal_output(struct s_assenv *ae,const unsigned char v)
 {
 	#undef FUNC
 	#define FUNC "___output"
 
+	___check_codeadr_wrap(ae);
 	if (ae->outputadr<ae->maxptr) {
 		ae->mem[ae->activebank][ae->outputadr++]=v;
 		ae->codeadr++;
@@ -3405,7 +3520,8 @@ void ___internal_output_nocode(struct s_assenv *ae,const unsigned char v)
 {
 	#undef FUNC
 	#define FUNC "___output (nocode)"
-	
+
+	___check_codeadr_wrap(ae);
 	if (ae->outputadr<ae->maxptr) {
 		/* struct definition always in NOCODE */
 		if (ae->getstruct) {
@@ -3437,16 +3553,28 @@ void ___internal_output_nocode(struct s_assenv *ae,const unsigned char v)
 }
 
 
-void ___output_set_limit(struct s_assenv *ae,const int zelimit)
+void ___output_set_limit(struct s_assenv *ae,const int zelimit,const int extended)
 {
 	#undef FUNC
 	#define FUNC "___output_set_limit"
 
 	int limit=65536;
-	
+
 	if (zelimit<=limit) {
 		/* apply limit */
 		limit=zelimit;
+	} else if (extended) {
+		/* explicit opt-in: grow the active bank's buffer past the usual 64K hardware
+		   limitation so outputadr (physical write position) may exceed 0xFFFF -- codeadr
+		   (the logical Z80 program counter) is untouched by this and stays 16 - bit, see __ORG
+		   This is useful to create one single large binary, spanning multiple 64k logical blocks. 
+		*/
+		limit=zelimit;
+		ae->mem[ae->activebank]=MemRealloc(ae->mem[ae->activebank],limit);
+		if (limit>ae->memsize[ae->activebank]) {
+			memset(ae->mem[ae->activebank]+ae->memsize[ae->activebank],0,limit-ae->memsize[ae->activebank]);
+		}
+		ae->memsize[ae->activebank]=limit;
 	} else {
 		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"limit exceed hardware limitation!");
 		ae->stop=1;
@@ -6627,7 +6755,12 @@ double ComputeExpressionCore(struct s_assenv *ae,char *original_zeexpression,con
 						curlyflag=0;
 					}
 
-					if (ae->computectx->varbuffer[minusptr+0]=='$' && ivar==1) { //ae->computectx->varbuffer[minusptr+1]==0) {
+	                /* $$ is always the current physical output position (outputadr), unlike a single $ whose meaning 
+					depends on what the caller passed as ptr. E.g. ORG $+100 treats $ as outputadr, while JR $ treats it as codeadr. 
+					(for compatibility with original rasm notation) */
+	                if (ae->computectx->varbuffer[minusptr + 0]=='$' && ae->computectx->varbuffer[minusptr + 1]=='$' && ivar == 2+minusptr) {
+						curval=ae->outputadr;
+					} else if (ae->computectx->varbuffer[minusptr+0]=='$' && ivar==1+minusptr) { //ae->computectx->varbuffer[minusptr+1]==0) {
 						curval=ptr;
 					} else {
 						crc=GetCRC(ae->computectx->varbuffer+minusptr);
@@ -7020,22 +7153,37 @@ printf("stage 2 | page=%d | ptr=%X ibank=%d\n",page,curlabel->ptr,curlabel->iban
 										curalias->used=1;
 										newlen=curalias->len;
 										lenw=strlen(zeexpression);
-										if (newlen>ivar) {
+										/* a leading unary minus lives in zeexpression[startvar..startvar+minusptr) and is
+										   not part of the alias name (looked up via varbuffer + minusptr) 
+										   It must be preserved, so only the ivar-minusptr chars after it are replaced 
+										   otherwise - SOME_EXPRESSION would lose the minus if SOME_EXPRESSION was a forward reference,
+										   and silently resolve to the positive value instead, with no error raised */
+										if (newlen>ivar-minusptr) {
 											/* realloc bigger */
 											if (original) {
-												expr=MemMalloc(lenw+newlen-ivar+1);
+												expr=MemMalloc(lenw+newlen-(ivar-minusptr)+1);
 												memcpy(expr,zeexpression,lenw+1);
 												zeexpression=expr;
 												original=0;
 											} else {
-												zeexpression=MemRealloc(zeexpression,lenw+newlen-ivar+1);
+												zeexpression=MemRealloc(zeexpression,lenw+newlen-(ivar-minusptr)+1);
 											}
 										}
 										/* startvar? */
-										if (newlen!=ivar) {
-											MemMove(zeexpression+startvar+newlen,zeexpression+startvar+ivar,lenw-startvar-ivar+1);
+										if (newlen!=ivar-minusptr) {
+											MemMove(zeexpression+startvar+minusptr+newlen,zeexpression+startvar+ivar,lenw-startvar-ivar+1);
 										}
-										strncpy(zeexpression+startvar,curalias->translation,newlen); /* copy without zero terminator */
+										strncpy(zeexpression+startvar+minusptr,curalias->translation,newlen); /* copy without zero terminator */
+										if (minusptr && !ae->AutomateExpressionValidCharFirst[(int)zeexpression[startvar + minusptr]&0xFF]) {
+											/* the preserved unary "-" no longer merges into a signed literal now that the alias
+											   text follows it (e.g. "-SOME_ALIAS" expanding to "-(3+4)*2") - push the same
+											   empty token used for a leading "-(" at function entry (the "double hack",
+											   ~line 6246), since that one-time check ran before this alias substitution
+											   and never saw the resulting text */
+											memset(&stackelement,0,sizeof(stackelement));
+											ObjectArrayAddDynamicValueConcat((void **)&ae->computectx->tokenstack,&nbtokenstack,&ae->computectx->maxtokenstack,&stackelement,sizeof(stackelement));
+											allow_minus_as_sign=0;
+										}
 										idx=startvar;
 										ivar=0;
 										continue;
@@ -7444,11 +7592,37 @@ printf("=== STACK EXECUTION ===\n");
 				case E_COMPUTE_OPERATION_ADD:if (paccu>1) accu[paccu-2]=((int)accu[paccu-2]+(int)accu[paccu-1])&workinterval;paccu--;break;
 				case E_COMPUTE_OPERATION_SUB:if (paccu>1) accu[paccu-2]=((int)accu[paccu-2]-(int)accu[paccu-1])&workinterval;paccu--;break;
 				case E_COMPUTE_OPERATION_MUL:if (paccu>1) accu[paccu-2]=((int)accu[paccu-2]*(int)accu[paccu-1])&workinterval;paccu--;break;
-				case E_COMPUTE_OPERATION_DIV:if (paccu>1) accu[paccu-2]=((int)accu[paccu-2]/(int)accu[paccu-1])&workinterval;paccu--;break;
+				/* DIV/MOD must emulate unsigned (16 bit/workinterval) division: operands are masked to
+				   workinterval BEFORE dividing, not after. Otherwise a negative intermediate (e.g. from "-$") 
+				   keeps C's signed truncating semantics through the division and only gets bit-masked into a huge
+				   positive afterwards (e.g. -3 mod 256 becoming 65533 instead of the correct 253) */
+				case E_COMPUTE_OPERATION_DIV:
+					if (paccu>1) {
+						int divisor=((int)accu[paccu-1])&workinterval;
+						if (divisor==0) {
+							MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"division by zero in expression [%s]\n",TradExpression(zeexpression));
+							accu[paccu-2]=0;
+						} else {
+							accu[paccu-2]=(((int)accu[paccu-2])&workinterval)/divisor;
+						}
+					}
+					paccu--;
+					break;
 				case E_COMPUTE_OPERATION_AND:if (paccu>1) accu[paccu-2]=((int)accu[paccu-2]&(int)accu[paccu-1])&workinterval;paccu--;break;
 				case E_COMPUTE_OPERATION_OR:if (paccu>1) accu[paccu-2]=((int)accu[paccu-2]|(int)accu[paccu-1])&workinterval;paccu--;break;
 				case E_COMPUTE_OPERATION_XOR:if (paccu>1) accu[paccu-2]=((int)accu[paccu-2]^(int)accu[paccu-1])&workinterval;paccu--;break;
-				case E_COMPUTE_OPERATION_MOD:if (paccu>1) accu[paccu-2]=((int)accu[paccu-2]%(int)accu[paccu-1])&workinterval;paccu--;break;
+				case E_COMPUTE_OPERATION_MOD:
+					if (paccu>1) {
+						int divisor=((int)accu[paccu-1])&workinterval;
+						if (divisor==0) {
+							MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"division by zero (mod) in expression [%s]\n",TradExpression(zeexpression));
+							accu[paccu-2]=0;
+						} else {
+							accu[paccu-2]=(((int)accu[paccu-2])&workinterval)%divisor;
+						}
+					}
+					paccu--;
+					break;
 				case E_COMPUTE_OPERATION_SHL:if (paccu>1) accu[paccu-2]=((int)accu[paccu-2])<<((int)accu[paccu-1]);
 								if (((int)accu[paccu-1])>31 || ((int)accu[paccu-1])<-31) {
 									if (!ae->nowarning) {
@@ -7888,12 +8062,33 @@ printf("=== STACK EXECUTION ===\n");
 				case E_COMPUTE_OPERATION_ADD:if (paccu>1) accu[paccu-2]+=accu[paccu-1];paccu--;break;
 				case E_COMPUTE_OPERATION_SUB:if (paccu>1) accu[paccu-2]-=accu[paccu-1];paccu--;break;
 				case E_COMPUTE_OPERATION_MUL:if (paccu>1) accu[paccu-2]*=accu[paccu-1];paccu--;break;
-				case E_COMPUTE_OPERATION_DIV:if (paccu>1) accu[paccu-2]/=accu[paccu-1];paccu--;break;
+				case E_COMPUTE_OPERATION_DIV:
+					if (paccu>1) {
+						if (accu[paccu-1]==0) {
+							MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"division by zero in expression [%s]\n",TradExpression(zeexpression));
+							accu[paccu-2]=0;
+						} else {
+							accu[paccu-2]/=accu[paccu-1];
+						}
+					}
+					paccu--;
+					break;
 				case E_COMPUTE_OPERATION_AND:if (paccu>1) accu[paccu-2]=((int)floor(accu[paccu-2]+0.5))&((int)floor(accu[paccu-1]+0.5));paccu--;break;
 				case E_COMPUTE_OPERATION_OR:if (paccu>1) accu[paccu-2]=((int)floor(accu[paccu-2]+0.5))|((int)floor(accu[paccu-1]+0.5));paccu--;break;
 				case E_COMPUTE_OPERATION_XOR:if (paccu>1) accu[paccu-2]=((int)floor(accu[paccu-2]+0.5))^((int)floor(accu[paccu-1]+0.5));paccu--;break;
 				case E_COMPUTE_OPERATION_NOT:/* half operator, half function */ if (paccu>0) accu[paccu-1]=!((int)floor(accu[paccu-1]+0.5));break;
-				case E_COMPUTE_OPERATION_MOD:if (paccu>1) accu[paccu-2]=((int)floor(accu[paccu-2]+0.5))%((int)floor(accu[paccu-1]+0.5));paccu--;break;
+				case E_COMPUTE_OPERATION_MOD:
+					if (paccu>1) {
+						int divisor=(int)floor(accu[paccu-1]+0.5);
+						if (divisor==0) {
+							MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"division by zero (mod) in expression [%s]\n",TradExpression(zeexpression));
+							accu[paccu-2]=0;
+						} else {
+							accu[paccu-2]=((int)floor(accu[paccu-2]+0.5))%divisor;
+						}
+					}
+					paccu--;
+					break;
 				case E_COMPUTE_OPERATION_SHL:if (paccu>1) accu[paccu-2]=((int)floor(accu[paccu-2]+0.5))<<((int)floor(accu[paccu-1]+0.5));
 								if (((int)accu[paccu-1])>31 || ((int)accu[paccu-1])<-31) {
 									if (!ae->nowarning) {
@@ -8751,8 +8946,33 @@ printf("fast [%s]\n",expr);
 #if TRACE_COMPUTE_EXPRESSION
 printf("ExpressionFastTranslate (full) => varbuffer=[%s] lz=%d\n",varbuffer,ae->lz);
 #endif
+				// $$ is always the current physical output position (outputadr), usable anywhere
+				// (unlike $ which means codeadr everywhere except for ORG address expression)
+				if (varbuffer[0]=='$' && varbuffer[1]=='$' && !varbuffer[2]) {
+					if (ae->lz==-1) {
+						#ifdef OS_WIN
+						snprintf(curval,sizeof(curval)-1,"%d",ae->outputadr);
+						newlen=strlen(curval);
+						#else
+						newlen=snprintf(curval,sizeof(curval)-1,"%d",ae->outputadr);
+						#endif
+
+						lenw=strlen(expr);
+						if (newlen>ivar) {
+							/* realloc bigger */
+							expr=*ptr_expr=MemRealloc(expr,lenw+newlen-ivar+1);
+						}
+						if (newlen!=ivar ) {
+							MemMove(expr+startvar+newlen,expr+startvar+ivar,lenw-startvar-ivar+1);
+							found_replace=1;
+						}
+						strncpy(expr+startvar,curval,newlen); /* copy without zero terminator */
+						idx=startvar+newlen;
+						ivar=0;
+					}
+					found_replace=1;
 				// le dollar seul est l'adresse courante qu'il faut remplacer
-				if (varbuffer[0]=='$' && !varbuffer[1]) {
+				} else if (varbuffer[0]=='$' && !varbuffer[1]) {
 					if (ae->lz==-1) {
 						if (ae->insideORG) {
 							#ifdef OS_WIN
@@ -9070,9 +9290,13 @@ void PushExpression(struct s_assenv *ae,const int iw,const enum e_expression zet
 	struct s_expression curexp={0};
 	unsigned char bakXY=0;
 
+	___check_codeadr_wrap(ae);
 	if (!ae->nocode) {
 		curexp.iw=iw;
 		curexp.wptr=ae->outputadr;
+		curexp.wcodeadr = ae->codeadr; // true runtime address of the value, before any "$" hack adjustment below
+		curexp.relocblock = ae->relocblockactive?1:0;
+		curexp.relocdollar = strchr(ae->wl[iw].w,'$')?1:0; // capture before ExpressionFastTranslate replaces "$" with a literal number below
 		curexp.zetype=zetype;
 		curexp.ibank=ae->activebank;
 		curexp.iorgzone=ae->io-1;
@@ -9847,7 +10071,7 @@ void PopAllSave(struct s_assenv *ae)
 	unsigned char *AmsdosHeader;
 	char *dskfilename;
 	char *filename;
-	int offset,size,run;
+	int offset,size,run,savelimit;
 	int i,is,erreur=0,touched,dummy_user=0;
 	int tag_protect=0, tag_hidden=0;
 	
@@ -9884,17 +10108,25 @@ void PopAllSave(struct s_assenv *ae)
 			run=offset;
 		}
 
-		if (size<1 || size>65536) {
+		/* DSK/TAPE/AMSDOS/HOBETA targets are hardware-format-shaped (16-bit load/exec
+		   addresses, 64K-native disk/tape structures) and always stay capped at 64K; a
+		   plain file SAVE may exceed 64K if its bank was grown via LIMIT ...,EXTENDED */
+		if (ae->save[is].dsk || ae->save[is].tape || ae->save[is].amsdos || ae->save[is].hobeta) {
+			savelimit=65536;
+		} else {
+			savelimit=ae->memsize[ae->save[is].ibank];
+		}
+		if (size<1 || size>savelimit) {
 			MakeError(ae,0,NULL,0,"cannot save [%s] as the size is invalid!\n",filename);
 			MemFree(filename);
 			continue;
 		}
-		if (offset<0 || offset>65535) {
+		if (offset<0 || offset>savelimit-1) {
 			MakeError(ae,0,NULL,0,"cannot save [%s] as the offset is invalid!\n",filename);
 			MemFree(filename);
 			continue;
 		}
-		if (offset+size>65536) {
+		if (offset+size>savelimit) {
 			MakeError(ae,0,NULL,0,"cannot save [%s] as the offset+size will be out of bounds!\n",filename);
 			MemFree(filename);
 			continue;
@@ -10028,6 +10260,12 @@ void PopAllExpression(struct s_assenv *ae, const int crunched_zone)
 				/* for enhanced 16bits instructions */
 				r++;
 			case E_EXPRESSION_IV8:
+				/* IX/IY are patched to the literal "%0" before evaluation (see PushExpression), so
+				   "(iy-4)" is actually evaluated as the subtraction "0-4", not the signed literal
+				   "-4" - in maxam mode every operator result gets masked to workinterval, 
+				   so that subtraction comes back as the 16bit unsigned wraparound 65532 rather than -4. 
+				   Normalize before range-checking below */
+				if (r>32767) r-=65536;
 				if (r>127 || r<-128) {
 					// horrible patch in order to display a proper error message
 					ae->wl[ae->expression[i].iw].w[1]='I';
@@ -10317,6 +10555,7 @@ void PushLabel(struct s_assenv *ae)
 					curlabel.ibank=ae->activebank;
 					curlabel.iorgzone=ae->io-1;
 					curlabel.lz=ae->lz;
+					curlabel.relocatable = ae->relocblockactive?1:0;
 					curlabel.fileidx=ae->wl[ae->idx].ifile;
 					curlabel.fileline=ae->wl[ae->idx].l;
 					curlabel.backidx=ae->il;
@@ -10521,6 +10760,7 @@ printf("PUSH Orphan PROXIMITY label that cannot be exported [%s]->[%s]\n",ae->wl
 		curlabel.ibank=ae->activebank;
 		curlabel.iorgzone=ae->io-1;
 		curlabel.lz=ae->lz;
+		curlabel.relocatable = ae->relocblockactive?1:0;
 	}
 
 //printf("PushLabel(%s) name=%s crc=%X lz=%d\n",curlabel.name,curlabel.name?curlabel.name:"null",curlabel.crc,curlabel.lz);
@@ -17306,6 +17546,264 @@ printf("-------------------------------------------------\n");
 	}
 }
 
+/*************************************************************************************************
+ * RELOCATE_START / RELOCATE_END / RELOCATE_TABLE
+ *
+ * WinAPE/SymbOS-style inline relocation table generator (unrelated to the original RELOCATE/ENDRELOCATE above).
+ * Any regular label defined between RELOCATE_START and RELOCATE_END is tagged "relocatable".
+ * RELOCATE_TABLE then scans every 16bit value written so far - DEFW/DW/struct-field data words and
+ * instruction operands (LD reg,nn, JP/CALL nn, LD (nn),reg, ...) alike, since a relocation table
+ * entry marks a 16bit memory slot whose stored value is an address into the relocatable block, and
+ * it needs fixing up on load regardless of whether that slot was written by a data directive or as
+ * part of an instruction encoding - and, for every one whose source expression references a
+ * relocatable label, emits its position as a table entry. This only needs the
+ * position of the value (always known immediately) rather than its resolved value (only known
+ * after the final fixup sweep), so the table can be written inline, at the spot where
+ * RELOCATE_TABLE appears, with no size ambiguity.
+ *************************************************************************************************/
+
+/*  Handling of reloc label arithmetic: 
+	First count how many "relocatable atoms" appear in 'expr'. (Occurrences of a label tagged relocatable,
+	plus dollar_atom)
+	A count of exactly 1 is a genuine single relocatable address, and gets recorded to the table as is.
+	2 or more means the expression combines several relocatable atoms - those need to be checked
+	using ___RelocNetZero() below to tell apart a difference (e.g. LABEL_A-LABEL_B: both sides shift by
+	the same delta on load, so the assembled value is already correct and no entry is needed) from
+	a sum or anything else whose post-load value would need more than the single delta a table
+	entry can add (e.g. LABEL_A+LABEL_B needs *two* deltas) - those get an error instead of being
+	silently left wrong. */
+static int ___RelocCountAtoms(struct s_assenv *ae, const char *expr, int dollar_atom) {
+	int i=0,start,len,count=dollar_atom;
+	char buf[256];
+	struct s_label *lbl;
+
+	while (expr[i]) {
+		if (ae->AutomateValidLabelFirst[(unsigned char)expr[i]]) {
+			start=i;
+			i++;
+			while (ae->AutomateValidLabel[(unsigned char)expr[i]]) i++;
+			len=i-start; if (len>255) len=255;
+			memcpy(buf,expr+start,len); buf[len]=0;
+			lbl=SearchLabel(ae,buf,GetCRC(buf));
+			if (lbl && lbl->relocatable) count++;
+		} else {
+			i++;
+		}
+	}
+	return count;
+}
+
+/* only meaningful when ___RelocCountAtoms() above returned 2 or more: decides whether that
+   combination of relocatable atoms provably needs zero delta fixup (safe to leave out of the
+   table, e.g. LABEL_A-LABEL_B, or LABEL_A-LABEL_B+LABEL_C-LABEL_D) by tracking, for every
+   relocatable atom found, the +1/-1 sign it carries at its position in the expression (through
+   nested parentheses, so "-(A-B)" is recognized too) and checking whether those signs sum to 0.
+   Only plain +/- combinations are analyzed: a relocatable atom (or a parenthesized group
+   containing one) directly multiplied or divided has an effective delta coefficient this doesn't
+   attempt to compute, so that's conservatively treated as unsafe too - this will raise an
+   error message later on. */
+static int ___RelocNetZero(struct s_assenv *ae, const char *expr) {
+	int i=0,start,len;
+	char buf[256];
+	struct s_label *lbl;
+	int depth=0;
+	int signstack[64];
+	int relocstack[64]; /* did this parenthesis level contain a relocatable atom (directly or via a nested group)? */
+	int cursign;
+	int netsum=0;
+	int lastreloc=0; /* did the previous atom/group end in something relocatable, for the "*"/"/" adjacency check */
+
+	signstack[0]=1;
+	relocstack[0]=0;
+	cursign=1;
+	while (expr[i]) {
+		char c=expr[i];
+		if (c==' ' || c=='\t') { i++; continue; }
+		if (c=='(') {
+			if (depth<63) { depth++; signstack[depth]=signstack[depth-1]*cursign; relocstack[depth]=0; }
+			cursign=signstack[depth<64?depth:63];
+			lastreloc=0;
+			i++;
+			continue;
+		}
+		if (c==')') {
+			int grouphadreloc=relocstack[depth<64?depth:63];
+			if (depth>0) depth--;
+			if (grouphadreloc) relocstack[depth]=1;
+			lastreloc=grouphadreloc;
+			i++;
+			continue;
+		}
+		if (c=='+') { cursign=signstack[depth]; lastreloc=0; i++; continue; }
+		if (c=='-') { cursign=-signstack[depth]; lastreloc=0; i++; continue; }
+		if (c=='*' || c=='/') {
+			if (lastreloc) return 0; /* relocatable atom (or group) directly scaled -- coefficient unknown */
+			lastreloc=0;
+			i++;
+			continue;
+		}
+		if (ae->AutomateValidLabelFirst[(unsigned char)c]) {
+			start=i;
+			i++;
+			while (ae->AutomateValidLabel[(unsigned char)expr[i]]) i++;
+			len=i-start; if (len>255) len=255;
+			memcpy(buf,expr+start,len); buf[len]=0;
+			lbl=SearchLabel(ae,buf,GetCRC(buf));
+			if (lbl && lbl->relocatable) {
+				netsum+=cursign;
+				relocstack[depth]=1;
+				lastreloc=1;
+			} else {
+				lastreloc=0;
+			}
+			continue;
+		}
+		lastreloc=0;
+		i++;
+	}
+	return netsum==0;
+}
+
+/* create (or update, if RELOCATE_TABLE is used more than once) a forward-reference-capable symbol,
+   the same way EQU-created labels work, so it can be used in the source before RELOCATE_TABLE itself */
+static void ___RelocSetSymbol(struct s_assenv *ae, char *name, int value) {
+	struct s_label *lbl;
+	int crc=GetCRC(name);
+
+	lbl=SearchLabel(ae,name,crc);
+	if (lbl) {
+		lbl->ptr=value;
+	} else {
+		struct s_label curlabel={0};
+
+		curlabel.name=TxtStrDup(name);
+		curlabel.crc=crc;
+		curlabel.ptr=value;
+		curlabel.ibank=ae->activebank;
+		curlabel.iorgzone=ae->io-1;
+		curlabel.lz=ae->lz;
+		curlabel.fileidx=ae->wl[ae->idx].ifile;
+		curlabel.fileline=ae->wl[ae->idx].l;
+		curlabel.autorise_export=ae->autorise_export;
+		curlabel.backidx=ae->il;
+		curlabel.nop=ae->nop;
+		if (InsertLabelToTree(ae,&curlabel)) {
+			ObjectArrayAddDynamicValueConcat((void **)&ae->label,&ae->il,&ae->ml,&curlabel,sizeof(curlabel));
+		} else {
+			MemFree(curlabel.name); // cannot happen, SearchLabel above already returned NULL
+		}
+	}
+}
+
+void __RELOCATE_START(struct s_assenv *ae) {
+	int ishigh=0;
+
+	if (!ae->wl[ae->idx].t) {
+		if (strcmp(ae->wl[ae->idx+1].w,"HIGH")==0) {
+			ishigh=1;
+			ae->idx++;
+		} else {
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"usage is RELOCATE_START [HIGH]\n");
+			return;
+		}
+	}
+	if (ae->relocblockactive) {
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"RELOCATE_START: a relocation block is already open (see RELOCATE_START in [%s:%d])\n",ae->filename[ae->wl[ae->relocblockidx].ifile],ae->wl[ae->relocblockidx].l);
+		return;
+	}
+	if (ae->lz>=0) {
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"RELOCATE_START must not be used inside a crunched section\n");
+		return;
+	}
+	if (ae->ir || ae->iw) {
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"RELOCATE_START must not be used inside a loop section\n");
+		return;
+	}
+	if (ae->nocode) {
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"RELOCATE_START must not be used inside a NOCODE section\n");
+		return;
+	}
+	if (ae->relocbankset && ae->relocbank!=ae->activebank) {
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"RELOCATE_START must stay in the same BANK for every block feeding the same RELOCATE_TABLE\n");
+		return;
+	}
+	if (ae->relocmode && ae->relocmode!=(ishigh?2:1)) {
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"RELOCATE_START: HIGH mode cannot be mixed with regular mode in the same file\n");
+		return;
+	}
+	ae->relocmode=ishigh?2:1;
+	ae->relocblockactive=ishigh?2:1;
+	ae->relocblockidx=ae->idx;
+	if (!ae->relocbankset) {
+		ae->relocbank=ae->activebank;
+		ae->relocbankset=1;
+	}
+}
+
+void __RELOCATE_END(struct s_assenv *ae) {
+	if (ae->wl[ae->idx].t) {
+		if (!ae->relocblockactive) {
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"RELOCATE_END: no RELOCATE_START block is open\n");
+			return;
+		}
+		ae->relocblockactive=0;
+	} else {
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"RELOCATE_END directive must be used without parameter\n");
+	}
+}
+
+void __RELOCATE_TABLE(struct s_assenv *ae) {
+	int subtract_offset=0;
+	int i,count=0;
+	int targetbank;
+	int ishigh=(ae->relocmode==2);
+	int *addrs=NULL;
+
+	if (ae->relocblockactive) {
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"RELOCATE_TABLE: a RELOCATE_START block is still open (missing RELOCATE_END)\n");
+		return;
+	}
+	if (!ae->wl[ae->idx].t) {
+		ae->idx++;
+		subtract_offset=RoundComputeExpression(ae,ae->wl[ae->idx].w,ae->outputadr,0,0);
+	}
+
+	targetbank=ae->relocbankset?ae->relocbank:ae->activebank;
+
+	for (i=0;i<ae->ie;i++) {
+		char *exprtext;
+		int atomcount;
+
+		if (ae->expression[i].ibank!=targetbank) continue;
+		if (ae->expression[i].lz>=0) continue;
+		switch (ae->expression[i].zetype) {
+			case E_EXPRESSION_0V16:
+			case E_EXPRESSION_V16:
+			case E_EXPRESSION_J16:
+			case E_EXPRESSION_IV16: break;
+			default: continue;
+		}
+		exprtext=ae->expression[i].reference?ae->expression[i].reference:ae->wl[ae->expression[i].iw].w;
+		atomcount=___RelocCountAtoms(ae,exprtext,ae->expression[i].relocblock && ae->expression[i].relocdollar);
+		if (atomcount==1) {
+			addrs=MemRealloc(addrs,(count+1)*sizeof(int));
+			addrs[count++]=ae->expression[i].wcodeadr+(ishigh?1:0)-subtract_offset;
+		} else if (atomcount>=2 && !___RelocNetZero(ae,exprtext)) {
+			MakeError(ae,ae->expression[i].iw,GetExpFile(ae,i),ae->wl[ae->expression[i].iw].l,
+				"RELOCATE_TABLE: expression [%s] combines relocatable addresses in a way that cannot be relocated correctly (would need more than one fixup delta)\n",exprtext);
+		}
+	}
+
+	for (i=0;i<count;i++) {
+		___output(ae,addrs[i]&0xFF);
+		___output(ae,(addrs[i]>>8)&0xFF);
+	}
+	if (addrs) MemFree(addrs);
+
+	___RelocSetSymbol(ae,"RELOCATE_COUNT",count); // source tokens are uppercased before reaching label lookup, match that here
+	___RelocSetSymbol(ae,"RELOCATE_SIZE",count*2);
+	}
+
 
 // symbol export
 void __SYMBOL(struct s_assenv *ae) {
@@ -17513,6 +18011,7 @@ void __BUILDCPR(struct s_assenv *ae) {
 			int idx;
 			ae->cartridge_name=ae->wl[ae->idx].w+1;
 			ae->cartridge_name[strlen(ae->cartridge_name)-1]=0;
+			NormalizePathSeparators(ae->cartridge_name);
 
 			if (strlen(ae->cartridge_name)>4) {
 				idx=strlen(ae->cartridge_name)-4;
@@ -18276,9 +18775,20 @@ void __LZCLOSE(struct s_assenv *ae) {
 }
 
 void __LIMIT(struct s_assenv *ae) {
+	int zelimit,extended = 0;
 	if (ae->wl[ae->idx+1].t!=2) {
 		//ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
-		___output_set_limit(ae,RoundComputeExpression(ae,ae->wl[ae->idx+1].w,ae->outputadr,0,0));
+		zelimit=RoundComputeExpression(ae,ae->wl[ae->idx+1].w,ae->outputadr,0,0);
+		if (!ae->wl[ae->idx+1].t) {
+			/* comma present -> optional EXTENDED keyword to allow >64K */
+			if (strcmp(ae->wl[ae->idx+2].w,"EXTENDED")==0) {
+				extended=1;
+				ae->idx++;
+			} else {
+				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"LIMIT 2nd parameter must be EXTENDED\n");
+			}
+		}
+		___output_set_limit(ae,zelimit,extended);
 		ae->idx++;
 	} else {
 		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"LIMIT directive need one integer parameter\n");
@@ -20512,7 +21022,7 @@ void __REND(struct s_assenv *ae) {
 void __UNTIL(struct s_assenv *ae) {
 	if (ae->ir>0) {
 		if (ae->repeat[ae->ir-1].cpt>=0) {
-			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"[%s:%d] UNTIL encounter whereas referent REPEAT n was waiting for REND\n");
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"UNTIL encounter whereas referent REPEAT n was waiting for REND\n");
 		} else {
 			if (ae->wl[ae->idx].t==0 && ae->wl[ae->idx+1].t==1) {
 				ae->repeat[ae->ir-1].repeat_counter++;
@@ -21196,14 +21706,17 @@ void __ORG(struct s_assenv *ae) {
 	___org_close(ae);
 	
 	if (!ae->wl[ae->idx].t) {
+		ae->codeadrwrapwarned = 0; // a new explicit ORG re-arms the codeadr-wrap warning
 		ae->insideORG=1;
 		//ExpressionFastTranslate(ae,&ae->wl[ae->idx+1].w,0);
 		ae->codeadr=RoundComputeExpression(ae,ae->wl[ae->idx+1].w,ae->outputadr,0,0);
 		ae->insideORG=0;
 		if (ae->codeadr<0) {
 			ae->codeadr=0;
-			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"[%s:%d] cannot ORG outside memory!\n");
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"cannot ORG outside memory!\n");
 		} else if (ae->codeadr>0xFFFF) {
+			/* codeadr is the logical Z80 program counter and must always stay a valid 16-bit
+			   address, even inside an EXTENDED bank -- only outputadr (see below) may grow past 64K */
 			iscrunched=0;
 			for (i=ae->ilz-1;i>=0;i--) {
 				if (ae->lzsection[i].ibank==ae->activebank) {
@@ -21213,7 +21726,7 @@ void __ORG(struct s_assenv *ae) {
 			}
 			if (!iscrunched) {
 				ae->codeadr=0;
-				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"[%s:%d] cannot ORG outside memory!\n");
+				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"cannot ORG outside memory!\n");
 			}
 		}
 		if (!ae->wl[ae->idx+1].t && ae->wl[ae->idx+2].t!=2) {
@@ -21223,7 +21736,7 @@ void __ORG(struct s_assenv *ae) {
 			ae->insideORG=0;
 			if (ae->outputadr<0) {
 				ae->outputadr=0;
-				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"[%s:%d] cannot ORG outside memory!\n");
+				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"cannot ORG outside memory!\n");
 			} else if (ae->outputadr>0xFFFF) {
 				iscrunched=0;
 				for (i=ae->ilz-1;i>=0;i--) {
@@ -21232,9 +21745,11 @@ void __ORG(struct s_assenv *ae) {
 						break;
 					}
 				}
-				if (!iscrunched) {
+				/* LIMIT ...,EXTENDED grows memsize[] past 64K for the active bank -- that's
+				   the explicit opt-in that allows outputadr (physical write position) to grow too */
+				if (!iscrunched && ae->memsize[ae->activebank]<=0x10000) {
 					ae->outputadr=0;
-					MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"[%s:%d] cannot ORG outside memory!\n");
+					MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"cannot ORG outside memory!\n");
 				}
 			}
 			ae->idx+=2;
@@ -21243,7 +21758,7 @@ void __ORG(struct s_assenv *ae) {
 			ae->idx++;
 		}
 	} else {
-		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"[%s:%d] ORG code location[,output location]\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"ORG code location[,output location]\n");
 		return;
 	}
 	
@@ -21587,6 +22102,7 @@ printf("EVOL 119 - tableau! %d elem%s\n",nbelem,nbelem>1?"s":"");
 				//curlabel.iw=-1;
 				curlabel.lz=-1; // because struct is NOT part of LZ
 				curlabel.ptr=ae->codeadr;
+				curlabel.relocatable = ae->relocblockactive?1:0;
 				curlabel.fileidx=ae->wl[ae->idx+2].ifile;
 
 				if (!ae->getstruct) {
@@ -22026,9 +22542,9 @@ printf("AudioLoadSample filesize=%d st=%d normalize=%.2lf\n",filesize,sample_typ
 
 	if (!brut) {
 		if (strncmp(wav_header->Format,"WAVE",4)) {
-			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"[%s:%d] WAV import - unsupported audio sample type (format must be 'WAVE')\n");
+			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"WAV import - unsupported audio sample type (format must be 'WAVE')\n");
 			return;
-		}
+			}
 		controlsize=wav_header->SubChunk1Size[0]+wav_header->SubChunk1Size[1]*256+wav_header->SubChunk1Size[2]*65536+wav_header->SubChunk1Size[3]*256*65536;
 		if (controlsize!=16) {
 			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"WAV import - invalid wav chunk size (subchunk1 control)\n");
@@ -22985,6 +23501,7 @@ void __SAVE(struct s_assenv *ae) {
 			ko=0;
 		} else {
 			if (!ae->wl[ae->idx+1].t) {
+				NormalizePathSeparators(ae->wl[ae->idx + 1].w);
 				filename=TxtStrDup(ae->wl[ae->idx+1].w);
 				/* need to upper case tags */
 				for (lm=touched=0;filename[lm];lm++) {
@@ -23503,6 +24020,9 @@ struct s_asm_keyword instruction[]={
 {"LOCALISATION",0,0,__LOCALISATION},
 {"RELOCATE",0,0,__RELOCATE},
 {"ENDRELOCATE",0,0,__ENDRELOCATE},
+{"RELOCATE_START",0,0,__RELOCATE_START},
+{"RELOCATE_END",0,0,__RELOCATE_END},
+{"RELOCATE_TABLE",0,0,__RELOCATE_TABLE},
 {"EDSK",0,0,__EDSK},
 {"HFE",0,0,__HFE},
 {"ERRRD",0,0,__ERRRD},
@@ -24784,7 +25304,7 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 #if TRACE_ORG
 		printf("ORG: B%03d %s#%04X-#%04X InPlace=%d\n",ae->orgzone[i].ibank,ae->orgzone[i].protect?"Protect ":"",ae->orgzone[i].memstart,ae->orgzone[i].memend,ae->orgzone[i].inplace);
 #endif
-		if (ae->orgzone[i].memend>0x10000) {
+		if (ae->orgzone[i].memend > 0x10000 && ae->memsize[ae->orgzone[i].ibank]<=0x10000) { // only report output overflow, if the bank isn't opted for LIMIT,,EXTENDED
 			MakeError(ae,0,ae->filename[ae->orgzone[i].ifile],ae->orgzone[i].iline,"ORG section is overflowing 64K bank by %d byte%s\n",
 					ae->orgzone[i].memend-0x10000,ae->orgzone[i].memend-0x10000>1?"s":"");
 		}
@@ -27241,7 +27761,7 @@ printf("init 3\n");
 	// count instructions and fill crc/length in the dynamic array of RASM instructions
 	for (nbinstruction=0;instruction[nbinstruction].mnemo[0];nbinstruction++) {
 		instruction[nbinstruction].crc=GetCRCandLength(instruction[nbinstruction].mnemo,&instruction[nbinstruction].length);
-		if (instruction[nbinstruction].length>INSTRUCTION_MAXLENGTH) {
+		if (instruction[nbinstruction].length >= INSTRUCTION_MAXLENGTH) {
 			rasm_printf(ae,"Internal Error, please resize fastmatch length for [%s] with %d\n",instruction[nbinstruction].mnemo,instruction[nbinstruction].length+1);
 			exit(-666);
 		}
@@ -28138,7 +28658,9 @@ printf("ajout du mot [%s]\n",curw.w);
 						}
 					}
 				} else {
-					if (hadcomma) {
+					/* whitespace after ',' used to trigger an error even when the real problem was an
+                       unknown preceding op; only report genuinely empty params like ",<none or any number of whitespaces>," here */
+					if (hadcomma && c==',') {
 						if (!ae->macro_multi_line) {
 							MakeError(ae,0,ae->filename[listing[l].ifile],listing[l].iline,"empty parameter right after word [%s]\n",nbword>1?wordlist[nbword-1].w:"(null)");
 						}

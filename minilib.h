@@ -32,6 +32,7 @@
 #include<stdlib.h>
 #ifndef OS_WIN
 #include<unistd.h>
+#include<dirent.h>
 #endif
 #include<string.h>
 #include<setjmp.h>
