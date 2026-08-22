@@ -561,7 +561,7 @@ struct s_lz_section {
 };
 
 struct s_orgzone {
-	int ibank,protect;
+	int ibank,protect,extended;
 	int memstart,memend;
 	int ifile,iline;
 	int nocode;
@@ -1184,7 +1184,7 @@ struct s_globalLabelStack {
 *******************************************/
 struct s_assenv {
 	/* current memory */
-	int maxptr;
+	int maxptr,extended,extended_limit;
 	/* CPR memory */
 	char *iwnamebank[BANK_MAX_NUMBER];
 	char *iwnameromsna[256]; // ROM with snapshots
@@ -1411,7 +1411,6 @@ struct s_assenv {
 	                      // a different bank would silently mix in addresses from unrelated memory,
 	                      // so it is rejected with an error instead (see __RELOCATE_START)
 	int relocbankset;     // 1 once relocbank has been captured
-	int wrap_addr;
 };
 
 /*************************************
@@ -2767,6 +2766,8 @@ void MakeError(struct s_assenv *ae, const int idx, const char *filename, const i
 
 	va_list argptr;
 
+	if (ae->stop) return; // rien si on est en train de STOP
+			      //
 	MaxError(ae);
 	if (ae->flux) {
 		/* in embedded Rasm all errors are stored in a debug struct */
@@ -3440,33 +3441,6 @@ void ___internal_output_disabled(struct s_assenv *ae,const unsigned char v)
 	#define FUNC "fake ___output"
 }
 
-void ___check_codeadr_wrap(struct s_assenv *ae)
-{
-	/* codeadr (the logical Z80 program counter) must stay a valid 16-bit address. Inside an
-	   EXTENDED bank outputadr may run way past 0xFFFF, so codeadr wraps back to 0 instead of
-	   growing unbounded -- warn once per phase (reset whenever __ORG explicitly sets codeadr).
-	   Called before a byte or expression is emitted so simply reaching #10000 as a
-	   terminal position (e.g. a DS that fills exactly up to the 64K boundary) never warns 
-	   Only actually placing something beyond it does.
-	   Crunched (LZ) sections are exempt: there, codeadr legitimately grows past 0xFFFF as part
-	   of the pre-existing crunch/decompress accounting and gets corrected afterwards via the
-	   lzshift relocation pass -- wrapping it here would corrupt that (e.g. relative jumps). */
-	int i;
-
-	if (ae->codeadr>0xFFFF) {
-		for (i=ae->ilz-1;i>=0;i--) {
-			if (ae->lzsection[i].ibank==ae->activebank) return;
-		}
-		ae->codeadr&=0xFFFF;
-		if (!ae->codeadrwrapwarned) {
-			ae->codeadrwrapwarned=1;
-			if (!ae->nowarning) {
-				rasm_printf(ae,KWARNING"[%s:%d] Warning: codeadr wrapped to #0000 (physical output kept growing past 64K)\n",GetCurrentFile(ae),ae->wl[ae->idx].l);
-				if (ae->erronwarn) MaxError(ae);
-			}
-		}
-	}
-}
 void ___internal_output_extend(struct s_assenv *ae,const unsigned char v)
 {
 	/* limit exceededn, second chance if crunched section */
@@ -3482,13 +3456,14 @@ void ___internal_output_extend(struct s_assenv *ae,const unsigned char v)
 		}
 	}
 
-	if (!iscrunched) {
+	if (!iscrunched && !ae->extended) {
 		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"output exceed limit %04X\n",ae->maxptr);
 		ae->stop=1;
 		___output=___internal_output_disabled;
 		return;
 	}
 
+	if (iscrunched)
 	if (ae->maxptr&0xFFFF) {
 		rasm_printf(ae,KWARNING"Warning: Specific limits are not applied  when using crunched sections, cause memory blocks are moved unpredictably\n");
 		if (ae->erronwarn) MaxError(ae);
@@ -3500,56 +3475,19 @@ void ___internal_output_extend(struct s_assenv *ae,const unsigned char v)
 	requested_block=ae->outputadr>>16;
 	ae->mem[ae->activebank]=MemRealloc(ae->mem[ae->activebank],(requested_block+1)*65536);
 	ae->maxptr=(requested_block+1)*65536;
+	if (ae->maxptr<ae->extended_limit) ae->maxptr=ae->extended_limit;
 	// eventually write byte ^_^
 	ae->mem[ae->activebank][ae->outputadr++]=v;
 	ae->codeadr++;
-}
-void ___internal_output_wrap(struct s_assenv *ae,const unsigned char v)
-{
-	#undef FUNC
-	#define FUNC "___output wrap"
 
-	if (ae->outputadr<ae->maxptr) {
-		ae->mem[ae->activebank][ae->outputadr++]=v;
-		ae->codeadr++;
-	} else {
-		___internal_output_extend(ae,v);
-	}
-}
-void ___internal_output_nocode_wrap(struct s_assenv *ae,const unsigned char v)
-{
-	#undef FUNC
-	#define FUNC "___output (nocode) wrap"
-
-	___check_codeadr_wrap(ae);
-	if (ae->outputadr<ae->maxptr) {
-		/* struct definition always in NOCODE */
-		if (ae->getstruct) {
-			int irs,irsf;
-			irs=ae->irasmstruct-1;
-			irsf=ae->rasmstruct[irs].irasmstructfield-1;
-			if (irsf>=0) {
-#if TRACE_STRUCT
-	printf("output_nocode irs=%d irsf=%d idata=%d\n",irs,irsf,ae->rasmstruct[irs].rasmstructfield[irsf].idata);
-#endif
-				/* ajouter les data du flux au champ de la structure */			
-				ObjectArrayAddDynamicValueConcat((void**)&ae->rasmstruct[irs].rasmstructfield[irsf].data,
-					&ae->rasmstruct[irs].rasmstructfield[irsf].idata,
-					&ae->rasmstruct[irs].rasmstructfield[irsf].mdata,
-					&v,sizeof(unsigned char));
-			} else {
-				rasm_printf(ae,KWARNING"[%s:%d] Warning: Structure field has no reference, did you forget a label?\n",GetCurrentFile(ae),ae->wl[ae->idx].l);
+	if (!iscrunched) rasm_printf(ae,KWARNING"[%s:%d] Warning: physical output overflow 64k\n",GetCurrentFile(ae),ae->wl[ae->idx].l);
+		if (0) if (!ae->codeadrwrapwarned) {
+			ae->codeadrwrapwarned=1;
+			if (!ae->nowarning) {
+				rasm_printf(ae,KWARNING"[%s:%d] Warning: codeadr wrapped to #0000 (physical output kept growing past 64K)\n",GetCurrentFile(ae),ae->wl[ae->idx].l);
 				if (ae->erronwarn) MaxError(ae);
 			}
 		}
-		
-		ae->outputadr++;
-		ae->codeadr++;
-	} else {
-		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"output exceed limit %04X\n",ae->maxptr);
-		ae->stop=1;
-		___output=___internal_output_disabled;
-	}
 }
 void ___internal_output(struct s_assenv *ae,const unsigned char v)
 {
@@ -3606,23 +3544,18 @@ void ___output_set_limit(struct s_assenv *ae,const int zelimit,const int extende
 
 	int limit=65536;
 
-	if (zelimit<=limit) {
+	if (zelimit<=limit || extended) {
 		/* apply limit */
 		limit=zelimit;
-	} else if (extended) {
-		/* explicit opt-in: grow the active bank's buffer past the usual 64K hardware
-		   limitation so outputadr (physical write position) may exceed 0xFFFF -- codeadr
-		   (the logical Z80 program counter) is untouched by this and stays 16 - bit, see __ORG
-		   This is useful to create one single large binary, spanning multiple 64k logical blocks. 
-		*/
-		limit=zelimit;
-		ae->mem[ae->activebank]=MemRealloc(ae->mem[ae->activebank],limit);
-		if (limit>ae->memsize[ae->activebank]) {
-			memset(ae->mem[ae->activebank]+ae->memsize[ae->activebank],0,limit-ae->memsize[ae->activebank]);
+		ae->extended=extended?1:0;
+		if (extended) {
+			limit=65536;
+			ae->extended_limit=zelimit;
+			// current org must have the flag!
+			ae->orgzone[ae->io-1].extended=1;
 		}
-		ae->memsize[ae->activebank]=limit;
 	} else {
-		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"limit exceed hardware limitation!");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"limit exceed hardware limitation! Use LIMIT <limit>,EXTENDED to bypass 64K");
 		ae->stop=1;
 	}
 	if (ae->outputadr>=0 && ae->outputadr>limit) {
@@ -9328,169 +9261,7 @@ printf("exprout=[%s]\n",expr);
 	}
 }
 
-void (*PushExpression)(struct s_assenv *ae,const int iw,const enum e_expression zetype);
-
-void __PushExpression_wrap(struct s_assenv *ae,const int iw,const enum e_expression zetype)
-{
-	#undef FUNC
-	#define FUNC "PushExpression"
-
-	struct s_expression curexp={0};
-	unsigned char bakXY=0;
-
-	//___check_codeadr_wrap(ae);
-	//
-	if (!ae->nocode) {
-		curexp.iw=iw;
-		curexp.wptr=ae->outputadr;
-		curexp.wcodeadr = ae->codeadr; // true runtime address of the value, before any "$" hack adjustment below
-		curexp.relocblock = ae->relocblockactive?1:0;
-		curexp.relocdollar = strchr(ae->wl[iw].w,'$')?1:0; // capture before ExpressionFastTranslate replaces "$" with a literal number below
-		curexp.zetype=zetype;
-		curexp.ibank=ae->activebank;
-		curexp.iorgzone=ae->io-1;
-		curexp.lz=ae->lz;
-		/* need the module to know where we are */
-		if (ae->module) curexp.module=TxtStrDup(ae->module); else curexp.module=NULL;
-		/* on traduit de suite les variables du dictionnaire pour les boucles et increments
-			SAUF si c'est une affectation
-		*/
-		switch (zetype) {
-			case E_EXPRESSION_J8:
-			case E_EXPRESSION_J16:
-				// prox loc label - RASM Atlas
-				if (ae->wl[iw].w[0]=='_' && (ae->wl[iw].w[1]=='+' || ae->wl[iw].w[1]=='-') && !ae->wl[iw].w[2]) {
-					curexp.reference=MemMalloc(32);
-					if (ae->wl[iw].w[1]=='+') {
-						sprintf(curexp.reference,"LPR%dOX",ae->curProxIndex+1); // post
-					} else {
-						if (ae->curProxIndex<0) {
-							MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"You cannot use _- before declaring _ proximity label\n");
-							strcpy(curexp.reference,"LPR0OX");
-						} else {
-							sprintf(curexp.reference,"LPR%dOX",ae->curProxIndex); // ante
-						}
-					}
-					ae->codeadr-=1;
-					goto skipTransPush;
-				}
-			case E_EXPRESSION_V8:
-			case E_EXPRESSION_V16:
-			case E_EXPRESSION_IM: ae->codeadr-=1; // $ hack
-						break;
-			case E_EXPRESSION_IV8:
-			case E_EXPRESSION_IV81:
-					     // patch IX/IY because they dont exist anymore as constants
-					     bakXY=ae->wl[iw].w[2];
-					     ae->wl[iw].w[1]='%';
-					     ae->wl[iw].w[2]='0';
-			case E_EXPRESSION_IV16: ae->codeadr-=2; // $ hack
-						break;
-			case E_EXPRESSION_3V8: ae->codeadr-=3; // $ hack
-						break;
-			default:break;
-		}
-		if (ae->ir || ae->iw || ae->imacro) {
-			curexp.reference=TxtStrDup(ae->wl[iw].w);
-			ExpressionFastTranslate(ae,&curexp.reference,1);
-			if (bakXY) {
-				ae->wl[iw].w[1]='I';
-				ae->wl[iw].w[2]=bakXY;
-			}
-		} else {
-			ExpressionFastTranslate(ae,&ae->wl[iw].w,1);
-		}
-		skipTransPush:;
-		/* calcul adresse de reference et post-incrementation pour sauter les data */
-
-		// switch in pure order of enum
-		switch (zetype) {
-			case E_EXPRESSION_J8: curexp.ptr=ae->codeadr;ae->outputadr++;ae->codeadr+=2;ae->external_mapping_size=1;break;
-			case E_EXPRESSION_0V8:curexp.ptr=ae->codeadr;ae->outputadr++;ae->codeadr++;ae->external_mapping_size=1;break;
-			case E_EXPRESSION_V8: curexp.ptr=ae->codeadr;ae->outputadr++;ae->codeadr+=2;ae->external_mapping_size=1;break;
-			case E_EXPRESSION_J16:
-			case E_EXPRESSION_V16: curexp.ptr=ae->codeadr;ae->outputadr+=2;ae->codeadr+=3;ae->external_mapping_size=2;break;
-			case E_EXPRESSION_0V16:curexp.ptr=ae->codeadr;ae->outputadr+=2;ae->codeadr+=2;ae->external_mapping_size=2;break;
-			case E_EXPRESSION_0V32:curexp.ptr=ae->codeadr;ae->outputadr+=4;ae->codeadr+=4;ae->external_mapping_size=4;break;
-			case E_EXPRESSION_0VR:
-			case E_EXPRESSION_0VRMike:curexp.ptr=ae->codeadr;ae->outputadr+=5;ae->codeadr+=5;ae->external_mapping_size=5;break;
-			case E_EXPRESSION_F24:curexp.ptr=ae->codeadr;ae->outputadr+=3;ae->codeadr+=3;ae->external_mapping_size=3;break;
-			case E_EXPRESSION_IV8:
-			case E_EXPRESSION_IV81:curexp.ptr=ae->codeadr;ae->outputadr++;ae->codeadr+=3;ae->external_mapping_size=1;break;
-			case E_EXPRESSION_3V8: curexp.ptr=ae->codeadr;ae->outputadr++;ae->codeadr+=4;ae->external_mapping_size=1;break;
-			case E_EXPRESSION_IV16:curexp.ptr=ae->codeadr;ae->outputadr+=2;ae->codeadr+=4;ae->external_mapping_size=2;break;
-			case E_EXPRESSION_RST:
-			case E_EXPRESSION_RSTC:curexp.ptr=ae->codeadr;ae->outputadr++;ae->codeadr++;ae->external_mapping_size=0;break;
-			case E_EXPRESSION_IM:  curexp.ptr=ae->codeadr;ae->outputadr++;ae->codeadr+=2;ae->external_mapping_size=0;break;
-			case E_EXPRESSION_RUN:
-			case E_EXPRESSION_ZXRUN:
-			case E_EXPRESSION_ZXSTACK:ae->external_mapping_size=0;break;
-			case E_EXPRESSION_BRS:curexp.ptr=ae->codeadr;ae->external_mapping_size=0;break; // minimum syndical
-			default:break;
-		}
-
-		if (ae->outputadr<=ae->maxptr) {  // = compare because done AFTER simili value assignment
-			ObjectArrayAddDynamicValueConcat((void **)&ae->expression,&ae->ie,&ae->me,&curexp,sizeof(curexp));
-		} else {
-			int requested_block;
-			int i,iscrunched=0;
-
-			for (i=ae->ilz-1;i>=0;i--) {
-				if (ae->lzsection[i].ibank==ae->activebank) {
-					iscrunched=1;
-					break;
-				}
-			}
-			if (!iscrunched) {
-				/* to avoid double error message */
-				if (!ae->stop) MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"(PushExpr) output exceed limit %04X\n",ae->maxptr); else MaxError(ae);
-				ae->stop=1;
-				return;
-			}
-			if (ae->maxptr&0xFFFF) {
-				rasm_printf(ae,KWARNING"Warning: Specific limits are not applied when using crunched sections, cause memory blocks are moved unpredictably\n");
-				if (ae->erronwarn) MaxError(ae);
-			}
-#if TRACE_LZ
-	printf("**output exceed limit** (PushExpr) extending memory space\n");
-#endif
-			requested_block=ae->outputadr>>16;
-			ae->mem[ae->activebank]=MemRealloc(ae->mem[ae->activebank],(requested_block+1)*65536);
-			ae->maxptr=(requested_block+1)*65536;
-			// eventually write expression ^_^
-			ObjectArrayAddDynamicValueConcat((void **)&ae->expression,&ae->ie,&ae->me,&curexp,sizeof(curexp));
-		}
-	} else {
-		switch (zetype) {
-			case E_EXPRESSION_J8:
-			case E_EXPRESSION_0V8:
-			case E_EXPRESSION_V8:ae->outputadr++;ae->codeadr++;break;
-			case E_EXPRESSION_J16:
-			case E_EXPRESSION_V16:
-			case E_EXPRESSION_0V16:ae->outputadr+=2;ae->codeadr+=2;break;
-			case E_EXPRESSION_0V32:ae->outputadr+=4;ae->codeadr+=4;break;
-			case E_EXPRESSION_0VR:
-			case E_EXPRESSION_0VRMike:ae->outputadr+=5;ae->codeadr+=5;break;
-			case E_EXPRESSION_F24:ae->outputadr+=3;ae->codeadr+=3;break;
-			case E_EXPRESSION_IV8:
-			case E_EXPRESSION_IV81:
-			case E_EXPRESSION_3V8:ae->outputadr++;ae->codeadr++;break;
-			case E_EXPRESSION_IV16:ae->outputadr+=2;ae->codeadr+=2;break;
-			case E_EXPRESSION_RST:
-			case E_EXPRESSION_RSTC:
-			case E_EXPRESSION_IM:ae->outputadr++;ae->codeadr++;break;
-			case E_EXPRESSION_RUN:break;
-			case E_EXPRESSION_ZXRUN:break;
-			case E_EXPRESSION_ZXSTACK:break;
-			case E_EXPRESSION_BRS:break;
-		}
-		if (ae->outputadr>ae->maxptr) {
-			if (!ae->stop) MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"(PushExpr) NOCODE output exceed limit %04X\n",ae->maxptr); else MaxError(ae);
-			ae->stop=1;
-		}
-	}
-}
-void __PushExpression(struct s_assenv *ae,const int iw,const enum e_expression zetype)
+void PushExpression(struct s_assenv *ae,const int iw,const enum e_expression zetype)
 {
 	#undef FUNC
 	#define FUNC "PushExpression"
@@ -9599,19 +9370,31 @@ void __PushExpression(struct s_assenv *ae,const int iw,const enum e_expression z
 					break;
 				}
 			}
+			if (!iscrunched && !ae->extended) {
+				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"output exceed limit %04X\n",ae->maxptr);
+				___output=___internal_output_disabled;
+				ae->stop=1;
+				return;
+			}
+#if 0
 			if (!iscrunched) {
 				/* to avoid double error message */
 				if (!ae->stop) MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"(PushExpr) output exceed limit %04X\n",ae->maxptr); else MaxError(ae);
 				ae->stop=1;
 				return;
 			}
+#endif
+			if (iscrunched)
 			if (ae->maxptr&0xFFFF) {
 				rasm_printf(ae,KWARNING"Warning: Specific limits are not applied when using crunched sections, cause memory blocks are moved unpredictably\n");
 				if (ae->erronwarn) MaxError(ae);
 			}
+
 #if TRACE_LZ
 	printf("**output exceed limit** (PushExpr) extending memory space\n");
 #endif
+	if (!iscrunched) rasm_printf(ae,KWARNING"[%s:%d] Warning: physical output overflow 64k\n",GetCurrentFile(ae),ae->wl[ae->idx].l);
+
 			requested_block=ae->outputadr>>16;
 			ae->mem[ae->activebank]=MemRealloc(ae->mem[ae->activebank],(requested_block+1)*65536);
 			ae->maxptr=(requested_block+1)*65536;
@@ -19060,6 +18843,7 @@ void ___new_memory_space(struct s_assenv *ae)
 	IntArrayAddDynamicValueConcat(&ae->memsize,&ae->nbmemsize,&ae->maxmemsize,65536);
 	ae->activebank=ae->nbbank-1; ae->maxptr=ae->memsize[ae->activebank]; // inseparable
 
+	orgzone.extended=ae->extended; // if we are in an extended schema
 	ae->outputadr=0;
 	ae->codeadr=0;
 	orgzone.memstart=0;
@@ -19089,6 +18873,7 @@ void ___getbackto_memory_space(struct s_assenv *ae) {
 	/* legacy */
 	orgzone.ibank=ae->activebank;
 	orgzone.nocode=ae->nocode=0;
+	orgzone.extended=ae->extended;
 	ObjectArrayAddDynamicValueConcat((void**)&ae->orgzone,&ae->io,&ae->mo,&orgzone,sizeof(orgzone));
 
 	OverWriteCheck(ae);
@@ -21890,24 +21675,17 @@ void ___org_new(struct s_assenv *ae, int nocode) {
 	if (ae->lz>=0) {
 		ae->lz=-1;
 	}	
+	orgzone.extended=ae->extended;
 	orgzone.memstart=ae->outputadr;
 	orgzone.ibank=ae->activebank;
 	orgzone.ifile=ae->wl[ae->idx].ifile;
 	orgzone.iline=ae->wl[ae->idx].l;
 	orgzone.nocode=ae->nocode=nocode;
 
-	if (ae->wrap_addr) {
-		if (nocode) {
-			___output=___internal_output_nocode_wrap;
-		} else {
-			___output=___internal_output_wrap;
-		}
+	if (nocode) {
+		___output=___internal_output_nocode;
 	} else {
-		if (nocode) {
-			___output=___internal_output_nocode;
-		} else {
-			___output=___internal_output;
-		}
+		___output=___internal_output;
 	}
 	
 	ObjectArrayAddDynamicValueConcat((void**)&ae->orgzone,&ae->io,&ae->mo,&orgzone,sizeof(orgzone));
@@ -24476,13 +24254,7 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 	orgzone.ibank=BANK_MAX_NUMBER;
 	orgzone.inplace=1;
 	ObjectArrayAddDynamicValueConcat((void**)&ae->orgzone,&ae->io,&ae->mo,&orgzone,sizeof(orgzone));
-	if (ae->wrap_addr) {
-		___output=___internal_output_wrap;
-		PushExpression=__PushExpression_wrap;
-	} else {
-		___output=___internal_output;
-		PushExpression=__PushExpression;
-	}
+	___output=___internal_output;
 	/* init des automates */
 	ae->AutomateExpressionDecision['<']='<';
 	ae->AutomateExpressionDecision['>']='>';
@@ -25527,8 +25299,10 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 		printf("ORG: B%03d %s#%04X-#%04X InPlace=%d\n",ae->orgzone[i].ibank,ae->orgzone[i].protect?"Protect ":"",ae->orgzone[i].memstart,ae->orgzone[i].memend,ae->orgzone[i].inplace);
 #endif
 		if (ae->orgzone[i].memend > 0x10000 && ae->memsize[ae->orgzone[i].ibank]<=0x10000) { // only report output overflow, if the bank isn't opted for LIMIT,,EXTENDED
-			MakeError(ae,0,ae->filename[ae->orgzone[i].ifile],ae->orgzone[i].iline,"ORG section is overflowing 64K bank by %d byte%s\n",
-					ae->orgzone[i].memend-0x10000,ae->orgzone[i].memend-0x10000>1?"s":"");
+			if (!ae->orgzone[i].extended) {
+				MakeError(ae,0,ae->filename[ae->orgzone[i].ifile],ae->orgzone[i].iline,"ORG section is overflowing 64K bank by %d byte%s\n",
+						ae->orgzone[i].memend-0x10000,ae->orgzone[i].memend-0x10000>1?"s":"");
+			}
 		}
 	}
 
@@ -27694,7 +27468,6 @@ printf("paramz 1\n");
 		ae->rom_name=param->rom_name;
 		ae->checkmode=param->checkmode;
 		ae->noampersand=param->noampersand;
-		ae->wrap_addr=param->wrap_addr;
 		ae->module_separator[0]=param->module_separator;
 		ae->enforce_symbol_case=param->enforce_symbol_case;
 		if (param->rough) ae->maxam=0; else ae->maxam=1;
@@ -31118,6 +30891,10 @@ struct s_autotest_keyword autotest_keyword[]={
 	{"iyabelle=10: set (iyabelle)-5,a",0},
 	{"iyabelle=10: ld a,(iyabelle)-5",0},
 	{"iyabelle=10: ld (hl),(iyabelle)-5",0},
+// limits
+	{"bank : org 0: nop 65535: repeat 64 : ldir : rend: bank : org 0: nop 65535: defb 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 ",1},
+	{"bank : org 0: nop 65535: defb 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 ",1},
+	{"bank : org 0 : limit 70000,EXTENDED : nop 65535: repeat 64 : ldir : rend bank : org 0 : nop 65535: defb 0,0,0,0,0,0,0,0,0,0,0,0,0,0 ",0}, // is ok with extended
 
 	{"ixabelle=10: jp (ixabelle+2)*5",0},
 	{"ixabelle=10: jp z,(ixabelle+2)*5",0},
@@ -34473,7 +34250,6 @@ void Usage(int help)
 		printf("-utf8            convert symbols from french or spanish keyboard inside quotes\n");
 		printf("-fq              do not bother with special chars inside quotes\n");
 		printf(KLWHITE"MISCELLANEOUS:\n"KNORMAL);
-		printf("-wrap            force code address to wrap inside 64K\n");
 		printf("-quick           enable fast mode for ZX0 crunching\n");
 		printf("-cprquiet        do not display ROM detailed informations\n");
 		printf("-map             display information during early assembling stages\n");
@@ -34761,8 +34537,6 @@ int ParseOptions(char **argv,int argc, struct s_parameter *param)
 		param->utf8enable=1;
 	} else if (strcmp(argv[i],"-twe")==0) {
 		param->erronwarn=1;
-	} else if (strcmp(argv[i],"-wrap")==0) {
-		param->wrap_addr=1;
 	} else if (strcmp(argv[i],"-mml")==0) {
 		param->macro_multi_line=1;
 	} else if (strcmp(argv[i],"-map")==0) {

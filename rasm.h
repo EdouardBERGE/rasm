@@ -64,7 +64,6 @@ struct s_parameter {
 	int enforce_symbol_case;
 	int verbose_assembling;
 	int macro_multi_line;
-	int wrap_addr;
 };
 
 struct s_debug_error {
