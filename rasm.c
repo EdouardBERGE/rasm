@@ -6806,11 +6806,15 @@ double ComputeExpressionCore(struct s_assenv *ae,char *original_zeexpression,con
 							} else if (strncmp(ae->computectx->varbuffer+minusptr,"{PAGE}",6)==0) {
 								bank=6;
 								page=1;
+								/* in cartridge mode the gate array value is a RAM banking configuration, not a cartridge ROM page */
+								if (ae->forcecpr) MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"expression [%s] cannot use PAGE in cartridge mode - {PAGE} returns a RAM banking configuration, use {BANK} instead\n",TradExpression(zeexpression));
 								/* obligé de recalculer le CRC */
 								crc=GetCRC(ae->computectx->varbuffer+minusptr+bank);
 							} else if (strncmp(ae->computectx->varbuffer+minusptr,"{PAGESET}",9)==0) {
 								bank=9;
 								page=2;
+								/* in cartridge mode the gate array value is a RAM banking configuration, not a cartridge ROM page */
+								if (ae->forcecpr) MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"expression [%s] cannot use PAGESET in cartridge mode - {PAGESET} returns a RAM banking configuration, use {BANK} instead\n",TradExpression(zeexpression));
 								/* obligé de recalculer le CRC */
 								crc=GetCRC(ae->computectx->varbuffer+minusptr+bank);
 							} else if (strncmp(ae->computectx->varbuffer+minusptr,"{SIZEOF}",8)==0) {
@@ -9209,6 +9213,8 @@ printf("exprout=[%s]\n",expr);
 								}
 							}
 						} else if (strcmp(varbuffer,"{PAGE}$")==0) {
+							/* in cartridge mode the gate array value is a RAM banking configuration, not a cartridge ROM page */
+							if (ae->forcecpr) MakeError(ae,ae->idx,GetCurrentFile(ae),GetExpLine(ae,0),"expression [%s] cannot use PAGE in cartridge mode - {PAGE} returns a RAM banking configuration, use {BANK} instead\n",TradExpression(expr));
 							if (ae->activebank<BANK_MAX_NUMBER) {
 								if (ae->bankset[ae->activebank>>2]) {
 									tagvalue=ae->bankgate[(ae->activebank&0x1FC)+(ae->codeadr>>14)];
@@ -9220,6 +9226,8 @@ printf("exprout=[%s]\n",expr);
 								tagvalue=ae->activebank;
 							}
 						} else if (strcmp(varbuffer,"{PAGESET}$")==0) {
+							/* in cartridge mode the gate array value is a RAM banking configuration, not a cartridge ROM page */
+							if (ae->forcecpr) MakeError(ae,ae->idx,GetCurrentFile(ae),GetExpLine(ae,0),"expression [%s] cannot use PAGESET in cartridge mode - {PAGESET} returns a RAM banking configuration, use {BANK} instead\n",TradExpression(expr));
 							if (ae->activebank<BANK_MAX_NUMBER) {
 								tagvalue=ae->setgate[ae->activebank];
 								//if (ae->activebank>3) tagvalue=((ae->activebank>>2)-1)*8+0xC2; else tagvalue=0xC0;
@@ -29438,6 +29446,13 @@ int RasmAssembleInfoParam(const char *datain, int lenin, unsigned char **dataout
 #define AUTOTEST_PAGETAG3	"buildsna:bank 2:assert {bank}$==2:assert {page}$==0x7FC0:assert {pageset}$==#7FC0:" \
 							"bankset 1:org #4000:assert {bank}$==5:assert {page}$==0x7FC5:assert {pageset}$==#7FC2"
 							
+/* {PAGE}/{PAGESET} answer with a gate array RAM banking configuration, which cannot
+   page a cartridge ROM bank -> must be refused in cartridge mode, not silently emitted */
+#define AUTOTEST_PAGETAG_CPR	"buildcpr:bank 0:org 0:ld bc,{page}b5:bank 5:org #C000:b5 nop"
+#define AUTOTEST_PAGETAG_CPR2	"buildcpr:bank 5:org #C000:ld bc,{page}$"
+#define AUTOTEST_PAGESETTAG_CPR	"buildcpr:bank 0:org 0:ld bc,{pageset}b5:bank 5:org #C000:b5 nop"
+#define AUTOTEST_PAGESETTAG_CPR2	"buildcpr:bank 5:org #C000:ld bc,{pageset}$"
+
 #define AUTOTEST_SWITCH		"mavar=4:switch mavar:case 1:nop:case 4:defb 4:case 3:defb 3:break:case 2:nop:case 4:defb 4:endswitch"
 
 #define AUTOTEST_PREPRO0	"\n\n\n\n;bitch\n\nnop\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\nxor a\n\n\n\n\n\n\n\n\n\n\n\n"
@@ -31814,6 +31829,20 @@ printf("testing prefix PAGE/PAGESET 2 OK\n");
 	if (!ret) {} else {printf("Autotest %03d ERROR (page/pageset 3)\n",cpt);exit(-1);}
 	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
 printf("testing prefix PAGE/PAGESET 3 OK\n");
+
+	ret=RasmAssemble(AUTOTEST_PAGETAG_CPR,strlen(AUTOTEST_PAGETAG_CPR),&opcode,&opcodelen);
+	if (ret) {} else {printf("Autotest %03d ERROR (PAGE prefix must be refused in cartridge mode)\n",cpt);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+	ret=RasmAssemble(AUTOTEST_PAGETAG_CPR2,strlen(AUTOTEST_PAGETAG_CPR2),&opcode,&opcodelen);
+	if (ret) {} else {printf("Autotest %03d ERROR (PAGE $ tag must be refused in cartridge mode)\n",cpt);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+	ret=RasmAssemble(AUTOTEST_PAGESETTAG_CPR,strlen(AUTOTEST_PAGESETTAG_CPR),&opcode,&opcodelen);
+	if (ret) {} else {printf("Autotest %03d ERROR (PAGESET prefix must be refused in cartridge mode)\n",cpt);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+	ret=RasmAssemble(AUTOTEST_PAGESETTAG_CPR2,strlen(AUTOTEST_PAGESETTAG_CPR2),&opcode,&opcodelen);
+	if (ret) {} else {printf("Autotest %03d ERROR (PAGESET $ tag must be refused in cartridge mode)\n",cpt);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing PAGE/PAGESET refused in cartridge mode OK\n");
 
 	ret=RasmAssemble(AUTOTEST_UNDEF,strlen(AUTOTEST_UNDEF),&opcode,&opcodelen);
 	if (!ret) {} else {printf("Autotest %03d ERROR (simple undef)\n",cpt);exit(-1);}
