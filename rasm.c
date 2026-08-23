@@ -24057,6 +24057,8 @@ unsigned char * _internal_export_REMU(struct s_assenv *ae, unsigned int *rchksiz
 			if (ae->breakpoint[i].bank<256) {
 				lbankn=ae->breakpoint[i].bank;
 				isrom=1;
+				/* LOCALISATION may retarget a numbered bank: assembled in a cartridge ROM bank, but executed elsewhere */
+				for (m=0;m<ae->imemory_localisation;m++) if (ae->memory_localisation[m].physical==ae->breakpoint[i].bank) {lbankn=ae->memory_localisation[m].logical;isrom=ae->memory_localisation[m].rom;break;}
 			} else {
 				lbankn=-1; // we cannot know which memory bank
 				isrom=0;   // unless we found a mapping
@@ -24088,6 +24090,8 @@ unsigned char * _internal_export_REMU(struct s_assenv *ae, unsigned int *rchksiz
 			if (ae->label[i].ibank<256) {
 				lbankn=ae->label[i].ibank;
 				isrom=1;
+				/* LOCALISATION may retarget a numbered bank: assembled in a cartridge ROM bank, but executed elsewhere */
+				for (m=0;m<ae->imemory_localisation;m++) if (ae->memory_localisation[m].physical==ae->label[i].ibank) {lbankn=ae->memory_localisation[m].logical;isrom=ae->memory_localisation[m].rom;break;}
 			} else {
 				lbankn=-1; // we cannot know which memory bank
 				isrom=0;
