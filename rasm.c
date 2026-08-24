@@ -30913,7 +30913,7 @@ struct s_autotest_keyword autotest_keyword[]={
 // limits
 	{"bank : org 0: nop 65535: repeat 64 : ldir : rend: bank : org 0: nop 65535: defb 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 ",1},
 	{"bank : org 0: nop 65535: defb 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 ",1},
-	{"bank : org 0 : limit 70000,EXTENDED : nop 65535: repeat 64 : ldir : rend bank : org 0 : nop 65535: defb 0,0,0,0,0,0,0,0,0,0,0,0,0,0 ",0}, // is ok with extended
+	{"bank : org 0 : limit 70000,EXTENDED : nop 65535: repeat 64 : ldir : rend : bank : org 0 : nop 65535: defb 0,0,0,0,0,0,0,0,0,0,0,0,0,0 ",0}, // is ok with extended
 
 	{"ixabelle=10: jp (ixabelle+2)*5",0},
 	{"ixabelle=10: jp z,(ixabelle+2)*5",0},
