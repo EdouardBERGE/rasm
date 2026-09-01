@@ -263,70 +263,71 @@ E_DEPENDENCIES_MAKE
 
 enum e_compute_operation_type {
 E_COMPUTE_OPERATION_PUSH_DATASTC=0,
-E_COMPUTE_OPERATION_OPEN=1,
-E_COMPUTE_OPERATION_CLOSE=2,
-E_COMPUTE_OPERATION_COMMA=3,
-E_COMPUTE_OPERATION_ADD=4,
-E_COMPUTE_OPERATION_SUB=5,
-E_COMPUTE_OPERATION_DIV=6,
-E_COMPUTE_OPERATION_MUL=7,
-E_COMPUTE_OPERATION_AND=8,
-E_COMPUTE_OPERATION_OR=9,
-E_COMPUTE_OPERATION_MOD=10,
-E_COMPUTE_OPERATION_XOR=11,
-E_COMPUTE_OPERATION_NOT=12,
-E_COMPUTE_OPERATION_SHL=13,
-E_COMPUTE_OPERATION_SHR=14,
-E_COMPUTE_OPERATION_BAND=15,
-E_COMPUTE_OPERATION_BOR=16,
-E_COMPUTE_OPERATION_LOWER=17,
-E_COMPUTE_OPERATION_GREATER=18,
-E_COMPUTE_OPERATION_EQUAL=19,
-E_COMPUTE_OPERATION_NOTEQUAL=20,
-E_COMPUTE_OPERATION_LOWEREQ=21,
-E_COMPUTE_OPERATION_GREATEREQ=22, // this one MUST be the last before math function!
+E_COMPUTE_OPERATION_OPEN     =1,
+E_COMPUTE_OPERATION_CLOSE    =2,
+E_COMPUTE_OPERATION_COMMA    =3,
+E_COMPUTE_OPERATION_ADD      =4,
+E_COMPUTE_OPERATION_SUB      =5,
+E_COMPUTE_OPERATION_DIV      =6,
+E_COMPUTE_OPERATION_INTDIV   =7,
+E_COMPUTE_OPERATION_MUL      =8,
+E_COMPUTE_OPERATION_AND      =9,
+E_COMPUTE_OPERATION_OR       =10,
+E_COMPUTE_OPERATION_MOD      =11,
+E_COMPUTE_OPERATION_XOR      =12,
+E_COMPUTE_OPERATION_NOT      =13,
+E_COMPUTE_OPERATION_SHL      =14,
+E_COMPUTE_OPERATION_SHR      =15,
+E_COMPUTE_OPERATION_BAND     =16,
+E_COMPUTE_OPERATION_BOR      =17,
+E_COMPUTE_OPERATION_LOWER    =18,
+E_COMPUTE_OPERATION_GREATER  =19,
+E_COMPUTE_OPERATION_EQUAL    =20,
+E_COMPUTE_OPERATION_NOTEQUAL =21,
+E_COMPUTE_OPERATION_LOWEREQ  =22,
+E_COMPUTE_OPERATION_GREATEREQ=23, // this one MUST be the last before math function!
 /* math functions */
-E_COMPUTE_OPERATION_SIN=23,
-E_COMPUTE_OPERATION_COS=24,
-E_COMPUTE_OPERATION_INT=25,
-E_COMPUTE_OPERATION_FLOOR=26,
-E_COMPUTE_OPERATION_ABS=27,
-E_COMPUTE_OPERATION_LN=28,
-E_COMPUTE_OPERATION_LOG10=29,
-E_COMPUTE_OPERATION_SQRT=30,
-E_COMPUTE_OPERATION_ASIN=31,
-E_COMPUTE_OPERATION_ACOS=32,
-E_COMPUTE_OPERATION_ATAN=33,
-E_COMPUTE_OPERATION_EXP=34,
-E_COMPUTE_OPERATION_LOW=35,
-E_COMPUTE_OPERATION_HIGH=36,
-E_COMPUTE_OPERATION_PSG=37,
-E_COMPUTE_OPERATION_RND=38,
-E_COMPUTE_OPERATION_FRAC=39,
-E_COMPUTE_OPERATION_CEIL=40,
-E_COMPUTE_OPERATION_GET_R=41,
-E_COMPUTE_OPERATION_GET_V=42,
-E_COMPUTE_OPERATION_GET_B=43,
-E_COMPUTE_OPERATION_SET_R=44,
-E_COMPUTE_OPERATION_SET_V=45,
-E_COMPUTE_OPERATION_SET_B=46,
-E_COMPUTE_OPERATION_SOFT2HARD=47,
-E_COMPUTE_OPERATION_HARD2SOFT=48,
-E_COMPUTE_OPERATION_PEEK=49,
-E_COMPUTE_OPERATION_POW2=50,
-E_COMPUTE_OPERATION_POW=51,
-E_COMPUTE_OPERATION_FMOD=52,
-E_COMPUTE_OPERATION_ATAN2=53,
-E_COMPUTE_OPERATION_HYPOT=54,
-E_COMPUTE_OPERATION_LDEXP=55,
-E_COMPUTE_OPERATION_FDIM=56,  // différence positive
-E_COMPUTE_OPERATION_FSTEP=57, // seuil, valeur dessous 0, dessus 1
-E_COMPUTE_OPERATION_FMAX=58,
-E_COMPUTE_OPERATION_FMIN=59,
-E_COMPUTE_OPERATION_CLAMP=60, // x min,max contraindre dans l'intervale
-E_COMPUTE_OPERATION_LERP=61, // a,b,x interpolation linéaire  a+x*(b-a)
-E_COMPUTE_OPERATION_ISGREATER=62,
-E_COMPUTE_OPERATION_ISLESS=63, 
+E_COMPUTE_OPERATION_SIN      =24,
+E_COMPUTE_OPERATION_COS      =25,
+E_COMPUTE_OPERATION_INT      =26,
+E_COMPUTE_OPERATION_FLOOR    =27,
+E_COMPUTE_OPERATION_ABS      =28,
+E_COMPUTE_OPERATION_LN       =29,
+E_COMPUTE_OPERATION_LOG10    =30,
+E_COMPUTE_OPERATION_SQRT     =31,
+E_COMPUTE_OPERATION_ASIN     =32,
+E_COMPUTE_OPERATION_ACOS     =33,
+E_COMPUTE_OPERATION_ATAN     =34,
+E_COMPUTE_OPERATION_EXP      =35,
+E_COMPUTE_OPERATION_LOW      =36,
+E_COMPUTE_OPERATION_HIGH     =37,
+E_COMPUTE_OPERATION_PSG      =38,
+E_COMPUTE_OPERATION_RND      =39,
+E_COMPUTE_OPERATION_FRAC     =40,
+E_COMPUTE_OPERATION_CEIL     =41,
+E_COMPUTE_OPERATION_GET_R    =42,
+E_COMPUTE_OPERATION_GET_V    =43,
+E_COMPUTE_OPERATION_GET_B    =44,
+E_COMPUTE_OPERATION_SET_R    =45,
+E_COMPUTE_OPERATION_SET_V    =46,
+E_COMPUTE_OPERATION_SET_B    =47,
+E_COMPUTE_OPERATION_SOFT2HARD=48,
+E_COMPUTE_OPERATION_HARD2SOFT=49,
+E_COMPUTE_OPERATION_PEEK     =50,
+E_COMPUTE_OPERATION_POW2     =51,
+E_COMPUTE_OPERATION_POW      =52,
+E_COMPUTE_OPERATION_FMOD     =53,
+E_COMPUTE_OPERATION_ATAN2    =54,
+E_COMPUTE_OPERATION_HYPOT    =55,
+E_COMPUTE_OPERATION_LDEXP    =56,
+E_COMPUTE_OPERATION_FDIM     =57,  // différence positive
+E_COMPUTE_OPERATION_FSTEP    =58, // seuil, valeur dessous 0, dessus 1
+E_COMPUTE_OPERATION_FMAX     =59,
+E_COMPUTE_OPERATION_FMIN     =60,
+E_COMPUTE_OPERATION_CLAMP    =61, // x min,max contraindre dans l'intervale
+E_COMPUTE_OPERATION_LERP     =62, // a,b,x interpolation linéaire  a+x*(b-a)
+E_COMPUTE_OPERATION_ISGREATER=63,
+E_COMPUTE_OPERATION_ISLESS   =64, 
 // noise x,y,z (perlin 2D/3D) => répétitif
 // rnd borné (min,max)  mod(rnd,max-min)+min
 // wrap(min,max,x) faire boucler valeur dans l'intervale mod(x,max-min)+min
@@ -339,15 +340,15 @@ E_COMPUTE_OPERATION_ISLESS=63,
 // 	x=x+(gx-x)*influence
 //
 /* string functions */
-E_COMPUTE_OPERATION_GETNOP=64,
-E_COMPUTE_OPERATION_GETTICK=65,
-E_COMPUTE_OPERATION_DURATION=66,
-E_COMPUTE_OPERATION_FILESIZE=67,
-E_COMPUTE_OPERATION_GETSIZE=68,
-E_COMPUTE_OPERATION_IS_REGISTER=69,
-E_COMPUTE_OPERATION_FILEBYTE=70,
-E_COMPUTE_OPERATION_COUNTNOPS=71,
-E_COMPUTE_OPERATION_END=72
+E_COMPUTE_OPERATION_GETNOP     =65,
+E_COMPUTE_OPERATION_GETTICK    =66,
+E_COMPUTE_OPERATION_DURATION   =67,
+E_COMPUTE_OPERATION_FILESIZE   =68,
+E_COMPUTE_OPERATION_GETSIZE    =69,
+E_COMPUTE_OPERATION_IS_REGISTER=70,
+E_COMPUTE_OPERATION_FILEBYTE   =71,
+E_COMPUTE_OPERATION_COUNTNOPS  =72,
+E_COMPUTE_OPERATION_END        =73
 };
 
 struct s_compute_element {
@@ -1673,7 +1674,7 @@ A-Z variable ou fonction (cos, sin, tan, sqr, pow, mod, and, xor, mod, ...)
 +*-/&^m| operateur
 */
 
-#define AutomateExpressionValidCharExtendedDefinition "0123456789.ABCDEFGHIJKLMNOPQRSTUVWXYZ_{}@+-*/~^$#%<=>|&" /* § */
+#define AutomateExpressionValidCharExtendedDefinition "0123456789.ABCDEFGHIJKLMNOPQRSTUVWXYZ_{}@+-*/~^$#%<=>|&\\" /* § */
 #define AutomateExpressionValidCharFirstDefinition "#%0123456789.ABCDEFGHIJKLMNOPQRSTUVWXYZ_@${"
 #define AutomateExpressionValidCharDefinition "0123456789.ABCDEFGHIJKLMNOPQRSTUVWXYZ_{}@$"
 #define AutomateValidLabelFirstDefinition ".ABCDEFGHIJKLMNOPQRSTUVWXYZ_@"
@@ -6089,6 +6090,7 @@ char *getOperatorStr(const int operator) {
 		case E_COMPUTE_OPERATION_ADD:strcpy(opStr,"+");break;
 		case E_COMPUTE_OPERATION_SUB:strcpy(opStr,"-");break;
 		case E_COMPUTE_OPERATION_DIV:strcpy(opStr,"/");break;
+		case E_COMPUTE_OPERATION_INTDIV:strcpy(opStr,"\\");break;
 		case E_COMPUTE_OPERATION_MUL:strcpy(opStr,"*");break;
 		case E_COMPUTE_OPERATION_AND:strcpy(opStr,"and");break;
 		case E_COMPUTE_OPERATION_OR:strcpy(opStr,"or");break;
@@ -6324,6 +6326,7 @@ double ComputeExpressionCore(struct s_assenv *ae,char *original_zeexpression,con
 			/* operator detection */
 			case '*':
 			case '/':
+			case '\\':
 			case '^':
 			case '[':
 			case 'm':
@@ -7285,6 +7288,7 @@ printf("====== STACK ==\n");
 			case E_COMPUTE_OPERATION_ADD:printf("+ ");break;
 			case E_COMPUTE_OPERATION_SUB:printf("- ");break;
 			case E_COMPUTE_OPERATION_DIV:printf("/ ");break;
+			case E_COMPUTE_OPERATION_DIV:printf("\\ ");break;
 			case E_COMPUTE_OPERATION_MUL:printf("* ");break;
 			case E_COMPUTE_OPERATION_AND:printf("and ");break;
 			case E_COMPUTE_OPERATION_OR:printf("or ");break;
@@ -7446,6 +7450,7 @@ printf("op-- string=%p\n",ae->computectx->operatorstack[o2].string);
 			case E_COMPUTE_OPERATION_ADD:
 			case E_COMPUTE_OPERATION_SUB:
 			case E_COMPUTE_OPERATION_DIV:
+			case E_COMPUTE_OPERATION_INTDIV:
 			case E_COMPUTE_OPERATION_MUL:
 			case E_COMPUTE_OPERATION_AND:
 			case E_COMPUTE_OPERATION_OR:
@@ -7579,6 +7584,7 @@ printf("=== STACK EXECUTION ===\n");
 				   workinterval BEFORE dividing, not after. Otherwise a negative intermediate (e.g. from "-$") 
 				   keeps C's signed truncating semantics through the division and only gets bit-masked into a huge
 				   positive afterwards (e.g. -3 mod 256 becoming 65533 instead of the correct 253) */
+				case E_COMPUTE_OPERATION_INTDIV:
 				case E_COMPUTE_OPERATION_DIV:
 					if (paccu>1) {
 						int divisor=((int)accu[paccu-1])&workinterval;
@@ -7961,6 +7967,7 @@ printf("=== STACK EXECUTION ===\n");
 			case E_COMPUTE_OPERATION_ADD:printf("+ ");break;
 			case E_COMPUTE_OPERATION_SUB:printf("- ");break;
 			case E_COMPUTE_OPERATION_DIV:printf("/ ");break;
+			case E_COMPUTE_OPERATION_INTDIV:printf("\\ ");break;
 			case E_COMPUTE_OPERATION_MUL:printf("* ");break;
 			case E_COMPUTE_OPERATION_AND:printf("and ");break;
 			case E_COMPUTE_OPERATION_OR:printf("or ");break;
@@ -8052,6 +8059,18 @@ printf("=== STACK EXECUTION ===\n");
 							accu[paccu-2]=0;
 						} else {
 							accu[paccu-2]/=accu[paccu-1];
+						}
+					}
+					paccu--;
+					break;
+				case E_COMPUTE_OPERATION_INTDIV:
+					if (paccu>1) {
+						int divisor=((int)accu[paccu-1]);
+						if (divisor==0) {
+							MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"division by zero in expression [%s]\n",TradExpression(zeexpression));
+							accu[paccu-2]=0;
+						} else {
+							accu[paccu-2]=(int)(((int)accu[paccu-2])/divisor);
 						}
 					}
 					paccu--;
@@ -8840,6 +8859,7 @@ printf("fast [%s]\n",expr);
 			case '[':
 			case '*':
 			case '/':
+			case '\\':
 			case '+':
 			case '~':
 			case '-':
@@ -24289,6 +24309,7 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 				/* priority 2 */
 				case '*':ae->AutomateElement[i].operator=E_COMPUTE_OPERATION_MUL;ae->AutomateElement[i].priority=2;break;
 				case '/':ae->AutomateElement[i].operator=E_COMPUTE_OPERATION_DIV;ae->AutomateElement[i].priority=2;break;
+				case '\\':ae->AutomateElement[i].operator=E_COMPUTE_OPERATION_INTDIV;ae->AutomateElement[i].priority=2;break;
 				case 'm':ae->AutomateElement[i].operator=E_COMPUTE_OPERATION_MOD;ae->AutomateElement[i].priority=2;break;
 				/* priority 3 */
 				case '+':ae->AutomateElement[i].operator=E_COMPUTE_OPERATION_ADD;ae->AutomateElement[i].priority=3;break;
@@ -24329,6 +24350,7 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 				/* priority 1 */
 				case '*':ae->AutomateElement[i].operator=E_COMPUTE_OPERATION_MUL;ae->AutomateElement[i].priority=464;break;
 				case '/':ae->AutomateElement[i].operator=E_COMPUTE_OPERATION_DIV;ae->AutomateElement[i].priority=464;break;
+				case '\\':ae->AutomateElement[i].operator=E_COMPUTE_OPERATION_INTDIV;ae->AutomateElement[i].priority=464;break;
 				case 'm':ae->AutomateElement[i].operator=E_COMPUTE_OPERATION_MOD;ae->AutomateElement[i].priority=464;break;
 				case '+':ae->AutomateElement[i].operator=E_COMPUTE_OPERATION_ADD;ae->AutomateElement[i].priority=464;break;
 				case '-':ae->AutomateElement[i].operator=E_COMPUTE_OPERATION_SUB;ae->AutomateElement[i].priority=464;break;
@@ -28583,7 +28605,7 @@ printf("*** separator='%c'   texpr=%d wordlist.t=%d wordlist.e=%d hadcomma=%d\n"
 					w[lw]=0;
 					if (lw==3 && strcmp(w,"EQU")==0) {
 #if TRACE_PREPRO
-printf("separator => test EQU match!\n",w+ispace);
+printf("separator => test EQU match!\n");
 #endif
 						/* il y avait un mot avant alors on va reorganiser la ligne */
 						if (!wordlist[nbword-1].t) {
@@ -31107,6 +31129,10 @@ struct s_autotest_keyword autotest_keyword[]={
 	{"macro macro1,...:defb {3}:mend:macro1 1,2,3,4",0}, // full variable is ok
 	{"macro macro1,...:nop:assert {#}==0:mend:macro1 ",0}, // full variable test
 	{"macro macro1,...:nop:assert {#}==0:mend:macro1 (void)",0}, // void must not count
+
+	{"defb 1/3,2\\3",0}, // new operator divide integer like Locomotive Basic syntax
+	{"nop : assert 270/256>1 : assert 270\\256>=1",0},
+	{"nop : assert 240/256>0.8 : assert 240\\256==0",0},
 
 	/*
 	 *
