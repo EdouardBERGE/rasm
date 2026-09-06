@@ -789,6 +789,11 @@ struct s_save {
 	int tape,dsk,face,iwdskname;
 };
 
+struct s_api_send {
+	int ibank;
+	int ptr;
+	int iw;
+};
 
 /********************
       L O O P S
@@ -1412,6 +1417,11 @@ struct s_assenv {
 	                      // a different bank would silently mix in addresses from unrelated memory,
 	                      // so it is rejected with an error instead (see __RELOCATE_START)
 	int relocbankset;     // 1 once relocbank has been captured
+	// network settings
+	char *web_host;
+	unsigned short int web_port;
+	struct s_api_send *api_send;
+	int iapi_send,mapi_send;
 };
 
 /*************************************
@@ -3234,7 +3244,9 @@ void FreeAssenv(struct s_assenv *ae)
 		if (ae->mem[i]) MemFree(ae->mem[i]);
 	}
 	MemFree(ae->mem);
-	
+
+	if (ae->mapi_send) MemFree(ae->api_send); // WEB_API
+
 	/* expression core buffer free */
 	ComputeExpressionCore(NULL,NULL,0,0);
 	//ExpressionFastTranslate(NULL,NULL,0);
@@ -17424,6 +17436,64 @@ void PopAllEDSK(struct s_assenv *ae) {
 //************************************************************************************************************************************
 //************************************************************************************************************************************
 
+#ifndef NO_WEB_API
+void __API_SEND(struct s_assenv *ae) {
+	struct s_api_send curapi_send={0};
+	unsigned char *response = NULL;
+	unsigned int response_len = 0;
+	unsigned char *message=NULL;
+	unsigned char *zecommand=NULL;
+	unsigned int message_size=1;
+
+	if (!ae->wl[ae->idx].t) {
+		ae->idx++;
+		zecommand=ae->wl[ae->idx].w;
+		if (strcmp(zecommand,"RAW")==0) {
+			// raw send, just parse everything else to build a message
+			message=MemMalloc(1);
+			message[0]=0;
+			while (!ae->wl[ae->idx].t) {
+				ae->idx++;
+				message_size+=strlen(ae->wl[ae->idx].w);
+				strcat(message,ae->wl[ae->idx].w);
+			}
+			if (!message[0]) {
+				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Empty message for raw API_SEND\n");
+				return;
+			}
+			if (tcp_send_receive(ae->web_host, ae->web_port, (const unsigned char *)message, (unsigned int)strlen(message), &response, &response_len) != 0) {
+				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"communication failed on %s:%u\n", ae->web_host, ae->web_port);
+			} else {
+				// display answer or not?
+			}
+		} else if (strcmp(zecommand,"SEND_DATA")==0) {
+			// send_data,start,size,ram/extram<n>/rom<n>[,destination_address]
+			// ram => 64k
+			// extram<n> => <n> 64k page (ram == extram0)
+			// rom<n> => <n> rom (from 0 to 16383 max)
+			// optional destination_address if not the same as start
+
+			// in fact push everything else like SAVE directive to be processed after compilation
+			curapi_send.iw=ae->idx; // command index
+			curapi_send.ptr=ae->outputadr; // logical address
+			curapi_send.ibank=ae->activebank; // current bank
+			ObjectArrayAddDynamicValueConcat((void**)&ae->api_send,&ae->iapi_send,&ae->mapi_send,&curapi_send,sizeof(curapi_send));
+		}
+	} else {
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"API_SEND <command>[,<parameters>] take a look at the documentation\n");
+		return;
+	}
+
+	if (tcp_send_receive(ae->web_host, ae->web_port, (const unsigned char *)message, (unsigned int)strlen(message), &response, &response_len) != 0) {
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"communication failed on %s:%u\n", ae->web_host, ae->web_port);
+	} else {
+		// display answer or not?
+	}
+
+}
+
+#endif // NO_WEB_API
+
 void __RELOCATE(struct s_assenv *ae) {
 	struct s_relocation relocation={0};
 	char str_reloc[128];
@@ -27525,6 +27595,9 @@ printf("paramz 1\n");
 		ae->mpath=param->mpath;
 		/* old inline params */
 		ae->dependencies=param->dependencies;
+		/* WEB API */
+		ae->web_host=param->web_host;
+		ae->web_port=param->web_port;
 	} else {
 		// default!
 		ae->snapshot.version=3;
@@ -34308,6 +34381,11 @@ void Usage(int help)
 		printf("-msep            <separator> set separator for modules\n");
 		printf("-utf8            convert symbols from french or spanish keyboard inside quotes\n");
 		printf("-fq              do not bother with special chars inside quotes\n");
+#ifndef NO_WEB_API
+		printf(KLWHITE"WEB API:\n"KNORMAL);
+		printf("-web_host        IP address. Default: 127.0.0.1\n");
+		printf("-web_port        IP port. Default: 6128\n");
+#endif
 		printf(KLWHITE"MISCELLANEOUS:\n"KNORMAL);
 		printf("-quick           enable fast mode for ZX0 crunching\n");
 		printf("-cprquiet        do not display ROM detailed informations\n");
@@ -34586,6 +34664,14 @@ int ParseOptions(char **argv,int argc, struct s_parameter *param)
 		param->as80=2;
 	} else if (strcmp(argv[i],"-quick")==0) {
 		MAX_OFFSET_ZX0=2176;
+	} else if (strcmp(argv[i],"-web_host")==0) {
+		if (i+1<argc) {
+			param->web_host=argv[++i][0];
+		} else Usage(1);
+	} else if (strcmp(argv[i],"-web_port")==0) {
+		if (i+1<argc) {
+			param->web_port=atoi(argv[++i][0]);
+		} else Usage(1);
 	} else if (strcmp(argv[i],"-msep")==0) {
 		if (i+1<argc) {
 			param->module_separator=argv[++i][0];
@@ -34893,6 +34979,8 @@ int main(int argc, char **argv)
 	struct s_parameter param={0};
 	int ret;
 
+	param.web_host="127.0.0.1";
+	param.web_port=6128;
 	param.cprinfo=1;
 	param.maxerr=20;
 	param.rough=0.5;

@@ -64,6 +64,8 @@ struct s_parameter {
 	int enforce_symbol_case;
 	int verbose_assembling;
 	int macro_multi_line;
+	char *web_host;
+	unsigned short int web_port;
 };
 
 struct s_debug_error {
