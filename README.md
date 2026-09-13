@@ -132,6 +132,8 @@ You can play with RASM live on https://cpc-playground.iiivan.org/
 
 Arkos Tracker is powered by RASM on https://www.julien-nevo.com/arkostracker/
 
+R-GX (Amstrad Plus generic engine) powered by RASM/ACE-DL using WEB-API https://www.youtube.com/@RaymanGX
+
 RetroDev intégrated dev environnement with RASM by the Lord of the Bits! https://github.com/tlotb/retrodev
 
 NEW! RASM on your CPC with developper studio! https://norecess464.weebly.com/news/pistudio-a-raspberry-pi-powered-ide-for-the-amstrad-cpc
