@@ -17492,7 +17492,7 @@ void PopAllAPI(struct s_assenv *ae) {
 
 	backidx=ae->idx;
 	for (iapi=0;iapi<ae->iapi_send;iapi++) {
-		int isdata=0;
+		int isbinary=0;
 
 		message=MemMalloc(1);
 		message[0]=0;
@@ -17505,8 +17505,8 @@ void PopAllAPI(struct s_assenv *ae) {
 				break;
 			} else {
 				if (strcmp(ae->wl[ae->idx].w,"TXT")==0) {
-					if (isdata) {
-						MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"API_SEND cannot mix TEXT and binary DATA\n");
+					if (isbinary) {
+						MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"API_SEND cannot mix TXT and binary BYTES\n");
 						break;
 					}
 					ae->idx++;
@@ -17524,9 +17524,9 @@ void PopAllAPI(struct s_assenv *ae) {
 						message=MemRealloc(message,message_size);
 						strcat((char *)message,itext);
 					}
-				} else if (strcmp(ae->wl[ae->idx].w,"B64")==0) {
-					if (isdata) {
-						MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"API_SEND cannot mix text BASE64 and binary DATA\n");
+				} else if (strcmp(ae->wl[ae->idx].w,"BASE64")==0) {
+					if (isbinary) {
+						MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"API_SEND cannot mix text BASE64 and binary BYTES\n");
 						break;
 					}
 					// parameters ptr+size
@@ -17535,6 +17535,7 @@ void PopAllAPI(struct s_assenv *ae) {
 						int outputlen;
 						offset=RoundComputeExpressionCore(ae,ae->wl[ae->idx+1].w,ae->api_send[iapi].ptr,0);
 						size=RoundComputeExpressionCore(ae,ae->wl[ae->idx+2].w,ae->api_send[iapi].ptr,0);
+						ae->idx+=2;
 						if (apiCheckBounds(ae,iapi,offset,size)) {
 							base64msg=(unsigned char *)base64_encode(ae->mem[ae->api_send[iapi].ibank]+offset,size,&outputlen);
 							if (base64msg && outputlen) {
@@ -17550,21 +17551,44 @@ void PopAllAPI(struct s_assenv *ae) {
 						MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"API_SEND BASE64 is expecting 2 parameters\n");
 						break;
 					}
-				} else if (strcmp(ae->wl[ae->idx].w,"DATA")==0) {
-					isdata=1;
+				} else if (strcmp(ae->wl[ae->idx].w,"TXTDATA")==0) {
+					if (isbinary) {
+						MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"API_SEND cannot mix text TXTDATA and binary BYTES\n");
+						break;
+					}
+					if (!ae->wl[ae->idx+1].t) {
+						offset=RoundComputeExpressionCore(ae,ae->wl[ae->idx+1].w,ae->api_send[iapi].ptr,0);
+						size=RoundComputeExpressionCore(ae,ae->wl[ae->idx+2].w,ae->api_send[iapi].ptr,0);
+						ae->idx+=2;
+						if (apiCheckBounds(ae,iapi,offset,size)) {
+							message_size+=4*size;
+							message=MemRealloc(message,message_size);
+							
+							sprintf((char *)message+strlen((char *)message),"%d",ae->mem[ae->api_send[iapi].ibank][offset]);
+							for (int i=1;i<size;i++) {
+								sprintf((char *)message+strlen((char *)message),",%d",ae->mem[ae->api_send[iapi].ibank][offset+i]);
+							}
+						} else break;
+					} else {
+						MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"API_SEND TXTDATA is expecting 2 parameters\n");
+						break;
+					}
+				} else if (strcmp(ae->wl[ae->idx].w,"BYTES")==0) {
+					isbinary=1;
 					// parameters ptr+size
 					if (!ae->wl[ae->idx+1].t) {
 						unsigned char *base64msg;
 						int outputlen;
 						offset=RoundComputeExpressionCore(ae,ae->wl[ae->idx+1].w,ae->api_send[iapi].ptr,0);
 						size=RoundComputeExpressionCore(ae,ae->wl[ae->idx+2].w,ae->api_send[iapi].ptr,0);
+						ae->idx+=2;
 						if (apiCheckBounds(ae,iapi,offset,size)) {
 							message=MemRealloc(message,message_size-1+size);
 							memcpy(message+message_size-1,ae->mem[ae->api_send[iapi].ibank]+offset,size);
 							message_size+=size;
 						} else break;
 					} else {
-						MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"API_SEND DATA is expecting 2 parameters\n");
+						MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"API_SEND BYTES is expecting 2 parameters\n");
 						break;
 					}
 				} else if (strcmp(ae->wl[ae->idx].w,"HOST")==0) {
@@ -17591,7 +17615,7 @@ void PopAllAPI(struct s_assenv *ae) {
 		} while (!ae->wl[ae->idx].t);
 
 		// data is realsize, text size is strlen
-		if (isdata) message_size--; else message_size=strlen((char *)message);
+		if (isbinary) message_size--; else message_size=strlen((char *)message);
 
 		if (tcp_send_receive(web_host, ae->web_port, (const unsigned char *)message, message_size, &response, &response_len) != 0) {
 			if (!ae->nowarning) {
