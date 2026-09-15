@@ -1317,4 +1317,298 @@ void FileRemoveIfExists(const char *filename)
 }
 
 
+#ifndef NO_WEB_API
+
+// newtwork API support
+//
+#ifdef OS_WIN
+    #include <winsock2.h>
+    #include <ws2tcpip.h>
+    #pragma comment(lib, "ws2_32.lib")
+    typedef SOCKET socket_t;
+    #define CLOSESOCKET closesocket
+#else
+    #include <sys/types.h>
+    #include <sys/socket.h>
+    #include <netinet/in.h>
+    #include <arpa/inet.h>
+    #include <netdb.h>
+    #include <unistd.h>
+    #include <errno.h>
+    typedef int socket_t;
+    #define CLOSESOCKET close
+    #define INVALID_SOCKET (-1)
+    #define SOCKET_ERROR   (-1)
+#endif
+
+#define RECV_CHUNK_SIZE 4096
+
+static int platform_init(void)
+{
+#ifdef OS_WIN
+    WSADATA wsa;
+    return WSAStartup(MAKEWORD(2, 2), &wsa) == 0 ? 0 : -1;
+#else
+    return 0;
+#endif
+}
+
+static void platform_cleanup(void)
+{
+#ifdef OS_WIN
+    WSACleanup();
+#endif
+}
+
+static int last_error(void)
+{
+#ifdef OS_WIN
+    return WSAGetLastError();
+#else
+    return errno;
+#endif
+}
+
+/* Gestion portable de SIGPIPE lors d'un send() sur un socket dont
+ * le correspondant a ferme la connexion :
+ *  - Linux    : flag MSG_NOSIGNAL passe a send()
+ *  - macOS/BSD: MSG_NOSIGNAL n'existe pas, il faut l'option socket
+ *               SO_NOSIGPIPE posee une fois par socket
+ *  - Windows  : sans objet (pas de signal SIGPIPE) */
+#if defined(__linux__)
+    #define SEND_FLAGS MSG_NOSIGNAL
+#else
+    #define SEND_FLAGS 0
+#endif
+
+static void disable_sigpipe_on_socket(socket_t sock)
+{
+#if defined(__APPLE__)
+    int set = 1;
+    setsockopt(sock, SOL_SOCKET, SO_NOSIGPIPE, (const void *)&set, sizeof(set));
+#else
+    (void)sock;
+#endif
+}
+
+#define CONNECT_TIMEOUT_SECONDS 5
+
+static int set_socket_nonblocking(socket_t sock, int nonblocking)
+{
+#ifdef OS_WIN
+    u_long mode = nonblocking ? 1 : 0;
+    return ioctlsocket(sock, FIONBIO, &mode) == 0 ? 0 : -1;
+#else
+    int flags = fcntl(sock, F_GETFL, 0);
+    if (flags < 0)
+        return -1;
+    flags = nonblocking ? (flags | O_NONBLOCK) : (flags & ~O_NONBLOCK);
+    return fcntl(sock, F_SETFL, flags) == 0 ? 0 : -1;
+#endif
+}
+
+
+/* Tente une connexion avec un delai maximum (en secondes). Sans ca,
+ * un connect() peut rester bloque tres longtemps (timeout TCP systeme,
+ * potentiellement plus d'une minute) si le paquet SYN est filtre
+ * silencieusement par un pare-feu ou par une permission systeme
+ * (observe notamment avec la permission "Reseau local" sur macOS).
+ * Retourne 0 si connecte, -1 sinon (timeout, refus, ou autre erreur). */
+static int connect_with_timeout(socket_t sock, const struct sockaddr *addr,
+                                 int addr_len, int timeout_sec)
+{
+    int ret;
+
+    if (set_socket_nonblocking(sock, 1) != 0)
+        return connect(sock, addr, addr_len); /* repli : connexion bloquante classique */
+
+    ret = connect(sock, addr, addr_len);
+    if (ret == 0) {
+        set_socket_nonblocking(sock, 0);
+        return 0; /* connexion immediate (ex: localhost) */
+    }
+
+#ifdef OS_WIN
+    if (WSAGetLastError() != WSAEWOULDBLOCK) {
+        set_socket_nonblocking(sock, 0);
+        return -1;
+    }
+#else
+    if (errno != EINPROGRESS) {
+        set_socket_nonblocking(sock, 0);
+        return -1;
+    }
+#endif
+
+    {
+        fd_set write_fds;
+        struct timeval tv;
+        int sel;
+
+        FD_ZERO(&write_fds);
+        FD_SET(sock, &write_fds);
+        tv.tv_sec = timeout_sec;
+        tv.tv_usec = 0;
+
+        sel = select((int)sock + 1, NULL, &write_fds, NULL, &tv);
+        if (sel <= 0) {
+            /* timeout (sel == 0) ou erreur select() : on abandonne */
+            set_socket_nonblocking(sock, 0);
+            return -1;
+        }
+    }
+
+    /* Le socket est pret en ecriture : encore faut-il verifier que la
+       connexion a reellement reussi (et pas juste ete refusee) */
+    {
+        int so_error = 0;
+#ifdef OS_WIN
+        int len = sizeof(so_error);
+#else
+        socklen_t len = sizeof(so_error);
+#endif
+        if (getsockopt(sock, SOL_SOCKET, SO_ERROR, (char *)&so_error, &len) != 0
+            || so_error != 0) {
+            set_socket_nonblocking(sock, 0);
+            return -1;
+        }
+    }
+
+    set_socket_nonblocking(sock, 0);
+    return 0;
+}
+
+
+static int socket_send_all(socket_t sock, const unsigned char *data, unsigned int len)
+{
+    unsigned int sent_total = 0;
+    while (sent_total < len) {
+        int sent = send(sock, (const char *)data + sent_total, (int)(len - sent_total), SEND_FLAGS);
+        if (sent == SOCKET_ERROR || sent <= 0)
+            return -1;
+        sent_total += (unsigned int)sent;
+    }
+    return 0;
+}
+
+int tcp_send_receive(const char *host, unsigned short port,
+                      const unsigned char *send_data, unsigned int send_len,
+                      unsigned char **recv_data, unsigned int *recv_len)
+{
+    struct addrinfo hints, *result = NULL, *rp;
+    char port_str[16];
+    socket_t sock = INVALID_SOCKET;
+    unsigned char *buffer = NULL;
+    unsigned int capacity = 0;
+    unsigned int total_received = 0;
+    int ret; 
+    
+    if (!host || !recv_data || !recv_len)
+        return -1;
+        
+    *recv_data = NULL;
+    *recv_len = 0;
+
+    if (platform_init() != 0)
+        return -1;
+
+    snprintf(port_str, sizeof(port_str), "%u", (unsigned int)port);
+        
+    memset(&hints, 0, sizeof(hints));
+    hints.ai_family = AF_UNSPEC;      /* IPv4 ou IPv6, peu importe */
+    hints.ai_socktype = SOCK_STREAM;
+            
+    ret = getaddrinfo(host, port_str, &hints, &result);
+    if (ret != 0) {
+        fprintf(stderr, "Erreur getaddrinfo(%s:%u) : %d\n", host, port, ret);
+        platform_cleanup();
+        return -1;
+    }       
+     
+    /* On essaie chaque adresse resolue jusqu'a ce qu'une connexion reussisse */
+    for (rp = result; rp != NULL; rp = rp->ai_next) {
+        sock = socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);
+        if (sock == INVALID_SOCKET)
+            continue;
+        
+        //if (connect(sock, rp->ai_addr, (int)rp->ai_addrlen) == 0)
+	if (connect_with_timeout(sock, rp->ai_addr, (int)rp->ai_addrlen, CONNECT_TIMEOUT_SECONDS) == 0) {
+            disable_sigpipe_on_socket(sock);
+            break; /* connexion reussie */
+        }
+            
+        CLOSESOCKET(sock);
+        sock = INVALID_SOCKET;
+    }       
+            
+    freeaddrinfo(result);
+            
+    if (sock == INVALID_SOCKET) {
+        fprintf(stderr, "Impossible de se connecter a %s:%u (%d)\n",
+                host, port, last_error());
+        platform_cleanup();
+        return -1;
+    }
+
+    /* Envoi des donnees */
+    if (send_len > 0 && socket_send_all(sock, send_data, send_len) != 0) {
+        fprintf(stderr, "Erreur send() (%d)\n", last_error());
+        CLOSESOCKET(sock);
+        platform_cleanup();
+        return -1;
+    }
+
+    /* Reception de la reponse : on lit jusqu'a fermeture par le serveur */
+    capacity = RECV_CHUNK_SIZE;
+    buffer = (unsigned char *)MemMalloc(capacity);
+    if (!buffer) {
+        fprintf(stderr, "Erreur allocation memoire\n");
+        CLOSESOCKET(sock);
+        platform_cleanup();
+        return -1;
+    }
+
+    for (;;) {
+        int received;
+
+        if (total_received + RECV_CHUNK_SIZE > capacity) {
+            unsigned char *tmp;
+            capacity *= 2;
+            tmp = (unsigned char *)MemRealloc(buffer, capacity);
+            if (!tmp) {
+                fprintf(stderr, "Erreur reallocation memoire\n");
+                MemFree(buffer);
+                CLOSESOCKET(sock);
+                platform_cleanup();
+                return -1;
+            }
+            buffer = tmp;
+        }
+
+        received = recv(sock, (char *)buffer + total_received,
+                         (int)(capacity - total_received), 0);
+
+        if (received > 0) {
+            total_received += (unsigned int)received;
+        } else if (received == 0) {
+            break; /* le serveur a ferme la connexion : fin normale */
+        } else {
+            fprintf(stderr, "Erreur recv() (%d)\n", last_error());
+            MemFree(buffer);
+            CLOSESOCKET(sock);
+            platform_cleanup();
+            return -1;
+        }
+    }
+
+    CLOSESOCKET(sock);
+    platform_cleanup();
+
+    *recv_data = buffer;
+    *recv_len = total_received;
+    return 0;
+}
+#endif  // NO_WEB_API
+
+
 #undef __FILENAME__

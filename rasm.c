@@ -17447,26 +17447,26 @@ void __API_SEND(struct s_assenv *ae) {
 
 	if (!ae->wl[ae->idx].t) {
 		ae->idx++;
-		zecommand=ae->wl[ae->idx].w;
-		if (strcmp(zecommand,"RAW")==0) {
+		zecommand=(unsigned char *)ae->wl[ae->idx].w;
+		if (strcmp((char *)zecommand,"RAW")==0) {
 			// raw send, just parse everything else to build a message
 			message=MemMalloc(1);
 			message[0]=0;
 			while (!ae->wl[ae->idx].t) {
 				ae->idx++;
 				message_size+=strlen(ae->wl[ae->idx].w);
-				strcat(message,ae->wl[ae->idx].w);
+				strcat((char *)message,ae->wl[ae->idx].w);
 			}
 			if (!message[0]) {
 				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Empty message for raw API_SEND\n");
 				return;
 			}
-			if (tcp_send_receive(ae->web_host, ae->web_port, (const unsigned char *)message, (unsigned int)strlen(message), &response, &response_len) != 0) {
+			if (tcp_send_receive(ae->web_host, ae->web_port, (const unsigned char *)message, (unsigned int)strlen((char *)message), &response, &response_len) != 0) {
 				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"communication failed on %s:%u\n", ae->web_host, ae->web_port);
 			} else {
 				// display answer or not?
 			}
-		} else if (strcmp(zecommand,"SEND_DATA")==0) {
+		} else if (strcmp((char *)zecommand,"SEND_DATA")==0) {
 			// send_data,start,size,ram/extram<n>/rom<n>[,destination_address]
 			// ram => 64k
 			// extram<n> => <n> 64k page (ram == extram0)
@@ -17484,7 +17484,7 @@ void __API_SEND(struct s_assenv *ae) {
 		return;
 	}
 
-	if (tcp_send_receive(ae->web_host, ae->web_port, (const unsigned char *)message, (unsigned int)strlen(message), &response, &response_len) != 0) {
+	if (tcp_send_receive(ae->web_host, ae->web_port, (const unsigned char *)message, (unsigned int)strlen((char *)message), &response, &response_len) != 0) {
 		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"communication failed on %s:%u\n", ae->web_host, ae->web_port);
 	} else {
 		// display answer or not?
@@ -34666,11 +34666,11 @@ int ParseOptions(char **argv,int argc, struct s_parameter *param)
 		MAX_OFFSET_ZX0=2176;
 	} else if (strcmp(argv[i],"-web_host")==0) {
 		if (i+1<argc) {
-			param->web_host=argv[++i][0];
+			param->web_host=argv[++i];
 		} else Usage(1);
 	} else if (strcmp(argv[i],"-web_port")==0) {
 		if (i+1<argc) {
-			param->web_port=atoi(argv[++i][0]);
+			param->web_port=atoi(argv[++i]);
 		} else Usage(1);
 	} else if (strcmp(argv[i],"-msep")==0) {
 		if (i+1<argc) {
