@@ -1626,7 +1626,7 @@ int tcp_send_receive(const char *host, unsigned short port,
             
     ret = getaddrinfo(host, port_str, &hints, &result);
     if (ret != 0) {
-        fprintf(stderr, "Erreur getaddrinfo(%s:%u) : %d\n", host, port, ret);
+        printf(KERROR"Erreur getaddrinfo(%s:%u) : %d\n"KNORMAL, host, port, ret);
         platform_cleanup();
         return -1;
     }       
@@ -1650,7 +1650,7 @@ int tcp_send_receive(const char *host, unsigned short port,
     freeaddrinfo(result);
             
     if (sock == INVALID_SOCKET) {
-        fprintf(stderr, "Impossible de se connecter a %s:%u (%d)\n",
+        printf(KERROR,"Impossible de se connecter a %s:%u (%d)\n"KNORMAL,
                 host, port, last_error());
         platform_cleanup();
         return -1;
@@ -1658,7 +1658,7 @@ int tcp_send_receive(const char *host, unsigned short port,
 
     /* Envoi des donnees */
     if (send_len > 0 && socket_send_all(sock, send_data, send_len) != 0) {
-        fprintf(stderr, "Erreur send() (%d)\n", last_error());
+        printf(KERROR"Erreur send() (%d)\n"KNORMAL, last_error());
         CLOSESOCKET(sock);
         platform_cleanup();
         return -1;
@@ -1668,7 +1668,7 @@ int tcp_send_receive(const char *host, unsigned short port,
     capacity = RECV_CHUNK_SIZE;
     buffer = (unsigned char *)MemMalloc(capacity);
     if (!buffer) {
-        fprintf(stderr, "Erreur allocation memoire\n");
+        printf(KERROR"Erreur allocation memoire\n"KNORMAL);
         CLOSESOCKET(sock);
         platform_cleanup();
         return -1;
@@ -1699,7 +1699,7 @@ int tcp_send_receive(const char *host, unsigned short port,
         } else if (received == 0) {
             break; /* le serveur a ferme la connexion : fin normale */
         } else {
-            fprintf(stderr, "Erreur recv() (%d)\n", last_error());
+            printf(KERROR"Erreur recv() (%d)\n"KNORMAL, last_error());
             MemFree(buffer);
             CLOSESOCKET(sock);
             platform_cleanup();

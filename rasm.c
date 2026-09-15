@@ -71,6 +71,56 @@ cc rasm.c -O2 -lm -march=native -o rasm
 #ifdef _WIN64
 #define OS_WIN 1
 #endif
+#ifndef OS_WIN
+#define KNORMAL  "\x1B[0m"
+#define KERROR   "\x1B[31m"
+#define KAYGREEN "\x1B[32m"
+#define KWARNING "\x1B[33m"
+#define KVERBOSE "\x1B[36m"
+#define KIO      "\x1B[97m"
+
+#define KBOLD      "\e[1m"
+#define KUNDERLINE "\e[4m"
+#define KRED      "\x1B[31m"
+#define KGREEN    "\x1B[32m"
+#define KYELLOW   "\x1B[33m"
+#define KBLUE     "\x1B[34m"
+#define KMAGENTA  "\x1B[35m"
+#define KCYAN     "\x1B[36m"
+#define KLRED     "\x1B[91m"
+#define KLGREEN   "\x1B[92m"
+#define KLYELLOW  "\x1B[93m"
+#define KLORANGE  "\x1B[38;5;202m"
+#define KLBLUE    "\x1B[94m"
+#define KLMAGENTA "\x1B[95m"
+#define KLCYAN    "\x1B[96m"
+#define KLWHITE   "\x1B[97m"
+
+#else
+#define KNORMAL  ""
+#define KERROR   "Error: "
+#define KAYGREEN ""
+#define KWARNING "Warning: "
+#define KBLUE    ""
+#define KVERBOSE ""
+#define KIO      ""
+#define KBOLD      ""
+#define KUNDERLINE ""
+#define KRED      ""
+#define KGREEN    ""
+#define KYELLOW   ""
+#define KBLUE     ""
+#define KMAGENTA  ""
+#define KCYAN     ""
+#define KLRED     ""
+#define KLGREEN   ""
+#define KLYELLOW  ""
+#define KLORANGE  ""
+#define KLBLUE    ""
+#define KLMAGENTA ""
+#define KLCYAN    ""
+#define KLWHITE   ""
+#endif
 
 #ifndef RDD
 	/* public lib */
@@ -192,57 +242,6 @@ unsigned long __stack = 128 * 1024;
 
 #undef __FILENAME__
 #define __FILENAME__ "rasm.c"
-
-#ifndef OS_WIN
-#define KNORMAL  "\x1B[0m"
-#define KERROR   "\x1B[31m"
-#define KAYGREEN "\x1B[32m"
-#define KWARNING "\x1B[33m"
-#define KVERBOSE "\x1B[36m"
-#define KIO      "\x1B[97m"
-
-#define KBOLD      "\e[1m"
-#define KUNDERLINE "\e[4m"
-#define KRED      "\x1B[31m"
-#define KGREEN    "\x1B[32m"
-#define KYELLOW   "\x1B[33m"
-#define KBLUE     "\x1B[34m"
-#define KMAGENTA  "\x1B[35m"
-#define KCYAN     "\x1B[36m"
-#define KLRED     "\x1B[91m"
-#define KLGREEN   "\x1B[92m"
-#define KLYELLOW  "\x1B[93m"
-#define KLORANGE  "\x1B[38;5;202m"
-#define KLBLUE    "\x1B[94m"
-#define KLMAGENTA "\x1B[95m"
-#define KLCYAN    "\x1B[96m"
-#define KLWHITE   "\x1B[97m"
-
-#else
-#define KNORMAL  ""
-#define KERROR   "Error: "
-#define KAYGREEN ""
-#define KWARNING "Warning: "
-#define KBLUE    ""
-#define KVERBOSE ""
-#define KIO      ""
-#define KBOLD      ""
-#define KUNDERLINE ""
-#define KRED      ""
-#define KGREEN    ""
-#define KYELLOW   ""
-#define KBLUE     ""
-#define KMAGENTA  ""
-#define KCYAN     ""
-#define KLRED     ""
-#define KLGREEN   ""
-#define KLYELLOW  ""
-#define KLORANGE  ""
-#define KLBLUE    ""
-#define KLMAGENTA ""
-#define KLCYAN    ""
-#define KLWHITE   ""
-#endif
 
 /*******************************************************************
          c o m m a n d    l i n e    p a r a m e t e r s 
