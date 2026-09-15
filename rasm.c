@@ -17455,14 +17455,27 @@ void __API_SEND(struct s_assenv *ae) {
 			while (!ae->wl[ae->idx].t) {
 				ae->idx++;
 				message_size+=strlen(ae->wl[ae->idx].w);
-				strcat((char *)message,ae->wl[ae->idx].w);
+				message=MemRealloc(message,message_size);
+				if (StringIsQuote(ae->wl[ae->idx].w)) {
+					strcat((char *)message,ae->wl[ae->idx].w+1); // remove start quote
+					message[strlen(message)-1]=0; // remove end quote
+				} else {
+					strcat((char *)message,ae->wl[ae->idx].w);
+				}
 			}
+
 			if (!message[0]) {
 				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Empty message for raw API_SEND\n");
 				return;
 			}
 			if (tcp_send_receive(ae->web_host, ae->web_port, (const unsigned char *)message, (unsigned int)strlen((char *)message), &response, &response_len) != 0) {
-				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"communication failed on %s:%u\n", ae->web_host, ae->web_port);
+				if (!ae->nowarning) {
+					static int first=1;
+					// no need to warn each time as the host/port wont change
+					if (first) rasm_printf(ae,KWARNING"[%s:%d] Warning: communication failed on %s:%u\n",GetCurrentFile(ae),ae->wl[ae->idx].l,ae->web_host, ae->web_port);
+					first=0;
+					if (ae->erronwarn) MaxError(ae);
+				}
 			} else {
 				// display answer or not?
 			}
@@ -17482,12 +17495,6 @@ void __API_SEND(struct s_assenv *ae) {
 	} else {
 		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"API_SEND <command>[,<parameters>] take a look at the documentation\n");
 		return;
-	}
-
-	if (tcp_send_receive(ae->web_host, ae->web_port, (const unsigned char *)message, (unsigned int)strlen((char *)message), &response, &response_len) != 0) {
-		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"communication failed on %s:%u\n", ae->web_host, ae->web_port);
-	} else {
-		// display answer or not?
 	}
 
 }
@@ -23924,6 +23931,9 @@ void __TIMESTAMP(struct s_assenv *ae) {
 }
 
 struct s_asm_keyword instruction[]={
+#ifndef NO_WEB_API
+{"API_SEND",0,0,__API_SEND},
+#endif
 {"LD",0,0,_LD},
 {"DEC",0,0,_DEC},
 {"INC",0,0,_INC},
