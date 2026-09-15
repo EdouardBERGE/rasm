@@ -446,7 +446,7 @@ char *base64_encode(const unsigned char *input, int input_len, int *out_len)
      * Protection contre un dépassement de int puisque l'API
      * retourne la taille via int.
      */
-    if (encoded_len > (size_t)INT_MAX)
+    if (encoded_len > 0x7f000000)
         return NULL;
 
     char *output = MemMalloc(encoded_len + 1u);

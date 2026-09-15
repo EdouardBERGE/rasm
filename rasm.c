@@ -793,6 +793,8 @@ struct s_api_send {
 	int ibank;
 	int ptr;
 	int iw;
+	char *host;
+	int port;
 };
 
 /********************
@@ -1422,6 +1424,7 @@ struct s_assenv {
 	unsigned short int web_port;
 	struct s_api_send *api_send;
 	int iapi_send,mapi_send;
+	int firstApiWarn;
 };
 
 /*************************************
@@ -3245,7 +3248,10 @@ void FreeAssenv(struct s_assenv *ae)
 	}
 	MemFree(ae->mem);
 
-	if (ae->mapi_send) MemFree(ae->api_send); // WEB_API
+	if (ae->mapi_send) {
+		for (i=0;i<ae->iapi_send;i++) MemFree(ae->api_send[i].host);
+		MemFree(ae->api_send); // WEB_API
+	}
 
 	/* expression core buffer free */
 	ComputeExpressionCore(NULL,NULL,0,0);
@@ -17439,64 +17445,169 @@ void PopAllEDSK(struct s_assenv *ae) {
 #ifndef NO_WEB_API
 void __API_SEND(struct s_assenv *ae) {
 	struct s_api_send curapi_send={0};
-	unsigned char *response = NULL;
-	unsigned int response_len = 0;
-	unsigned char *message=NULL;
-	unsigned char *zecommand=NULL;
-	unsigned int message_size=1;
 
-	if (!ae->wl[ae->idx].t) {
-		ae->idx++;
-		zecommand=(unsigned char *)ae->wl[ae->idx].w;
-		if (strcmp((char *)zecommand,"RAW")==0) {
-			// raw send, just parse everything else to build a message
-			message=MemMalloc(1);
-			message[0]=0;
-			while (!ae->wl[ae->idx].t) {
-				ae->idx++;
-				message_size+=strlen(ae->wl[ae->idx].w);
-				message=MemRealloc(message,message_size);
-				if (StringIsQuote(ae->wl[ae->idx].w)) {
-					strcat((char *)message,ae->wl[ae->idx].w+1); // remove start quote
-					message[strlen(message)-1]=0; // remove end quote
-				} else {
-					strcat((char *)message,ae->wl[ae->idx].w);
-				}
-			}
-
-			if (!message[0]) {
-				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Empty message for raw API_SEND\n");
-				return;
-			}
-			if (tcp_send_receive(ae->web_host, ae->web_port, (const unsigned char *)message, (unsigned int)strlen((char *)message), &response, &response_len) != 0) {
-				if (!ae->nowarning) {
-					static int first=1;
-					// no need to warn each time as the host/port wont change
-					if (first) rasm_printf(ae,KWARNING"[%s:%d] Warning: communication failed on %s:%u\n",GetCurrentFile(ae),ae->wl[ae->idx].l,ae->web_host, ae->web_port);
-					first=0;
-					if (ae->erronwarn) MaxError(ae);
-				}
-			} else {
-				// display answer or not?
-			}
-		} else if (strcmp((char *)zecommand,"SEND_DATA")==0) {
-			// send_data,start,size,ram/extram<n>/rom<n>[,destination_address]
-			// ram => 64k
-			// extram<n> => <n> 64k page (ram == extram0)
-			// rom<n> => <n> rom (from 0 to 16383 max)
-			// optional destination_address if not the same as start
-
-			// in fact push everything else like SAVE directive to be processed after compilation
-			curapi_send.iw=ae->idx; // command index
-			curapi_send.ptr=ae->outputadr; // logical address
-			curapi_send.ibank=ae->activebank; // current bank
-			ObjectArrayAddDynamicValueConcat((void**)&ae->api_send,&ae->iapi_send,&ae->mapi_send,&curapi_send,sizeof(curapi_send));
-		}
+	if (!ae->wl[ae->idx].t && !ae->wl[ae->idx+1].t) {
+		// in fact push everything else like SAVE directive to be processed after compilation
+		curapi_send.host=TxtStrDup(ae->web_host); // duplicate setting
+		curapi_send.port=ae->web_port; // duplicate setting
+		curapi_send.iw=ae->idx; // command index
+		curapi_send.ptr=ae->outputadr; // logical address
+		curapi_send.ibank=ae->activebank; // current bank
+		ObjectArrayAddDynamicValueConcat((void**)&ae->api_send,&ae->iapi_send,&ae->mapi_send,&curapi_send,sizeof(curapi_send));
+		ae->idx+=2;
 	} else {
-		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"API_SEND <command>[,<parameters>] take a look at the documentation\n");
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"API_SEND <keyword>,<parameter>[,<keyword>,<parameter>] take a look at the documentation\n");
 		return;
 	}
+}
 
+
+int apiCheckBounds(struct s_assenv *ae, int iapi, int offset, int size) {
+	int savelimit=ae->memsize[ae->api_send[iapi].ibank];
+
+	if (size<1 || size>savelimit) {
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"API_SEND invalid size\n");
+		return 0;
+	}
+	if (offset<0 || offset>savelimit-1) {
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"API_SEND invalid offset\n");
+		return 0;
+	}
+	if (offset+size>savelimit) {
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"API_SEND offset+size are out of bounds\n");
+		return 0;
+	}
+	return 1;
+}
+
+void PopAllAPI(struct s_assenv *ae) {
+	unsigned char *response = NULL;
+	unsigned int response_len = 0;
+	unsigned int message_size=1;
+	unsigned char *message=NULL;
+	int iapi,backidx;
+	int v, offset, size;
+	char *web_host=NULL;
+
+	web_host=TxtStrDup(ae->web_host);
+
+	backidx=ae->idx;
+	for (iapi=0;iapi<ae->iapi_send;iapi++) {
+		int isdata=0;
+
+		message=MemMalloc(1);
+		message[0]=0;
+		ae->idx=ae->api_send[iapi].iw; // hack idx
+		do {
+			ae->idx++;
+			// look for a keyword + at least one param
+			if (ae->wl[ae->idx].t) {
+				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"API_SEND <keyword> is expecting a parameter\n");
+				break;
+			} else {
+				if (strcmp(ae->wl[ae->idx].w,"TXT")==0) {
+					if (isdata) {
+						MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"API_SEND cannot mix TEXT and binary DATA\n");
+						break;
+					}
+					ae->idx++;
+					if (StringIsQuote(ae->wl[ae->idx].w)) {
+						message_size+=strlen(ae->wl[ae->idx].w);
+						message=MemRealloc(message,message_size);
+						strcat((char *)message,ae->wl[ae->idx].w+1); // remove start quote
+						message[strlen((char *)message)-1]=0; // remove end quote
+					} else {
+						// variable or calculation
+						char itext[64];
+						v=RoundComputeExpressionCore(ae,ae->wl[ae->idx].w,ae->api_send[iapi].ptr,0);
+						sprintf(itext,"%d",v);
+						message_size+=strlen(itext);
+						message=MemRealloc(message,message_size);
+						strcat((char *)message,itext);
+					}
+				} else if (strcmp(ae->wl[ae->idx].w,"B64")==0) {
+					if (isdata) {
+						MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"API_SEND cannot mix text BASE64 and binary DATA\n");
+						break;
+					}
+					// parameters ptr+size
+					if (!ae->wl[ae->idx+1].t) {
+						unsigned char *base64msg;
+						int outputlen;
+						offset=RoundComputeExpressionCore(ae,ae->wl[ae->idx+1].w,ae->api_send[iapi].ptr,0);
+						size=RoundComputeExpressionCore(ae,ae->wl[ae->idx+2].w,ae->api_send[iapi].ptr,0);
+						if (apiCheckBounds(ae,iapi,offset,size)) {
+							base64msg=(unsigned char *)base64_encode(ae->mem[ae->api_send[iapi].ibank]+offset,size,&outputlen);
+							if (base64msg && outputlen) {
+								message_size+=strlen((char *)base64msg);
+								message=MemRealloc(message,message_size);
+								strcat((char *)message,(char *)base64msg);
+							} else {
+								MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"API_SEND BASE64 internal error, please report\n");
+								break;
+							}
+						} else break;
+					} else {
+						MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"API_SEND BASE64 is expecting 2 parameters\n");
+						break;
+					}
+				} else if (strcmp(ae->wl[ae->idx].w,"DATA")==0) {
+					isdata=1;
+					// parameters ptr+size
+					if (!ae->wl[ae->idx+1].t) {
+						unsigned char *base64msg;
+						int outputlen;
+						offset=RoundComputeExpressionCore(ae,ae->wl[ae->idx+1].w,ae->api_send[iapi].ptr,0);
+						size=RoundComputeExpressionCore(ae,ae->wl[ae->idx+2].w,ae->api_send[iapi].ptr,0);
+						if (apiCheckBounds(ae,iapi,offset,size)) {
+							message=MemRealloc(message,message_size-1+size);
+							memcpy(message+message_size-1,ae->mem[ae->api_send[iapi].ibank]+offset,size);
+							message_size+=size;
+						} else break;
+					} else {
+						MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"API_SEND DATA is expecting 2 parameters\n");
+						break;
+					}
+				} else if (strcmp(ae->wl[ae->idx].w,"HOST")==0) {
+					// change socket host
+					ae->idx++;
+					if (StringIsQuote(ae->wl[ae->idx].w)) {
+						MemFree(web_host);
+						web_host=MemMalloc(strlen(ae->wl[ae->idx].w));
+						strcpy(web_host,ae->wl[ae->idx].w+1);
+						web_host[strlen(web_host)-1]=0;
+					} else {
+						MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is API_SEND HOST,'hostName'\n");
+					}
+					ae->idx+=2;
+				} else if (strcmp(ae->wl[ae->idx].w,"PORT")==0) {
+					// change socket port
+					ae->idx++;
+					ae->web_port=RoundComputeExpressionCore(ae,ae->wl[ae->idx].w,ae->api_send[iapi].ptr,0);
+				} else {
+					MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"API_SEND unknown keyword [%s]\n",ae->wl[ae->idx].w);
+					break;
+				}
+			}
+		} while (!ae->wl[ae->idx].t);
+
+		// data is realsize, text size is strlen
+		if (isdata) message_size--; else message_size=strlen((char *)message);
+
+		if (tcp_send_receive(web_host, ae->web_port, (const unsigned char *)message, message_size, &response, &response_len) != 0) {
+			if (!ae->nowarning) {
+				// no need to warn each time as the host/port wont change
+				if (!ae->firstApiWarn) rasm_printf(ae,KWARNING"[%s:%d] Warning: communication failed on %s:%u\n",GetCurrentFile(ae),ae->wl[ae->idx].l,ae->web_host, ae->web_port);
+				ae->firstApiWarn=1;
+				if (ae->erronwarn) MaxError(ae);
+			}
+		} else {
+			// display answer or not?
+		}
+		MemFree(message);
+	}
+	ae->idx=backidx;
+	MemFree(web_host);
 }
 
 #endif // NO_WEB_API
@@ -25515,6 +25626,13 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 		}
 
 	}
+
+	/*******************************************************************************
+	      d e l a y e d      w e b   a p i    c a l l s
+	*******************************************************************************/
+#ifndef NO_WEB_API
+	PopAllAPI(ae);
+#endif
 
 	/*******************************************************************************
 	      d e l a y e d      p r i n t s   &   c o m m e n t s
