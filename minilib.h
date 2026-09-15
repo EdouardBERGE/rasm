@@ -1650,7 +1650,7 @@ int tcp_send_receive(const char *host, unsigned short port,
     freeaddrinfo(result);
             
     if (sock == INVALID_SOCKET) {
-        printf(KERROR,"Impossible de se connecter a %s:%u (%d)\n"KNORMAL,
+        printf(KERROR"Impossible de se connecter a %s:%u (%d)\n"KNORMAL,
                 host, port, last_error());
         platform_cleanup();
         return -1;
