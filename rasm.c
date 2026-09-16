@@ -17488,7 +17488,7 @@ void PopAllAPI(struct s_assenv *ae) {
 	int v, offset, size;
 	char *web_host=NULL;
 
-	web_host=TxtStrDup(ae->web_host);
+	if (ae->web_host) web_host=TxtStrDup(ae->web_host);
 
 	backidx=ae->idx;
 	for (iapi=0;iapi<ae->iapi_send;iapi++) {
@@ -17630,7 +17630,7 @@ void PopAllAPI(struct s_assenv *ae) {
 		MemFree(message);
 	}
 	ae->idx=backidx;
-	MemFree(web_host);
+	if (web_host) MemFree(web_host);
 }
 
 #endif // NO_WEB_API
@@ -29327,6 +29327,7 @@ int RasmAssembleInfoParam(const char *datain, int lenin, unsigned char **dataout
 
 	if (datain==NULL && lenin==0) return cpt; else cpt++;
 
+	if (!param->web_host) param->web_host="127.0.0.1";
 	ae=PreProcessing(NULL,1,datain,lenin,param);
 	ret=Assemble(ae,dataout,lenout,debug);
 	return ret;
@@ -31364,8 +31365,20 @@ struct s_autotest_keyword autotest_keyword[]={
 	 *
 	 *
 	 *
-	{"",},
-	{"",},{"",},{"",},
+
+	{"api_send host,'127.0.0.1',port,8080,txt,'{ \"cmd\":\"sendBytes\",\"bytes\":[',txtdata,bite,10,txt,'],\"versionLone\":\"',BASE64,bite,10,txt,'\" }' :bite:defb 'roudoudou',0 ",0}, // regular usage
+	{"api_send : nop ",1},
+	{"api_send 0 : nop ",1},
+	{"api_send 0,1 : nop ",1},
+	{"api_send host : nop ",1},
+	{"api_send port : nop ",1},
+	{"api_send port,'0' : nop ",1},
+	{"api_send base64 : nop ",1},
+	{"api_send bytes : nop ",1},
+	{"api_send txtdata : nop ",1},
+	{"api_send txt : nop ",1},
+	{"api_send txtdata,0 : nop ",1},
+	{"",},{"",},
 	{"",},{"",},{"",},{"",},{"",},
 	{"",},{"",},{"",},{"",},{"",},{"",},
 	{"",},{"",},{"",},{"",},{"",},{"",},{"",},{"",},{"",},{"",},{"",},{"",},

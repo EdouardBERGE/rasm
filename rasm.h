@@ -1,13 +1,13 @@
 #define PROGRAM_NAME      "RASM"
-#define PROGRAM_VERSION   "3.2"
-#define PROGRAM_SUBVERSION   ".7"
-#define PROGRAM_VERSION_FLOAT   "3.27"
-#define PROGRAM_DATE      "16/08/2026"
+#define PROGRAM_VERSION   "3.3"
+#define PROGRAM_SUBVERSION   ".0"
+#define PROGRAM_VERSION_FLOAT   "3.3"
+#define PROGRAM_DATE      "16/09/2026"
 #define PROGRAM_COPYRIGHT "© 2017 BERGE Edouard / roudoudou from Praline"
 #ifndef SUPERFAST
-#define RELEASE_NAME      "Atlas"
+#define RELEASE_NAME      "Monolith"
 #else
-#define RELEASE_NAME      "Atlas Superfast"
+#define RELEASE_NAME      "Monolith Superfast"
 #endif
 
 #define RASM_VERSION PROGRAM_NAME" v"PROGRAM_VERSION""PROGRAM_SUBVERSION" (build "PROGRAM_DATE")"
