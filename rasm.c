@@ -2793,7 +2793,8 @@ void MakeError(struct s_assenv *ae, const int idx, const char *filename, const i
 		myalloc=vsnprintf(toosmalltotakeitall,1,format,argptr);
 		va_end(argptr);
 
-		#if defined(_MSC_VER) && _MSC_VER < 1900
+		//#if defined(_MSC_VER) && _MSC_VER < 1900
+		#ifdef OS_WIN
 		/* visual studio before 2015 does not fully support C99 */
 		if (myalloc<1 && strlen(format)) {
 			va_start(argptr,format);
@@ -10857,7 +10858,7 @@ unsigned char *EncodeSnapshotRLE(unsigned char *memin, int *lenout, const int si
 #undef FUNC
 #define FUNC "Instruction CORE"
 						
-#define EnforceNoAddressingMode(zidx) if (StringIsMem(ae->wl[zidx].w)) MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Ambiguous and potentially erroneous mnemonic entry. Expecting immediate value instead of immediate addressing value\n");
+#define EnforceNoAddressingMode(zidx) if (StringIsMem(ae->wl[zidx].w)) {MakeError(ae,zidx,GetCurrentFile(ae),ae->wl[zidx].l,"Ambiguous and potentially erroneous mnemonic entry. Expecting immediate value instead of immediate addressing value\n");}
 
 void _IN(struct s_assenv *ae) {
 	if (!ae->wl[ae->idx].t && !ae->wl[ae->idx+1].t && ae->wl[ae->idx+2].t==1) {
@@ -27181,23 +27182,24 @@ printf("lab[%s]\n",ae->label[i].name);
 				}
 			}
 		}
-		/*********************************
-		**********************************
-			DEBUG INFO
-		**********************************
-		*********************************/
-		if (ae->retdebug) {
-			if (ae->rundefined) {
-				ae->debug.run=ae->snapshot.registers.LPC+(ae->snapshot.registers.HPC<<8);
-			} else {
-				ae->debug.run=-1;
-			}
-			ae->debug.start=minmem;
-		}
-		ae->debug.warnerr=ae->nberr;
 	} else {
 		if (!ae->dependencies) rasm_printf(ae,KERROR"%d error%s\n",ae->nberr,ae->nberr>1?"s":"");
 	}
+
+	/*********************************
+	**********************************
+		DEBUG INFO
+	**********************************
+	*********************************/
+	if (ae->retdebug) {
+		if (ae->rundefined) {
+			ae->debug.run=ae->snapshot.registers.LPC+(ae->snapshot.registers.HPC<<8);
+		} else {
+			ae->debug.run=-1;
+		}
+		ae->debug.start=minmem;
+	}
+	ae->debug.warnerr=ae->nberr;
 /*******************************************************************************************
                         E X P O R T     D E P E N D E N C I E S
 *******************************************************************************************/
@@ -32418,7 +32420,7 @@ printf("testing alias case reconstruction + memory leak regression\n");
 	memset(&param,0,sizeof(struct s_parameter));
 	param.erronwarn=1;
 	ret=RasmAssembleInfoParam(AUTOTEST_ADDRLD,strlen(AUTOTEST_ADDRLD),&opcode,&opcodelen,&debug,&param);
-	if (ret && debug->nberror==6) {} else {printf("Autotest %03d ERROR (addressing mode checking)\n",cpt);exit(-1);}
+	if (ret && debug->nberror==6) {} else {printf("Autotest %03d ERROR (addressing mode checking ret=%d nberr=%d)\n",cpt,ret,debug->nberror);exit(-1);}
 	RasmFreeInfoStruct(debug);
 printf("Testing addressing mode control for LD OK\n");
 	
