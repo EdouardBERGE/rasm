@@ -17558,6 +17558,7 @@ void PopAllAPI(struct s_assenv *ae) {
 						break;
 					}
 					if (!ae->wl[ae->idx+1].t) {
+						int i;
 						offset=RoundComputeExpressionCore(ae,ae->wl[ae->idx+1].w,ae->api_send[iapi].ptr,0);
 						size=RoundComputeExpressionCore(ae,ae->wl[ae->idx+2].w,ae->api_send[iapi].ptr,0);
 						ae->idx+=2;
@@ -17566,7 +17567,7 @@ void PopAllAPI(struct s_assenv *ae) {
 							message=MemRealloc(message,message_size);
 							
 							sprintf((char *)message+strlen((char *)message),"%d",ae->mem[ae->api_send[iapi].ibank][offset]);
-							for (int i=1;i<size;i++) {
+							for (i=1;i<size;i++) {
 								sprintf((char *)message+strlen((char *)message),",%d",ae->mem[ae->api_send[iapi].ibank][offset+i]);
 							}
 						} else break;

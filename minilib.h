@@ -419,19 +419,30 @@ static int base64_decode_table[256];
 static int base64_initialized = 0;
 static void base64_init(void)
 {
+	int i;
     if (base64_initialized)
         return;
 
-    for (int i = 0; i < 256; i++)
+    for (i = 0; i < 256; i++)
         base64_decode_table[i] = -1;
 
-    for (int i = 0; i < 64; i++)
+    for (i = 0; i < 64; i++)
         base64_decode_table[(unsigned char)BASE64_ALPHABET[i]] = i;
 
     base64_initialized = 1;
 }   
+#ifndef uint32_t
+#define uint32_t unsigned int
+#endif
+
 char *base64_encode(const unsigned char *input, int input_len, int *out_len)
 {
+    size_t i = 0;
+    size_t j = 0;
+
+    size_t encoded_len=0;
+    char *output=NULL;
+
     if (input_len < 0 ||
         (input == NULL && input_len != 0))
         return NULL;
@@ -439,8 +450,7 @@ char *base64_encode(const unsigned char *input, int input_len, int *out_len)
     /*
      * Chaque groupe de 3 octets produit 4 caractères.
      */
-    size_t encoded_len =
-        ((size_t)input_len + 2u) / 3u * 4u;
+    encoded_len = ((size_t)input_len + 2u) / 3u * 4u;
 
     /*
      * Protection contre un dépassement de int puisque l'API
@@ -449,45 +459,29 @@ char *base64_encode(const unsigned char *input, int input_len, int *out_len)
     if (encoded_len > 0x7f000000)
         return NULL;
 
-    char *output = MemMalloc(encoded_len + 1u);
+    output = MemMalloc(encoded_len + 1u);
 
     if (!output)
         return NULL;
 
-    size_t i = 0;
-    size_t j = 0;
-
     while (i < (size_t)input_len)
     {
-        size_t remaining =
-            (size_t)input_len - i;
+        size_t remaining = (size_t)input_len - i;
 
         uint32_t a = input[i++];
 
-        uint32_t b =
-            (remaining > 1u)
-                ? input[i++]
-                : 0u;
+        uint32_t b = (remaining > 1u) ? input[i++] : 0u;
 
-        uint32_t c =
-            (remaining > 2u)
-                ? input[i++]
-                : 0u;
+        uint32_t c = (remaining > 2u) ? input[i++] : 0u;
 
-        uint32_t triple =
-            (a << 16) |
-            (b << 8) |
-            c;
-        output[j++] =
-            BASE64_ALPHABET[(triple >> 18) & 0x3F];
+        uint32_t triple = (a << 16) | (b << 8) | c;
+        output[j++] = BASE64_ALPHABET[(triple >> 18) & 0x3F];
 
-        output[j++] =
-            BASE64_ALPHABET[(triple >> 12) & 0x3F];
+        output[j++] = BASE64_ALPHABET[(triple >> 12) & 0x3F];
 
         if (remaining > 1u)
         {
-            output[j++] =
-                BASE64_ALPHABET[(triple >> 6) & 0x3F];
+            output[j++] = BASE64_ALPHABET[(triple >> 6) & 0x3F];
         }
         else
         {
@@ -496,8 +490,7 @@ char *base64_encode(const unsigned char *input, int input_len, int *out_len)
 
         if (remaining > 2u)
         {
-            output[j++] =
-                BASE64_ALPHABET[triple & 0x3F];
+            output[j++] = BASE64_ALPHABET[triple & 0x3F];
         }
         else
         {
