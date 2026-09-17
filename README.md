@@ -79,7 +79,9 @@ As RASM does not rely on library or something, the compilation was always intend
 On Linux you can expect significant performance improvements with the mimalloc library
 
 > make
+
 and again to rebuild only rasm.c
+
 > make superfastmi
 
 ### MacOS
