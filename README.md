@@ -102,7 +102,7 @@ You can play with RASM live on https://cpc-playground.iiivan.org/
 
 Arkos Tracker is powered by RASM on https://www.julien-nevo.com/arkostracker/
 
-R-GX (Amstrad Plus generic engine) powered by RASM/ACE-DL using WEB-API https://www.youtube.com/@RaymanGX
+R-GX https://r-gx.com (Amstrad Plus generic engine) powered by RASM/ACE-DL using WEB-API https://www.youtube.com/@RaymanGX
 
 RetroDev intégrated dev environnement with RASM by the Lord of the Bits! https://github.com/tlotb/retrodev
 
