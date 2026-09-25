@@ -110,7 +110,7 @@ NEW! RASM on your CPC with developper studio! https://norecess464.weebly.com/new
 
 ![RASM on a CPC](https://github.com/EdouardBERGE/rasm/blob/master/Norecess.png)
 
-RASM embedded in CPCSyntaxError emulator
+RASM embedded in CPCSyntaxError emulator https://github.com/WacKEDmaN/CPCSyntaxError
 
 ![RASM embedded in CPCSyntaxError emulator](https://github.com/EdouardBERGE/rasm/blob/master/assets/cpcSyntax.png)
 
