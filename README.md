@@ -31,6 +31,7 @@ There is a cool French and English documentation, you should read it ;)
 
 ## Debug output
 
+- relevant error messages
 - web socket support
 - symbols import, or export in files, CPC snapshot
 - breakpoint export in CPC snapshot or files
@@ -59,6 +60,7 @@ There is a cool French and English documentation, you should read it ;)
 ## Newschool is beautiful
 
 - native FLOAT24 declaration support (which can be use with float24 library in RASM sources asset directory)
+- integration in any software with all embedded possibilities
 
 ## Quality
 
