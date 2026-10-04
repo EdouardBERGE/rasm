@@ -31474,7 +31474,7 @@ struct s_autotest_keyword autotest_keyword[]={
 	{"api_send txtdata : nop ",1},
 	{"api_send txt : nop ",1},
 	{"api_send txtdata,0 : nop ",1},
-	{" repeat 20,t: repeat 16,y: repeat 16,x: defb ((x+16*y)^(t*4))&255 ; kind of minimal hash: rend: rend: rend: save 'rasmoutput_tiles.bin',0,$ ",0}, // for further testing
+	{" repeat 20,t: repeat 16,y: repeat 16,x: defb ((x+16*y)^(t*4))&255 : rend: rend: rend: save 'rasmoutput_tiles.bin',0,$ ",0}, // for further testing tiles with minimal hash
 	{"",},
 	{"",},{"",},{"",},{"",},{"",},
 	{"",},{"",},{"",},{"",},{"",},{"",},
