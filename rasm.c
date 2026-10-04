@@ -23047,6 +23047,7 @@ void __HEXBIN(struct s_assenv *ae) {
 	int ifExists=0;
 	int skipHeader=0;
 	int maxOpt;
+	int strata=0,tilew,tileh,alignementCheck=0,misaligned=0;
 #if TRACE_HEXBIN
 printf("Hexbin ae->idx=%d\n",ae->idx);
 #endif
@@ -23109,6 +23110,27 @@ printf("Hexbin check wl[%d]=[%s]\n",ae->idx,ae->wl[ae->idx].w);
 							}
 						} else {
 							MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"INCBIN REMAP need a number of columns for reordering\n");
+						}
+					} else if (strcmp("SLICE",ae->wl[ae->idx].w)==0 || strcmp("ISLICE",ae->wl[ae->idx].w)==0) {
+						if (ae->wl[ae->idx].w[0]=='I') strata=2; else strata=1; // 2:gray coded 1:vertically linear
+													//
+						if (!ae->wl[ae->idx].t) {
+							ae->idx++;
+							tilew=RoundComputeExpressionCore(ae,ae->wl[ae->idx].w,ae->codeadr,0);
+							if (!ae->wl[ae->idx].t) {
+								ae->idx++;
+								tileh=RoundComputeExpressionCore(ae,ae->wl[ae->idx].w,ae->codeadr,0);
+								if (!ae->wl[ae->idx].t && strcmp("MISALIGNED",ae->wl[ae->idx+1].w)==0) {
+									ae->idx++;
+									misaligned=1;
+								}
+							} else {
+								MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"usage is INCBIN'file',(I)SLICE,width,height\n");
+								strata=0;
+							}
+						} else {
+							MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"usage is INCBIN'file',(I)SLICE,width,height\n");
+							strata=0;
 						}
 					} else if (strcmp("GTILES",ae->wl[ae->idx].w)==0) {
 						/*** entrelace les tiles, besoin de hauteur et largeur de la tile ***/
@@ -23409,11 +23431,11 @@ printf("taille nulle et offset=%d -> conversion en %d\n",offset,size);
 #endif
 			}
 			if (size>ae->hexbin[hbinidx].datalen) {
-				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"INCBIN size is greater than filesize\n");
+				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"INCBIN size is greater than filesize (%d>%d)\n",size,ae->hexbin[hbinidx].datalen);
 				return;
 			}
 			if (size+offset>ae->hexbin[hbinidx].datalen) {
-				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"INCBIN size+offset is greater than filesize\n");
+				MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"INCBIN size+offset is greater than filesize (%d+%d>%d)\n",size,offset,ae->hexbin[hbinidx].datalen);
 				return;
 			}
 			outputdata=MemMalloc(ae->hexbin[hbinidx].datalen);
@@ -23427,7 +23449,69 @@ printf("revert DATA on selected  area\n");
 #endif
 				zx0_reverse(ae->hexbin[hbinidx].data+offset,ae->hexbin[hbinidx].data+offset+size-1);
 			}
-			if (itiles || gtiles) {
+			if (strata) {
+				int tilesize;
+				tilesize=tilew*tileh;
+				/* sliced tiles reordering */
+				if (tilew<1 || tilew>256 || tileh<1) {
+					MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"INCBIN SLICE need a tile width in the range [1-256] and a proper height\n");
+				} else if (ae->hexbin[hbinidx].datalen==0 || ((ae->hexbin[hbinidx].datalen % tilesize)!=0)) {
+					MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"INCBIN SLICE need input data to be a multiple of tiles size\n");
+				} else if (strata==2 && (tileh&7)) {
+					MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"INCBIN ISLICE need tile height to be 8 factor\n");
+				} else {
+					int ntiles,tpg,totalsize,groups;
+					int n,y,g,ig,it;
+
+					ntiles=ae->hexbin[hbinidx].datalen/tilesize;
+					tpg=256/tilew;
+					groups=(ntiles+tpg-1)/tpg;
+					totalsize=(groups*tileh-1)*256+tilew*(ntiles-(groups-1)*tpg);
+
+		//printf("tpg=%d\n",tpg);
+		//printf("groups=%d\n",groups);
+		//printf("totalsize=%d => outputidx\n",totalsize);
+
+					if (totalsize>65536) {
+						MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"INCBIN SLICE outputdata will be too big (>64K)\n");
+					} else {
+						alignementCheck=1;
+						outputdata=MemRealloc(outputdata,totalsize);
+						memset(outputdata,0,totalsize); // we need to clear everything because there may be some holes!
+
+						// optional GRAY code
+						if (strata==2) {
+							int b8;
+
+							// les lignes 0,1,3,2,6,7,5,4 ont pour destination 0,1,2,3,4,5,6,7
+							// les lignes     3,2,6,7,5,4 ont pour destination     2,3,4,5,6,7
+							b8=ntiles*tileh/8;
+							for (it=0;it<b8;it++) {
+								memcpy(outputdata,ae->hexbin[hbinidx].data+it*tilew*8+tilew*2,tilew); // backup 2
+								memcpy(ae->hexbin[hbinidx].data+it*tilew*8+tilew*2,ae->hexbin[hbinidx].data+it*tilew*8+tilew*3,tilew); // 3 => 2
+								memcpy(ae->hexbin[hbinidx].data+it*tilew*8+tilew*3,outputdata,tilew); // 2 => 3
+																//
+								memcpy(outputdata,ae->hexbin[hbinidx].data+it*tilew*8+tilew*4,tilew); // backup 4
+								memcpy(ae->hexbin[hbinidx].data+it*tilew*8+tilew*4,ae->hexbin[hbinidx].data+it*tilew*8+tilew*6,tilew); // 6 => 4
+								memcpy(ae->hexbin[hbinidx].data+it*tilew*8+tilew*6,ae->hexbin[hbinidx].data+it*tilew*8+tilew*5,tilew); // 5 => 6
+								memcpy(ae->hexbin[hbinidx].data+it*tilew*8+tilew*5,ae->hexbin[hbinidx].data+it*tilew*8+tilew*7,tilew); // 7 => 5
+								memcpy(ae->hexbin[hbinidx].data+it*tilew*8+tilew*7,outputdata,tilew); // 4 => 7
+							}
+							memset(outputdata,0,tilew); // reset (not really needed but hey...)
+						}
+
+						// conversion
+						for (it=0;it<ntiles;it++) {
+							g=it/tpg;
+							ig=(it%tpg)*tilew; // décalage à l'intérieur du groupe
+							for (y=0;y<tileh;y++) {
+								memcpy(outputdata+(g*tileh+y)*256+ig,ae->hexbin[hbinidx].data+it*tilesize+y*tilew,tilew);
+							}
+						}
+						outputidx=totalsize;
+					}
+				}
+			} else if (itiles || gtiles) {
 				/* tiles data reordering */
 				int tx,it;
 				if (tilex<=0 || tilex>256) {
@@ -23672,6 +23756,15 @@ if (curhexbin->crunch) printf("CRUNCHED! (%d)\n",curhexbin->crunch);
 				outputidx=0;
 			}
 
+			if (alignementCheck && !misaligned) {
+				if (ae->codeadr&0xFF) {
+					while (ae->codeadr&0xFF) ___output(ae,0);
+					if (!ae->nowarning) {
+						rasm_printf(ae,KWARNING"[%s:%d] Warning: INCBIN ISLICE was automatically aligned, use MISALIGNED to force in place\n",GetCurrentFile(ae),ae->wl[ae->idx].l);
+						if (ae->erronwarn) MaxError(ae);
+					}
+				}
+			}
 			if (overwritecheck) {
 				for (idx=0;idx<outputidx;idx++) {
 					___output(ae,outputdata[idx]);
@@ -31381,7 +31474,8 @@ struct s_autotest_keyword autotest_keyword[]={
 	{"api_send txtdata : nop ",1},
 	{"api_send txt : nop ",1},
 	{"api_send txtdata,0 : nop ",1},
-	{"",},{"",},
+	{" repeat 20,t: repeat 16,y: repeat 16,x: defb ((x+16*y)^(t*4))&255 ; kind of minimal hash: rend: rend: rend: save 'rasmoutput_tiles.bin',0,$ ",0}, // for further testing
+	{"",},
 	{"",},{"",},{"",},{"",},{"",},
 	{"",},{"",},{"",},{"",},{"",},{"",},
 	{"",},{"",},{"",},{"",},{"",},{"",},{"",},{"",},{"",},{"",},{"",},{"",},
@@ -33466,6 +33560,37 @@ printf("testing INCBIN+offset OK\n");
 	if (!ret && opcodelen==1000) {} else {printf("Autotest %03d ERROR (INCBIN+size)\n",cpt);MiniDump(opcode,opcodelen);exit(-1);}
 	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
 printf("testing INCBIN+size OK\n");
+
+
+#define AUTOTEST_SLICE "repeat 16,tile,0: repeat 16,tileh,0: org tileh*256+tile*16: incbin 'rasmoutput_tiles.bin',256*tile+16*tileh,16: rend: rend:"\
+	"repeat 4,tile,0: repeat 16,tileh,0: org 16*256+tileh*256+tile*16: incbin 'rasmoutput_tiles.bin',256*(tile+16)+16*tileh,16: rend: rend:"\
+	"align 256:incbin 'rasmoutput_tiles.bin',SLICE,16,16"
+	ret=RasmAssemble(AUTOTEST_SLICE,strlen(AUTOTEST_SLICE),&opcode,&opcodelen);
+	if (!ret && opcodelen==8000+8192 && memcmp(opcode,opcode+8192,8000)==0) {} else {printf("Autotest %03d ERROR (INCBIN+SLICE)\n",cpt);MiniDump(opcode,opcodelen);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing INCBIN+SLICE option OK\n");
+
+#define AUTOTEST_SLICE_MIS "repeat 16,tile,0: repeat 16,tileh,0: org tileh*256+tile*16: incbin 'rasmoutput_tiles.bin',256*tile+16*tileh,16: rend: rend:"\
+	"repeat 4,tile,0: repeat 16,tileh,0: org 16*256+tileh*256+tile*16: incbin 'rasmoutput_tiles.bin',256*(tile+16)+16*tileh,16: rend: rend:"\
+	"incbin 'rasmoutput_tiles.bin',SLICE,16,16"
+	ret=RasmAssemble(AUTOTEST_SLICE_MIS,strlen(AUTOTEST_SLICE_MIS),&opcode,&opcodelen);
+	if (!ret && opcodelen==8000+8192 && memcmp(opcode,opcode+8192,8000)==0) {} else {printf("Autotest %03d ERROR (INCBIN+misaligned SLICE)\n",cpt);MiniDump(opcode,opcodelen);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing INCBIN+misaligned SLICE option OK\n");
+
+#define AUTOTEST_SLICE_GRAY " gray0=0: gray1=1: gray2=3: gray3=2: gray4=6: gray5=7: gray6=5: gray7=4: gray8=0+8: gray9=1+8: gray10=3+8:"\
+	"gray11=2+8: gray12=6+8: gray13=7+8: gray14=5+8: gray15=4+8: repeat 16,tile,0: repeat 16,tileh,0: org tileh*256+tile*16:"\
+	"incbin 'rasmoutput_tiles.bin',256*tile+16*gray{tileh},16: rend: rend: repeat 4,tile,0: repeat 16,tileh,0: org 16*256+tileh*256+tile*16:"\
+	"incbin 'rasmoutput_tiles.bin',256*(tile+16)+16*gray{tileh},16: rend: rend: align 256:incbin 'rasmoutput_tiles.bin',ISLICE,16,16"
+	ret=RasmAssemble(AUTOTEST_SLICE_GRAY,strlen(AUTOTEST_SLICE_GRAY),&opcode,&opcodelen);
+	if (!ret && opcodelen==8000+8192 && memcmp(opcode,opcode+8192,8000)==0) {} else {printf("Autotest %03d ERROR (INCBIN+ISLICE)\n",cpt);MiniDump(opcode,opcodelen);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing INCBIN+ISLICE option OK\n");
+
+
+#ifndef OS_WIN
+	FileRemoveIfExists("rasmoutput_tiles.raw"); // we have done with tiles
+#endif
 
 #ifndef NO_3RD_PARTIES
 	ret=RasmAssemble(AUTOTEST_LZ4_A,strlen(AUTOTEST_LZ4_A),&opcode,&opcodelen);
