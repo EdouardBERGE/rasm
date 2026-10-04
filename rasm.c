@@ -27849,6 +27849,9 @@ printf("paramz 1\n");
 		// default!
 		ae->snapshot.version=3;
 	}
+	if (!ae->web_host) ae->web_host="127.0.0.1";
+	if (!ae->web_port) ae->web_port=6128;
+
 #if TRACE_PREPRO
 printf("init 0 amper=%d\n",ae->noampersand);
 #endif
@@ -31455,13 +31458,6 @@ struct s_autotest_keyword autotest_keyword[]={
 	{"nop : assert 270/256>1 : assert 270\\256>=1",0},
 	{"nop : assert 240/256>0.8 : assert 240\\256==0",0},
 
-	/*
-	 *
-	 * will need to test resize + format then meta review test!
-	 *
-	 *
-	 *
-
 	{"api_send host,'127.0.0.1',port,8080,txt,'{ \"cmd\":\"sendBytes\",\"bytes\":[',txtdata,bite,10,txt,'],\"versionLone\":\"',BASE64,bite,10,txt,'\" }' :bite:defb 'roudoudou',0 ",0}, // regular usage
 	{"api_send : nop ",1},
 	{"api_send 0 : nop ",1},
@@ -31475,6 +31471,15 @@ struct s_autotest_keyword autotest_keyword[]={
 	{"api_send txt : nop ",1},
 	{"api_send txtdata,0 : nop ",1},
 	{" repeat 20,t: repeat 16,y: repeat 16,x: defb ((x+16*y)^(t*4))&255 : rend: rend: rend: save 'rasmoutput_tiles.bin',0,$ ",0}, // for further testing tiles with minimal hash
+																      //
+	/*
+	 *
+	 * will need to test resize + format then meta review test!
+	 *
+	 *
+	 *
+
+																      //
 	{"",},
 	{"",},{"",},{"",},{"",},{"",},
 	{"",},{"",},{"",},{"",},{"",},{"",},
