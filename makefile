@@ -3,7 +3,7 @@ EXEC=rasm.exe
 
 CFLAGS=-lm  -march=native -o $(EXEC)
 CFLAGS_OPT = $(CFLAGS) -O2 -Wpointer-sign
-CFLAGS_DBG = $(CFLAGS) -O1 -g -Wpointer-sign
+CFLAGS_DBG = $(CFLAGS) -g -Wpointer-sign
 CFLAGS_3RD = $(CFLAGS) -O2 -DNO_3RD_PARTIES
 CFLAGS_INT = -lm  -march=native -O2 -DNO_3RD_PARTIES
 CFLAGS_FAST = $(CFLAGS) -O2 -Wpointer-sign -DSUPERFAST
