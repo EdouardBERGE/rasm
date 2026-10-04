@@ -1,8 +1,8 @@
 #define PROGRAM_NAME      "RASM"
 #define PROGRAM_VERSION   "3.3"
-#define PROGRAM_SUBVERSION   ".0"
-#define PROGRAM_VERSION_FLOAT   "3.3"
-#define PROGRAM_DATE      "16/09/2026"
+#define PROGRAM_SUBVERSION   ".1"
+#define PROGRAM_VERSION_FLOAT   "3.31"
+#define PROGRAM_DATE      "04/10/2026"
 #define PROGRAM_COPYRIGHT "© 2017 BERGE Edouard / roudoudou from Praline"
 #ifndef SUPERFAST
 #define RELEASE_NAME      "Monolith"
