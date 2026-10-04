@@ -17608,7 +17608,11 @@ void PopAllAPI(struct s_assenv *ae) {
 				} else if (strcmp(ae->wl[ae->idx].w,"PORT")==0) {
 					// change socket port
 					ae->idx++;
-					ae->web_port=RoundComputeExpressionCore(ae,ae->wl[ae->idx].w,ae->api_send[iapi].ptr,0);
+					if (StringIsQuote(ae->wl[ae->idx].w)) {
+						MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"syntax is API_SEND PORT,<port value without quote!>\n");
+					} else {
+						ae->web_port=RoundComputeExpressionCore(ae,ae->wl[ae->idx].w,ae->api_send[iapi].ptr,0);
+					}
 				} else {
 					MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"API_SEND unknown keyword [%s]\n",ae->wl[ae->idx].w);
 					break;
