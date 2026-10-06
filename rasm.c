@@ -1237,7 +1237,7 @@ struct s_assenv {
 	int codeadrwrapwarned;             // avoids spamming one warning per byte when codeadr wraps past 0xFFFF in an EXTENDED bank, reset by __ORG
 	struct s_orgzone *orgzone;         // each ORG is monitored to avoid conflicts
 	int io,mo;
-	int deadend,insideORG;
+	int deadend,insideORG,orgDone;
 	struct s_memory_localisation *memory_localisation;
 	int imemory_localisation,mmemory_localisation;
 	/* Struct */
@@ -18221,6 +18221,12 @@ void __BUILDOBJ(struct s_assenv *ae) {
 	} else {
 		// pure OBJ output
 	}
+	if (ae->orgDone || ae->codeadr || ae->outputadr) {
+		if (!ae->nowarning) {
+			rasm_printf(ae,KWARNING"[%s:%d] Warning: using BUILDOBJ whereas there was a previous ORG or code\n",GetCurrentFile(ae),ae->wl[ae->idx].l);
+			if (ae->erronwarn) MaxError(ae);
+		}
+	}
 }
 void __BUILDZX(struct s_assenv *ae) {
 	if (!ae->wl[ae->idx].t) {
@@ -18231,6 +18237,12 @@ void __BUILDZX(struct s_assenv *ae) {
 		ae->forcezx=1;
 	} else {
 		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Cannot select ZX output when already in Amstrad ROM/cartridge/snapshot/tape output\n");
+	}
+	if (ae->orgDone || ae->codeadr || ae->outputadr) {
+		if (!ae->nowarning) {
+			rasm_printf(ae,KWARNING"[%s:%d] Warning: using BUILDZX whereas there was a previous ORG or code\n",GetCurrentFile(ae),ae->wl[ae->idx].l);
+			if (ae->erronwarn) MaxError(ae);
+		}
 	}
 }
 void __BUILDCPR(struct s_assenv *ae) {
@@ -18266,6 +18278,12 @@ void __BUILDCPR(struct s_assenv *ae) {
 			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"BUILDCPR unknown parameter, may be EXTENDED, LEGACY, SYMBOL(S) or 'filename'\n");
 		}
 	}
+	if (ae->orgDone || ae->codeadr || ae->outputadr) {
+		if (!ae->nowarning) {
+			rasm_printf(ae,KWARNING"[%s:%d] Warning: using BUILDCPR whereas there was a previous ORG or code\n",GetCurrentFile(ae),ae->wl[ae->idx].l);
+			if (ae->erronwarn) MaxError(ae);
+		}
+	}
 	if (!ae->forcesnapshot && !ae->forcetape && !ae->forcezx && !ae->forceROM) {
 		ae->forcecpr=1;
 	} else {
@@ -18273,6 +18291,12 @@ void __BUILDCPR(struct s_assenv *ae) {
 	}
 }
 void __BUILDROM(struct s_assenv *ae) {
+	if (ae->orgDone || ae->codeadr || ae->outputadr) {
+		if (!ae->nowarning) {
+			rasm_printf(ae,KWARNING"[%s:%d] Warning: using BUILDROM whereas there was a previous ORG or code\n",GetCurrentFile(ae),ae->wl[ae->idx].l);
+			if (ae->erronwarn) MaxError(ae);
+		}
+	}
 	if (!ae->forcesnapshot && !ae->forcetape && !ae->forcezx && !ae->forcecpr) {
 		if (!ae->wl[ae->idx].t && ae->wl[ae->idx+1].t) {
 			if (strcmp(ae->wl[ae->idx+1].w,"CONCAT")==0) {
@@ -18653,6 +18677,14 @@ void __BUILDSNA(struct s_assenv *ae) {
 		}
 		ae->idx++;
 	}
+
+	if (ae->orgDone || ae->codeadr || ae->outputadr) {
+		if (!ae->nowarning) {
+			rasm_printf(ae,KWARNING"[%s:%d] Warning: using BUILDSNA whereas there was a previous ORG or code\n",GetCurrentFile(ae),ae->wl[ae->idx].l);
+			if (ae->erronwarn) MaxError(ae);
+		}
+	}
+
 	if (!ae->forcecpr && !ae->forcetape && !ae->forcezx && !ae->forceROM) {
 		ae->forcesnapshot=1;
 		ae->remu=1;
@@ -18682,6 +18714,12 @@ void __BUILDTAPE(struct s_assenv *ae) {
 			}
 		} else {
 			MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"BUILDTAPE optional parameter must be a string\n");
+		}
+	}
+	if (ae->orgDone || ae->codeadr || ae->outputadr) {
+		if (!ae->nowarning) {
+			rasm_printf(ae,KWARNING"[%s:%d] Warning: using BUILDTAPE whereas there was a previous ORG or code\n",GetCurrentFile(ae),ae->wl[ae->idx].l);
+			if (ae->erronwarn) MaxError(ae);
 		}
 	}
 	if (!ae->forcesnapshot && !ae->forcecpr && !ae->forcezx && !ae->forceROM) {
@@ -21943,7 +21981,9 @@ void __ORG(struct s_assenv *ae) {
 		return;
 	}
 	___org_close(ae);
-	
+
+	ae->orgDone=1;
+
 	if (!ae->wl[ae->idx].t) {
 		ae->codeadrwrapwarned = 0; // a new explicit ORG re-arms the codeadr-wrap warning
 		ae->insideORG=1;
@@ -26217,7 +26257,11 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 						sprintf(TMP_filename,"%s.sna",ae->outputfilename);
 					}
 					FileRemoveIfExists(TMP_filename);
-					
+				
+					if (!ae->mem[0]) {ae->mem[0]=MemMalloc(65536);memset(ae->mem[0],0,65536);}
+					if (!ae->mem[2]) {ae->mem[2]=MemMalloc(65536);memset(ae->mem[2],0,65536);}
+					if (!ae->mem[5]) {ae->mem[5]=MemMalloc(65536);memset(ae->mem[5],0,65536);}
+
 					/* do we have a bankset? */
 					/* zx bootstrap */
 					zxsnapheader[0x13]=0; /* 0:DI 4:EI */
@@ -31475,7 +31519,16 @@ struct s_autotest_keyword autotest_keyword[]={
 	{"api_send txt : nop ",1},
 	{"api_send txtdata,0 : nop ",1},
 	{" repeat 20,t: repeat 16,y: repeat 16,x: defb ((x+16*y)^(t*4))&255 : rend: rend: rend: save 'rasmoutput_tiles.bin',0,$ ",0}, // for further testing tiles with minimal hash
-																      //
+
+	// fix dynamic alloc when not using all ZX rom	
+	{"buildzx : nop",0},
+	// memory directive must warn (no error)
+	{"nop : buildzx : nop",0}, {"org #100 : buildzx : nop",0},
+	{"nop : buildsna : nop",0}, {"org #100 : buildsna : nop",0},
+	{"nop : buildcpr : nop",0}, {"org #100 : buildcpr : nop",0},
+	{"nop : buildrom : nop",0}, {"org #100 : buildrom : nop",0},
+	{"nop : buildtape : nop",0}, {"org #100 : buildtape : nop",0},
+
 	/*
 	 *
 	 * will need to test resize + format then meta review test!
@@ -31907,6 +31960,90 @@ printf("testing BANK/ORG OK\n");
 	if (!ret) {} else {printf("Autotest %03d ERROR (BANKROM + bank prefixes)\n",cpt);exit(-1);}
 	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
 printf("testing BANKROM+bank tags OK\n");
+
+
+#define AUTOTEST_LATE_0 "nop : buildzx : nop"
+#define AUTOTEST_LATE_1 "org #100 : buildzx : nop"
+#define AUTOTEST_LATE_2 "nop : buildsna : nop"
+#define AUTOTEST_LATE_3 "org #100 : buildsna : nop"
+#define AUTOTEST_LATE_4 "nop : buildcpr : nop"
+#define AUTOTEST_LATE_5 "org #100 : buildcpr : nop"
+#define AUTOTEST_LATE_6 "nop : buildrom : nop"
+#define AUTOTEST_LATE_7 "org #100 : buildrom : nop"
+#define AUTOTEST_LATE_8 "nop : buildtape : nop"
+#define AUTOTEST_LATE_9 "org #100 : buildtape : nop"
+	memset(&param,0,sizeof(struct s_parameter));
+	param.erronwarn=1;
+	ret=RasmAssembleInfoParam(AUTOTEST_LATE_0,strlen(AUTOTEST_LATE_0),&opcode,&opcodelen,&debug,&param);
+	if (ret) {} else {printf("Autotest %03d ERROR (No warning with BUILDZX and previous code)\n",cpt);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing BUILDZX late declaration 1 OK\n");
+
+	memset(&param,0,sizeof(struct s_parameter));
+	param.erronwarn=1;
+	ret=RasmAssembleInfoParam(AUTOTEST_LATE_1,strlen(AUTOTEST_LATE_1),&opcode,&opcodelen,&debug,&param);
+	if (ret) {} else {printf("Autotest %03d ERROR (No warning with BUILDZX and previous code)\n",cpt);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing BUILDZX late declaration 2 OK\n");
+
+	memset(&param,0,sizeof(struct s_parameter));
+	param.erronwarn=1;
+	ret=RasmAssembleInfoParam(AUTOTEST_LATE_2,strlen(AUTOTEST_LATE_2),&opcode,&opcodelen,&debug,&param);
+	if (ret) {} else {printf("Autotest %03d ERROR (No warning with BUILDSNA and previous code)\n",cpt);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing BUILDSNA late declaration 1 OK\n");
+
+	memset(&param,0,sizeof(struct s_parameter));
+	param.erronwarn=1;
+	ret=RasmAssembleInfoParam(AUTOTEST_LATE_3,strlen(AUTOTEST_LATE_3),&opcode,&opcodelen,&debug,&param);
+	if (ret) {} else {printf("Autotest %03d ERROR (No warning with BUILDSNA and previous code)\n",cpt);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing BUILDSNA late declaration 2 OK\n");
+
+	memset(&param,0,sizeof(struct s_parameter));
+	param.erronwarn=1;
+	ret=RasmAssembleInfoParam(AUTOTEST_LATE_4,strlen(AUTOTEST_LATE_4),&opcode,&opcodelen,&debug,&param);
+	if (ret) {} else {printf("Autotest %03d ERROR (No warning with BUILDCPR and previous code)\n",cpt);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing BUILDCPR late declaration 1 OK\n");
+
+	memset(&param,0,sizeof(struct s_parameter));
+	param.erronwarn=1;
+	ret=RasmAssembleInfoParam(AUTOTEST_LATE_5,strlen(AUTOTEST_LATE_5),&opcode,&opcodelen,&debug,&param);
+	if (ret) {} else {printf("Autotest %03d ERROR (No warning with BUILDCPR and previous code)\n",cpt);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing BUILDCPR late declaration 2 OK\n");
+
+	memset(&param,0,sizeof(struct s_parameter));
+	param.erronwarn=1;
+	ret=RasmAssembleInfoParam(AUTOTEST_LATE_6,strlen(AUTOTEST_LATE_6),&opcode,&opcodelen,&debug,&param);
+	if (ret) {} else {printf("Autotest %03d ERROR (No warning with BUILDROM and previous code)\n",cpt);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing BUILDROM late declaration 1 OK\n");
+
+	memset(&param,0,sizeof(struct s_parameter));
+	param.erronwarn=1;
+	ret=RasmAssembleInfoParam(AUTOTEST_LATE_7,strlen(AUTOTEST_LATE_7),&opcode,&opcodelen,&debug,&param);
+	if (ret) {} else {printf("Autotest %03d ERROR (No warning with BUILDROM and previous code)\n",cpt);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing BUILDROM late declaration 2 OK\n");
+
+	memset(&param,0,sizeof(struct s_parameter));
+	param.erronwarn=1;
+	ret=RasmAssembleInfoParam(AUTOTEST_LATE_8,strlen(AUTOTEST_LATE_8),&opcode,&opcodelen,&debug,&param);
+	if (ret) {} else {printf("Autotest %03d ERROR (No warning with BUILDTAPE and previous code)\n",cpt);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing BUILDTAPE late declaration 1 OK\n");
+
+	memset(&param,0,sizeof(struct s_parameter));
+	param.erronwarn=1;
+	ret=RasmAssembleInfoParam(AUTOTEST_LATE_9,strlen(AUTOTEST_LATE_9),&opcode,&opcodelen,&debug,&param);
+	if (ret) {} else {printf("Autotest %03d ERROR (No warning with BUILDTAPE and previous code)\n",cpt);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing BUILDTAPE late declaration 2 OK\n");
+
+
+
 
 
 	ret=RasmAssemble(AUTOTEST_LIMITOK1,strlen(AUTOTEST_LIMITOK1),&opcode,&opcodelen);
