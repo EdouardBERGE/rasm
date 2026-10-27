@@ -1,0 +1,219 @@
+- r : registre 8 bits 
+- rr : registre 16 bits général BC,DE,HL 
+- n : valeur immédiate 8 bits 
+- nn : valeur immédiate 16 bits 
+- d : offset 8 bits signé 
+- b : numéro de bit dans l'octet 
+- cond : condition de type Z,NZ,C,NC,P,PO,PE,M 
+
+- ADC r: 1
+- CP IXL: 2
+- INC (IX+d): 6
+- LD BC,(nn): 6
+- RET: 3
+- SCF: 1
+- ADC A,(HL): 2
+- CP (IX+d): 5
+- IND: 5
+- LD DE,(nn): 6
+- RET cond: 4 / 2
+- SET b,r: 2
+- ADC n: 2
+- CPD: 4
+- INI: 5
+- LD (dd),HL: 5
+- RETN: 4
+- SET b, (HL): 4
+- ADC HL,rr: 4
+- CPDR: 6 /4
+- INIR: 6 / 5
+- LD r,(IX+d): 5
+- RETI: 4
+- SET b,(IX+d): 7
+- ADC HL,SP: 4
+- CPI: 4
+- INDR: 6 / 5
+- LD (nn),rr: 6
+- RL r: 2
+- SET b,(IX+d),r: 7
+- ADC IXH: 2
+- CPIR: 6 /4
+- JP nn: 3
+- LD IX,(nn): 6
+- RL (HL): 4
+- SLA r: 2
+- ADC IXL: 2
+- CPL: 1
+- JP cond,nn: 3
+- LD (nn),IX: 6
+- RL (IX+d): 7
+- SLA (HL): 4
+- ADC (IX+d): 5
+- DAA: 1
+- JP (HL): 1
+- LD (IX+d),r: 5
+- RL (IX+d),r: 7
+- SLA (IX+d): 7
+- ADD r: 1
+- DEC r: 1
+- JP (IX): 2
+- LD (IX+d),n: 6
+- RLC r: 2
+- SLA (IX+d),r: 7
+- ADD (HL): 2
+- DEC rr: 2
+- JR d: 3
+- LD (nn),SP: 6
+- RLC (HL): 4
+- SLL r: 2
+- ADD n: 2
+- DEC (HL): 3
+- JR C,d: 3 / 2
+- LD SP,(nn): 6
+- RLC (IX+d): 7
+- SLL (HL): 4
+- ADD HL,rr: 3
+- DEC IX: 3
+- JR NC,d: 3 / 2
+- LDD: 5
+- RLC (IX+d),r: 7
+- SLL (IX+d): 7
+- ADD IX,rr: 4
+- DEC IXH: 2
+- JR NZ,d: 3 / 2
+- LDI: 5
+- RLCA: 1
+- SLL (IX+d),r: 7
+- ADD IX,IX: 4
+- DEC IXL: 2
+- JR Z,d: 3 / 2
+- LDDR: 6 / 5
+- RLA: 1
+- SRA r: 2
+- ADD IX,SP: 4
+- DEC (IX+d): 6
+- LD r,r: 1
+- LDIR: 6 / 5
+- RLD: 5
+- SRA (HL): 4
+- ADD IXH: 2
+- DI: 1
+- LD r,n: 2
+- NEG: 2
+- RR r: 2
+- SRA (IX+d): 7
+- ADD IXL: 2
+- DJNZ d: 4 /3
+- LD A,(rr): 2
+- NOP: 1
+- RR (HL): 4
+- SRA (IX+d),r: 7
+- ADD (IX+d): 5
+- EI: 1
+- LD r,(HL): 2
+- OR r: 1
+- RR (IX+d): 7
+- SRL r: 2
+- AND r: 1
+- EX AF,AF': 1
+- LD (rr),A: 2
+- OR d: 2
+- RR (IX+d),r: 7
+- SRL (HL): 4
+- AND n: 2
+- EX DE,HL: 1
+- LD SP,HL: 2
+- OR (HL): 2
+- RRA: 1
+- SRL (IX+d): 7
+- AND (HL): 2
+- EX (SP),HL: 6
+- LD r,IXH: 2
+- OR IXH: 2
+- RRC r: 2
+- SRL (IX+d),r: 7
+- AND IXH: 2
+- EX (SP),IX: 7
+- LD r,IXL: 2
+- OR IXL: 2
+- RRC (HL): 4
+- SUB r: 1
+- AND IXL: 2
+- EXX: 1
+- LD SP,IX: 3
+- OR (IX+d): 5
+- RRC (IX+d): 7
+- SUB d: 2
+- AND (IX+d): 5
+- HALT: 1
+- LD rr,nn: 3
+- OUT (n),A: 3
+- RRC (IX+d),r: 7
+- SUB (HL): 2
+- BIT r: 2
+- IM 0: 2
+- LD (HL),n: 3
+- OUT (C),r: 4
+- RRD: 5
+- SUB IXH: 2
+- BIT (HL): 3
+- IM 1: 2
+- LD A,R: 3
+- OUT (C),0: 4
+- RRCA: 1
+- SUB IXL: 2
+- BIT b,(IX+d): 6
+- IM 2: 2
+- LD R,A: 3
+- OUTD: 5
+- RST n: 4
+- SUB (IX+d): 5
+- IN A,(n): 3
+- LD A,I: 3
+- OUTI: 5
+- SBC r: 1
+- XOR r: 1
+- CALL nn: 5
+- IN r,(C): 4
+- LD I,A: 3
+- OTDR: 6 / 5
+- SBC n: 2
+- XOR n: 2
+- CALL cond,nn: 5 / 3
+- INC r: 1
+- LD IXH,n: 3
+- OTIR: 6 / 5
+- SBC IXH: 2
+- XOR (HL): 2
+- CCF: 1
+- INC rr: 2
+- LD IXL,d: 3
+- POP rr: 3
+- SBC IXL: 2
+- XOR IXH: 2
+- CP r: 1
+- INC (HL): 3
+- LD A,(nn): 4
+- POP IX: 4
+- SBC (HL): 2
+- XOR IXL: 2
+- CP n: 2
+- INC IX: 3
+- LD (nn),A: 4
+- PUSH rr: 4
+- SBC (IX+d): 5
+- XOR (IX+d): 5
+- CP (HL): 2
+- INC IXH: 2
+- LD IX,nn: 4
+- PUSH IX: 5
+- SBC HL,rr: 4
+- SBC HL,SP: 4
+- CP IXH: 2
+- INC IXL: 2
+- LD HL,(nn): 5
+- RES b, (HL): 4
+- RES b,(IX+d): 7
+- RES b,(IX+d),r: 7
+- RES b,r: 2
+
