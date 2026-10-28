@@ -723,8 +723,9 @@ enum e_edsk_action {
 	E_EDSK_ACTION_PUTFILE,
 	E_EDSK_ACTION_GETFILE,
 	E_EDSK_ACTION_UPGRADE,
-	E_EDSK_ACTION_MERGE,
+	E_EDSK_ACTION_CAT,
 	/* deferred */
+	E_EDSK_ACTION_MERGE,
 	E_EDSK_ACTION_DELFILE,
 	E_EDSK_ACTION_COPYFILE,
 	E_EDSK_ACTION_SAVEFILE,
@@ -15915,6 +15916,72 @@ void __edsk_putfile(struct s_assenv *ae, struct s_edsk_action *action) {
 	MemFree(filedata);
 }
 
+void __edsk_cat(struct s_assenv *ae, struct s_edsk_action *action) {
+	struct s_edsk_global_struct *edsk=NULL;
+	int side,sidedest,sizetoread=0x1234567;
+	int i,curtrack,s,j,k,extended=0;
+	char *edskfilename;
+
+	edskfilename=action->filename;
+	sidedest=__edsk_get_side_from_name(edskfilename);
+
+	if (action->nbparam<2 || action->nbparam>3) {
+		MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"Usage is : EDSK CAT,'edskfilename:side'[,EXTENDED]\n");
+		return;
+	}
+
+	// no tag ?
+	if (!ae->wl[action->iw+1].t && !ae->wl[action->iw+2].t) {
+		if (strcmp(ae->wl[action->iw+3].w,"EXTENDED")==0) extended=1;
+	}
+
+	// create DSK if it does not exists
+	if (!FileExists(edskfilename)) {
+		edsk=edsktool_NewEDSK("DATA",sidedest+1);
+	} else {
+		edsk=edsktool_EDSK_load(ae,edskfilename);
+		if (!edsk) {
+			MakeError(ae,0,NULL,0,"Error loading edsk [%s]\n",edskfilename);
+			return;
+		}
+	}
+	amsdos_build_entries(ae,edsk, sidedest);
+
+	if (extended) {
+		printf("  fileName  | U |protected|hidden|onDisk|size\n");
+		printf("---------------------------------------------\n");
+		for (i=0;i<64;i++) {
+			if (edsk->floppy_entries[i].filename[0]) {
+				if (edsk->floppy_entries[i].isdisplayable) {
+					printf("%s|#%02X|%s|%s|%s|%3dK\n",
+						edsk->floppy_entries[i].filename,
+						edsk->floppy_entries[i].user,
+						edsk->floppy_entries[i].isprotected?"protected":"         ",
+						edsk->floppy_entries[i].ishidden?"hidden":"      ",
+						edsk->floppy_entries[i].isondisk?"onDisk":"      ",
+						edsk->floppy_entries[i].allocsize
+						);
+				} else {
+					printf("invalidChar|#%02X|%s|%s|%s|%dK\n",
+						edsk->floppy_entries[i].user,
+						edsk->floppy_entries[i].isprotected?"protected":"         ",
+						edsk->floppy_entries[i].ishidden?"hidden":"      ",
+						edsk->floppy_entries[i].isondisk?"onDisk":"      ",
+						edsk->floppy_entries[i].allocsize
+						);
+				}
+			}
+		}
+		printf("---------------------------------------------\n");
+	} else {
+		for (i=0;i<64;i++) {
+			if (edsk->floppy_entries[i].filename[0]) {
+				printf("%s|%dK\n",edsk->floppy_entries[i].filename,edsk->floppy_entries[i].allocsize);
+			}
+		}
+	}
+}
+
 void __edsk_getfile(struct s_assenv *ae, struct s_edsk_action *action) {
 	struct s_edsk_global_struct *edsk=NULL;
 	int side,sidedest,sizetoread=0x1234567;
@@ -17240,8 +17307,10 @@ void __edsk_writesect(struct s_assenv *ae, struct s_edsk_action *action) {
  * EDSK  PUTFILE,'filename.dsk','source filename on host',[,'destination filename on dsk']
  * EDSK  GETFILE,'filename.dsk','source filename on DSK',[,'destination filename on host']
  * EDSK  UPGRADE,'filename.dsk','outputfilename.dsk'
+ * EDSK      CAT,'filename.dsk:side'
  *
  * == deferred execution ==
+ * EDSK    MERGE,'filename.dsk:side','filename.dsk:side','outputfilename.dsk'
  * EDSK  DELFILE,'filename.dsk','filename'
  * EDSK  COPYFILE,'filename.dsk','filename','filename.dsk','filename'
  * EDSK  SAVEFILE,'filename.dsk','filename',<start_addr>,<length>[,RAW]
@@ -17252,7 +17321,6 @@ void __edsk_writesect(struct s_assenv *ae, struct s_edsk_action *action) {
  * EDSK       ADD,'filename.dsk','location',<size>,...
  * EDSK    RESIZE,'filename.dsk','location',<size>,...
  * EDSK   REORDER,'filename.dsk','location',position,...
- * EDSK     MERGE,'filename.dsk:side','filename.dsk:side','outputfilename.dsk'
  * EDSK     CHECK,'filename.dsk','location',<size>,<start_addr> @@TODO => la doc!
 ***************************************************************************************************************************/
 void __EDSK(struct s_assenv *ae) {
@@ -17267,9 +17335,10 @@ void __EDSK(struct s_assenv *ae) {
 			case 'A':if (strcmp(ae->wl[ae->idx+1].w,"ADD")==0)	curaction.action=E_EDSK_ACTION_ADD; else cmderr=1;break; // add sector
 			case 'C':if (strcmp(ae->wl[ae->idx+1].w,"CREATE")==0)	curaction.action=E_EDSK_ACTION_CREATE; else // nombre de pistes + format éventuel
 			         if (strcmp(ae->wl[ae->idx+1].w,"CHECK")==0)	curaction.action=E_EDSK_ACTION_CHECK; else  // location, size, memory address
+			         if (strcmp(ae->wl[ae->idx+1].w,"CAT")==0)	curaction.action=E_EDSK_ACTION_CAT; else  // catalog
 			         if (strcmp(ae->wl[ae->idx+1].w,"COPYFILE")==0)	curaction.action=E_EDSK_ACTION_COPYFILE; else cmderr=1;break; // copy file from one DSK to another
 			case 'D':if (strcmp(ae->wl[ae->idx+1].w,"DROP")==0)	curaction.action=E_EDSK_ACTION_DROP; else // drop track or sector
-				if (strcmp(ae->wl[ae->idx+1].w,"DELFILE")==0)	curaction.action=E_EDSK_ACTION_DELFILE; else cmderr=1;break; // delete a file on DSK
+				 if (strcmp(ae->wl[ae->idx+1].w,"DELFILE")==0)	curaction.action=E_EDSK_ACTION_DELFILE; else cmderr=1;break; // delete a file on DSK
 			case 'G':if (strcmp(ae->wl[ae->idx+1].w,"GAPFIX")==0)	curaction.action=E_EDSK_ACTION_GAPFIX; else // fix GAP to fit an ideal track
 				 if (strcmp(ae->wl[ae->idx+1].w,"GETFILE")==0)	curaction.action=E_EDSK_ACTION_GETFILE; else cmderr=1;break; // get FILE from a DSK and save it on host
 			case 'M':if (strcmp(ae->wl[ae->idx+1].w,"MERGE")==0)	curaction.action=E_EDSK_ACTION_MERGE; else // merge edsk
@@ -17297,6 +17366,7 @@ void __EDSK(struct s_assenv *ae) {
 		switch (curaction.action) {
 			case E_EDSK_ACTION_ADD: case E_EDSK_ACTION_CREATE: case E_EDSK_ACTION_DROP: case E_EDSK_ACTION_MAP: case E_EDSK_ACTION_REORDER:
 			case E_EDSK_ACTION_RESIZE: case E_EDSK_ACTION_READSECT: case E_EDSK_ACTION_WRITESECT: case E_EDSK_ACTION_GAPFIX: case E_EDSK_ACTION_CHECK:
+			case E_EDSK_ACTION_CAT:
 				nbfilename=1;break;
 			case E_EDSK_ACTION_UPGRADE:case E_EDSK_ACTION_READFILE:case E_EDSK_ACTION_DELFILE:case E_EDSK_ACTION_SAVEFILE:
 				nbfilename=2;break;
@@ -17368,6 +17438,7 @@ void __EDSK(struct s_assenv *ae) {
 			case E_EDSK_ACTION_PUTFILE: __edsk_putfile(ae,&curaction);break;
 			case E_EDSK_ACTION_GETFILE: __edsk_getfile(ae,&curaction);break;
 			case E_EDSK_ACTION_UPGRADE: __edsk_upgrade(ae,&curaction);break;
+			case E_EDSK_ACTION_CAT:     __edsk_cat(ae,&curaction);break;
 			// deferred execution
 			case E_EDSK_ACTION_DELFILE:
 			case E_EDSK_ACTION_COPYFILE:
@@ -17420,10 +17491,10 @@ void PopAllEDSK(struct s_assenv *ae) {
 			case E_EDSK_ACTION_DELFILE:	__edsk_delfile(ae,&ae->edsk_action[i]);break;
 			case E_EDSK_ACTION_MAP:		__edsk_map(ae,&ae->edsk_action[i]);break;
 			case E_EDSK_ACTION_GAPFIX:	__edsk_gapfix(ae,&ae->edsk_action[i]);break;
-			case E_EDSK_ACTION_MERGE:	__edsk_merge(ae,&ae->edsk_action[i]);break;
 			case E_EDSK_ACTION_RESIZE:	__edsk_resize(ae,&ae->edsk_action[i]);break;
 			case E_EDSK_ACTION_REORDER:	__edsk_reorder(ae,&ae->edsk_action[i]);break;
 			case E_EDSK_ACTION_DROP:	__edsk_drop(ae,&ae->edsk_action[i]);break;
+			case E_EDSK_ACTION_MERGE:       __edsk_merge(ae,&ae->edsk_action[i]);break;
 			case E_EDSK_ACTION_COPYFILE:	__edsk_copyfile(ae,&ae->edsk_action[i]);break;
 			case E_EDSK_ACTION_SAVEFILE:	__edsk_savefile(ae,&ae->edsk_action[i]);break;
 			case E_EDSK_ACTION_WRITESECT:	__edsk_writesect(ae,&ae->edsk_action[i]);break;
