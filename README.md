@@ -61,6 +61,7 @@ There is a cool French and English documentation, you should read it ;)
 
 - native FLOAT24 declaration support (which can be use with float24 library in RASM sources asset directory)
 - integration in any software with all embedded possibilities
+- AI/LLM easy usage with optimised markdown documentation of RASM in https://github.com/EdouardBERGE/rasm/tree/master/resources/md
 
 ## Quality
 
