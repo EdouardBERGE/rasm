@@ -21133,7 +21133,10 @@ void ___internal_skip_loop_block(struct s_assenv *ae, const int eloopstyle) {
 			}
 		}
 		while (!ae->wl[cidx].t) cidx++;
-		if (ae->wl[cidx].t==2) break;
+		if (ae->wl[cidx].t==2) {
+			if (iloop) MakeError(ae,ae->idx,GetCurrentFile(ae),ae->wl[ae->idx].l,"End of file encountered with unclosed loop(s)\n");
+			break;
+		}
 		cidx++;
 	}
 	MemFree(loopstyle);
@@ -30945,6 +30948,8 @@ struct s_autotest_keyword autotest_keyword[]={
 	{"repeat 0",1},
 	{"f{ equ 1",1},
 	{"f{ equ",1},
+	{"aa=4<<456",0},
+	{"aa=5:aa<<=456",0},
 
 	{"defb getnop(1)",1},{"defb getnop(-1)",1},{"defb getnop(10)",1},{"defb getnop(\"rien\")",1},{"defb getnop()",1},{"defb getnop(\"djNz\")",0},
 	{"assert getnop('nop')==1 : nop",0},
