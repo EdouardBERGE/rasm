@@ -21133,6 +21133,7 @@ void ___internal_skip_loop_block(struct s_assenv *ae, const int eloopstyle) {
 			}
 		}
 		while (!ae->wl[cidx].t) cidx++;
+		if (ae->wl[cidx].t==2) break;
 		cidx++;
 	}
 	MemFree(loopstyle);
