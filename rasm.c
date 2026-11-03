@@ -4532,7 +4532,7 @@ char *TranslateTag(struct s_assenv *ae, char *varbuffer, int *touched, const int
 	while ((starttag=strchr(varbuffer+1,'{'))!=NULL) {
 		if ((endtag=strchr(starttag,'}'))==NULL) {
 			MakeError(ae,ae->idx,GetCurrentFile(ae),GetExpLine(ae,0),"invalid tag in string [%s]\n",varbuffer);
-			return NULL;
+			return TxtStrDup("invalid tag");
 		}
 		/* allow inception */
 		tagcount=1;
@@ -4543,7 +4543,7 @@ char *TranslateTag(struct s_assenv *ae, char *varbuffer, int *touched, const int
 		}
 		if (tagcount) {
 			MakeError(ae,ae->idx,GetCurrentFile(ae),GetExpLine(ae,0),"invalid brackets combination in string [%s]\n",varbuffer);
-			return NULL;
+			return TxtStrDup("invalid tag");
 		} else {
 			endtag=tagcheck-1;
 		}
