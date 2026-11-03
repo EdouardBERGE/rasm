@@ -30940,7 +30940,11 @@ struct s_autotest_keyword autotest_keyword[]={
 	{"repeat 5:nop:rend",0},{"repeat 100000:a=5:rend",1},{"repeat -5:nop:rend",1},{"repeat repeat:nop:rend",1},
 	{"macro bidule:nop:mend:bidule",0},{"macro bidule:nop:macro glop:nop:mend:mend:bidule",1},
 	{"macro bidule:nop",1},{"macro bidule:nop:mend:macro glop:nop:bidule",1},
-
+	// must not segfault!
+	{"repeat l",1},
+	{"repeat 0",1},
+	{"f{ equ 1",1},
+	{"f{ equ",1},
 
 	{"defb getnop(1)",1},{"defb getnop(-1)",1},{"defb getnop(10)",1},{"defb getnop(\"rien\")",1},{"defb getnop()",1},{"defb getnop(\"djNz\")",0},
 	{"assert getnop('nop')==1 : nop",0},
