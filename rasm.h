@@ -2,8 +2,8 @@
 #define PROGRAM_VERSION   "3.3"
 #define PROGRAM_SUBVERSION   ".2"
 #define PROGRAM_VERSION_FLOAT   "3.32"
-#define PROGRAM_DATE      "04/10/2026"
-#define PROGRAM_COPYRIGHT "© 2017 BERGE Edouard / roudoudou from Praline"
+#define PROGRAM_DATE      "01/11/2026"
+#define PROGRAM_COPYRIGHT "© 2017 BERGE Edouard / roudoudou"
 #ifndef SUPERFAST
 #define RELEASE_NAME      "Monolith"
 #else

@@ -7637,7 +7637,7 @@ printf("=== STACK EXECUTION ===\n");
 										rasm_printf(ae,KWARNING"[%s:%d] Warning - shifting %d is architecture dependant, result forced to ZERO\n",GetExpFile(ae,didx),GetExpLine(ae,didx),(int)accu[paccu-1]);
 										if (ae->erronwarn) MaxError(ae);
 									}
-									accu[paccu-2]=0;
+									if (paccu>1) accu[paccu-2]=0;
 								}
 								paccu--;break;
 				case E_COMPUTE_OPERATION_SHR:if (paccu>1) accu[paccu-2]=((int)accu[paccu-2])>>((int)accu[paccu-1]);
@@ -7646,7 +7646,7 @@ printf("=== STACK EXECUTION ===\n");
 										rasm_printf(ae,KWARNING"[%s:%d] Warning - shifting %d is architecture dependant, result forced to ZERO\n",GetExpFile(ae,didx),GetExpLine(ae,didx),(int)accu[paccu-1]);
 										if (ae->erronwarn) MaxError(ae);
 									}
-									accu[paccu-2]=0;
+									if (paccu>1) accu[paccu-2]=0;
 								}
 								paccu--;break;
 				case E_COMPUTE_OPERATION_BAND:if (paccu>1) accu[paccu-2]=((int)accu[paccu-2]&&(int)accu[paccu-1])&workinterval;paccu--;break;
@@ -8116,7 +8116,7 @@ printf("=== STACK EXECUTION ===\n");
 										rasm_printf(ae,KWARNING"[%s:%d] Warning - shifting %d is architecture dependant, result forced to ZERO\n",GetExpFile(ae,didx),GetExpLine(ae,didx),(int)accu[paccu-1]);
 										if (ae->erronwarn) MaxError(ae);
 									}
-									accu[paccu-2]=0;
+									if (paccu>1) accu[paccu-2]=0;
 								}
 								paccu--;break;
 				case E_COMPUTE_OPERATION_SHR:if (paccu>1) accu[paccu-2]=((int)floor(accu[paccu-2]+0.5))>>((int)floor(accu[paccu-1]+0.5));
@@ -8125,7 +8125,7 @@ printf("=== STACK EXECUTION ===\n");
 										rasm_printf(ae,KWARNING"[%s:%d] Warning - shifting %d is architecture dependant, result forced to ZERO\n",GetExpFile(ae,didx),GetExpLine(ae,didx),(int)accu[paccu-1]);
 										if (ae->erronwarn) MaxError(ae);
 									}
-									accu[paccu-2]=0;
+									if (paccu>1) accu[paccu-2]=0;
 								}
 								paccu--;break;
 				case E_COMPUTE_OPERATION_BAND:if (paccu>1) accu[paccu-2]=((int)floor(accu[paccu-2]+0.5))&&((int)floor(accu[paccu-1]+0.5));paccu--;break;
