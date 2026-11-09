@@ -122,6 +122,42 @@ cc rasm.c -O2 -lm -march=native -o rasm
 #define KLWHITE   ""
 #endif
 
+
+#ifdef __MORPHOS__
+#include <string.h>
+#include <limits.h>
+#ifndef PATH_MAX
+#define PATH_MAX 4096
+#endif
+/* MorphOS uses AmigaDOS paths: "." is not the current directory and the
+   parent directory is "/" instead of "../". Translate Unix style relative
+   paths ("./x", "../x", "a/./b", "a/../b") before they reach the C
+   library (used by minilib.h), so sources and the autotest written for
+   Unix work unchanged. Other systems: no change. */
+static const char *SysPath(const char *p) {
+	static char b[4][PATH_MAX];
+	static int n;
+	char *d,*o;
+	int st=1;
+
+	if (!p || !strchr(p,'.')) return p;
+	d=o=b[n++&3];
+	while (*p && o-d<PATH_MAX-1) {
+		if (st && p[0]=='.') {
+			if (p[1]=='/') {p+=2;continue;}
+			if (!p[1]) {p++;continue;}
+			if (p[1]=='.' && (p[2]=='/' || !p[2])) {*o++='/';p+=p[2]?3:2;continue;}
+		}
+		st=(*p=='/' || *p==':');
+		*o++=*p++;
+	}
+	*o=0;
+	return d;
+}
+#else
+#define SysPath(p) (p)
+#endif
+
 #ifndef RDD
 	/* public lib */
 	#include"minilib.h"
@@ -2326,7 +2362,7 @@ void ResolveCaseInsensitivePath(char *path) {
 		if (FileExists(candidate)) {
 			found=1;
 		} else {
-			dir=opendir(ridx?resolved:".");
+			dir=opendir(SysPath(ridx?resolved:"."));
 			if (dir) {
 				while ((entry=readdir(dir))!=NULL) {
 					if (strcasecmp(entry->d_name,component)==0) {
@@ -5473,7 +5509,7 @@ int __FILEBYTE(struct s_assenv *ae,char *argstr, unsigned int offset, int didx)
 		}
 	}
 	// no entry in cache, how bgi is the file?
-	f=fopen(argstr,"rb");
+	f=fopen(SysPath(argstr),"rb");
 	if (!f) {
 		MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"invalid filename [%s] for FILEBYTE function \n",argstr);
 		return 0;
@@ -6023,7 +6059,7 @@ int __FILESIZE(struct s_assenv *ae,char *zefile, int didx)
 	FILE *f;
 	int zesize;
 
-	f=fopen(zefile,"rb");
+	f=fopen(SysPath(zefile),"rb");
 	if (!f) {
 		MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"cannot retrieve filesize of [%s] file\n",zefile);
 		return 0;
@@ -15256,7 +15292,7 @@ struct s_edsk_global_struct *edsktool_EDSK_load(struct s_assenv *ae,char *edskfi
 
         edsk=edsktool_NewEDSK(NULL,1);
 
-        f=fopen(edskfilename,"rb");
+        f=fopen(SysPath(edskfilename),"rb");
         if (!f) {
 		MakeError(ae,0,NULL,0,"Cannot read EDSK header of [%s]\n",edskfilename);
 		return NULL;

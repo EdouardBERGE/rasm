@@ -647,7 +647,7 @@ FILE *FileOpen(const char *filename, const char *opening_type)
 		}
 	}
 	
-	curfile->file_id=fopen(filename,opening_type);
+	curfile->file_id=fopen(SysPath(filename),opening_type);
 	if (!curfile->file_id)
 	{
 		if (errno==EMFILE) {
@@ -664,7 +664,7 @@ FILE *FileOpen(const char *filename, const char *opening_type)
 			oldfile->file_id=0;
 			oldfile->closed=1;
 			/* then try again */
-			curfile->file_id=fopen(filename,opening_type);
+			curfile->file_id=fopen(SysPath(filename),opening_type);
 			if (curfile->file_id) {
 				if (curfile->curpos) {
 					fseek(curfile->file_id,curfile->curpos,SEEK_SET);
@@ -1226,7 +1226,7 @@ struct stat *FileGetStat(const char *filename)
 #ifdef OS_WIN
 	if (_stat(filename,&winstat)!=0)
 #else	
-	if (stat(filename,filestat) && errno!=ENOENT)
+	if (stat(SysPath(filename),filestat) && errno!=ENOENT)
 #endif
 	{
 		logerr("stat %s failed",filename);
@@ -1351,7 +1351,7 @@ int LookForFile(const char *filename, const char *dirname)
 #ifdef OS_WIN
 		if (_access(filename,0)==0) return 1; else return 0;
 #else
-		if (access(filename,F_OK)!=-1) return 1; else return 0;
+		if (access(SysPath(filename),F_OK)!=-1) return 1; else return 0;
 #endif
 	} else {
 		pathlen+=strnlen(dirname,PATH_MAX-pathlen);
@@ -1364,7 +1364,7 @@ int LookForFile(const char *filename, const char *dirname)
 #ifdef OS_WIN
 		if (_access(fullpath,0)==0) return 1; else return 0;
 #else
-		if (access(fullpath,F_OK)!=-1) return 1; else return 0;
+		if (access(SysPath(fullpath),F_OK)!=-1) return 1; else return 0;
 #endif
 	}
 }
@@ -1387,7 +1387,7 @@ int _internal_do_remove(const char *zename, const char *zetype)
 		exit(ABORT_ERROR);
 	}
 	
-	if (remove(zename))
+	if (remove(SysPath(zename)))
 	{
 		switch (errno)
 		{
