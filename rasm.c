@@ -31745,6 +31745,7 @@ printf("testing rasm source integrity : activebank and maxptr update OK\n");
 	if (!FileExists("rasmoutput_CRLF.raw")) {printf("Autotest %03d ERROR (fileExists KO)\n",cpt);exit(-1);} else cpt++;
 	printf("testing file exists OK\n");
         if (FileReadBinary("rasmoutput_CRLF.raw",(char*)opcode,FileGetSize("rasmoutput_CRLF.raw"))!=32) {printf("Autotest %03d ERROR (Binary read must not change 0x0D or 0x0A output)\n",cpt);exit(-1);} else cpt++;
+	FileReadBinaryClose("rasmoutput_CRLF.raw"); /* an open file cannot be removed on MorphOS/Windows */
 	printf("testing pure binary file read OK\n");
 	FileRemoveIfExists("rasmoutput_CRLF.raw");
 	if (FileExists("rasmoutput_CRLF.raw")) {printf("Autotest %03d ERROR (cannot remove file or fileExists KO)\n",cpt);exit(-1);} else cpt++;
@@ -34578,6 +34579,9 @@ printf("testing EXO (Z80 simulation with exo_docent) OK\n");cpt++;
 	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
 printf("testing simple extended CPR behaviour OK\n");
 
+	/* the snapshot is still open from an earlier test; an open file
+	   cannot be removed on MorphOS (nor on Windows) */
+	FileWriteBinaryClose("rasmoutput.sna");
 #ifndef OS_WIN
 	// remove workfiles
 	FileRemoveIfExists("snap64k.sna");
