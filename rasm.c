@@ -252,8 +252,8 @@ E_DEPENDENCIES_MAKE
 #ifdef __MORPHOS__
 /* Add standard version string to executable */
 const char __attribute__((section(".text"))) ver_version[]={ "\0$VER: "PROGRAM_NAME" "PROGRAM_VERSION" ("PROGRAM_DATE") "PROGRAM_COPYRIGHT"" };
-/* Expand the default stack to match rasm requirements (about 64KiB) */
-unsigned long __stack = 128 * 1024;
+/* Expand the default stack: rasm -autotest overflows 128 KiB (and 256 KiB) */
+unsigned long __stack = 1024 * 1024;
 #endif
 
 
