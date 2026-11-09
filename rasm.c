@@ -233,12 +233,6 @@ size_t salvador_get_max_compressed_size(const size_t nInputSize);
 #endif
 #endif
 
-#ifdef __MORPHOS__
-/* Add standard version string to executable */
-const char __attribute__((section(".text"))) ver_version[]={ "\0$VER: "PROGRAM_NAME" "PROGRAM_VERSION" ("PROGRAM_DATE") "PROGRAM_COPYRIGHT"" };
-/* Expand the default stack to match rasm requirements (about 64KiB) */
-unsigned long __stack = 128 * 1024;
-#endif
 
 #undef __FILENAME__
 #define __FILENAME__ "rasm.c"
@@ -254,6 +248,13 @@ E_DEPENDENCIES_MAKE
 
 #define INSIDE_RASM
 #include "rasm.h"
+
+#ifdef __MORPHOS__
+/* Add standard version string to executable */
+const char __attribute__((section(".text"))) ver_version[]={ "\0$VER: "PROGRAM_NAME" "PROGRAM_VERSION" ("PROGRAM_DATE") "PROGRAM_COPYRIGHT"" };
+/* Expand the default stack to match rasm requirements (about 64KiB) */
+unsigned long __stack = 128 * 1024;
+#endif
 
 
 /*******************************************************************
@@ -8565,10 +8566,7 @@ printf("MakeAlias (2) EXPR=[%s EQU %s]\n",expr,ptr_exp2);
 			curalias.ptr=ae->codeadr;
 			curalias.lz=ae->ilz;
 #ifndef SUPERFAST
-			if (IsRegister(curalias.alias)) {
-				MakeError(ae,ae->idx,GetCurrentFile(ae),GetExpLine(ae,0),"Alias cannot be a register [%s]\n",expr);
-				MemFree(curalias.alias);
-			} else if (SearchLabel(ae,curalias.alias,curalias.crc)) {
+			if (SearchLabel(ae,curalias.alias,curalias.crc)) {
 				MakeError(ae,ae->idx,GetCurrentFile(ae),GetExpLine(ae,0),"Alias cannot override existing label [%s]\n",expr);
 				MemFree(curalias.alias);
 			} else if (SearchDico(ae,curalias.alias,curalias.crc)) {
@@ -31314,36 +31312,6 @@ struct s_autotest_keyword autotest_keyword[]={
 	{"nop : a=fremain(29)",1},
 	{"nop : a=5*fremain(29)",1},
 	{"nop : a=fremain()",1},
-
-	{"nop : f equ 10 : nop",1},
-	{"nop : i equ 10 : nop",1},
-	{"nop : r equ 10 : nop",1},
-	{"nop : a equ 10 : nop",1},
-	{"nop : b equ 10 : nop",1},
-	{"nop : c equ 10 : nop",1},
-	{"nop : d equ 10 : nop",1},
-	{"nop : e equ 10 : nop",1},
-	{"nop : h equ 10 : nop",1},
-	{"nop : l equ 10 : nop",1},
-	{"nop : ix equ 10 : nop",1},
-	{"nop : iy equ 10 : nop",1},
-	{"nop : lx equ 10 : nop",1},
-	{"nop : hx equ 10 : nop",1},
-	{"nop : ly equ 10 : nop",1},
-	{"nop : hy equ 10 : nop",1},
-	{"nop : xl equ 10 : nop",1},
-	{"nop : xh equ 10 : nop",1},
-	{"nop : yl equ 10 : nop",1},
-	{"nop : yh equ 10 : nop",1},
-	{"nop : ixl equ 10 : nop",1},
-	{"nop : ixh equ 10 : nop",1},
-	{"nop : iyl equ 10 : nop",1},
-	{"nop : iyh equ 10 : nop",1},
-	{"nop : af equ 10 : nop",1},
-	{"nop : bc equ 10 : nop",1},
-	{"nop : de equ 10 : nop",1},
-	{"nop : hl equ 10 : nop",1},
-	{"nop : sp equ 10 : nop",1},
 
 	{"nop : a=rnd()",1},
 	{"nop : a=5+rnd()",1},
