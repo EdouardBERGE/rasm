@@ -647,7 +647,7 @@ FILE *FileOpen(const char *filename, const char *opening_type)
 		}
 	}
 	
-	curfile->file_id=fopen(filename,opening_type);
+	curfile->file_id=fopen(SysPath(filename),opening_type);
 	if (!curfile->file_id)
 	{
 		if (errno==EMFILE) {
@@ -664,7 +664,7 @@ FILE *FileOpen(const char *filename, const char *opening_type)
 			oldfile->file_id=0;
 			oldfile->closed=1;
 			/* then try again */
-			curfile->file_id=fopen(filename,opening_type);
+			curfile->file_id=fopen(SysPath(filename),opening_type);
 			if (curfile->file_id) {
 				if (curfile->curpos) {
 					fseek(curfile->file_id,curfile->curpos,SEEK_SET);
@@ -1226,7 +1226,7 @@ struct stat *FileGetStat(const char *filename)
 #ifdef OS_WIN
 	if (_stat(filename,&winstat)!=0)
 #else	
-	if (stat(filename,filestat) && errno!=ENOENT)
+	if (stat(SysPath(filename),filestat) && errno!=ENOENT)
 #endif
 	{
 		logerr("stat %s failed",filename);
@@ -1351,7 +1351,7 @@ int LookForFile(const char *filename, const char *dirname)
 #ifdef OS_WIN
 		if (_access(filename,0)==0) return 1; else return 0;
 #else
-		if (access(filename,F_OK)!=-1) return 1; else return 0;
+		if (access(SysPath(filename),F_OK)!=-1) return 1; else return 0;
 #endif
 	} else {
 		pathlen+=strnlen(dirname,PATH_MAX-pathlen);
@@ -1364,7 +1364,7 @@ int LookForFile(const char *filename, const char *dirname)
 #ifdef OS_WIN
 		if (_access(fullpath,0)==0) return 1; else return 0;
 #else
-		if (access(fullpath,F_OK)!=-1) return 1; else return 0;
+		if (access(SysPath(fullpath),F_OK)!=-1) return 1; else return 0;
 #endif
 	}
 }
@@ -1387,7 +1387,7 @@ int _internal_do_remove(const char *zename, const char *zetype)
 		exit(ABORT_ERROR);
 	}
 	
-	if (remove(zename))
+	if (remove(SysPath(zename)))
 	{
 		switch (errno)
 		{
@@ -1426,6 +1426,34 @@ void FileRemoveIfExists(const char *filename)
     #pragma comment(lib, "ws2_32.lib")
     typedef SOCKET socket_t;
     #define CLOSESOCKET closesocket
+#elif defined(__MORPHOS__)
+    /* MorphOS: bsdsocket.library API (works with -noixemul / libnix).
+       Sockets are not libnix file descriptors: use CloseSocket(),
+       IoctlSocket(), WaitSelect() and Errno() instead of close(),
+       fcntl(), select() and errno. No getaddrinfo(): IPv4 lookup only. */
+    #include <exec/types.h>
+    #include <proto/exec.h>
+    #include <sys/types.h>
+    #include <sys/socket.h>
+    #include <sys/ioctl.h>
+    #include <netinet/in.h>
+    #include <netdb.h>
+    #include <proto/socket.h>
+    #include <errno.h>
+    #ifndef EINPROGRESS
+    #define EINPROGRESS 36 /* BSD value used by bsdsocket.library */
+    #endif
+    #ifndef INADDR_NONE
+    #define INADDR_NONE 0xffffffff
+    #endif
+    struct Library *SocketBase = NULL;
+    typedef LONG socket_t;
+    #define CLOSESOCKET CloseSocket
+    #define INVALID_SOCKET (-1)
+    #define SOCKET_ERROR   (-1)
+    /* bsdsocket protos use UBYTE * buffers */
+    #define SOCK_SNDBUF(p) ((const UBYTE *)(p))
+    #define SOCK_RCVBUF(p) ((UBYTE *)(p))
 #else
     #include <sys/types.h>
     #include <sys/socket.h>
@@ -1440,6 +1468,11 @@ void FileRemoveIfExists(const char *filename)
     #define SOCKET_ERROR   (-1)
 #endif
 
+#ifndef SOCK_SNDBUF
+    #define SOCK_SNDBUF(p) ((const char *)(p))
+    #define SOCK_RCVBUF(p) ((char *)(p))
+#endif
+
 #define RECV_CHUNK_SIZE 4096
 
 static int platform_init(void)
@@ -1447,6 +1480,13 @@ static int platform_init(void)
 #ifdef OS_WIN
     WSADATA wsa;
     return WSAStartup(MAKEWORD(2, 2), &wsa) == 0 ? 0 : -1;
+#elif defined(__MORPHOS__)
+    if (!SocketBase) SocketBase = OpenLibrary("bsdsocket.library", 4);
+    if (!SocketBase) {
+        printf(KERROR"cannot open bsdsocket.library (is the TCP/IP stack running?)\n"KNORMAL);
+        return -1;
+    }
+    return 0;
 #else
     return 0;
 #endif
@@ -1456,6 +1496,11 @@ static void platform_cleanup(void)
 {
 #ifdef OS_WIN
     WSACleanup();
+#elif defined(__MORPHOS__)
+    if (SocketBase) {
+        CloseLibrary(SocketBase);
+        SocketBase = NULL;
+    }
 #endif
 }
 
@@ -1463,6 +1508,8 @@ static int last_error(void)
 {
 #ifdef OS_WIN
     return WSAGetLastError();
+#elif defined(__MORPHOS__)
+    return (int)Errno();
 #else
     return errno;
 #endif
@@ -1497,6 +1544,9 @@ static int set_socket_nonblocking(socket_t sock, int nonblocking)
 #ifdef OS_WIN
     u_long mode = nonblocking ? 1 : 0;
     return ioctlsocket(sock, FIONBIO, &mode) == 0 ? 0 : -1;
+#elif defined(__MORPHOS__)
+    LONG mode = nonblocking ? 1 : 0;
+    return IoctlSocket(sock, FIONBIO, (char *)&mode) == 0 ? 0 : -1;
 #else
     int flags = fcntl(sock, F_GETFL, 0);
     if (flags < 0)
@@ -1519,9 +1569,9 @@ static int connect_with_timeout(socket_t sock, const struct sockaddr *addr,
     int ret;
 
     if (set_socket_nonblocking(sock, 1) != 0)
-        return connect(sock, addr, addr_len); /* repli : connexion bloquante classique */
+        return connect(sock, (struct sockaddr *)addr, addr_len); /* repli : connexion bloquante classique */
 
-    ret = connect(sock, addr, addr_len);
+    ret = connect(sock, (struct sockaddr *)addr, addr_len);
     if (ret == 0) {
         set_socket_nonblocking(sock, 0);
         return 0; /* connexion immediate (ex: localhost) */
@@ -1529,6 +1579,11 @@ static int connect_with_timeout(socket_t sock, const struct sockaddr *addr,
 
 #ifdef OS_WIN
     if (WSAGetLastError() != WSAEWOULDBLOCK) {
+        set_socket_nonblocking(sock, 0);
+        return -1;
+    }
+#elif defined(__MORPHOS__)
+    if (Errno() != EINPROGRESS) {
         set_socket_nonblocking(sock, 0);
         return -1;
     }
@@ -1549,7 +1604,11 @@ static int connect_with_timeout(socket_t sock, const struct sockaddr *addr,
         tv.tv_sec = timeout_sec;
         tv.tv_usec = 0;
 
+#ifdef __MORPHOS__
+        sel = WaitSelect((LONG)sock + 1, NULL, &write_fds, NULL, &tv, NULL);
+#else
         sel = select((int)sock + 1, NULL, &write_fds, NULL, &tv);
+#endif
         if (sel <= 0) {
             /* timeout (sel == 0) ou erreur select() : on abandonne */
             set_socket_nonblocking(sock, 0);
@@ -1563,10 +1622,12 @@ static int connect_with_timeout(socket_t sock, const struct sockaddr *addr,
         int so_error = 0;
 #ifdef OS_WIN
         int len = sizeof(so_error);
+#elif defined(__MORPHOS__)
+        LONG len = sizeof(so_error);
 #else
         socklen_t len = sizeof(so_error);
 #endif
-        if (getsockopt(sock, SOL_SOCKET, SO_ERROR, (char *)&so_error, &len) != 0
+        if (getsockopt(sock, SOL_SOCKET, SO_ERROR, (char *)&so_error, (void *)&len) != 0
             || so_error != 0) {
             set_socket_nonblocking(sock, 0);
             return -1;
@@ -1582,7 +1643,7 @@ static int socket_send_all(socket_t sock, const unsigned char *data, unsigned in
 {
     unsigned int sent_total = 0;
     while (sent_total < len) {
-        int sent = send(sock, (const char *)data + sent_total, (int)(len - sent_total), SEND_FLAGS);
+        int sent = send(sock, SOCK_SNDBUF(data + sent_total), (int)(len - sent_total), SEND_FLAGS);
         if (sent == SOCKET_ERROR || sent <= 0)
             return -1;
         sent_total += (unsigned int)sent;
@@ -1594,13 +1655,20 @@ int tcp_send_receive(const char *host, unsigned short port,
                       const unsigned char *send_data, unsigned int send_len,
                       unsigned char **recv_data, unsigned int *recv_len)
 {
+#ifdef __MORPHOS__
+    struct sockaddr_in sin;
+    struct hostent *he;
+#else
     struct addrinfo hints, *result = NULL, *rp;
     char port_str[16];
+#endif
     socket_t sock = INVALID_SOCKET;
     unsigned char *buffer = NULL;
     unsigned int capacity = 0;
     unsigned int total_received = 0;
-    int ret; 
+#ifndef __MORPHOS__
+    int ret;
+#endif
     
     if (!host || !recv_data || !recv_len)
         return -1;
@@ -1611,6 +1679,33 @@ int tcp_send_receive(const char *host, unsigned short port,
     if (platform_init() != 0)
         return -1;
 
+#ifdef __MORPHOS__
+    /* resolution IPv4 uniquement (pas de getaddrinfo sous MorphOS) */
+    memset(&sin, 0, sizeof(sin));
+    sin.sin_len = sizeof(sin);
+    sin.sin_family = AF_INET;
+    sin.sin_port = htons(port);
+    sin.sin_addr.s_addr = inet_addr((const UBYTE *)host);
+    if (sin.sin_addr.s_addr == INADDR_NONE) {
+        he = gethostbyname((const UBYTE *)host);
+        if (!he || he->h_addrtype != AF_INET || !he->h_addr_list[0]) {
+            printf(KERROR"Erreur gethostbyname(%s:%u)\n"KNORMAL, host, port);
+            platform_cleanup();
+            return -1;
+        }
+        memcpy(&sin.sin_addr, he->h_addr_list[0], sizeof(sin.sin_addr));
+    }
+
+    sock = socket(AF_INET, SOCK_STREAM, 0);
+    if (sock != INVALID_SOCKET) {
+        if (connect_with_timeout(sock, (const struct sockaddr *)&sin, (int)sizeof(sin), CONNECT_TIMEOUT_SECONDS) == 0) {
+            disable_sigpipe_on_socket(sock);
+        } else {
+            CLOSESOCKET(sock);
+            sock = INVALID_SOCKET;
+        }
+    }
+#else
     snprintf(port_str, sizeof(port_str), "%u", (unsigned int)port);
         
     memset(&hints, 0, sizeof(hints));
@@ -1641,6 +1736,7 @@ int tcp_send_receive(const char *host, unsigned short port,
     }       
             
     freeaddrinfo(result);
+#endif
             
     if (sock == INVALID_SOCKET) {
         printf(KERROR"Impossible de se connecter a %s:%u (%d)\n"KNORMAL,
@@ -1684,7 +1780,7 @@ int tcp_send_receive(const char *host, unsigned short port,
             buffer = tmp;
         }
 
-        received = recv(sock, (char *)buffer + total_received,
+        received = recv(sock, SOCK_RCVBUF(buffer + total_received),
                          (int)(capacity - total_received), 0);
 
         if (received > 0) {

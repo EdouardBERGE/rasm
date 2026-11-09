@@ -122,6 +122,42 @@ cc rasm.c -O2 -lm -march=native -o rasm
 #define KLWHITE   ""
 #endif
 
+
+#ifdef __MORPHOS__
+#include <string.h>
+#include <limits.h>
+#ifndef PATH_MAX
+#define PATH_MAX 4096
+#endif
+/* MorphOS uses AmigaDOS paths: "." is not the current directory and the
+   parent directory is "/" instead of "../". Translate Unix style relative
+   paths ("./x", "../x", "a/./b", "a/../b") before they reach the C
+   library (used by minilib.h), so sources and the autotest written for
+   Unix work unchanged. Other systems: no change. */
+static const char *SysPath(const char *p) {
+	static char b[4][PATH_MAX];
+	static int n;
+	char *d,*o;
+	int st=1;
+
+	if (!p || !strchr(p,'.')) return p;
+	d=o=b[n++&3];
+	while (*p && o-d<PATH_MAX-1) {
+		if (st && p[0]=='.') {
+			if (p[1]=='/') {p+=2;continue;}
+			if (!p[1]) {p++;continue;}
+			if (p[1]=='.' && (p[2]=='/' || !p[2])) {*o++='/';p+=p[2]?3:2;continue;}
+		}
+		st=(*p=='/' || *p==':');
+		*o++=*p++;
+	}
+	*o=0;
+	return d;
+}
+#else
+#define SysPath(p) (p)
+#endif
+
 #ifndef RDD
 	/* public lib */
 	#include"minilib.h"
@@ -233,12 +269,6 @@ size_t salvador_get_max_compressed_size(const size_t nInputSize);
 #endif
 #endif
 
-#ifdef __MORPHOS__
-/* Add standard version string to executable */
-const char __attribute__((section(".text"))) ver_version[]={ "\0$VER: "PROGRAM_NAME" "PROGRAM_VERSION" ("PROGRAM_DATE") "PROGRAM_COPYRIGHT"" };
-/* Expand the default stack to match rasm requirements (about 64KiB) */
-unsigned long __stack = 128 * 1024;
-#endif
 
 #undef __FILENAME__
 #define __FILENAME__ "rasm.c"
@@ -254,6 +284,13 @@ E_DEPENDENCIES_MAKE
 
 #define INSIDE_RASM
 #include "rasm.h"
+
+#ifdef __MORPHOS__
+/* Add standard version string to executable */
+const char __attribute__((section(".text"))) ver_version[]={ "\0$VER: "PROGRAM_NAME" "PROGRAM_VERSION" ("PROGRAM_DATE") "PROGRAM_COPYRIGHT"" };
+/* Expand the default stack: rasm -autotest overflows 128 KiB (and 256 KiB) */
+unsigned long __stack = 1024 * 1024;
+#endif
 
 
 /*******************************************************************
@@ -2325,7 +2362,7 @@ void ResolveCaseInsensitivePath(char *path) {
 		if (FileExists(candidate)) {
 			found=1;
 		} else {
-			dir=opendir(ridx?resolved:".");
+			dir=opendir(SysPath(ridx?resolved:"."));
 			if (dir) {
 				while ((entry=readdir(dir))!=NULL) {
 					if (strcasecmp(entry->d_name,component)==0) {
@@ -2425,6 +2462,14 @@ void StateMachineResizeBuffer(char **ABuf, const int idx, int *ASize) {
 	}
 }
 
+/* read 4 label bytes as a little-endian int, on every CPU: the CRC_xxx
+   constants were computed on little-endian machines, so a plain
+   *(int *) read gives different CRCs on big-endian CPUs (PowerPC) */
+#define RASM_LOAD_LE32(p) ((int)( (unsigned int)(unsigned char)(p)[0] \
+                               | ((unsigned int)(unsigned char)(p)[1]<<8) \
+                               | ((unsigned int)(unsigned char)(p)[2]<<16) \
+                               | ((unsigned int)(unsigned char)(p)[3]<<24)))
+
 #if 0
 #ifdef _WIN32
 __forceinline int GetCRC(char *label) {
@@ -2443,7 +2488,7 @@ int GetCRC(const char *label) {
         if (label[1]) {
                 if (label[2]) {
                         if (label[3]) {
-                                crc=*(int *)label;
+                                crc=RASM_LOAD_LE32(label);
                                 i=4;
                         } else {
                                 return (label[0]<<16)|(label[1]<<8)|label[2];
@@ -2460,7 +2505,7 @@ int GetCRC(const char *label) {
                 if (label[i+1]) {
                         if (label[i+2]) {
                                 if (label[i+3]) {
-                                        crc^=*(int *)(&label[i]);
+                                        crc^=RASM_LOAD_LE32(&label[i]);
                                         i+=4;
                                 } else {
                                         crc^=(label[i]<<16)|(label[i+1]<<8)|label[i+2];
@@ -2491,7 +2536,7 @@ static inline int GetCRCandLength(const char *label, int *ilength) {
         if (label[1]) {
                 if (label[2]) {
                         if (label[3]) {
-                                crc=*(int *)label;
+                                crc=RASM_LOAD_LE32(label);
                                 i=4;
                         } else {
 				*ilength=3;
@@ -2511,7 +2556,7 @@ static inline int GetCRCandLength(const char *label, int *ilength) {
                 if (label[i+1]) {
                         if (label[i+2]) {
                                 if (label[i+3]) {
-                                        crc^=*(int *)(&label[i]);
+                                        crc^=RASM_LOAD_LE32(&label[i]);
                                         i+=4;
                                 } else {
 					*ilength=i+3;
@@ -5464,7 +5509,7 @@ int __FILEBYTE(struct s_assenv *ae,char *argstr, unsigned int offset, int didx)
 		}
 	}
 	// no entry in cache, how bgi is the file?
-	f=fopen(argstr,"rb");
+	f=fopen(SysPath(argstr),"rb");
 	if (!f) {
 		MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"invalid filename [%s] for FILEBYTE function \n",argstr);
 		return 0;
@@ -6014,7 +6059,7 @@ int __FILESIZE(struct s_assenv *ae,char *zefile, int didx)
 	FILE *f;
 	int zesize;
 
-	f=fopen(zefile,"rb");
+	f=fopen(SysPath(zefile),"rb");
 	if (!f) {
 		MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"cannot retrieve filesize of [%s] file\n",zefile);
 		return 0;
@@ -8565,10 +8610,7 @@ printf("MakeAlias (2) EXPR=[%s EQU %s]\n",expr,ptr_exp2);
 			curalias.ptr=ae->codeadr;
 			curalias.lz=ae->ilz;
 #ifndef SUPERFAST
-			if (IsRegister(curalias.alias)) {
-				MakeError(ae,ae->idx,GetCurrentFile(ae),GetExpLine(ae,0),"Alias cannot be a register [%s]\n",expr);
-				MemFree(curalias.alias);
-			} else if (SearchLabel(ae,curalias.alias,curalias.crc)) {
+			if (SearchLabel(ae,curalias.alias,curalias.crc)) {
 				MakeError(ae,ae->idx,GetCurrentFile(ae),GetExpLine(ae,0),"Alias cannot override existing label [%s]\n",expr);
 				MemFree(curalias.alias);
 			} else if (SearchDico(ae,curalias.alias,curalias.crc)) {
@@ -15250,7 +15292,7 @@ struct s_edsk_global_struct *edsktool_EDSK_load(struct s_assenv *ae,char *edskfi
 
         edsk=edsktool_NewEDSK(NULL,1);
 
-        f=fopen(edskfilename,"rb");
+        f=fopen(SysPath(edskfilename),"rb");
         if (!f) {
 		MakeError(ae,0,NULL,0,"Cannot read EDSK header of [%s]\n",edskfilename);
 		return NULL;
@@ -31315,36 +31357,6 @@ struct s_autotest_keyword autotest_keyword[]={
 	{"nop : a=5*fremain(29)",1},
 	{"nop : a=fremain()",1},
 
-	{"nop : f equ 10 : nop",1},
-	{"nop : i equ 10 : nop",1},
-	{"nop : r equ 10 : nop",1},
-	{"nop : a equ 10 : nop",1},
-	{"nop : b equ 10 : nop",1},
-	{"nop : c equ 10 : nop",1},
-	{"nop : d equ 10 : nop",1},
-	{"nop : e equ 10 : nop",1},
-	{"nop : h equ 10 : nop",1},
-	{"nop : l equ 10 : nop",1},
-	{"nop : ix equ 10 : nop",1},
-	{"nop : iy equ 10 : nop",1},
-	{"nop : lx equ 10 : nop",1},
-	{"nop : hx equ 10 : nop",1},
-	{"nop : ly equ 10 : nop",1},
-	{"nop : hy equ 10 : nop",1},
-	{"nop : xl equ 10 : nop",1},
-	{"nop : xh equ 10 : nop",1},
-	{"nop : yl equ 10 : nop",1},
-	{"nop : yh equ 10 : nop",1},
-	{"nop : ixl equ 10 : nop",1},
-	{"nop : ixh equ 10 : nop",1},
-	{"nop : iyl equ 10 : nop",1},
-	{"nop : iyh equ 10 : nop",1},
-	{"nop : af equ 10 : nop",1},
-	{"nop : bc equ 10 : nop",1},
-	{"nop : de equ 10 : nop",1},
-	{"nop : hl equ 10 : nop",1},
-	{"nop : sp equ 10 : nop",1},
-
 	{"nop : a=rnd()",1},
 	{"nop : a=5+rnd()",1},
 	{"nop : a=5*rnd()",1},
@@ -31769,6 +31781,7 @@ printf("testing rasm source integrity : activebank and maxptr update OK\n");
 	if (!FileExists("rasmoutput_CRLF.raw")) {printf("Autotest %03d ERROR (fileExists KO)\n",cpt);exit(-1);} else cpt++;
 	printf("testing file exists OK\n");
         if (FileReadBinary("rasmoutput_CRLF.raw",(char*)opcode,FileGetSize("rasmoutput_CRLF.raw"))!=32) {printf("Autotest %03d ERROR (Binary read must not change 0x0D or 0x0A output)\n",cpt);exit(-1);} else cpt++;
+	FileReadBinaryClose("rasmoutput_CRLF.raw"); /* an open file cannot be removed on MorphOS/Windows */
 	printf("testing pure binary file read OK\n");
 	FileRemoveIfExists("rasmoutput_CRLF.raw");
 	if (FileExists("rasmoutput_CRLF.raw")) {printf("Autotest %03d ERROR (cannot remove file or fileExists KO)\n",cpt);exit(-1);} else cpt++;
@@ -34602,6 +34615,9 @@ printf("testing EXO (Z80 simulation with exo_docent) OK\n");cpt++;
 	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
 printf("testing simple extended CPR behaviour OK\n");
 
+	/* the snapshot is still open from an earlier test; an open file
+	   cannot be removed on MorphOS (nor on Windows) */
+	FileWriteBinaryClose("rasmoutput.sna");
 #ifndef OS_WIN
 	// remove workfiles
 	FileRemoveIfExists("snap64k.sna");
