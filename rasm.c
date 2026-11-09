@@ -2426,6 +2426,14 @@ void StateMachineResizeBuffer(char **ABuf, const int idx, int *ASize) {
 	}
 }
 
+/* read 4 label bytes as a little-endian int, on every CPU: the CRC_xxx
+   constants were computed on little-endian machines, so a plain
+   *(int *) read gives different CRCs on big-endian CPUs (PowerPC) */
+#define RASM_LOAD_LE32(p) ((int)( (unsigned int)(unsigned char)(p)[0] \
+                               | ((unsigned int)(unsigned char)(p)[1]<<8) \
+                               | ((unsigned int)(unsigned char)(p)[2]<<16) \
+                               | ((unsigned int)(unsigned char)(p)[3]<<24)))
+
 #if 0
 #ifdef _WIN32
 __forceinline int GetCRC(char *label) {
@@ -2444,7 +2452,7 @@ int GetCRC(const char *label) {
         if (label[1]) {
                 if (label[2]) {
                         if (label[3]) {
-                                crc=*(int *)label;
+                                crc=RASM_LOAD_LE32(label);
                                 i=4;
                         } else {
                                 return (label[0]<<16)|(label[1]<<8)|label[2];
@@ -2461,7 +2469,7 @@ int GetCRC(const char *label) {
                 if (label[i+1]) {
                         if (label[i+2]) {
                                 if (label[i+3]) {
-                                        crc^=*(int *)(&label[i]);
+                                        crc^=RASM_LOAD_LE32(&label[i]);
                                         i+=4;
                                 } else {
                                         crc^=(label[i]<<16)|(label[i+1]<<8)|label[i+2];
@@ -2492,7 +2500,7 @@ static inline int GetCRCandLength(const char *label, int *ilength) {
         if (label[1]) {
                 if (label[2]) {
                         if (label[3]) {
-                                crc=*(int *)label;
+                                crc=RASM_LOAD_LE32(label);
                                 i=4;
                         } else {
 				*ilength=3;
@@ -2512,7 +2520,7 @@ static inline int GetCRCandLength(const char *label, int *ilength) {
                 if (label[i+1]) {
                         if (label[i+2]) {
                                 if (label[i+3]) {
-                                        crc^=*(int *)(&label[i]);
+                                        crc^=RASM_LOAD_LE32(&label[i]);
                                         i+=4;
                                 } else {
 					*ilength=i+3;
