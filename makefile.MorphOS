@@ -3,6 +3,8 @@ STRIP=strip --strip-unneeded --remove-section .comment
 
 EXEC=rasm
 CFLAGS=-g -noixemul -Ofast -Wall -W
+LDFLAGS=-noixemul
+LIBS=-lm
 
 #
 SRC_APUDIR=./apultra-master/src
@@ -10,7 +12,9 @@ SRC_LZSADIR=./lzsa-master/src
 SRC_SALVADORDIR=./salvador/src
 
 #
-RASM_CFLAGS=$(CFLAGS) -lm
+# rasm.c itself: -O2 like the Linux makefile (no -ffast-math for the
+# expression evaluator). Add -DNO_WEB_API to build without the web API.
+RASM_FLAGS=-g -noixemul -O2
 
 #
 APU_FLAGS=$(CFLAGS) -fomit-frame-pointer -I$(SRC_LZSADIR)/libdivsufsort/include -I$(SRC_APUDIR)
@@ -40,7 +44,7 @@ LZSA_OBJ+=$(SRC_LZSADIR)/shrink_inmem.o
 LZSA_OBJ+=$(SRC_LZSADIR)/stream.o
 
 #
-SALVADOR_FLAGS=-c -Ofast -fomit-frame-pointer -I$(SRC_LZSADIR)/libdivsufsort/include -I$(SRC_SALVADORDIR)
+SALVADOR_FLAGS=$(CFLAGS) -fomit-frame-pointer -I$(SRC_LZSADIR)/libdivsufsort/include -I$(SRC_SALVADORDIR)
 
 SALVADOR_OBJ =$(SRC_SALVADORDIR)/expand.o
 SALVADOR_OBJ+=$(SRC_SALVADORDIR)/matchfinder.o
@@ -52,12 +56,12 @@ SALVADOR_OBJ+=$(SRC_SALVADORDIR)/shrink.o
 all: $(EXEC)
 
 clean:
-	@rm $(APU_OBJ) $(LZSA_OBJ) $(SALVADOR_OBJ) rasm.o
+	@rm -f $(APU_OBJ) $(LZSA_OBJ) $(SALVADOR_OBJ) z80-master/z80.o rasm.o $(EXEC).db $(EXEC)
 
 #
-$(EXEC): rasm.o $(APU_OBJ) $(LZSA_OBJ) $(SALVADOR_OBJ)
+$(EXEC): rasm.o $(APU_OBJ) $(LZSA_OBJ) $(SALVADOR_OBJ) z80-master/z80.o
 	@echo "Linking $@..."
-	@$(CC) -o $(EXEC).db rasm.o $(APU_OBJ) $(LZSA_OBJ) $(SALVADOR_OBJ) z80-master/z80.o
+	@$(CC) $(LDFLAGS) -o $(EXEC).db rasm.o $(APU_OBJ) $(LZSA_OBJ) $(SALVADOR_OBJ) z80-master/z80.o $(LIBS)
 	@$(STRIP) -o $(EXEC) $(EXEC).db
 	@echo "Done $@"
 
