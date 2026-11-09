@@ -43,6 +43,33 @@
 #define ARG_MAX 8191
 #endif
 
+#if defined(__MORPHOS__)
+        #define IS_LITTLE_ENDIAN 0
+        #define IS_BIG_ENDIAN    1
+#else
+#if defined(__BYTE_ORDER__) && defined(__ORDER_LITTLE_ENDIAN__) && \
+    defined(__ORDER_BIG_ENDIAN__)
+
+    #if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+        #define IS_LITTLE_ENDIAN 1
+        #define IS_BIG_ENDIAN    0
+    #elif __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+        #define IS_LITTLE_ENDIAN 0
+        #define IS_BIG_ENDIAN    1
+    #else
+        #error "Unsupported byte order"
+    #endif
+
+#elif defined(_MSC_VER)
+
+    // MSVC : architectures actuellement supportées, little endian
+    #define IS_LITTLE_ENDIAN 1
+    #define IS_BIG_ENDIAN    0
+
+#else
+    #error "Unable to determine endianness"
+#endif
+#endif
 
 
 #define MemFree free

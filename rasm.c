@@ -2488,7 +2488,11 @@ int GetCRC(const char *label) {
         if (label[1]) {
                 if (label[2]) {
                         if (label[3]) {
+#if IS_BIG_ENDIAN
                                 crc=RASM_LOAD_LE32(label);
+#else
+                                crc=*(int *)label;
+#endif
                                 i=4;
                         } else {
                                 return (label[0]<<16)|(label[1]<<8)|label[2];
@@ -2505,7 +2509,11 @@ int GetCRC(const char *label) {
                 if (label[i+1]) {
                         if (label[i+2]) {
                                 if (label[i+3]) {
+#if IS_BIG_ENDIAN
                                         crc^=RASM_LOAD_LE32(&label[i]);
+#else
+					crc^=*(int *)(&label[i]);
+#endif
                                         i+=4;
                                 } else {
                                         crc^=(label[i]<<16)|(label[i+1]<<8)|label[i+2];
@@ -2536,7 +2544,11 @@ static inline int GetCRCandLength(const char *label, int *ilength) {
         if (label[1]) {
                 if (label[2]) {
                         if (label[3]) {
+#if IS_BIG_ENDIAN
                                 crc=RASM_LOAD_LE32(label);
+#else
+                                crc=*(int *)label;
+#endif
                                 i=4;
                         } else {
 				*ilength=3;
@@ -2556,7 +2568,11 @@ static inline int GetCRCandLength(const char *label, int *ilength) {
                 if (label[i+1]) {
                         if (label[i+2]) {
                                 if (label[i+3]) {
+#if IS_BIG_ENDIAN
                                         crc^=RASM_LOAD_LE32(&label[i]);
+#else
+					crc^=*(int *)(&label[i]);
+#endif
                                         i+=4;
                                 } else {
 					*ilength=i+3;
@@ -8610,7 +8626,10 @@ printf("MakeAlias (2) EXPR=[%s EQU %s]\n",expr,ptr_exp2);
 			curalias.ptr=ae->codeadr;
 			curalias.lz=ae->ilz;
 #ifndef SUPERFAST
-			if (SearchLabel(ae,curalias.alias,curalias.crc)) {
+			if (IsRegister(curalias.alias)) {
+				MakeError(ae,ae->idx,GetCurrentFile(ae),GetExpLine(ae,0),"Alias cannot be a register [%s]\n",expr);
+				MemFree(curalias.alias);
+			} else if (SearchLabel(ae,curalias.alias,curalias.crc)) {
 				MakeError(ae,ae->idx,GetCurrentFile(ae),GetExpLine(ae,0),"Alias cannot override existing label [%s]\n",expr);
 				MemFree(curalias.alias);
 			} else if (SearchDico(ae,curalias.alias,curalias.crc)) {
@@ -31149,10 +31168,11 @@ struct s_autotest_keyword autotest_keyword[]={
 	{"edsk writesect,'autotestw.dsk',0,512,'50:#C1'",1}, // cannot access non existing track
 	{"edsk readsect,'autotestw.dsk','50:#C1',512",1}, // cannot access non existing track
 	{"edsk readsect,'autotestnonexisting.dsk','5:#C1',512",1}, // cannot access non existing DSK
-	{"edsk create,'rasmoutput_test.dsk',DATA,OVERWRITE:edsk putfile,'rasmoutput_test.dsk','minilib.h'",0}, // put minilib.h without header on a DSK
+	{"edsk create,'rasmoutput_test.dsk',DATA,OVERWRITE:edsk putfile,'rasmoutput_test.dsk','minilib.h'",0}, // put minilib.h without header on a new DSK
 	{"incbin 'minilib.h',0,512:edsk check,'rasmoutput_test.dsk:0','0:#C5',512,0",0}, // check minilib was well ASCII written
 	{"edsk putfile,'rasmoutput_test.dsk','minilib.h','other.bin'",0}, // put minilib.h as another filename
 	{"edsk putfile,'rasmoutput_test.dsk','minilib.h','prot.bin',PROT",0}, // put PROT file
+	{"edsk delfile,'rasmoutput_test.dsk','prot.bin'",0}, // remove file because we wont have enough space ^_^
 	{"edsk putfile,'rasmoutput_test.dsk','minilib.h','hidden.bin',HIDDEN",0}, // put HIDDEN file
 	{"edsk putfile,'rasmoutput_test.dsk','minilib.h','pouet.bin',POUET",1}, // pouet must failed
 	{"noHeader defb 'noHeader',0:edsk create,'rasmoutput_test.dsk',DATA,OVERWRITE:edsk savefile,'rasmoutput_test.dsk','monfic1.txt',0,9,RAW:edsk check,'rasmoutput_test.dsk','0:0xC5',9,noHeader",0}, // raw file check
@@ -31356,6 +31376,35 @@ struct s_autotest_keyword autotest_keyword[]={
 	{"nop : a=fremain(29)",1},
 	{"nop : a=5*fremain(29)",1},
 	{"nop : a=fremain()",1},
+	{"nop : f equ 10 : nop",1},
+	{"nop : i equ 10 : nop",1},
+	{"nop : r equ 10 : nop",1},
+	{"nop : a equ 10 : nop",1},
+	{"nop : b equ 10 : nop",1},
+	{"nop : c equ 10 : nop",1},
+	{"nop : d equ 10 : nop",1},
+	{"nop : e equ 10 : nop",1},
+	{"nop : h equ 10 : nop",1},
+	{"nop : l equ 10 : nop",1},
+	{"nop : ix equ 10 : nop",1},
+	{"nop : iy equ 10 : nop",1},
+	{"nop : lx equ 10 : nop",1},
+	{"nop : hx equ 10 : nop",1},
+	{"nop : ly equ 10 : nop",1},
+	{"nop : hy equ 10 : nop",1},
+	{"nop : xl equ 10 : nop",1},
+	{"nop : xh equ 10 : nop",1},
+	{"nop : yl equ 10 : nop",1},
+	{"nop : yh equ 10 : nop",1},
+	{"nop : ixl equ 10 : nop",1},
+	{"nop : ixh equ 10 : nop",1},
+	{"nop : iyl equ 10 : nop",1},
+	{"nop : iyh equ 10 : nop",1},
+	{"nop : af equ 10 : nop",1},
+	{"nop : bc equ 10 : nop",1},
+	{"nop : de equ 10 : nop",1},
+	{"nop : hl equ 10 : nop",1},
+	{"nop : sp equ 10 : nop",1},
 
 	{"nop : a=rnd()",1},
 	{"nop : a=5+rnd()",1},
@@ -32035,6 +32084,8 @@ printf("testing %d various opcode tests OK\n",i);
 		} else {
 			printf("Autotest %03d ERROR ([%s] test) has %d error%s instead of %serror expected\n",cpt,autotest_keyword[idx].keywordtest,ret,ret>1?"s":"",autotest_keyword[idx].result?"":"no ");
 			sko++;
+			RasmAssembleInfo(autotest_keyword[idx].keywordtest,strlen(autotest_keyword[idx].keywordtest),&opcode,&opcodelen, &debug);
+			for (i=0;i<debug->nberror;i++) printf("%d -> %s\n",i,debug->error[i].msg);
 		}
 		if (opcode) MemFree(opcode);opcode=NULL;
 		idx++;
@@ -34639,9 +34690,14 @@ printf("testing simple extended CPR behaviour OK\n");
 	ret=RasmAssemble(NULL,0,&opcode,&opcodelen)+RasmAssembleInfo(NULL,0,&opcode,&opcodelen,&debug)+RasmAssembleInfoParam(NULL,0,&opcode,&opcodelen,&debug,&param);
 
 	if (sko) {
+		printf("###############################################################\n");
+		printf("###############################################################\n");
 		printf("ERROR => various opcode tests did not pass! (check backlog)\n");
+		printf("###############################################################\n");
+		printf("###############################################################\n");
 		printf("All other tests OK => %d tests done\n",ret);
 	} else {
+		printf("#########################################\n");
 		printf("All internal tests OK => %d tests done\n",ret);
 	}
 
