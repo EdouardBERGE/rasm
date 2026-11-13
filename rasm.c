@@ -2636,6 +2636,23 @@ int IsRegister(const char *zeexpression)
 	return 0;
 }
 
+int IsMath(struct s_assenv *ae, const char *zeexpression, int crc, int length)
+{
+	#undef FUNC
+	#define FUNC "IsMath"
+
+	int imkey;
+
+	if (length>=FUNCTION_MAXLENGTH) return 0;
+	imkey=ae->fastmath[((unsigned char)zeexpression[0])][length];
+	if (imkey==-1) return 0;
+	do {
+		if (math_keyword[imkey].crc==crc && strcmp(math_keyword[imkey].mnemo,zeexpression)==0) return 1;
+		imkey++;
+	} while (math_keyword[imkey].length==length && math_keyword[imkey].mnemo[0]==zeexpression[0]);
+	return 0;
+}
+
 int StringIsMem(const char *w)
 {
 	#undef FUNC
@@ -8568,7 +8585,7 @@ double ComputeExpression(struct s_assenv *ae,char *expr, const int ptr, const in
 	#define FUNC "ComputeExpression"
 
 	char *ptr_exp,*ptr_exp2;
-	int crc,idx=0,touched;
+	int crc,idx=0,touched,length;
 	double v;
 	struct s_alias curalias;
 	struct s_expr_dico *curdic;
@@ -8622,11 +8639,14 @@ printf("MakeAlias (2) EXPR=[%s EQU %s]\n",expr,ptr_exp2);
                                 MemFree(curalias.alias);
                                 curalias.alias=newaliasname;
                         }
-			curalias.crc=GetCRC(curalias.alias);
+			curalias.crc=GetCRCandLength(curalias.alias,&length);
 			curalias.ptr=ae->codeadr;
 			curalias.lz=ae->ilz;
 #ifndef SUPERFAST
-			if (IsRegister(curalias.alias)) {
+			if (IsMath(ae,curalias.alias,curalias.crc,length)) {
+				MakeError(ae,ae->idx,GetCurrentFile(ae),GetExpLine(ae,0),"Alias cannot be a math function [%s]\n",expr);
+				MemFree(curalias.alias);
+			} else if (IsRegister(curalias.alias)) {
 				MakeError(ae,ae->idx,GetCurrentFile(ae),GetExpLine(ae,0),"Alias cannot be a register [%s]\n",expr);
 				MemFree(curalias.alias);
 			} else if (SearchLabel(ae,curalias.alias,curalias.crc)) {
@@ -31014,6 +31034,18 @@ struct s_autotest_keyword autotest_keyword[]={
 	{"f{ equ",1},
 	{"aa=4<<456",0},
 	{"aa=5:aa<<=456",0},
+	// alias cannot be a math function (IsMath)
+	{"sin equ 5",1},{"cos equ 5",1},{"int equ 5",1},{"abs equ 5",1},{"ln equ 5",1},{"log10 equ 5",1},
+	{"sqrt equ 5",1},{"floor equ 5",1},{"asin equ 5",1},{"acos equ 5",1},{"atan equ 5",1},{"exp equ 5",1},
+	{"lo equ 5",1},{"hi equ 5",1},{"psgvalue equ 5",1},{"rnd equ 5",1},{"frac equ 5",1},{"ceil equ 5",1},
+	{"getr equ 5",1},{"getv equ 5",1},{"getg equ 5",1},{"getb equ 5",1},{"setr equ 5",1},{"setv equ 5",1},
+	{"setg equ 5",1},{"setb equ 5",1},{"soft2hard_ink equ 5",1},{"s2h_ink equ 5",1},{"hard2soft_ink equ 5",1},
+	{"h2s_ink equ 5",1},{"peek equ 5",1},{"pow2 equ 5",1},{"pow equ 5",1},{"fmod equ 5",1},{"atan2 equ 5",1},
+	{"hypot equ 5",1},{"ldexp equ 5",1},{"fdim equ 5",1},{"fstep equ 5",1},{"fmax equ 5",1},{"fmin equ 5",1},
+	{"clamp equ 5",1},{"lerp equ 5",1},{"isgreater equ 5",1},{"isless equ 5",1},{"fremain equ 5",1},
+	{"getnop equ 5",1},{"gettick equ 5",1},{"duration equ 5",1},{"filesize equ 5",1},{"getsize equ 5",1},
+	{"is_register equ 5",1},{"filebyte equ 5",1},{"countnops equ 5",1},
+	{"FLOOR equ 5",1},{"floors equ 5",0},{"floo equ 5",0},{"high equ 5",0},{"low equ 5",0},{"get_r equ 5",0},{"psg equ 5",0},{"s2h equ 5",0},
 
 	{"defb getnop(1)",1},{"defb getnop(-1)",1},{"defb getnop(10)",1},{"defb getnop(\"rien\")",1},{"defb getnop()",1},{"defb getnop(\"djNz\")",0},
 	{"assert getnop('nop')==1 : nop",0},
