@@ -1641,6 +1641,8 @@ struct s_math_keyword math_keyword[]={
 #define CRC_ORG 0x004F5247
 #define CRC_BANK 0x4B4E4142
 #define CRC_HALT 0x544C4148
+#define CRC_EXA 0x00455841
+#define CRC_SRL8 0x384C5253
 #define CRC_NOP 0x004E4F50
 #define CRC_LDI 0x004C4449
 #define CRC_LDD 0x004C4444
@@ -4732,6 +4734,7 @@ int __GETNOP(struct s_assenv *ae,char *oplist, const int didx)
 			case CRC_CPL:
 			case CRC_EXX:
 			case CRC_EI:
+			case CRC_EXA:
 			case CRC_DI:tick+=1;break;
 
 			case CRC_IM:
@@ -4783,6 +4786,13 @@ int __GETNOP(struct s_assenv *ae,char *oplist, const int didx)
 					if (strcmp(zearg,"IX")==0) tick+=4; else tick+=3;
 				} else {
 					MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"unsupported opcode [%s] for GETNOP, see documentation about this directive\n",opcode[idx]);
+				}
+				break;
+
+			case CRC_SRL8: tick+=3;
+				if (zearg) {
+					if (strstr(zearg,"IX")) tick+=2;
+					if (strstr(zearg,"IY")) tick+=2;
 				}
 				break;
 
@@ -4887,6 +4897,12 @@ int __GETNOP(struct s_assenv *ae,char *oplist, const int didx)
 				break;
 			case CRC_CALL:
 				// CALL is supposed to skip! (or not...) @@TODO les conditioooooooons
+				tick+=5;
+				if (zearg) {
+					if (strstr(zearg,"Z")) tick-=2;
+					if (strstr(zearg,"C")) tick-=2;
+				}
+				break;
 			case CRC_JR:
 				// JR is supposed to loop!
 				tick+=3;
@@ -31128,7 +31144,17 @@ struct s_autotest_keyword autotest_keyword[]={
 	{"assert getnop('out (c),l : out (c),0 : out (12),a')==11 : nop",0},
 	{"assert getnop('in a,(c)' )==4 : nop",0}, {"assert getnop('in b,(c)' )==4 : nop",0}, {"assert getnop('in a,(0)' )==3 : nop",0},
 	{"assert getnop('in a,(0) : in a,(c)' )==7 : nop",0},
-
+	{"assert getnop('CALL #1234')==5 : nop",0},
+	{"assert getnop('CALL Z,#1234')==3 : nop",0},
+	{"assert getnop('CALL NZ,#1234')==3 : nop",0},
+	{"assert getnop('CALL NC,#1234')==3 : nop",0},
+	{"assert getnop('CALL C,#1234')==3 : nop",0},
+	{"assert getnop('EXA')==1 : nop",0},
+	{"assert getnop('SRL8 BC')==3 : nop",0},
+	{"assert getnop('SRL8 DE')==3 : nop",0},
+	{"assert getnop('SRL8 HL')==3 : nop",0},
+	{"assert getnop('SRL8 IX')==5 : nop",0},
+	{"assert getnop('SRL8 IY')==5 : nop",0},
 	{"assert getnop('or a')==1 : nop",0}, {"assert getnop('or b')==1 : nop",0}, {"assert getnop('or c')==1 : nop",0},
 	{"assert getnop('or d')==1 : nop",0}, {"assert getnop('or e')==1 : nop",0}, {"assert getnop('or h')==1 : nop",0},
 	{"assert getnop('or l')==1 : nop",0}, {"assert getnop('or (hl)')==2 : nop",0}, {"assert getnop('or ixl')==2 : nop",0},
