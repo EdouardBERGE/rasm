@@ -5542,6 +5542,8 @@ int __FILEBYTE(struct s_assenv *ae,char *argstr, unsigned int offset, int didx)
 	struct s_filebyte_cache newcache={0};
 	FILE *f;
 	int i;
+        int zesize,lm,touched,fileok=0;
+        char *newfilename;
 	unsigned char zebyte;
 #ifdef OS_WIN
 	int sr;
@@ -5557,12 +5559,53 @@ int __FILEBYTE(struct s_assenv *ae,char *argstr, unsigned int offset, int didx)
 			}
 		}
 	}
-	// no entry in cache, how bgi is the file?
-	f=fopen(SysPath(argstr),"rb");
-	if (!f) {
-		MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"invalid filename [%s] for FILEBYTE function \n",argstr);
+
+        newfilename=TxtStrDup(argstr);
+
+        /* need to upper case tags */
+        for (lm=touched=0;newfilename[lm];lm++) {
+                if (newfilename[lm]=='{') touched++; else if (newfilename[lm]=='}') touched--; else if (touched) newfilename[lm]=toupper(newfilename[lm]);
+        }
+        /* on essaie d'interpréter le nom du fichier en dynamique */
+        newfilename=TranslateTag(ae,newfilename,&touched,1,E_TAGOPTION_REMOVESPACE);
+
+        /* Where is the file to load? */
+        if (!FileExists(newfilename)) {
+                int ilookfile;
+                char *filename_toread;
+
+                // on cherche à la racine du fichier qui exécute le filesize
+                filename_toread=MergePath(ae,GetExpFile(ae,didx),newfilename);
+                if (FileExists(filename_toread)) {
+                        fileok=1;
+                        MemFree(newfilename);
+                        newfilename=TxtStrDup(filename_toread); // Merge renvoie un static
+                }
+                if (!fileok) {
+                        /* on cherche dans les include */
+                        for (ilookfile=0;ilookfile<ae->ipath && !fileok;ilookfile++) {
+                                filename_toread=MergePath(ae,ae->includepath[ilookfile],newfilename);
+                                if (FileExists(filename_toread)) {
+                                        fileok=1;
+                                        MemFree(newfilename);
+                                        newfilename=TxtStrDup(filename_toread); // Merge renvoie un static
+                                }
+                        }
+                }
+        } else {
+                fileok=1;
+        }
+	if (!fileok) {
+		MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"File [%s] not found for FILEBYTE function \n",argstr);
 		return 0;
 	}
+	// no entry in cache, how bgi is the file?
+	f=fopen(SysPath(newfilename),"rb");
+	if (!f) {
+		MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"invalid filename [%s] for FILEBYTE function \n",newfilename);
+		return 0;
+	}
+
 #ifdef OS_WIN
 sr=_setmode(_fileno(f), _O_BINARY );
 if (sr==-1) {
@@ -5576,7 +5619,7 @@ exit(ABORT_ERROR);
 	// no cache for files bigger than 128k
 	if (newcache.zelen>128*1024) {
 		fseek(f,offset,SEEK_SET);
-		if (fread(&zebyte,1,1,f)!=1) MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"FILEBYTE function had read error with file [%s]\n",argstr);
+		if (fread(&zebyte,1,1,f)!=1) MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"FILEBYTE function had read error with file [%s]\n",newfilename);
 		fclose(f);
 		return (int)zebyte&0xFF;
 	}
@@ -5584,14 +5627,14 @@ exit(ABORT_ERROR);
 	newcache.zename=strdup(argstr);
 	newcache.data=MemMalloc(newcache.zelen);
 	fseek(f,0,SEEK_SET);
-	if (fread(newcache.data,1,newcache.zelen,f)!=newcache.zelen) MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"FILEBYTE function had read error with file [%s]\n",argstr);
+	if (fread(newcache.data,1,newcache.zelen,f)!=newcache.zelen) MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"FILEBYTE function had read error with file [%s]\n",newfilename);
 	fclose(f);
 
 	ObjectArrayAddDynamicValueConcat((void **)&ae->fbcache,&ae->nbfbcache,&ae->maxfbcache,&newcache,sizeof(newcache));
 	if (offset<newcache.zelen) {
 		return (int)newcache.data[offset]&0xFF;
 	} else {
-		MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"invalid offset %d for FILEBYTE function and file [%s]\n",offset,argstr);
+		MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"invalid offset %d for FILEBYTE function and file [%s]\n",offset,newfilename);
 		return 0;
 	}
 }
@@ -6106,16 +6149,59 @@ int __FILESIZE(struct s_assenv *ae,char *zefile, int didx)
 	#define FUNC "__FILESIZE"
 
 	FILE *f;
-	int zesize;
+	int zesize,lm,touched,fileok=0;
+	char *newfilename;
 
-	f=fopen(SysPath(zefile),"rb");
-	if (!f) {
-		MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"cannot retrieve filesize of [%s] file\n",zefile);
+        newfilename=TxtStrDup(zefile);
+
+	/* need to upper case tags */
+	for (lm=touched=0;newfilename[lm];lm++) {
+		if (newfilename[lm]=='{') touched++; else if (newfilename[lm]=='}') touched--; else if (touched) newfilename[lm]=toupper(newfilename[lm]);
+	}
+	/* on essaie d'interpréter le nom du fichier en dynamique */
+	newfilename=TranslateTag(ae,newfilename,&touched,1,E_TAGOPTION_REMOVESPACE);
+
+	/* Where is the file to load? */
+	if (!FileExists(newfilename)) {
+		int ilookfile;
+		char *filename_toread;
+
+		// on cherche à la racine du fichier qui exécute le filesize
+		filename_toread=MergePath(ae,GetExpFile(ae,didx),newfilename);
+		if (FileExists(filename_toread)) {
+			fileok=1;
+			MemFree(newfilename);
+			newfilename=TxtStrDup(filename_toread); // Merge renvoie un static
+		}
+		if (!fileok) {
+			/* on cherche dans les include */
+			for (ilookfile=0;ilookfile<ae->ipath && !fileok;ilookfile++) {
+				filename_toread=MergePath(ae,ae->includepath[ilookfile],newfilename);
+				if (FileExists(filename_toread)) {
+					fileok=1;
+					MemFree(newfilename);
+					newfilename=TxtStrDup(filename_toread); // Merge renvoie un static
+				}
+			}
+		}
+	} else {
+		fileok=1;
+	}
+
+	if (fileok) {
+		f=fopen(SysPath(newfilename),"rb");
+		if (!f) {
+			MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"cannot retrieve filesize of [%s] file\n",newfilename);
+			return 0;
+		}
+		fseek(f,0,SEEK_END);
+		zesize=ftell(f);
+		fclose(f);
+	} else {
+		MakeError(ae,GetExpIdx(ae,didx),GetExpFile(ae,didx),GetExpLine(ae,didx),"FILESIZE did not find [%s] file in the path\n",zefile);
 		return 0;
 	}
-	fseek(f,0,SEEK_END);
-	zesize=ftell(f);
-	fclose(f);
+	MemFree(newfilename);
 	return zesize;
 }
 
