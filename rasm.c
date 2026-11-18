@@ -25868,6 +25868,8 @@ int Assemble(struct s_assenv *ae, unsigned char **dataout, int *lenout, struct s
 			printf("label %s valeur=#%04X shifte vers #%04X\n",ae->label[il].iw!=-1?wordlist[ae->label[il].iw].w:ae->label[il].name,curlabel->ptr,curlabel->ptr+lzshift);
 #endif
 						curlabel->ptr+=lzshift;
+						/* the label list is a separate copy of the tree, and symbol exports read it */
+						ae->label[il].ptr+=lzshift;
 						il++;
 					}
 					iorgzone++;
@@ -33980,6 +33982,25 @@ printf("testing internal error struct OK\n");
 	} else {printf("Autotest %03d ERROR (embedded test)\n",cpt);MiniDump(opcode,opcodelen);exit(-1);}
 	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
 printf("testing internal label struct OK\n");
+
+#define AUTOTEST_LZ_SYMBOLS "org #4000 : lz48 : defs 256,0 : lzclose : after_lz nop : lz48 : defs 256,1 : lzclose : after_lz2 nop : defw after_lz,after_lz2"
+	ret=RasmAssembleInfo(AUTOTEST_LZ_SYMBOLS,strlen(AUTOTEST_LZ_SYMBOLS),&opcode,&opcodelen,&debug);
+	if (!ret && opcodelen>4) {
+		int lzok=0;
+		/* exported label values must be the relocated ones, as the code uses them */
+		for (i=0;i<debug->nbsymbol;i++) {
+			if (strcmp(debug->symbol[i].name,"AFTER_LZ")==0 && debug->symbol[i].v==opcode[opcodelen-4]+opcode[opcodelen-3]*256) lzok|=1;
+			if (strcmp(debug->symbol[i].name,"AFTER_LZ2")==0 && debug->symbol[i].v==opcode[opcodelen-2]+opcode[opcodelen-1]*256) lzok|=2;
+		}
+		if (lzok!=3) {
+			printf("Autotest %03d ERROR (label export after crunched section)\n",cpt);
+			for (i=0;i<debug->nbsymbol;i++) printf("%d -> %s=#%04X\n",i,debug->symbol[i].name,debug->symbol[i].v);
+			MiniDump(opcode,opcodelen);exit(-1);
+		}
+		RasmFreeInfoStruct(debug);
+	} else {printf("Autotest %03d ERROR (label export after crunched section)\n",cpt);MiniDump(opcode,opcodelen);exit(-1);}
+	if (opcode) MemFree(opcode);opcode=NULL;cpt++;
+printf("testing label export after crunched section OK\n");
 
 #ifdef RDD
 	printf("\n%d bytes\n",_static_library_memory_used);
